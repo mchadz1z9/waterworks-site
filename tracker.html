@@ -1,0 +1,789 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>WaterWorks Tracker</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Bebas+Neue&family=Inter:wght@300;400;500;600;700;800;900&display=swap" rel="stylesheet">
+<style>
+*,*::before,*::after{box-sizing:border-box;margin:0;padding:0;}
+:root{
+  --green:#0f1f0f;--green-mid:#162416;
+  --blue:#00d4ff;--blue-dim:rgba(0,212,255,0.12);--blue-glow:rgba(0,212,255,0.45);
+  --white:#ffffff;--off-white:#ddf0f8;
+  --glass:rgba(255,255,255,0.05);--glass-border:rgba(255,255,255,0.1);
+  --red:#ff4d4d;--yellow:#ffd700;--green-ok:#00e676;
+}
+body{
+  font-family:'Inter',sans-serif;color:var(--white);
+  background:var(--green);min-height:100vh;
+}
+
+/* ── LOCK SCREEN ── */
+#lock-screen{
+  position:fixed;inset:0;background:#0a150a;z-index:9999;
+  display:flex;flex-direction:column;align-items:center;justify-content:center;
+  gap:1.4rem;padding:2rem;
+}
+#lock-screen.hidden{display:none;}
+.lock-logo{font-family:'Bebas Neue',sans-serif;font-size:2.2rem;letter-spacing:0.08em;color:var(--blue);}
+.lock-logo span{color:var(--white);}
+.lock-sub{font-size:0.72rem;font-weight:700;letter-spacing:0.25em;text-transform:uppercase;color:rgba(255,255,255,0.3);}
+#lock-input{
+  background:rgba(255,255,255,0.07);border:1px solid rgba(255,255,255,0.15);
+  border-radius:12px;padding:0.9rem 1.4rem;
+  color:var(--white);font-family:'Inter',sans-serif;font-size:1.1rem;
+  outline:none;width:100%;max-width:300px;text-align:center;
+  transition:border-color 0.2s;
+}
+#lock-input:focus{border-color:var(--blue);}
+#lock-error{font-size:0.82rem;color:var(--red);min-height:1.2em;font-weight:600;}
+#lock-btn{
+  background:var(--blue);color:var(--green);
+  font-family:'Inter',sans-serif;font-weight:800;font-size:0.95rem;
+  letter-spacing:0.1em;text-transform:uppercase;
+  padding:0.9rem 2.8rem;border-radius:50px;border:none;cursor:pointer;
+  box-shadow:0 0 28px var(--blue-glow);transition:transform 0.2s,box-shadow 0.2s;
+}
+#lock-btn:hover{transform:scale(1.04);box-shadow:0 0 42px rgba(0,212,255,0.7);}
+
+/* ── NAV ── */
+nav{
+  display:flex;align-items:center;justify-content:space-between;
+  padding:1.2rem 2rem;
+  background:rgba(15,31,15,0.95);
+  border-bottom:1px solid var(--glass-border);
+  position:sticky;top:0;z-index:100;
+  backdrop-filter:blur(20px);
+}
+.nav-logo{font-family:'Bebas Neue',sans-serif;font-size:1.5rem;letter-spacing:0.08em;color:var(--blue);text-decoration:none;}
+.nav-logo span{color:var(--white);}
+.nav-back{color:rgba(0,212,255,0.6);text-decoration:none;font-size:0.78rem;font-weight:600;letter-spacing:0.15em;text-transform:uppercase;transition:color 0.2s;}
+.nav-back:hover{color:var(--blue);}
+
+/* ── LAYOUT ── */
+.page{max-width:1100px;margin:0 auto;padding:2rem 1.5rem 4rem;}
+
+/* ── SUMMARY ── */
+.summary{display:grid;grid-template-columns:repeat(auto-fit,minmax(150px,1fr));gap:1rem;margin-bottom:2.5rem;}
+.card{background:rgba(255,255,255,0.04);border:1px solid var(--glass-border);border-radius:16px;padding:1.4rem 1.5rem;transition:border-color 0.2s;}
+.card:hover{border-color:rgba(0,212,255,0.25);}
+.card-label{font-size:0.68rem;font-weight:700;letter-spacing:0.2em;text-transform:uppercase;color:rgba(255,255,255,0.4);margin-bottom:0.5rem;}
+.card-value{font-family:'Bebas Neue',sans-serif;font-size:2.4rem;letter-spacing:0.04em;line-height:1;}
+.c-green{color:var(--green-ok);}
+.c-yellow{color:var(--yellow);}
+.c-blue{color:var(--blue);}
+
+/* ── FORM ── */
+.form-section{background:rgba(255,255,255,0.04);border:1px solid var(--glass-border);border-radius:20px;padding:1.8rem;margin-bottom:2.5rem;}
+.section-title{font-family:'Bebas Neue',sans-serif;font-size:1.4rem;letter-spacing:0.08em;color:var(--blue);margin-bottom:1.4rem;}
+.form-grid{display:grid;grid-template-columns:repeat(auto-fit,minmax(160px,1fr));gap:1rem;}
+.field{display:flex;flex-direction:column;gap:0.4rem;}
+.field label{font-size:0.7rem;font-weight:700;letter-spacing:0.15em;text-transform:uppercase;color:rgba(255,255,255,0.4);}
+.field input,.field select{
+  background:rgba(255,255,255,0.07);border:1px solid rgba(255,255,255,0.12);
+  border-radius:10px;padding:0.7rem 1rem;
+  color:var(--white);font-family:'Inter',sans-serif;font-size:0.92rem;
+  outline:none;transition:border-color 0.2s;-webkit-appearance:none;
+}
+.field input:focus,.field select:focus{border-color:var(--blue);}
+.field select option{background:#1a2e1a;}
+.form-actions{margin-top:1.2rem;display:flex;gap:0.8rem;flex-wrap:wrap;}
+.btn{display:inline-flex;align-items:center;gap:0.4rem;font-family:'Inter',sans-serif;font-weight:700;font-size:0.88rem;letter-spacing:0.08em;text-transform:uppercase;padding:0.75rem 1.8rem;border-radius:50px;border:none;cursor:pointer;transition:transform 0.2s,box-shadow 0.2s;}
+.btn:active{transform:scale(0.96);}
+.btn-primary{background:var(--blue);color:var(--green);box-shadow:0 0 20px rgba(0,212,255,0.3);}
+.btn-primary:hover{box-shadow:0 0 32px rgba(0,212,255,0.6);transform:translateY(-1px);}
+.btn-ghost{background:rgba(255,255,255,0.07);color:rgba(255,255,255,0.5);border:1px solid rgba(255,255,255,0.1);}
+.btn-ghost:hover{color:var(--white);}
+
+/* ── TABLE ── */
+.table-section{background:rgba(255,255,255,0.03);border:1px solid var(--glass-border);border-radius:20px;overflow:hidden;}
+.table-header{display:flex;align-items:center;justify-content:space-between;padding:1.2rem 1.8rem;border-bottom:1px solid var(--glass-border);flex-wrap:wrap;gap:0.8rem;}
+.filter-tabs{display:flex;gap:0.5rem;flex-wrap:wrap;}
+.tab{background:rgba(255,255,255,0.05);border:1px solid rgba(255,255,255,0.1);border-radius:50px;padding:0.38rem 1rem;font-size:0.7rem;font-weight:700;letter-spacing:0.12em;text-transform:uppercase;color:rgba(255,255,255,0.4);cursor:pointer;transition:all 0.2s;}
+.tab:hover{color:var(--white);}
+.tab.active{background:var(--blue-dim);border-color:rgba(0,212,255,0.4);color:var(--blue);}
+.tab.flag-tab{color:rgba(255,77,77,0.6);border-color:rgba(255,77,77,0.2);}
+.tab.flag-tab.active{background:rgba(255,77,77,0.1);border-color:rgba(255,77,77,0.4);color:var(--red);}
+.table-controls{display:flex;gap:0.6rem;align-items:center;flex-wrap:wrap;}
+.table-search{background:rgba(255,255,255,0.06);border:1px solid rgba(255,255,255,0.1);border-radius:50px;padding:0.5rem 1.2rem;color:var(--white);font-family:'Inter',sans-serif;font-size:0.85rem;outline:none;width:200px;transition:border-color 0.2s;}
+.table-search:focus{border-color:var(--blue);}
+.table-search::placeholder{color:rgba(255,255,255,0.25);}
+.export-btn{background:rgba(255,255,255,0.06);border:1px solid rgba(255,255,255,0.12);color:rgba(255,255,255,0.45);border-radius:50px;padding:0.5rem 1.1rem;font-family:'Inter',sans-serif;font-size:0.72rem;font-weight:600;letter-spacing:0.1em;text-transform:uppercase;cursor:pointer;transition:all 0.2s;}
+.export-btn:hover{color:var(--white);}
+.table-wrap{overflow-x:auto;-webkit-overflow-scrolling:touch;}
+table{width:100%;border-collapse:collapse;min-width:640px;}
+thead tr{background:rgba(0,0,0,0.2);}
+th{padding:0.85rem 1.1rem;text-align:left;font-size:0.65rem;font-weight:700;letter-spacing:0.18em;text-transform:uppercase;color:rgba(255,255,255,0.35);white-space:nowrap;}
+tbody tr{border-bottom:1px solid rgba(255,255,255,0.05);transition:background 0.15s;}
+tbody tr:last-child{border-bottom:none;}
+tbody tr:hover{background:rgba(0,212,255,0.03);}
+tbody tr.flagged-row{background:rgba(255,77,77,0.06);border-left:3px solid rgba(255,77,77,0.5);}
+td{padding:0.85rem 1.1rem;font-size:0.87rem;color:rgba(255,255,255,0.8);vertical-align:middle;}
+td.name{font-weight:600;color:var(--white);}
+td.amount{font-family:'Bebas Neue',sans-serif;font-size:1.2rem;letter-spacing:0.06em;color:var(--blue);}
+.badge{display:inline-block;padding:0.26rem 0.8rem;border-radius:50px;font-size:0.68rem;font-weight:700;letter-spacing:0.14em;text-transform:uppercase;cursor:pointer;transition:opacity 0.2s,transform 0.15s;user-select:none;}
+.badge:hover{opacity:0.75;transform:scale(1.05);}
+.badge.paid{background:rgba(0,230,118,0.12);color:var(--green-ok);border:1px solid rgba(0,230,118,0.28);}
+.badge.unpaid{background:rgba(255,215,0,0.1);color:var(--yellow);border:1px solid rgba(255,215,0,0.28);}
+.badge.cancelled{background:rgba(255,77,77,0.1);color:var(--red);border:1px solid rgba(255,77,77,0.28);}
+.btn-icon{background:none;border:none;cursor:pointer;color:rgba(255,255,255,0.25);font-size:1rem;padding:0.3rem;border-radius:6px;line-height:1;transition:color 0.2s,background 0.2s;}
+.btn-icon:hover{color:var(--red);background:rgba(255,77,77,0.1);}
+.btn-icon.edit:hover{color:var(--blue);background:rgba(0,212,255,0.1);}
+.flag-btn{font-size:1.1rem;opacity:0.2;transition:opacity 0.2s,transform 0.2s;}
+.flag-btn.on{opacity:1;}
+.flag-btn:hover{opacity:1;transform:scale(1.2);}
+.empty{text-align:center;padding:4rem 2rem;color:rgba(255,255,255,0.2);}
+.empty-icon{font-size:2.8rem;margin-bottom:0.8rem;}
+.empty p{font-size:0.88rem;}
+
+/* ── NOTES MODAL ── */
+.modal-bg{display:none;position:fixed;inset:0;background:rgba(0,0,0,0.75);backdrop-filter:blur(8px);z-index:500;align-items:center;justify-content:center;padding:1rem;}
+.modal-bg.open{display:flex;}
+.modal{background:#162416;border:1px solid var(--glass-border);border-radius:20px;padding:2rem;width:100%;max-width:460px;}
+.modal h3{font-family:'Bebas Neue',sans-serif;font-size:1.5rem;color:var(--blue);margin-bottom:1.2rem;}
+.modal textarea{width:100%;background:rgba(255,255,255,0.07);border:1px solid rgba(255,255,255,0.12);border-radius:10px;padding:0.8rem 1rem;color:var(--white);font-family:'Inter',sans-serif;font-size:0.9rem;resize:vertical;min-height:100px;outline:none;transition:border-color 0.2s;}
+.modal textarea:focus{border-color:var(--blue);}
+.modal-actions{display:flex;gap:0.8rem;margin-top:1rem;}
+
+@media(max-width:600px){
+  .page{padding:1.2rem 1rem 3rem;}
+  .form-grid{grid-template-columns:1fr 1fr;}
+  .summary{grid-template-columns:1fr 1fr;}
+  .table-search{width:140px;}
+}
+
+/* ── MAX AI ── */
+#max-btn{
+  position:fixed;bottom:2rem;left:2rem;z-index:800;
+  background:linear-gradient(135deg,#0f1f0f,#1a3a1a);
+  border:1px solid rgba(0,212,255,0.4);
+  color:var(--blue);font-family:'Bebas Neue',sans-serif;
+  font-size:1rem;letter-spacing:0.1em;
+  padding:0.75rem 1.4rem;border-radius:50px;cursor:pointer;
+  box-shadow:0 0 20px rgba(0,212,255,0.2);
+  transition:all 0.25s;display:flex;align-items:center;gap:0.5rem;
+}
+#max-btn:hover{box-shadow:0 0 32px rgba(0,212,255,0.5);transform:translateY(-2px);}
+#max-btn .pulse{
+  width:8px;height:8px;border-radius:50%;background:var(--blue);
+  animation:aiPulse 2s ease-in-out infinite;
+}
+@keyframes aiPulse{0%,100%{opacity:1;transform:scale(1);}50%{opacity:0.4;transform:scale(0.7);}}
+
+#max-panel{
+  position:fixed;bottom:0;left:0;top:0;z-index:900;
+  width:380px;max-width:100vw;
+  background:#0d1d0d;border-right:1px solid rgba(0,212,255,0.15);
+  display:flex;flex-direction:column;
+  transform:translateX(-100%);transition:transform 0.3s cubic-bezier(0.22,1,0.36,1);
+  box-shadow:4px 0 40px rgba(0,0,0,0.5);
+}
+#max-panel.open{transform:translateX(0);}
+.max-header{
+  display:flex;align-items:center;justify-content:space-between;
+  padding:1.2rem 1.4rem;border-bottom:1px solid rgba(255,255,255,0.07);
+  background:rgba(0,212,255,0.05);flex-shrink:0;
+}
+.max-title{display:flex;align-items:center;gap:0.7rem;}
+.max-avatar{
+  width:36px;height:36px;border-radius:50%;
+  background:linear-gradient(135deg,var(--blue),#0090b3);
+  display:flex;align-items:center;justify-content:center;
+  font-size:1rem;flex-shrink:0;
+}
+.max-name{font-family:'Bebas Neue',sans-serif;font-size:1.1rem;letter-spacing:0.08em;color:var(--white);}
+.max-role{font-size:0.65rem;color:rgba(0,212,255,0.6);font-weight:600;letter-spacing:0.12em;text-transform:uppercase;margin-top:-2px;}
+.max-close{background:none;border:none;color:rgba(255,255,255,0.35);font-size:1.3rem;cursor:pointer;padding:0.2rem;transition:color 0.2s;}
+.max-close:hover{color:var(--white);}
+
+.max-quick{
+  display:flex;gap:0.5rem;padding:0.9rem 1rem;
+  overflow-x:auto;flex-shrink:0;border-bottom:1px solid rgba(255,255,255,0.06);
+  scrollbar-width:none;
+}
+.max-quick::-webkit-scrollbar{display:none;}
+.quick-pill{
+  background:rgba(0,212,255,0.08);border:1px solid rgba(0,212,255,0.2);
+  color:rgba(0,212,255,0.8);border-radius:50px;
+  padding:0.35rem 0.9rem;font-size:0.72rem;font-weight:600;
+  letter-spacing:0.05em;white-space:nowrap;cursor:pointer;flex-shrink:0;
+  transition:all 0.2s;
+}
+.quick-pill:hover{background:rgba(0,212,255,0.18);color:var(--blue);}
+
+.max-messages{
+  flex:1;overflow-y:auto;padding:1rem;display:flex;flex-direction:column;gap:0.9rem;
+  scrollbar-width:thin;scrollbar-color:rgba(255,255,255,0.1) transparent;
+}
+.msg{display:flex;flex-direction:column;gap:0.25rem;max-width:88%;}
+.msg.user{align-self:flex-end;align-items:flex-end;}
+.msg.ai{align-self:flex-start;}
+.msg-bubble{
+  padding:0.7rem 1rem;border-radius:14px;font-size:0.84rem;line-height:1.55;
+}
+.msg.user .msg-bubble{background:var(--blue);color:#0a150a;font-weight:500;border-radius:14px 14px 4px 14px;}
+.msg.ai .msg-bubble{background:rgba(255,255,255,0.07);border:1px solid rgba(255,255,255,0.08);color:rgba(255,255,255,0.9);border-radius:14px 14px 14px 4px;}
+.msg.ai .msg-bubble b,.msg.ai .msg-bubble strong{color:var(--blue);}
+.msg-time{font-size:0.62rem;color:rgba(255,255,255,0.25);padding:0 0.3rem;}
+
+.max-typing{display:none;align-self:flex-start;}
+.max-typing.show{display:flex;}
+.typing-bubble{background:rgba(255,255,255,0.07);border:1px solid rgba(255,255,255,0.08);border-radius:14px 14px 14px 4px;padding:0.8rem 1rem;display:flex;gap:5px;align-items:center;}
+.typing-dot{width:6px;height:6px;border-radius:50%;background:rgba(0,212,255,0.5);animation:typingDot 1.2s ease-in-out infinite;}
+.typing-dot:nth-child(2){animation-delay:0.2s;}
+.typing-dot:nth-child(3){animation-delay:0.4s;}
+@keyframes typingDot{0%,80%,100%{transform:scale(0.7);opacity:0.4;}40%{transform:scale(1);opacity:1;}}
+
+.max-input-row{
+  display:flex;gap:0.6rem;padding:1rem;
+  border-top:1px solid rgba(255,255,255,0.07);flex-shrink:0;
+  background:#0d1d0d;
+}
+#max-input{
+  flex:1;background:rgba(255,255,255,0.07);border:1px solid rgba(255,255,255,0.12);
+  border-radius:12px;padding:0.7rem 1rem;color:var(--white);
+  font-family:'Inter',sans-serif;font-size:0.88rem;outline:none;resize:none;
+  height:42px;max-height:100px;overflow-y:auto;
+  transition:border-color 0.2s;
+}
+#max-input:focus{border-color:rgba(0,212,255,0.4);}
+#max-send{
+  background:var(--blue);color:#0a150a;border:none;cursor:pointer;
+  width:42px;height:42px;border-radius:12px;flex-shrink:0;
+  font-size:1.1rem;transition:all 0.2s;
+}
+#max-send:hover{box-shadow:0 0 16px rgba(0,212,255,0.5);}
+#max-send:disabled{opacity:0.4;cursor:not-allowed;}
+</style>
+</head>
+<body>
+
+<!-- ── LOCK SCREEN ── -->
+<div id="lock-screen">
+  <div class="lock-logo"><span>Water</span>Works<span> Tracker</span></div>
+  <div class="lock-sub">Enter your code to continue</div>
+  <input id="lock-input" type="password"
+    autocomplete="current-password" autocorrect="off" autocapitalize="off" spellcheck="false"
+    placeholder="Enter code...">
+  <div id="lock-error"></div>
+  <button id="lock-btn" onclick="checkCode()">Unlock</button>
+</div>
+
+<!-- ── MAIN APP ── -->
+<div id="app" style="display:none;">
+
+<nav>
+  <a class="nav-logo" href="index.html"><span>Water</span>Works<span> &amp; Lawn</span></a>
+  <div style="display:flex;gap:1.5rem;align-items:center;">
+    <a href="contract.html" style="color:rgba(0,212,255,0.6);text-decoration:none;font-size:0.78rem;font-weight:600;letter-spacing:0.15em;text-transform:uppercase;transition:color 0.2s;" onmouseover="this.style.color='#00d4ff'" onmouseout="this.style.color='rgba(0,212,255,0.6)'">&#128221; Contracts</a>
+    <a class="nav-back" href="index.html">Back to Site</a>
+  </div>
+</nav>
+
+<div class="page">
+
+  <div class="summary">
+    <div class="card">
+      <div class="card-label">Total Earned</div>
+      <div class="card-value c-green" id="stat-earned">$0</div>
+    </div>
+    <div class="card">
+      <div class="card-label">Unpaid</div>
+      <div class="card-value c-yellow" id="stat-unpaid">$0</div>
+    </div>
+    <div class="card">
+      <div class="card-label">This Month</div>
+      <div class="card-value c-blue" id="stat-month">0</div>
+    </div>
+    <div class="card">
+      <div class="card-label">Total Jobs</div>
+      <div class="card-value" id="stat-total">0</div>
+    </div>
+    <div class="card" style="border-color:rgba(255,215,0,0.2);">
+      <div class="card-label" style="color:rgba(255,215,0,0.6);">&#127942; Best Win</div>
+      <div class="card-value" id="stat-bestwin" style="color:#ffd700;">$0</div>
+    </div>
+  </div>
+
+  <div class="form-section">
+    <div class="section-title">+ Add Booking</div>
+    <div class="form-grid">
+      <div class="field">
+        <label>Customer Name</label>
+        <input type="text" id="f-name" placeholder="John Smith" oninput="checkFlagged()">
+        <div id="flag-warning" style="display:none;margin-top:0.4rem;background:rgba(255,77,77,0.12);border:1px solid rgba(255,77,77,0.4);border-radius:8px;padding:0.5rem 0.8rem;font-size:0.78rem;font-weight:700;color:#ff4d4d;letter-spacing:0.05em;">&#128681; This customer is flagged — booking blocked. Unflag them first.</div>
+      </div>
+      <div class="field">
+        <label>Service</label>
+        <select id="f-service">
+          <option value="">Select...</option>
+          <option>Lawn Mowing</option>
+          <option>Pressure Washing</option>
+          <option>Car Wash</option>
+          <option>Snow Removal</option>
+          <option>Other</option>
+        </select>
+      </div>
+      <div class="field">
+        <label>Date</label>
+        <input type="date" id="f-date">
+      </div>
+      <div class="field">
+        <label>Time</label>
+        <input type="time" id="f-time">
+      </div>
+      <div class="field">
+        <label>Amount ($)</label>
+        <input type="number" id="f-amount" placeholder="10" min="0" step="0.01">
+      </div>
+      <div class="field">
+        <label>Status</label>
+        <select id="f-status">
+          <option value="unpaid">Unpaid</option>
+          <option value="paid">Paid</option>
+          <option value="cancelled">Cancelled</option>
+        </select>
+      </div>
+    </div>
+    <div class="form-actions">
+      <button class="btn btn-primary" id="add-btn" onclick="addBooking()">&#9889; Add Booking</button>
+      <button class="btn btn-ghost" onclick="clearForm()">Clear</button>
+    </div>
+  </div>
+
+  <div class="table-section">
+    <div class="table-header">
+      <div class="filter-tabs">
+        <div class="tab active" onclick="setFilter('all',this)">All</div>
+        <div class="tab" onclick="setFilter('unpaid',this)">Unpaid</div>
+        <div class="tab" onclick="setFilter('paid',this)">Paid</div>
+        <div class="tab" onclick="setFilter('cancelled',this)">Cancelled</div>
+        <div class="tab flag-tab" onclick="setFilter('flagged',this)">&#128681; Flagged</div>
+      </div>
+      <div class="table-controls">
+        <input class="table-search" type="text" id="search-input" placeholder="Search..." oninput="renderTable()">
+        <button class="export-btn" onclick="exportCSV()">Export CSV</button>
+      </div>
+    </div>
+    <div class="table-wrap">
+      <table>
+        <thead>
+          <tr>
+            <th></th>
+            <th>Customer</th>
+            <th>Service</th>
+            <th>Date</th>
+            <th>Time</th>
+            <th>Amount</th>
+            <th>Status</th>
+            <th>Notes</th>
+            <th></th>
+          </tr>
+        </thead>
+        <tbody id="table-body"></tbody>
+      </table>
+    </div>
+    <div class="empty" id="empty-state" style="display:none;">
+      <div class="empty-icon">&#128203;</div>
+      <p>No bookings yet — add one above!</p>
+    </div>
+  </div>
+
+</div>
+</div>
+
+<!-- ── NOTES MODAL ── -->
+<div class="modal-bg" id="notes-modal">
+  <div class="modal">
+    <h3>Notes</h3>
+    <textarea id="notes-text" placeholder="Add notes about this booking..."></textarea>
+    <div class="modal-actions">
+      <button class="btn btn-primary" onclick="saveNotes()">Save</button>
+      <button class="btn btn-ghost" onclick="closeNotes()">Cancel</button>
+    </div>
+  </div>
+</div>
+
+<script>
+var PASS = 'tracker123';
+var bookings = JSON.parse(localStorage.getItem('ww-bookings') || '[]');
+var activeFilter = 'all';
+var editingNotesId = null;
+
+// ── LOCK ──
+function checkCode() {
+  var val = document.getElementById('lock-input').value;
+  if (val === PASS) {
+    sessionStorage.setItem('ww-auth', '1');
+    document.getElementById('lock-screen').classList.add('hidden');
+    document.getElementById('app').style.display = 'block';
+  } else {
+    document.getElementById('lock-error').textContent = 'Wrong code, try again.';
+    document.getElementById('lock-input').value = '';
+    document.getElementById('lock-input').focus();
+  }
+}
+document.getElementById('lock-input').addEventListener('keydown', function(e) {
+  if (e.key === 'Enter') checkCode();
+});
+// Always require password on fresh load — only skip if unlocked in this tab session
+if (sessionStorage.getItem('ww-auth') === '1') {
+  document.getElementById('lock-screen').classList.add('hidden');
+  document.getElementById('app').style.display = 'block';
+} else {
+  // Make sure lock screen is visible and app is hidden
+  document.getElementById('lock-screen').classList.remove('hidden');
+  document.getElementById('app').style.display = 'none';
+  setTimeout(function() { document.getElementById('lock-input').focus(); }, 100);
+}
+
+// ── DATA ──
+function save() {
+  localStorage.setItem('ww-bookings', JSON.stringify(bookings));
+}
+function genId() {
+  return Date.now().toString(36) + Math.random().toString(36).slice(2, 6);
+}
+
+// ── BOOKINGS ──
+function checkFlagged() {
+  var name = document.getElementById('f-name').value.trim().toLowerCase();
+  var warning = document.getElementById('flag-warning');
+  var addBtn = document.getElementById('add-btn');
+  if (!name) { warning.style.display = 'none'; addBtn.disabled = false; addBtn.style.opacity = '1'; return; }
+  var isFlagged = bookings.some(function(b) { return b.flagged && b.name.toLowerCase() === name; });
+  if (isFlagged) {
+    warning.style.display = 'block';
+    addBtn.disabled = true;
+    addBtn.style.opacity = '0.4';
+  } else {
+    warning.style.display = 'none';
+    addBtn.disabled = false;
+    addBtn.style.opacity = '1';
+  }
+}
+
+function addBooking() {
+  var name = document.getElementById('f-name').value.trim();
+  var service = document.getElementById('f-service').value;
+  var date = document.getElementById('f-date').value;
+  var time = document.getElementById('f-time').value;
+  var amount = parseFloat(document.getElementById('f-amount').value) || 0;
+  var status = document.getElementById('f-status').value;
+  if (!name || !service) { alert('Please enter a name and service.'); return; }
+  var isFlagged = bookings.some(function(b) { return b.flagged && b.name.toLowerCase() === name.toLowerCase(); });
+  if (isFlagged) { alert('This customer is flagged. Unflag them in the table before booking again.'); return; }
+  bookings.unshift({ id: genId(), name: name, service: service, date: date, time: time, amount: amount, status: status, notes: '', flagged: false });
+  save(); renderTable(); updateStats(); clearForm(); checkFlagged();
+}
+
+function clearForm() {
+  document.getElementById('f-name').value = '';
+  document.getElementById('f-amount').value = '';
+  document.getElementById('f-service').value = '';
+  document.getElementById('f-status').value = 'unpaid';
+  document.getElementById('f-date').value = '';
+  document.getElementById('f-time').value = '';
+}
+
+function deleteBooking(id) {
+  if (!confirm('Delete this booking?')) return;
+  bookings = bookings.filter(function(b) { return b.id !== id; });
+  save(); renderTable(); updateStats();
+}
+
+function toggleStatus(id) {
+  var b = bookings.find(function(b) { return b.id === id; });
+  if (!b) return;
+  var cycle = { unpaid: 'paid', paid: 'cancelled', cancelled: 'unpaid' };
+  b.status = cycle[b.status] || 'unpaid';
+  save(); renderTable(); updateStats();
+}
+
+function toggleFlag(id) {
+  var b = bookings.find(function(b) { return b.id === id; });
+  if (!b) return;
+  b.flagged = !b.flagged;
+  save(); renderTable();
+}
+
+function setFilter(f, el) {
+  activeFilter = f;
+  document.querySelectorAll('.tab').forEach(function(t) { t.classList.remove('active'); });
+  el.classList.add('active');
+  renderTable();
+}
+
+// ── NOTES ──
+function openNotes(id) {
+  editingNotesId = id;
+  var b = bookings.find(function(b) { return b.id === id; });
+  document.getElementById('notes-text').value = b ? (b.notes || '') : '';
+  document.getElementById('notes-modal').classList.add('open');
+}
+function closeNotes() {
+  document.getElementById('notes-modal').classList.remove('open');
+  editingNotesId = null;
+}
+function saveNotes() {
+  var b = bookings.find(function(b) { return b.id === editingNotesId; });
+  if (b) { b.notes = document.getElementById('notes-text').value.trim(); save(); }
+  closeNotes(); renderTable();
+}
+document.getElementById('notes-modal').addEventListener('click', function(e) {
+  if (e.target === this) closeNotes();
+});
+
+// ── RENDER ──
+function fmtDate(d) {
+  if (!d) return '-';
+  var p = d.split('-');
+  return p[1] + '/' + p[2] + '/' + p[0];
+}
+function fmtTime(t) {
+  if (!t) return '-';
+  var p = t.split(':');
+  var h = parseInt(p[0]);
+  return (h > 12 ? h - 12 : (h || 12)) + ':' + p[1] + ' ' + (h >= 12 ? 'PM' : 'AM');
+}
+function esc(s) {
+  return (s || '').replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;');
+}
+
+function renderTable() {
+  var search = (document.getElementById('search-input').value || '').toLowerCase();
+  var filtered = bookings.filter(function(b) {
+    if (activeFilter === 'flagged') return b.flagged;
+    if (activeFilter !== 'all' && b.status !== activeFilter) return false;
+    if (search && (b.name + ' ' + b.service + ' ' + b.date).toLowerCase().indexOf(search) === -1) return false;
+    return true;
+  });
+
+  var tbody = document.getElementById('table-body');
+  var empty = document.getElementById('empty-state');
+
+  if (filtered.length === 0) {
+    tbody.innerHTML = '';
+    empty.style.display = 'block';
+    return;
+  }
+  empty.style.display = 'none';
+
+  tbody.innerHTML = filtered.map(function(b) {
+    var rowClass = b.flagged ? 'flagged-row' : '';
+    var flagClass = b.flagged ? 'flag-btn on' : 'flag-btn';
+    var flagTitle = b.flagged ? 'Remove flag' : 'Flag customer';
+    var noteIcon = b.notes ? '📝' : '+';
+    var noteTitle = b.notes ? 'View notes' : 'Add notes';
+    return '<tr class="' + rowClass + '">' +
+      '<td><button class="btn-icon ' + flagClass + '" onclick="toggleFlag(\'' + b.id + '\')" title="' + flagTitle + '">&#128681;</button></td>' +
+      '<td class="name">' + esc(b.name) + '</td>' +
+      '<td>' + esc(b.service) + '</td>' +
+      '<td>' + fmtDate(b.date) + '</td>' +
+      '<td>' + fmtTime(b.time) + '</td>' +
+      '<td class="amount">$' + b.amount.toFixed(2) + '</td>' +
+      '<td><span class="badge ' + b.status + '" onclick="toggleStatus(\'' + b.id + '\')" title="Click to change">' + b.status + '</span></td>' +
+      '<td><button class="btn-icon edit" onclick="openNotes(\'' + b.id + '\')" title="' + noteTitle + '">' + noteIcon + '</button></td>' +
+      '<td><button class="btn-icon" onclick="deleteBooking(\'' + b.id + '\')" title="Delete">&#x2715;</button></td>' +
+      '</tr>';
+  }).join('');
+}
+
+function updateStats() {
+  var now = new Date();
+  var thisMonth = now.getFullYear() + '-' + String(now.getMonth() + 1).padStart(2, '0');
+  var earned = 0, unpaid = 0, monthCount = 0;
+  bookings.forEach(function(b) {
+    if (b.status === 'paid') earned += b.amount;
+    if (b.status === 'unpaid') unpaid += b.amount;
+    if (b.date && b.date.indexOf(thisMonth) === 0 && b.status !== 'cancelled') monthCount++;
+  });
+  var bestWin = 0;
+  bookings.forEach(function(b) {
+    if (b.status === 'paid' && b.amount > bestWin) bestWin = b.amount;
+  });
+  document.getElementById('stat-earned').textContent = '$' + earned.toFixed(2);
+  document.getElementById('stat-unpaid').textContent = '$' + unpaid.toFixed(2);
+  document.getElementById('stat-month').textContent = monthCount;
+  document.getElementById('stat-total').textContent = bookings.filter(function(b) { return b.status !== 'cancelled'; }).length;
+  document.getElementById('stat-bestwin').textContent = '$' + bestWin.toFixed(2);
+}
+
+function exportCSV() {
+  var headers = ['Customer','Service','Date','Time','Amount','Status','Flagged','Notes'];
+  var rows = bookings.map(function(b) {
+    return [b.name, b.service, b.date, b.time, b.amount.toFixed(2), b.status, b.flagged ? 'Yes' : 'No', b.notes || '']
+      .map(function(v) { return '"' + String(v).replace(/"/g, '""') + '"'; }).join(',');
+  });
+  var csv = [headers.join(',')].concat(rows).join('\n');
+  var a = document.createElement('a');
+  a.href = 'data:text/csv;charset=utf-8,' + encodeURIComponent(csv);
+  a.download = 'waterworks-bookings.csv';
+  a.click();
+}
+
+// Set today as default date
+try {
+  var today = new Date();
+  var yyyy = today.getFullYear();
+  var mm = String(today.getMonth() + 1).padStart(2, '0');
+  var dd = String(today.getDate()).padStart(2, '0');
+  document.getElementById('f-date').value = yyyy + '-' + mm + '-' + dd;
+} catch(e) {}
+
+renderTable();
+updateStats();
+
+// ── MAX AI ──
+var maxHistory = [];
+var maxBusy = false;
+
+function openMax() {
+  document.getElementById('max-panel').classList.add('open');
+  if (maxHistory.length === 0) {
+    setTimeout(function() { maxGreet(); }, 300);
+  }
+}
+function closeMax() {
+  document.getElementById('max-panel').classList.remove('open');
+}
+
+function maxGreet() {
+  var earned = 0; var unpaid = 0;
+  bookings.forEach(function(b) {
+    if (b.status === 'paid') earned += b.amount;
+    if (b.status === 'unpaid') unpaid += b.amount;
+  });
+  var greeting = "Hey! I'm your **Assistant**, your marketing specialist. I can see you've got **" + bookings.length + " bookings**, **$" + earned.toFixed(2) + " collected**, and **$" + unpaid.toFixed(2) + " outstanding**.\n\nAsk me anything — marketing ideas, best customers, pricing tips, or how to grow faster. What do you want to tackle first?";
+  appendMsg('ai', greeting);
+}
+
+function appendMsg(role, text) {
+  var msgs = document.getElementById('max-messages');
+  var div = document.createElement('div');
+  div.className = 'msg ' + role;
+  var now = new Date();
+  var t = (now.getHours() % 12 || 12) + ':' + String(now.getMinutes()).padStart(2,'0') + (now.getHours() >= 12 ? ' PM' : ' AM');
+  div.innerHTML = '<div class="msg-bubble">' + formatMaxText(text) + '</div><div class="msg-time">' + t + '</div>';
+  msgs.appendChild(div);
+  msgs.scrollTop = msgs.scrollHeight;
+  if (role === 'ai') maxHistory.push({ role: 'assistant', content: text });
+  if (role === 'user') maxHistory.push({ role: 'user', content: text });
+}
+
+function formatMaxText(text) {
+  return text
+    .replace(/\*\*(.+?)\*\*/g, '<strong>$1</strong>')
+    .replace(/\n/g, '<br>');
+}
+
+function setTyping(show) {
+  document.getElementById('max-typing').className = 'max-typing' + (show ? ' show' : '');
+  if (show) {
+    var msgs = document.getElementById('max-messages');
+    msgs.scrollTop = msgs.scrollHeight;
+  }
+}
+
+function maxQuick(text) {
+  sendToMax(text);
+}
+
+function sendToMax(overrideText) {
+  if (maxBusy) return;
+  var input = document.getElementById('max-input');
+  var text = overrideText || input.value.trim();
+  if (!text) return;
+  input.value = '';
+  input.style.height = '42px';
+  appendMsg('user', text);
+  maxBusy = true;
+  document.getElementById('max-send').disabled = true;
+  setTyping(true);
+
+  // Remove last 2 from history since appendMsg already added user msg
+  maxHistory.pop();
+
+  fetch('/ai', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({
+      message: text,
+      history: maxHistory.slice(-8),
+      bookings: bookings
+    })
+  })
+  .then(function(r) { return r.json(); })
+  .then(function(data) {
+    setTyping(false);
+    if (data.reply) {
+      appendMsg('ai', data.reply);
+    } else {
+      appendMsg('ai', 'Sorry, I hit a snag. Try again in a moment.');
+    }
+  })
+  .catch(function() {
+    setTyping(false);
+    appendMsg('ai', 'Connection issue — check your internet and try again.');
+  })
+  .finally(function() {
+    maxBusy = false;
+    document.getElementById('max-send').disabled = false;
+  });
+}
+
+document.getElementById('max-input').addEventListener('keydown', function(e) {
+  if (e.key === 'Enter' && !e.shiftKey) { e.preventDefault(); sendToMax(); }
+});
+document.getElementById('max-input').addEventListener('input', function() {
+  this.style.height = '42px';
+  this.style.height = Math.min(this.scrollHeight, 100) + 'px';
+});
+</script>
+
+<!-- ── MAX AI BUTTON ── -->
+<button id="max-btn" onclick="openMax()">
+  <div class="pulse"></div>
+  Assistant
+</button>
+
+<!-- ── MAX AI PANEL ── -->
+<div id="max-panel">
+  <div class="max-header">
+    <div class="max-title">
+      <div class="max-avatar">🧠</div>
+      <div>
+        <div class="max-name">Assistant</div>
+        <div class="max-role">Marketing Specialist</div>
+      </div>
+    </div>
+    <button class="max-close" onclick="closeMax()">&#x2715;</button>
+  </div>
+  <div class="max-quick">
+    <div class="quick-pill" onclick="maxQuick('Analyze my revenue and give me insights')">💰 Revenue Insights</div>
+    <div class="quick-pill" onclick="maxQuick('Who are my best customers and why?')">⭐ Best Customers</div>
+    <div class="quick-pill" onclick="maxQuick('Give me 3 marketing ideas to get more bookings')">📣 Marketing Ideas</div>
+    <div class="quick-pill" onclick="maxQuick('Should I change my pricing? What do you recommend?')">💲 Pricing Tips</div>
+    <div class="quick-pill" onclick="maxQuick('Draft a text message I can send customers to book again')">📱 Draft a Text</div>
+    <div class="quick-pill" onclick="maxQuick('What services should I push more this season?')">📈 What to Push</div>
+  </div>
+  <div class="max-messages" id="max-messages">
+    <div class="max-typing" id="max-typing">
+      <div class="typing-bubble">
+        <div class="typing-dot"></div>
+        <div class="typing-dot"></div>
+        <div class="typing-dot"></div>
+      </div>
+    </div>
+  </div>
+  <div class="max-input-row">
+    <textarea id="max-input" placeholder="Ask your assistant anything..."></textarea>
+    <button id="max-send" onclick="sendToMax()">&#10148;</button>
+  </div>
+</div>
+
+</body>
+</html>

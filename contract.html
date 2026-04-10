@@ -1,0 +1,329 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>WaterWorks — Contract Generator</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Bebas+Neue&family=Inter:wght@300;400;500;600;700;800;900&display=swap" rel="stylesheet">
+<style>
+*,*::before,*::after{box-sizing:border-box;margin:0;padding:0;}
+:root{
+  --green:#0f1f0f;--green-mid:#162416;
+  --blue:#00d4ff;--blue-glow:rgba(0,212,255,0.45);
+  --white:#ffffff;--off-white:#ddf0f8;
+  --glass-border:rgba(255,255,255,0.1);
+  --red:#ff4d4d;
+}
+body{font-family:'Inter',sans-serif;color:var(--white);background:var(--green);min-height:100vh;}
+
+/* NAV */
+nav{display:flex;align-items:center;justify-content:space-between;padding:1.2rem 2rem;background:rgba(15,31,15,0.95);border-bottom:1px solid var(--glass-border);position:sticky;top:0;z-index:100;backdrop-filter:blur(20px);}
+.nav-logo{font-family:'Bebas Neue',sans-serif;font-size:1.5rem;letter-spacing:0.08em;color:var(--blue);text-decoration:none;}
+.nav-logo span{color:var(--white);}
+.nav-back{color:rgba(0,212,255,0.6);text-decoration:none;font-size:0.78rem;font-weight:600;letter-spacing:0.15em;text-transform:uppercase;transition:color 0.2s;}
+.nav-back:hover{color:var(--blue);}
+
+/* LOCK */
+#lock-screen{position:fixed;inset:0;background:#0a150a;z-index:9999;display:flex;flex-direction:column;align-items:center;justify-content:center;gap:1.4rem;padding:2rem;}
+#lock-screen.hidden{display:none;}
+.lock-logo{font-family:'Bebas Neue',sans-serif;font-size:2.2rem;letter-spacing:0.08em;color:var(--blue);}
+.lock-logo span{color:var(--white);}
+.lock-sub{font-size:0.72rem;font-weight:700;letter-spacing:0.25em;text-transform:uppercase;color:rgba(255,255,255,0.3);}
+#lock-input{background:rgba(255,255,255,0.07);border:1px solid rgba(255,255,255,0.15);border-radius:12px;padding:0.9rem 1.4rem;color:var(--white);font-family:'Inter',sans-serif;font-size:1.1rem;outline:none;width:100%;max-width:300px;text-align:center;transition:border-color 0.2s;}
+#lock-input:focus{border-color:var(--blue);}
+#lock-error{font-size:0.82rem;color:var(--red);min-height:1.2em;font-weight:600;}
+#lock-btn{background:var(--blue);color:var(--green);font-family:'Inter',sans-serif;font-weight:800;font-size:0.95rem;letter-spacing:0.1em;text-transform:uppercase;padding:0.9rem 2.8rem;border-radius:50px;border:none;cursor:pointer;box-shadow:0 0 28px var(--blue-glow);}
+
+/* PAGE */
+.page{max-width:820px;margin:0 auto;padding:2.5rem 1.5rem 4rem;}
+.page-title{font-family:'Bebas Neue',sans-serif;font-size:2.2rem;letter-spacing:0.06em;color:var(--blue);margin-bottom:0.3rem;}
+.page-sub{font-size:0.82rem;color:rgba(255,255,255,0.4);margin-bottom:2rem;font-weight:500;}
+
+/* FORM */
+.form-card{background:rgba(255,255,255,0.04);border:1px solid var(--glass-border);border-radius:20px;padding:2rem;margin-bottom:2rem;}
+.form-grid{display:grid;grid-template-columns:1fr 1fr;gap:1.2rem;}
+.field{display:flex;flex-direction:column;gap:0.4rem;}
+.field.full{grid-column:1/-1;}
+.field label{font-size:0.7rem;font-weight:700;letter-spacing:0.15em;text-transform:uppercase;color:rgba(255,255,255,0.4);}
+.field input,.field select,.field textarea{background:rgba(255,255,255,0.07);border:1px solid rgba(255,255,255,0.12);border-radius:10px;padding:0.75rem 1rem;color:var(--white);font-family:'Inter',sans-serif;font-size:0.92rem;outline:none;transition:border-color 0.2s;-webkit-appearance:none;}
+.field input:focus,.field select:focus,.field textarea:focus{border-color:var(--blue);}
+.field select option{background:#1a2e1a;}
+.field textarea{resize:vertical;min-height:80px;line-height:1.5;}
+.hint{font-size:0.72rem;color:rgba(255,255,255,0.28);margin-top:0.25rem;}
+
+.btn{display:inline-flex;align-items:center;gap:0.5rem;font-family:'Inter',sans-serif;font-weight:700;font-size:0.9rem;letter-spacing:0.08em;text-transform:uppercase;padding:0.85rem 2rem;border-radius:50px;border:none;cursor:pointer;transition:all 0.2s;}
+.btn-primary{background:var(--blue);color:var(--green);box-shadow:0 0 20px rgba(0,212,255,0.3);}
+.btn-primary:hover{box-shadow:0 0 36px rgba(0,212,255,0.6);transform:translateY(-1px);}
+.btn-ghost{background:rgba(255,255,255,0.07);color:rgba(255,255,255,0.6);border:1px solid rgba(255,255,255,0.12);}
+.btn-ghost:hover{color:var(--white);}
+.form-actions{display:flex;gap:0.8rem;flex-wrap:wrap;margin-top:1.5rem;}
+
+/* CONTRACT PREVIEW */
+#contract-wrap{display:none;}
+#contract-wrap.show{display:block;}
+.contract-actions{display:flex;gap:0.8rem;flex-wrap:wrap;margin-bottom:1.5rem;align-items:center;}
+.contract-actions span{font-size:0.78rem;color:rgba(255,255,255,0.35);margin-left:auto;}
+
+/* THE ACTUAL CONTRACT — print-friendly white */
+#contract-doc{
+  background:#fff;color:#111;
+  border-radius:12px;padding:3rem 3.5rem;
+  font-family:'Times New Roman',Times,serif;
+  font-size:11pt;line-height:1.7;
+  box-shadow:0 8px 40px rgba(0,0,0,0.4);
+}
+#contract-doc h1{font-size:16pt;font-weight:700;text-align:center;text-transform:uppercase;letter-spacing:0.08em;margin-bottom:0.3rem;font-family:'Times New Roman',Times,serif;}
+#contract-doc .doc-sub{text-align:center;font-size:10pt;color:#555;margin-bottom:2rem;border-bottom:2px solid #111;padding-bottom:1rem;}
+#contract-doc h2{font-size:11pt;font-weight:700;text-transform:uppercase;letter-spacing:0.05em;margin:1.6rem 0 0.4rem;}
+#contract-doc p{margin-bottom:0.8rem;}
+#contract-doc .highlight{font-weight:700;}
+#contract-doc .sig-block{margin-top:3rem;display:grid;grid-template-columns:1fr 1fr;gap:3rem;}
+#contract-doc .sig-party{border-top:1px solid #333;padding-top:0.6rem;}
+#contract-doc .sig-line{border-bottom:1px solid #333;height:2.5rem;margin-bottom:0.4rem;}
+#contract-doc .sig-label{font-size:9pt;color:#555;}
+#contract-doc .doc-footer{margin-top:2.5rem;padding-top:1rem;border-top:1px solid #ccc;font-size:9pt;color:#888;text-align:center;}
+
+@media(max-width:600px){
+  .form-grid{grid-template-columns:1fr;}
+  #contract-doc{padding:2rem 1.5rem;}
+  #contract-doc .sig-block{grid-template-columns:1fr;gap:2rem;}
+}
+
+@media print{
+  body{background:#fff!important;}
+  nav,#lock-screen,.form-card,.contract-actions,.page-title,.page-sub{display:none!important;}
+  .page{padding:0;max-width:100%;}
+  #contract-wrap{display:block!important;}
+  #contract-doc{box-shadow:none;border-radius:0;padding:1.5rem 2rem;}
+}
+</style>
+</head>
+<body>
+
+<div id="lock-screen">
+  <div class="lock-logo"><span>Water</span>Works<span> Contracts</span></div>
+  <div class="lock-sub">Enter your code to continue</div>
+  <input id="lock-input" type="password" autocomplete="current-password" autocorrect="off" autocapitalize="off" placeholder="Enter code...">
+  <div id="lock-error"></div>
+  <button id="lock-btn" onclick="checkCode()">Unlock</button>
+</div>
+
+<div id="app" style="display:none;">
+
+<nav>
+  <a class="nav-logo" href="index.html"><span>Water</span>Works<span> &amp; Lawn</span></a>
+  <a class="nav-back" href="tracker.html">← My Tracker</a>
+</nav>
+
+<div class="page">
+  <div class="page-title">Profit Share Contract</div>
+  <div class="page-sub">Fill in the details below — a ready-to-sign contract will be generated instantly.</div>
+
+  <div class="form-card">
+    <div class="form-grid">
+
+      <div class="field">
+        <label>Your Full Name (Owner)</label>
+        <input type="text" id="owner-name" placeholder="e.g. Aiden Smith" autocomplete="name">
+      </div>
+
+      <div class="field">
+        <label>Other Party's Full Name</label>
+        <input type="text" id="party-name" placeholder="e.g. Sandra Smith" autocomplete="off">
+      </div>
+
+      <div class="field">
+        <label>Profit Share Percentage (%)</label>
+        <input type="number" id="percentage" placeholder="e.g. 5" min="0.1" max="99" step="0.1">
+        <div class="hint">This is the % of net profit (after all costs) they receive.</div>
+      </div>
+
+      <div class="field">
+        <label>Payment Schedule</label>
+        <select id="payment-schedule">
+          <option value="monthly">Monthly</option>
+          <option value="quarterly">Quarterly (every 3 months)</option>
+          <option value="yearly">Yearly</option>
+        </select>
+      </div>
+
+      <div class="field">
+        <label>Agreement Start Date</label>
+        <input type="date" id="start-date">
+      </div>
+
+      <div class="field">
+        <label>Agreement End Date (optional)</label>
+        <input type="date" id="end-date">
+        <div class="hint">Leave blank for an ongoing agreement.</div>
+      </div>
+
+      <div class="field full">
+        <label>Reason / Context (optional)</label>
+        <textarea id="reason" placeholder="e.g. In recognition of financial support provided to help start and grow WaterWorks &amp; Lawn Care."></textarea>
+      </div>
+
+    </div>
+    <div class="form-actions">
+      <button class="btn btn-primary" onclick="generateContract()">&#9889; Generate Contract</button>
+      <button class="btn btn-ghost" onclick="resetForm()">Clear</button>
+    </div>
+  </div>
+
+  <!-- CONTRACT OUTPUT -->
+  <div id="contract-wrap">
+    <div class="contract-actions">
+      <button class="btn btn-primary" onclick="window.print()">&#128438; Print / Save as PDF</button>
+      <button class="btn btn-ghost" onclick="resetContract()">&#8592; Edit Details</button>
+      <span>Tip: use "Save as PDF" in your print dialog to get a PDF copy.</span>
+    </div>
+    <div id="contract-doc"></div>
+  </div>
+
+</div>
+</div>
+
+<script>
+var PASS = 'tracker123';
+
+function checkCode() {
+  var val = document.getElementById('lock-input').value;
+  if (val === PASS) {
+    sessionStorage.setItem('ww-auth', '1');
+    document.getElementById('lock-screen').classList.add('hidden');
+    document.getElementById('app').style.display = 'block';
+  } else {
+    document.getElementById('lock-error').textContent = 'Wrong code, try again.';
+    document.getElementById('lock-input').value = '';
+    document.getElementById('lock-input').focus();
+  }
+}
+document.getElementById('lock-input').addEventListener('keydown', function(e) {
+  if (e.key === 'Enter') checkCode();
+});
+if (sessionStorage.getItem('ww-auth') === '1') {
+  document.getElementById('lock-screen').classList.add('hidden');
+  document.getElementById('app').style.display = 'block';
+} else {
+  setTimeout(function() { document.getElementById('lock-input').focus(); }, 100);
+}
+
+// Set today as default start date
+try {
+  var today = new Date();
+  var yyyy = today.getFullYear();
+  var mm = String(today.getMonth()+1).padStart(2,'0');
+  var dd = String(today.getDate()).padStart(2,'0');
+  document.getElementById('start-date').value = yyyy+'-'+mm+'-'+dd;
+} catch(e){}
+
+function fmtDate(val) {
+  if (!val) return '';
+  var p = val.split('-');
+  var months = ['January','February','March','April','May','June','July','August','September','October','November','December'];
+  return months[parseInt(p[1])-1] + ' ' + parseInt(p[2]) + ', ' + p[0];
+}
+
+function ordinal(n) {
+  var s = ['th','st','nd','rd'];
+  var v = n % 100;
+  return n + (s[(v-20)%10] || s[v] || s[0]);
+}
+
+function generateContract() {
+  var owner   = document.getElementById('owner-name').value.trim();
+  var party   = document.getElementById('party-name').value.trim();
+  var pct     = parseFloat(document.getElementById('percentage').value);
+  var sched   = document.getElementById('payment-schedule').value;
+  var startD  = document.getElementById('start-date').value;
+  var endD    = document.getElementById('end-date').value;
+  var reason  = document.getElementById('reason').value.trim();
+
+  if (!owner || !party || !pct || !startD) {
+    alert('Please fill in your name, their name, the percentage, and a start date.');
+    return;
+  }
+
+  var schedLabel = { monthly: 'monthly', quarterly: 'quarterly (once every three months)', yearly: 'annually (once per year)' }[sched];
+  var endClause = endD
+    ? 'This Agreement shall remain in effect from <span class="highlight">' + fmtDate(startD) + '</span> through <span class="highlight">' + fmtDate(endD) + '</span>, unless terminated earlier by mutual written consent of both parties.'
+    : 'This Agreement shall remain in effect beginning <span class="highlight">' + fmtDate(startD) + '</span> and shall continue on an ongoing basis until terminated by mutual written consent of both parties with a minimum of 30 days written notice.';
+
+  var reasonClause = reason
+    ? '<p>' + reason + '</p>'
+    : '<p>In recognition of the support and contributions provided to WaterWorks &amp; Lawn Care, the Owner has agreed to share a portion of the business\'s net profits with the Recipient.</p>';
+
+  var today = new Date();
+  var todayStr = fmtDate(today.getFullYear()+'-'+String(today.getMonth()+1).padStart(2,'0')+'-'+String(today.getDate()).padStart(2,'0'));
+
+  var html = '<h1>Profit Sharing Agreement</h1>' +
+    '<div class="doc-sub">WaterWorks &amp; Lawn Care &mdash; Prepared ' + todayStr + '</div>' +
+
+    '<h2>1. Parties</h2>' +
+    '<p>This Profit Sharing Agreement (the <span class="highlight">"Agreement"</span>) is entered into between:</p>' +
+    '<p><span class="highlight">Owner:</span> ' + owner + ', sole owner and operator of WaterWorks &amp; Lawn Care (the <span class="highlight">"Business"</span>).</p>' +
+    '<p><span class="highlight">Recipient:</span> ' + party + ' (the <span class="highlight">"Recipient"</span>).</p>' +
+
+    '<h2>2. Background</h2>' +
+    reasonClause +
+
+    '<h2>3. Profit Share</h2>' +
+    '<p>The Owner agrees to pay the Recipient <span class="highlight">' + pct + '% (' + pct + ' percent) of the net profit</span> earned by WaterWorks &amp; Lawn Care each period. Net profit is defined as total revenue collected minus all direct costs (supplies, equipment, fuel, and other documented business expenses).</p>' +
+
+    '<h2>4. Payment Schedule</h2>' +
+    '<p>Payments shall be made <span class="highlight">' + schedLabel + '</span>. The Owner shall provide a simple written or digital summary of revenue, costs, and net profit for each payment period at the time of payment. Both parties agree that this summary is sufficient accounting for the purposes of this Agreement.</p>' +
+
+    '<h2>5. Term</h2>' +
+    '<p>' + endClause + '</p>' +
+
+    '<h2>6. No Ownership or Control</h2>' +
+    '<p>This Agreement grants the Recipient the right to receive a share of net profits only. It does not grant the Recipient any ownership stake, equity, voting rights, or control over the operations or decisions of WaterWorks &amp; Lawn Care. The Owner retains full and sole ownership of the Business.</p>' +
+
+    '<h2>7. Confidentiality</h2>' +
+    '<p>Both parties agree to keep the terms of this Agreement and all financial information shared under it confidential and shall not disclose such information to any third party without the written consent of the other party.</p>' +
+
+    '<h2>8. Governing Law</h2>' +
+    '<p>This Agreement shall be governed by the laws of the state in which WaterWorks &amp; Lawn Care operates. Any disputes shall first be attempted to be resolved through good-faith discussion between both parties.</p>' +
+
+    '<h2>9. Entire Agreement</h2>' +
+    '<p>This document constitutes the entire agreement between the parties regarding profit sharing and supersedes any prior verbal or written understandings on the same subject matter. Any changes to this Agreement must be made in writing and signed by both parties.</p>' +
+
+    '<div class="sig-block">' +
+      '<div class="sig-party">' +
+        '<div class="sig-line"></div>' +
+        '<div><strong>' + owner + '</strong></div>' +
+        '<div class="sig-label">Owner, WaterWorks &amp; Lawn Care</div>' +
+        '<div class="sig-label" style="margin-top:0.8rem;">Date: ___________________</div>' +
+      '</div>' +
+      '<div class="sig-party">' +
+        '<div class="sig-line"></div>' +
+        '<div><strong>' + party + '</strong></div>' +
+        '<div class="sig-label">Recipient</div>' +
+        '<div class="sig-label" style="margin-top:0.8rem;">Date: ___________________</div>' +
+      '</div>' +
+    '</div>' +
+
+    '<div class="doc-footer">This agreement was generated by WaterWorks &amp; Lawn Care internal tools. Both parties should retain a signed copy. For disputes involving significant amounts, consult a licensed attorney.</div>';
+
+  document.getElementById('contract-doc').innerHTML = html;
+  document.getElementById('contract-wrap').classList.add('show');
+  document.getElementById('contract-wrap').scrollIntoView({ behavior: 'smooth', block: 'start' });
+}
+
+function resetContract() {
+  document.getElementById('contract-wrap').classList.remove('show');
+  window.scrollTo({ top: 0, behavior: 'smooth' });
+}
+
+function resetForm() {
+  ['owner-name','party-name','percentage','end-date','reason'].forEach(function(id) {
+    document.getElementById(id).value = '';
+  });
+  document.getElementById('payment-schedule').value = 'monthly';
+  resetContract();
+}
+</script>
+</body>
+</html>

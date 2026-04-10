@@ -1,0 +1,744 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>WaterWorks — Loss Analysis</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Bebas+Neue&family=Inter:wght@300;400;500;600;700;800;900&display=swap" rel="stylesheet">
+<style>
+  *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+
+  :root {
+    --bg: #0a0e14;
+    --bg2: #0f1419;
+    --bg3: #151b23;
+    --border: rgba(255,255,255,0.07);
+    --blue: #00d4ff;
+    --blue-dim: rgba(0,212,255,0.10);
+    --green: #00e87b;
+    --green-dim: rgba(0,232,123,0.10);
+    --red: #ff4d6a;
+    --red-dim: rgba(255,77,106,0.10);
+    --yellow: #ffd700;
+    --yellow-dim: rgba(255,215,0,0.10);
+    --orange: #ff8c00;
+    --white: #e8edf3;
+    --muted: #6b7a8d;
+    --glass: rgba(255,255,255,0.03);
+  }
+
+  html { scroll-behavior: smooth; }
+  body {
+    font-family: 'Inter', sans-serif;
+    color: var(--white);
+    background: var(--bg);
+    min-height: 100vh;
+    overflow-x: hidden;
+    opacity: 0;
+    animation: fadeIn 0.5s ease 0.1s both;
+  }
+  @keyframes fadeIn { from { opacity:0 } to { opacity:1 } }
+  @keyframes slideUp {
+    from { opacity: 0; transform: translateY(16px); }
+    to { opacity: 1; transform: translateY(0); }
+  }
+  @keyframes pulse { 0%,100%{opacity:1} 50%{opacity:.6} }
+
+  /* ── NAV ── */
+  nav {
+    padding: 1rem 2rem;
+    display: flex; align-items: center; justify-content: space-between;
+    border-bottom: 1px solid var(--border);
+  }
+  .logo {
+    font-family: 'Bebas Neue', sans-serif;
+    font-size: 1.2rem; letter-spacing: 0.1em; color: var(--muted);
+  }
+  .logo strong { color: var(--white); }
+  nav a { color: var(--muted); text-decoration: none; font-size: 0.8rem; }
+  nav a:hover { color: var(--blue); }
+
+  /* ── LAYOUT ── */
+  .container {
+    max-width: 1100px;
+    margin: 0 auto;
+    padding: 0 1.5rem;
+  }
+
+  /* ── HEADER ── */
+  .header {
+    padding: 3rem 0 1.5rem;
+    border-bottom: 1px solid var(--border);
+    margin-bottom: 2rem;
+    animation: slideUp 0.5s ease 0.15s both;
+  }
+  .header h1 {
+    font-family: 'Bebas Neue', sans-serif;
+    font-size: clamp(2rem, 5vw, 3rem);
+    letter-spacing: 0.06em;
+    margin-bottom: 0.3rem;
+  }
+  .header p { color: var(--muted); font-size: 0.85rem; line-height: 1.6; }
+  .tag {
+    display: inline-block;
+    font-size: 0.65rem;
+    text-transform: uppercase;
+    letter-spacing: 0.1em;
+    padding: 0.2rem 0.6rem;
+    border-radius: 4px;
+    margin-right: 0.5rem;
+    font-weight: 600;
+  }
+  .tag.red { background: var(--red-dim); color: var(--red); }
+  .tag.yellow { background: var(--yellow-dim); color: var(--yellow); }
+
+  /* ── KPI ROW ── */
+  .kpis {
+    display: grid;
+    grid-template-columns: repeat(auto-fit, minmax(180px, 1fr));
+    gap: 1rem;
+    margin-bottom: 2.5rem;
+    animation: slideUp 0.5s ease 0.25s both;
+  }
+  .kpi {
+    background: var(--glass);
+    border: 1px solid var(--border);
+    border-radius: 12px;
+    padding: 1.3rem 1.2rem;
+  }
+  .kpi .kpi-label {
+    font-size: 0.65rem;
+    text-transform: uppercase;
+    letter-spacing: 0.1em;
+    color: var(--muted);
+    margin-bottom: 0.4rem;
+  }
+  .kpi .kpi-value {
+    font-family: 'Bebas Neue', sans-serif;
+    font-size: 2rem;
+    letter-spacing: 0.03em;
+  }
+  .kpi .kpi-sub {
+    font-size: 0.7rem;
+    color: var(--muted);
+    margin-top: 0.15rem;
+  }
+  .kpi-value.red { color: var(--red); }
+  .kpi-value.yellow { color: var(--yellow); }
+  .kpi-value.green { color: var(--green); }
+  .kpi-value.blue { color: var(--blue); }
+
+  /* ── SECTION ── */
+  .section {
+    margin-bottom: 2.5rem;
+    animation: slideUp 0.5s ease 0.3s both;
+  }
+  .section h2 {
+    font-family: 'Bebas Neue', sans-serif;
+    font-size: 1.4rem;
+    letter-spacing: 0.06em;
+    margin-bottom: 0.3rem;
+  }
+  .section .subtitle {
+    font-size: 0.78rem;
+    color: var(--muted);
+    margin-bottom: 1.2rem;
+    line-height: 1.5;
+  }
+
+  /* ── P&L TABLE ── */
+  .pnl-table {
+    width: 100%;
+    border-collapse: collapse;
+    font-size: 0.82rem;
+  }
+  .pnl-table th {
+    text-align: left;
+    font-size: 0.65rem;
+    text-transform: uppercase;
+    letter-spacing: 0.1em;
+    color: var(--muted);
+    padding: 0.6rem 0.8rem;
+    border-bottom: 1px solid var(--border);
+    font-weight: 600;
+  }
+  .pnl-table th:not(:first-child) { text-align: right; }
+  .pnl-table td {
+    padding: 0.8rem;
+    border-bottom: 1px solid var(--border);
+    vertical-align: top;
+  }
+  .pnl-table td:not(:first-child) { text-align: right; font-variant-numeric: tabular-nums; }
+  .pnl-table tr:hover { background: rgba(255,255,255,0.02); }
+  .pnl-table .service-name { font-weight: 600; }
+  .pnl-table .neg { color: var(--red); }
+  .pnl-table .warn { color: var(--yellow); }
+  .pnl-table .ok { color: var(--green); }
+  .pnl-table .dim { color: var(--muted); font-size: 0.72rem; }
+  .pnl-table tfoot td {
+    font-weight: 700;
+    border-top: 2px solid var(--border);
+    border-bottom: none;
+    padding-top: 1rem;
+  }
+
+  /* ── MARGIN BARS ── */
+  .margin-bars {
+    display: grid;
+    gap: 1.2rem;
+  }
+  .m-bar {
+    display: grid;
+    grid-template-columns: 140px 1fr 60px;
+    align-items: center;
+    gap: 0.8rem;
+  }
+  .m-bar .m-label { font-size: 0.82rem; font-weight: 600; }
+  .m-bar .m-track {
+    height: 24px;
+    background: var(--bg3);
+    border-radius: 6px;
+    overflow: hidden;
+    position: relative;
+  }
+  .m-bar .m-fill {
+    height: 100%;
+    border-radius: 6px;
+    transition: width 0.8s ease;
+    min-width: 2px;
+  }
+  .m-bar .m-fill.neg-fill {
+    background: linear-gradient(90deg, var(--red), rgba(255,77,106,0.4));
+  }
+  .m-bar .m-fill.low-fill {
+    background: linear-gradient(90deg, var(--yellow), rgba(255,215,0,0.4));
+  }
+  .m-bar .m-fill.ok-fill {
+    background: linear-gradient(90deg, var(--green), rgba(0,232,123,0.4));
+  }
+  .m-bar .m-pct {
+    font-family: 'Bebas Neue', sans-serif;
+    font-size: 1.2rem;
+    text-align: right;
+  }
+  .threshold-line {
+    font-size: 0.7rem;
+    color: var(--muted);
+    margin-top: 0.6rem;
+    padding-left: 140px;
+  }
+  .threshold-line span { color: var(--yellow); font-weight: 600; }
+
+  /* ── SCENARIO TABLE ── */
+  .scenario-grid {
+    display: grid;
+    grid-template-columns: repeat(auto-fit, minmax(300px, 1fr));
+    gap: 1.2rem;
+  }
+  .scenario {
+    background: var(--glass);
+    border: 1px solid var(--border);
+    border-radius: 12px;
+    padding: 1.5rem;
+  }
+  .scenario h3 {
+    font-family: 'Bebas Neue', sans-serif;
+    font-size: 1.1rem;
+    letter-spacing: 0.05em;
+    margin-bottom: 0.8rem;
+    display: flex; align-items: center; gap: 0.5rem;
+  }
+  .scenario .dot {
+    width: 8px; height: 8px; border-radius: 50%;
+    display: inline-block;
+  }
+  .scenario .row {
+    display: flex; justify-content: space-between;
+    padding: 0.4rem 0;
+    font-size: 0.8rem;
+    border-bottom: 1px solid var(--border);
+  }
+  .scenario .row:last-child { border-bottom: none; }
+  .scenario .row .val { font-weight: 600; font-variant-numeric: tabular-nums; }
+
+  /* ── VERDICT ── */
+  .verdict {
+    background: var(--red-dim);
+    border: 1px solid rgba(255,77,106,0.2);
+    border-radius: 16px;
+    padding: 2rem;
+    margin: 2.5rem 0;
+    animation: slideUp 0.5s ease 0.4s both;
+  }
+  .verdict h2 {
+    font-family: 'Bebas Neue', sans-serif;
+    font-size: 1.6rem;
+    letter-spacing: 0.06em;
+    color: var(--red);
+    margin-bottom: 0.6rem;
+  }
+  .verdict p {
+    font-size: 0.88rem;
+    line-height: 1.7;
+    color: var(--white);
+    opacity: 0.85;
+  }
+  .verdict ul {
+    margin: 0.8rem 0;
+    padding-left: 1.2rem;
+    font-size: 0.85rem;
+    line-height: 1.8;
+  }
+  .verdict li { opacity: 0.85; }
+
+  /* ── RECOMMENDED ── */
+  .recommended {
+    background: var(--green-dim);
+    border: 1px solid rgba(0,232,123,0.2);
+    border-radius: 16px;
+    padding: 2rem;
+    margin-bottom: 2.5rem;
+  }
+  .recommended h2 {
+    font-family: 'Bebas Neue', sans-serif;
+    font-size: 1.6rem;
+    letter-spacing: 0.06em;
+    color: var(--green);
+    margin-bottom: 0.6rem;
+  }
+  .rec-grid {
+    display: grid;
+    grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
+    gap: 0.8rem;
+    margin-top: 1rem;
+  }
+  .rec-item {
+    background: rgba(0,232,123,0.05);
+    border: 1px solid rgba(0,232,123,0.1);
+    border-radius: 10px;
+    padding: 1rem;
+    text-align: center;
+  }
+  .rec-item .rec-service {
+    font-size: 0.7rem;
+    text-transform: uppercase;
+    letter-spacing: 0.1em;
+    color: var(--muted);
+    margin-bottom: 0.3rem;
+  }
+  .rec-item .rec-current {
+    font-size: 0.82rem;
+    color: var(--red);
+    text-decoration: line-through;
+    opacity: 0.6;
+  }
+  .rec-item .rec-new {
+    font-family: 'Bebas Neue', sans-serif;
+    font-size: 1.8rem;
+    color: var(--green);
+  }
+  .rec-item .rec-note {
+    font-size: 0.68rem;
+    color: var(--muted);
+    margin-top: 0.2rem;
+  }
+
+  /* ── FOOTER ── */
+  .footer {
+    border-top: 1px solid var(--border);
+    padding: 2rem 0;
+    text-align: center;
+    font-size: 0.7rem;
+    color: var(--muted);
+    line-height: 1.7;
+  }
+  .footer a { color: var(--muted); }
+
+  /* ── RANGE CELLS ── */
+  .range {
+    display: flex; flex-direction: column; gap: 1px;
+  }
+  .range .best { color: var(--yellow); font-size: 0.78rem; }
+  .range .worst { color: var(--red); font-size: 0.78rem; }
+  .range-label {
+    font-size: 0.6rem;
+    text-transform: uppercase;
+    letter-spacing: 0.08em;
+    opacity: 0.45;
+  }
+
+  /* ── RESPONSIVE ── */
+  @media (max-width: 700px) {
+    .kpis { grid-template-columns: 1fr 1fr; }
+    .m-bar { grid-template-columns: 100px 1fr 50px; }
+    .threshold-line { padding-left: 100px; }
+    .pnl-table { font-size: 0.75rem; }
+    .pnl-table th, .pnl-table td { padding: 0.6rem 0.4rem; }
+    .scenario-grid { grid-template-columns: 1fr; }
+    .container { padding: 0 1rem; }
+  }
+  @media (max-width: 480px) {
+    .kpis { grid-template-columns: 1fr; }
+    .m-bar { grid-template-columns: 1fr; gap: 0.3rem; }
+    .m-bar .m-pct { text-align: left; }
+    .threshold-line { padding-left: 0; }
+  }
+</style>
+</head>
+<body>
+
+<nav>
+  <span class="logo"><strong>WATERWORKS</strong> ANALYTICS</span>
+  <a href="index.html">Back to site</a>
+</nav>
+
+<div class="container">
+
+<!-- ═══════════ HEADER ═══════════ -->
+<div class="header">
+  <div style="margin-bottom:0.6rem">
+    <span class="tag red">INTERNAL</span>
+    <span class="tag yellow">NEEDS REVIEW</span>
+  </div>
+  <h1>SERVICE PROFITABILITY ANALYSIS</h1>
+  <p>Per-job cost breakdown, margin analysis, and income projections at current pricing. All cost estimates based on industry data from Jobber, HouseCallPro, InvoiceFly, and HomeGuide (2025-2026).</p>
+</div>
+
+<!-- ═══════════ KPIs ═══════════ -->
+<div class="kpis">
+  <div class="kpi">
+    <div class="kpi-label">Avg Margin / Job</div>
+    <div class="kpi-value red">$6.67</div>
+    <div class="kpi-sub">before your time</div>
+  </div>
+  <div class="kpi">
+    <div class="kpi-label">Effective $/Hour</div>
+    <div class="kpi-value red">$4 &ndash; $13</div>
+    <div class="kpi-sub">depends how fast you are</div>
+  </div>
+  <div class="kpi">
+    <div class="kpi-label">Jobs / Day for $50k</div>
+    <div class="kpi-value yellow">22.4</div>
+    <div class="kpi-sub">at current prices</div>
+  </div>
+  <div class="kpi">
+    <div class="kpi-label">Annual (5 jobs/day)</div>
+    <div class="kpi-value red">$5,836</div>
+    <div class="kpi-sub">not a typo</div>
+  </div>
+</div>
+
+<!-- ═══════════ PER-SERVICE P&L ═══════════ -->
+<div class="section">
+  <h2>PER-JOB COST BREAKDOWN</h2>
+  <p class="subtitle">Direct costs only. Does not include insurance, marketing, vehicle payments, phone, or your time driving between jobs.</p>
+
+  <div style="overflow-x:auto">
+  <table class="pnl-table">
+    <thead>
+      <tr>
+        <th>Service</th>
+        <th>Your Price</th>
+        <th>Direct Cost</th>
+        <th>Margin</th>
+        <th>Time Range</th>
+        <th style="background:rgba(0,232,123,0.06)">Best $/hr</th>
+        <th style="background:rgba(255,77,106,0.06)">Worst $/hr</th>
+      </tr>
+    </thead>
+    <tbody>
+      <tr>
+        <td class="service-name">Lawn Mowing<br><span class="dim">low end ($10)</span></td>
+        <td>$10</td>
+        <td>$9.00<br><span class="dim">fuel $3 + supply $1 + equip $2.50 + drive $2.50</span></td>
+        <td class="neg">$1.00</td>
+        <td><div class="range"><span class="best">30 min <span class="range-label">small yard, fast</span></span><span class="worst">60 min <span class="range-label">big yard, edging</span></span></div></td>
+        <td style="background:rgba(0,232,123,0.06)" class="neg">$2.00</td>
+        <td style="background:rgba(255,77,106,0.06)" class="neg">$1.00</td>
+      </tr>
+      <tr>
+        <td class="service-name">Lawn Mowing<br><span class="dim">high end ($20)</span></td>
+        <td>$20</td>
+        <td>$9.00<br><span class="dim">same cost structure</span></td>
+        <td class="warn">$11.00</td>
+        <td><div class="range"><span class="best">30 min</span><span class="worst">60 min</span></div></td>
+        <td style="background:rgba(0,232,123,0.06)" class="warn">$22.00</td>
+        <td style="background:rgba(255,77,106,0.06)" class="warn">$11.00</td>
+      </tr>
+      <tr>
+        <td class="service-name">Pressure Washing<br><span class="dim">sidewalk + driveway</span></td>
+        <td>$30</td>
+        <td>$15.00<br><span class="dim">fuel $5 + chem $4 + equip $3.50 + drive $2.50</span></td>
+        <td class="warn">$15.00</td>
+        <td><div class="range"><span class="best">90 min <span class="range-label">small driveway</span></span><span class="worst">120 min <span class="range-label">large + stains</span></span></div></td>
+        <td style="background:rgba(0,232,123,0.06)" class="warn">$10.00</td>
+        <td style="background:rgba(255,77,106,0.06)" class="neg">$7.50</td>
+      </tr>
+      <tr>
+        <td class="service-name">Hand Car Wash</td>
+        <td>$10</td>
+        <td>$5.50<br><span class="dim">fuel $0.50 + soap $2 + equip $0.50 + drive $2.50</span></td>
+        <td class="neg">$4.50</td>
+        <td><div class="range"><span class="best">30 min <span class="range-label">sedan, quick</span></span><span class="worst">50 min <span class="range-label">SUV/truck, dirty</span></span></div></td>
+        <td style="background:rgba(0,232,123,0.06)" class="neg">$9.00</td>
+        <td style="background:rgba(255,77,106,0.06)" class="neg">$5.40</td>
+      </tr>
+      <tr>
+        <td class="service-name">Snow &mdash; Driveway</td>
+        <td>$15</td>
+        <td>$9.50<br><span class="dim">fuel $2.50 + salt $3 + equip $1.50 + drive $2.50</span></td>
+        <td class="neg">$5.50</td>
+        <td><div class="range"><span class="best">20 min <span class="range-label">light dusting, blower</span></span><span class="worst">50 min <span class="range-label">heavy storm, shoveling</span></span></div></td>
+        <td style="background:rgba(0,232,123,0.06)" class="warn">$16.50</td>
+        <td style="background:rgba(255,77,106,0.06)" class="neg">$6.60</td>
+      </tr>
+      <tr>
+        <td class="service-name">Snow &mdash; Walkway</td>
+        <td>$5</td>
+        <td>$2.00<br><span class="dim">fuel $0.50 + salt $1 + equip $0.50</span></td>
+        <td class="neg">$3.00</td>
+        <td><div class="range"><span class="best">10 min <span class="range-label">light, short walk</span></span><span class="worst">25 min <span class="range-label">heavy, long path</span></span></div></td>
+        <td style="background:rgba(0,232,123,0.06)" class="warn">$18.00</td>
+        <td style="background:rgba(255,77,106,0.06)" class="neg">$7.20</td>
+      </tr>
+    </tbody>
+    <tfoot>
+      <tr>
+        <td>Weighted Average</td>
+        <td>$15.00</td>
+        <td>$8.33</td>
+        <td class="neg">$6.67</td>
+        <td><div class="range"><span class="best">35 min</span><span class="worst">61 min</span></div></td>
+        <td style="background:rgba(0,232,123,0.06)" class="warn">$12.92</td>
+        <td style="background:rgba(255,77,106,0.06)" class="neg">$6.56</td>
+      </tr>
+    </tfoot>
+  </table>
+  </div>
+
+  <div style="margin-top:1rem; padding:1rem; background:var(--red-dim); border:1px solid rgba(255,77,106,0.15); border-radius:10px; font-size:0.82rem; line-height:1.6;">
+    <strong style="color:var(--red)">The time problem:</strong> On a bad day (big yards, heavy snow, dirty trucks), your effective rate drops to <strong style="color:var(--red)">$1-7/hr</strong> across every service. Even on your fastest days, only snow walkways and $20 mows break $15/hr. The margin per job is fixed &mdash; but the longer a job takes, the harder that margin gets divided.
+  </div>
+</div>
+
+<!-- ═══════════ MARGIN VISUALIZATION ═══════════ -->
+<div class="section">
+  <h2>MARGIN AFTER DIRECT COSTS</h2>
+  <p class="subtitle">This is what's left after fuel, supplies, equipment wear, and drive costs. Your labor is still unpaid at this point.</p>
+
+  <div class="margin-bars">
+    <div class="m-bar">
+      <div class="m-label">Mowing ($10)</div>
+      <div class="m-track"><div class="m-fill neg-fill" style="width:10%"></div></div>
+      <div class="m-pct" style="color:var(--red)">10%</div>
+    </div>
+    <div class="m-bar">
+      <div class="m-label">Mowing ($20)</div>
+      <div class="m-track"><div class="m-fill low-fill" style="width:55%"></div></div>
+      <div class="m-pct" style="color:var(--yellow)">55%</div>
+    </div>
+    <div class="m-bar">
+      <div class="m-label">Pressure Wash</div>
+      <div class="m-track"><div class="m-fill low-fill" style="width:50%"></div></div>
+      <div class="m-pct" style="color:var(--yellow)">50%</div>
+    </div>
+    <div class="m-bar">
+      <div class="m-label">Car Wash</div>
+      <div class="m-track"><div class="m-fill low-fill" style="width:45%"></div></div>
+      <div class="m-pct" style="color:var(--yellow)">45%</div>
+    </div>
+    <div class="m-bar">
+      <div class="m-label">Snow Driveway</div>
+      <div class="m-track"><div class="m-fill low-fill" style="width:37%"></div></div>
+      <div class="m-pct" style="color:var(--yellow)">37%</div>
+    </div>
+    <div class="m-bar">
+      <div class="m-label">Snow Walkway</div>
+      <div class="m-track"><div class="m-fill ok-fill" style="width:60%"></div></div>
+      <div class="m-pct" style="color:var(--green)">60%</div>
+    </div>
+  </div>
+  <p class="threshold-line">Healthy service businesses target <span>60-70% gross margin</span> to cover labor + overhead and still profit.</p>
+</div>
+
+<!-- ═══════════ INCOME SCENARIOS ═══════════ -->
+<div class="section">
+  <h2>INCOME PROJECTIONS AT CURRENT PRICES</h2>
+  <p class="subtitle">Assuming 250 working days/year. Shows best case (fast jobs) and worst case (slow jobs) side by side. Margin = revenue minus direct costs only.</p>
+
+  <div class="scenario-grid">
+
+    <div class="scenario">
+      <h3><span class="dot" style="background:var(--red)"></span> 5 JOBS/DAY &mdash; BEST CASE</h3>
+      <div class="row"><span>Avg time / job</span><span class="val">35 min</span></div>
+      <div class="row"><span>Work hours / day</span><span class="val">2.9 hrs</span></div>
+      <div class="row"><span>Daily revenue</span><span class="val">$75</span></div>
+      <div class="row"><span>Daily direct costs</span><span class="val" style="color:var(--red)">-$41.65</span></div>
+      <div class="row"><span>Daily margin</span><span class="val" style="color:var(--yellow)">$33.35</span></div>
+      <div class="row"><span>Effective hourly</span><span class="val" style="color:var(--yellow)">$11.50/hr</span></div>
+      <div class="row"><span>Annual after overhead + tax</span><span class="val" style="color:var(--red)">$5,836</span></div>
+      <div class="row"><span style="font-weight:700">Verdict</span><span class="val" style="color:var(--red);font-weight:700">UNDER POVERTY LINE</span></div>
+    </div>
+
+    <div class="scenario">
+      <h3><span class="dot" style="background:var(--red)"></span> 5 JOBS/DAY &mdash; WORST CASE</h3>
+      <div class="row"><span>Avg time / job</span><span class="val">61 min</span></div>
+      <div class="row"><span>Work hours / day</span><span class="val">5.1 hrs</span></div>
+      <div class="row"><span>Daily revenue</span><span class="val">$75</span></div>
+      <div class="row"><span>Daily direct costs</span><span class="val" style="color:var(--red)">-$41.65</span></div>
+      <div class="row"><span>Daily margin</span><span class="val" style="color:var(--red)">$33.35</span></div>
+      <div class="row"><span>Effective hourly</span><span class="val" style="color:var(--red)">$6.54/hr</span></div>
+      <div class="row"><span>Annual after overhead + tax</span><span class="val" style="color:var(--red)">$5,836</span></div>
+      <div class="row"><span style="font-weight:700">Verdict</span><span class="val" style="color:var(--red);font-weight:700">BELOW MIN WAGE</span></div>
+    </div>
+
+    <div class="scenario">
+      <h3><span class="dot" style="background:var(--yellow)"></span> HUSTLE: 8 JOBS/DAY</h3>
+      <div class="row"><span>Time range</span><span class="val">4.7 &ndash; 8.1 hrs</span></div>
+      <div class="row"><span>Daily margin</span><span class="val" style="color:var(--yellow)">$53.36</span></div>
+      <div class="row"><span>Effective hourly</span><span class="val" style="color:var(--red)">$6.59 &ndash; $11.35</span></div>
+      <div class="row"><span>Annual after overhead + tax</span><span class="val" style="color:var(--yellow)">$9,338</span></div>
+      <div class="row"><span style="font-weight:700">Verdict</span><span class="val" style="color:var(--yellow);font-weight:700">STILL POVERTY</span></div>
+    </div>
+
+    <div class="scenario">
+      <h3><span class="dot" style="background:var(--orange)"></span> WHAT $50K ACTUALLY REQUIRES</h3>
+      <div class="row"><span>Revenue needed / yr</span><span class="val" style="color:var(--yellow)">$84,088</span></div>
+      <div class="row"><span>Jobs / yr at $15 avg</span><span class="val" style="color:var(--red)">5,606</span></div>
+      <div class="row"><span>Jobs / day (250 days)</span><span class="val" style="color:var(--red)">22.4</span></div>
+      <div class="row"><span>Hours / day (best case)</span><span class="val" style="color:var(--red)">13.1 hrs</span></div>
+      <div class="row"><span>Hours / day (worst case)</span><span class="val" style="color:var(--red)">22.8 hrs</span></div>
+      <div class="row"><span style="font-weight:700">Verdict</span><span class="val" style="color:var(--red);font-weight:700">PHYSICALLY IMPOSSIBLE</span></div>
+    </div>
+
+  </div>
+</div>
+
+<!-- ═══════════ COMPARISON: YOU vs INDUSTRY ═══════════ -->
+<div class="section">
+  <h2>YOUR $/HOUR VS LITERALLY EVERYTHING</h2>
+  <p class="subtitle">Where WaterWorks lands on the pay scale. The range bar shows your best day to worst day.</p>
+  <div class="margin-bars">
+    <div class="m-bar">
+      <div class="m-label" style="font-size:0.75rem">Federal min wage</div>
+      <div class="m-track"><div class="m-fill low-fill" style="width:15%"></div></div>
+      <div class="m-pct" style="color:var(--yellow);font-size:1rem">$7.25/hr</div>
+    </div>
+    <div class="m-bar">
+      <div class="m-label" style="font-size:0.75rem">Lemonade stand</div>
+      <div class="m-track"><div class="m-fill low-fill" style="width:16%"></div></div>
+      <div class="m-pct" style="color:var(--yellow);font-size:1rem">$8/hr</div>
+    </div>
+    <div class="m-bar">
+      <div class="m-label" style="font-size:0.75rem;color:var(--blue)">WaterWorks (worst)</div>
+      <div class="m-track"><div class="m-fill neg-fill" style="width:8%"></div></div>
+      <div class="m-pct" style="color:var(--red);font-size:1rem">$1-7/hr</div>
+    </div>
+    <div class="m-bar">
+      <div class="m-label" style="font-size:0.75rem;color:var(--blue)">WaterWorks (best)</div>
+      <div class="m-track"><div class="m-fill neg-fill" style="width:18%"></div></div>
+      <div class="m-pct" style="color:var(--red);font-size:1rem">$9-22/hr</div>
+    </div>
+    <div class="m-bar">
+      <div class="m-label" style="font-size:0.75rem">Fast food</div>
+      <div class="m-track"><div class="m-fill ok-fill" style="width:30%"></div></div>
+      <div class="m-pct" style="color:var(--green);font-size:1rem">$15/hr</div>
+    </div>
+    <div class="m-bar">
+      <div class="m-label" style="font-size:0.75rem">Babysitting</div>
+      <div class="m-track"><div class="m-fill ok-fill" style="width:40%"></div></div>
+      <div class="m-pct" style="color:var(--green);font-size:1rem">$20/hr</div>
+    </div>
+    <div class="m-bar">
+      <div class="m-label" style="font-size:0.75rem">Other lawn cos</div>
+      <div class="m-track"><div class="m-fill ok-fill" style="width:70%"></div></div>
+      <div class="m-pct" style="color:var(--green);font-size:1rem">$35/hr</div>
+    </div>
+  </div>
+  <p class="threshold-line" style="padding-left:0; margin-top:1rem; text-align:center">On a bad day, a lemonade stand out-earns you. On a good day, fast food still does. <span>On every day, other lawn companies do.</span></p>
+</div>
+
+<!-- ═══════════ VERDICT ═══════════ -->
+<div class="verdict">
+  <h2>THE HONEST VERDICT</h2>
+  <p>At current pricing, WaterWorks is a <strong>volunteer organization that accidentally charges money</strong>. With realistic time ranges, it's worse than the single-point estimates suggested:</p>
+  <ul>
+    <li><strong>Lawn mowing at $10</strong> &mdash; $1-2/hr effective. On a big yard that takes an hour, you net one dollar. A vending machine has better margins.</li>
+    <li><strong>Pressure washing at $30</strong> &mdash; $7.50-10/hr. If a job runs long (stained concrete, large area), you're at $7.50/hr before taxes. That's a parking lot attendant who also has to bring their own equipment.</li>
+    <li><strong>Car wash at $10</strong> &mdash; $5.40-9/hr. A muddy SUV on a bad day puts you at $5.40/hr. The kid at the automated car wash pressing the "start" button makes more.</li>
+    <li><strong>Snow driveway at $15</strong> &mdash; $6.60-16.50/hr. This is your widest swing. A light dusting is almost decent money. A heavy storm is $6.60/hr of backbreaking labor in freezing weather.</li>
+    <li><strong>$50k/year</strong> requires 22 jobs/day. On slow-job days, that's <strong>22.8 hours of work</strong> &mdash; more hours than exist in a day, even before you factor in driving between jobs, eating, or sleeping.</li>
+  </ul>
+  <p style="margin-top:1rem"><strong>The core problem:</strong> Your margin per job is thin ($1-15), and time is the hidden killer. A job that takes twice as long doesn't cost twice as much in supplies &mdash; but it cuts your hourly rate in half. You have zero buffer for slow days.</p>
+</div>
+
+<!-- ═══════════ RECOMMENDED PRICING ═══════════ -->
+<div class="recommended">
+  <h2>SUSTAINABLE PRICING (STILL 40-55% BELOW MARKET)</h2>
+  <p style="font-size:0.85rem;opacity:0.8;line-height:1.6">These prices would let you clear $30/hr effective (comparable to trades), stay well below competitors, and actually survive. You'd still be the cheapest option by a wide margin.</p>
+
+  <div class="rec-grid">
+    <div class="rec-item">
+      <div class="rec-service">Lawn Mowing</div>
+      <div class="rec-current">$10-20</div>
+      <div class="rec-new">$30</div>
+      <div class="rec-note">still 40% under market</div>
+    </div>
+    <div class="rec-item">
+      <div class="rec-service">Pressure Wash</div>
+      <div class="rec-current">$30</div>
+      <div class="rec-new">$75</div>
+      <div class="rec-note">still 63% under market</div>
+    </div>
+    <div class="rec-item">
+      <div class="rec-service">Car Wash</div>
+      <div class="rec-current">$10</div>
+      <div class="rec-new">$25</div>
+      <div class="rec-note">still 38% under market</div>
+    </div>
+    <div class="rec-item">
+      <div class="rec-service">Snow Driveway</div>
+      <div class="rec-current">$15</div>
+      <div class="rec-new">$30</div>
+      <div class="rec-note">still 40% under market</div>
+    </div>
+    <div class="rec-item">
+      <div class="rec-service">Snow Walkway</div>
+      <div class="rec-current">$5</div>
+      <div class="rec-new">$15</div>
+      <div class="rec-note">still 57% under market</div>
+    </div>
+  </div>
+
+  <div class="scenario" style="margin-top:1.2rem; background:rgba(0,232,123,0.05); border-color:rgba(0,232,123,0.15)">
+    <h3><span class="dot" style="background:var(--green)"></span> REVISED: 5 JOBS/DAY AT NEW PRICES</h3>
+    <div class="row"><span>Avg revenue / job</span><span class="val" style="color:var(--green)">$35.00</span></div>
+    <div class="row"><span>Daily revenue</span><span class="val" style="color:var(--green)">$175.00</span></div>
+    <div class="row"><span>Daily direct costs</span><span class="val">-$41.65</span></div>
+    <div class="row"><span>Daily margin</span><span class="val" style="color:var(--green)">$133.35</span></div>
+    <div class="row"><span>Effective hourly (best &ndash; worst)</span><span class="val" style="color:var(--green)">$26 &ndash; $46/hr</span></div>
+    <div class="row"><span>Annual after overhead + SE tax</span><span class="val" style="color:var(--green)">$23,336</span></div>
+    <div class="row"><span>Even on your slowest day</span><span class="val" style="color:var(--green)">$26/hr</span></div>
+    <div class="row"><span style="font-weight:700">Still cheapest in town?</span><span class="val" style="color:var(--green);font-weight:700">YES, BY FAR</span></div>
+  </div>
+</div>
+
+</div><!-- /container -->
+
+<div class="container">
+  <div class="footer">
+    Cost estimates based on industry data from
+    <a href="https://www.getjobber.com/academy/lawn-care/how-to-price-out-lawn-care-services/" target="_blank">Jobber</a>,
+    <a href="https://www.housecallpro.com/resources/how-much-charge-lawn-mowing/" target="_blank">HouseCallPro</a>,
+    <a href="https://invoicefly.com/academy/how-much-to-charge-for-lawn-mowing/" target="_blank">InvoiceFly</a>,
+    <a href="https://homeguide.com/articles/how-much-to-charge-for-lawn-mowing" target="_blank">HomeGuide</a>,
+    <a href="https://fieldcamp.ai/blog/how-to-price-for-lawn-mowing-jobs/" target="_blank">FieldCamp</a>, and
+    <a href="https://www.angi.com/articles/how-much-does-lawn-mowing-cost.htm" target="_blank">Angi</a>.
+    <br>All figures approximate. Actual costs vary by location, equipment age, and route density.
+  </div>
+</div>
+
+</body>
+</html>
