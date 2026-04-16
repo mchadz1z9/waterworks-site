@@ -73,23 +73,33 @@ def run_full_calculation(
     start_date,
     periods: list[dict],
     user_rates: dict | None = None,
+    rate_mode: str = 'bloomberg',
+    scenario=None,
 ) -> dict:
     """
     End-to-end calculation: schedule → matrices → aggregation.
 
-    Args:
-        start_capital: Starting capital amount
-        start_date: Schedule start date
-        periods: List of monthly investment period dicts
-        user_rates: Optional {term_months: annual_rate} overrides
-
-    Returns:
-        Full results dict including schedule rows and all matrix outputs
+    rate_mode:
+      'bloomberg' — use real CDS rates from BloombergRate table
+      'custom'    — use user_rates dict {term_months: annual_rate}
+      'forecast'  — blend Bloomberg history + scenario ForecastRate rows
     """
-    from .interest_calc import build_rate_map
+    from .interest_calc import (
+        build_rate_map,
+        build_rate_map_from_bloomberg,
+        build_rate_map_from_forecast,
+    )
 
     schedule = run_capital_schedule(start_capital, start_date, periods)
-    rate_map = build_rate_map(user_rates)
+    num_months = len(schedule)
+
+    if rate_mode == 'bloomberg':
+        rate_map = build_rate_map_from_bloomberg(start_date)
+    elif rate_mode == 'forecast' and scenario is not None:
+        rate_map = build_rate_map_from_forecast(scenario, start_date, num_months)
+    else:
+        rate_map = build_rate_map(user_rates)
+
     matrices = build_all_matrices(schedule, rate_map)
     outputs = aggregate_outputs(matrices)
 
