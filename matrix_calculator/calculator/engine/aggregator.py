@@ -120,6 +120,8 @@ def run_full_calculation(
             'final_balance': final_balance,
             'total_interest': outputs['grand_total_interest'],
             'grand_total_balance': outputs['grand_total_balance'],
+            'rate_mode': rate_mode,
+            'rate_map_sample': {str(k): round(v * 1200, 4) for k, v in list(rate_map.items())[:5]},
         },
         **outputs,
     }

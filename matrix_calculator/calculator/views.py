@@ -11,10 +11,12 @@ from django.contrib import messages
 from django.http import HttpResponse
 from django.urls import reverse
 
-from .models import Scenario, InvestmentPeriod, InterestRate, CalculationResult
+from .models import (Scenario, InvestmentPeriod, InterestRate,
+                     CalculationResult, BloombergRate, ForecastRate,
+                     TERM_BUCKETS, TERM_TO_FIELD)
 from .forms import ScenarioForm, InterestRateForm
 from .engine.aggregator import run_full_calculation
-from .engine.interest_calc import TERM_BUCKETS, DEFAULT_RATES
+from .engine.interest_calc import DEFAULT_RATES
 
 
 class ScenarioListView(ListView):
@@ -276,6 +278,8 @@ class RunCalculationView(View):
             start_date=scenario.start_date,
             periods=periods,
             user_rates=user_rates,
+            rate_mode=scenario.rate_mode,
+            scenario=scenario,
         )
         calc = CalculationResult.objects.create(
             scenario=scenario,
