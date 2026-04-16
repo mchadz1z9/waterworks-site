@@ -1,0 +1,262 @@
+{% extends 'calculator/base.html' %}
+{% block title %}Results — {{ scenario.name }}{% endblock %}
+
+{% block head %}
+<script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.0/dist/chart.umd.min.js"></script>
+<style>
+  .matrix-table { font-size: 11px; }
+  .matrix-table td, .matrix-table th { padding: 3px 7px; min-width: 70px; }
+  .cell-pos { color: #00d4aa; }
+  .cell-zero { color: #3a3f5c; }
+  .total-row td, .total-col { background: #4f7cff15 !important; font-weight: 600; }
+</style>
+{% endblock %}
+
+{% block content %}
+<div style="display:flex; align-items:center; gap:16px; margin-bottom:6px; flex-wrap:wrap;">
+  <h1>Results</h1>
+  <span style="color:var(--muted); font-size:13px;">{{ scenario.name }}</span>
+  <div style="margin-left:auto; display:flex; gap:8px;">
+    <a href="{% url 'calculator:schedule' scenario.pk %}" class="btn btn-outline btn-sm">Edit Schedule</a>
+    <a href="{% url 'calculator:run' scenario.pk %}" class="btn btn-primary btn-sm">Re-run</a>
+    <a href="{% url 'calculator:compare' %}" class="btn btn-outline btn-sm">Compare Scenarios</a>
+  </div>
+</div>
+<p class="subtitle">Calculated {{ calc.calculated_at|date:"M d, Y H:i" }}</p>
+
+<div class="steps">
+  <div class="step done">1. Create Scenario</div>
+  <div class="step done">2. Investment Schedule</div>
+  <div class="step done">3. Interest Rates</div>
+  <div class="step active">4. Results</div>
+</div>
+
+<!-- Summary cards -->
+<div class="summary-grid">
+  <div class="summary-card">
+    <div class="label">Starting Capital</div>
+    <div class="value">${{ summary.start_capital|floatformat:0 }}</div>
+  </div>
+  <div class="summary-card">
+    <div class="label">Total New Investments</div>
+    <div class="value">${{ summary.total_new_investments|floatformat:0 }}</div>
+  </div>
+  <div class="summary-card">
+    <div class="label">Total Invested</div>
+    <div class="value">${{ summary.total_invested|floatformat:0 }}</div>
+  </div>
+  <div class="summary-card">
+    <div class="label">Final Balance</div>
+    <div class="value">${{ summary.final_balance|floatformat:0 }}</div>
+  </div>
+  <div class="summary-card">
+    <div class="label">Total Interest Earned</div>
+    <div class="value" style="color:#4f7cff;">${{ summary.total_interest|floatformat:0 }}</div>
+  </div>
+  <div class="summary-card">
+    <div class="label">Grand Total Balance</div>
+    <div class="value" style="color:#4f7cff;">${{ summary.grand_total_balance|floatformat:0 }}</div>
+  </div>
+</div>
+
+<!-- Charts -->
+<div class="chart-row">
+  <div class="card">
+    <h3>Balance Over Time</h3>
+    <canvas id="balanceChart" height="200"></canvas>
+  </div>
+  <div class="card">
+    <h3>Interest by Term Bucket</h3>
+    <canvas id="interestChart" height="200"></canvas>
+  </div>
+</div>
+
+<!-- Capital Schedule -->
+<div class="card">
+  <h2>Monthly Capital Schedule</h2>
+  <div class="table-wrap">
+    <table>
+      <thead>
+        <tr>
+          <th style="text-align:center;">Month</th>
+          <th style="text-align:left;">Date</th>
+          <th>Starting Capital</th>
+          <th>New Investment</th>
+          <th>Growth</th>
+          <th>Total Invested</th>
+          <th>Drawdown</th>
+          <th>Cumulative Balance</th>
+        </tr>
+      </thead>
+      <tbody>
+        {% for row in schedule %}
+        <tr>
+          <td style="text-align:center; color:var(--muted);">{{ row.month }}</td>
+          <td style="text-align:left; color:var(--muted);">{{ row.date }}</td>
+          <td>${{ row.starting_cap|floatformat:2 }}</td>
+          <td>
+            {% if row.new_investment %}
+              <span style="color:var(--accent2);">${{ row.new_investment|floatformat:2 }}</span>
+            {% else %}
+              <span style="color:var(--muted);">—</span>
+            {% endif %}
+          </td>
+          <td>${{ row.growth|floatformat:2 }}</td>
+          <td>${{ row.total_invested|floatformat:2 }}</td>
+          <td>
+            {% if row.drawdown %}
+              <span style="color:var(--danger);">${{ row.drawdown|floatformat:2 }}</span>
+            {% else %}<span style="color:var(--muted);">—</span>{% endif %}
+          </td>
+          <td style="font-weight:600;">${{ row.cumulative_balance|floatformat:2 }}</td>
+        </tr>
+        {% endfor %}
+      </tbody>
+    </table>
+  </div>
+</div>
+
+<!-- Balance Output Matrix -->
+<div class="card">
+  <h2>Balance Output Matrix (25x25)</h2>
+  <p style="color:var(--muted); font-size:12px; margin-bottom:12px;">Rows = investment cohort month; Columns = time period bucket. Replicates the BalanceOutput named range from the workbook.</p>
+  <div class="table-wrap">
+    <table class="matrix-table">
+      <thead>
+        <tr>
+          <th>Cohort</th>
+          {% for t in term_buckets %}
+            <th>{{ t }}M</th>
+          {% endfor %}
+          <th class="total-col">Total</th>
+        </tr>
+      </thead>
+      <tbody>
+        {% for row in balance_output %}
+        <tr>
+          <td style="color:var(--muted);">M{{ forloop.counter }}</td>
+          {% for cell in row %}
+            <td class="{% if cell > 0 %}cell-pos{% else %}cell-zero{% endif %}">
+              {% if cell > 0 %}${{ cell|floatformat:0 }}{% else %}—{% endif %}
+            </td>
+          {% endfor %}
+          <td class="total-col">${{ row_totals_balance|list_index:forloop.counter0|floatformat:0 }}</td>
+        </tr>
+        {% endfor %}
+        <tr class="total-row">
+          <td>Total</td>
+          {% for t in col_totals_balance %}
+            <td>${{ t|floatformat:0 }}</td>
+          {% endfor %}
+          <td></td>
+        </tr>
+      </tbody>
+    </table>
+  </div>
+</div>
+
+<!-- Interest Output Matrix -->
+<div class="card">
+  <h2>Interest Output Matrix (25x25)</h2>
+  <p style="color:var(--muted); font-size:12px; margin-bottom:12px;">Interest earned per cohort per term bucket. Replicates the InterestOutput named range.</p>
+  <div class="table-wrap">
+    <table class="matrix-table">
+      <thead>
+        <tr>
+          <th>Cohort</th>
+          {% for t in term_buckets %}
+            <th>{{ t }}M</th>
+          {% endfor %}
+          <th class="total-col">Total</th>
+        </tr>
+      </thead>
+      <tbody>
+        {% for row in interest_output %}
+        <tr>
+          <td style="color:var(--muted);">M{{ forloop.counter }}</td>
+          {% for cell in row %}
+            <td class="{% if cell > 0 %}cell-pos{% else %}cell-zero{% endif %}">
+              {% if cell > 0 %}${{ cell|floatformat:0 }}{% else %}—{% endif %}
+            </td>
+          {% endfor %}
+          <td class="total-col" style="color:var(--accent);">${{ row_totals_interest|list_index:forloop.counter0|floatformat:0 }}</td>
+        </tr>
+        {% endfor %}
+        <tr class="total-row">
+          <td>Total</td>
+          {% for t in col_totals_interest %}
+            <td>${{ t|floatformat:0 }}</td>
+          {% endfor %}
+          <td></td>
+        </tr>
+      </tbody>
+    </table>
+  </div>
+</div>
+
+{% endblock %}
+
+{% block scripts %}
+<script>
+const balanceData = {{ balance_chart|safe }};
+const interestData = {{ interest_chart|safe }};
+
+new Chart(document.getElementById('balanceChart'), {
+  type: 'line',
+  data: {
+    labels: balanceData.labels,
+    datasets: [{
+      label: 'Cumulative Balance',
+      data: balanceData.data,
+      borderColor: '#00d4aa',
+      backgroundColor: '#00d4aa22',
+      fill: true,
+      tension: 0.3,
+      pointRadius: 2,
+    }]
+  },
+  options: {
+    responsive: true,
+    plugins: { legend: { display: false } },
+    scales: {
+      x: { ticks: { color: '#7b82a0', maxTicksLimit: 12 }, grid: { color: '#2e3450' } },
+      y: {
+        ticks: {
+          color: '#7b82a0',
+          callback: v => '$' + (v >= 1e6 ? (v/1e6).toFixed(1)+'M' : v.toLocaleString()),
+        },
+        grid: { color: '#2e3450' }
+      }
+    }
+  }
+});
+
+new Chart(document.getElementById('interestChart'), {
+  type: 'bar',
+  data: {
+    labels: interestData.labels,
+    datasets: [{
+      label: 'Interest Earned',
+      data: interestData.data,
+      backgroundColor: '#4f7cff99',
+      borderColor: '#4f7cff',
+      borderWidth: 1,
+    }]
+  },
+  options: {
+    responsive: true,
+    plugins: { legend: { display: false } },
+    scales: {
+      x: { ticks: { color: '#7b82a0' }, grid: { color: '#2e3450' } },
+      y: {
+        ticks: {
+          color: '#7b82a0',
+          callback: v => '$' + (v >= 1e6 ? (v/1e6).toFixed(1)+'M' : v.toLocaleString()),
+        },
+        grid: { color: '#2e3450' }
+      }
+    }
+  }
+});
+</script>
+{% endblock %}
