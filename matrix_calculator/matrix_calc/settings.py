@@ -55,6 +55,8 @@ DATABASES = {
     }
 }
 
+DATA_UPLOAD_MAX_NUMBER_FIELDS = 5000
+
 LANGUAGE_CODE = 'en-us'
 TIME_ZONE = 'America/Chicago'
 USE_I18N = True

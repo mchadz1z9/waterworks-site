@@ -388,7 +388,7 @@ class RunCalculationView(View):
             scenario=scenario,
             result_json=result,
         )
-        return redirect('calculator:results', pk=scenario.pk, result_id=calc.pk)
+        return redirect('calculator:results_detail', pk=scenario.pk, result_id=calc.pk)
 
     def get(self, request, pk):
         # Allow GET to trigger calculation (convenience)
