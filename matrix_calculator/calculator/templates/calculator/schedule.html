@@ -1,0 +1,146 @@
+{% extends 'calculator/base.html' %}
+{% block title %}Investment Schedule — {{ scenario.name }}{% endblock %}
+
+{% block head %}
+<style>
+  .schedule-table input.inv-input { width: 130px; }
+  .schedule-table input.pct-input { width: 80px; }
+  .schedule-table td { padding: 4px 6px; vertical-align: middle; }
+  .bulk-bar {
+    background: var(--surface);
+    border: 1px solid var(--border);
+    border-radius: 8px;
+    padding: 14px 18px;
+    margin-bottom: 20px;
+    display: flex;
+    gap: 16px;
+    align-items: flex-end;
+    flex-wrap: wrap;
+  }
+  .bulk-bar .form-group { margin-bottom: 0; }
+  .row-highlight td { background: #4f7cff15 !important; }
+</style>
+{% endblock %}
+
+{% block content %}
+<div style="display:flex; align-items:center; gap:16px; margin-bottom:6px;">
+  <h1>Investment Schedule</h1>
+  <span style="color:var(--muted); font-size:13px;">{{ scenario.name }}</span>
+</div>
+<p class="subtitle">Set a new investment amount for any month. Leave as 0 for months with no new capital. Growth % applies to existing balance; New Growth % applies to new investments.</p>
+
+<div class="steps">
+  <div class="step done">1. Create Scenario</div>
+  <div class="step active">2. Investment Schedule</div>
+  <div class="step">3. Interest Rates</div>
+  <div class="step">4. Run & Results</div>
+</div>
+
+<!-- Bulk fill toolbar -->
+<div class="bulk-bar">
+  <div class="form-group">
+    <label>Bulk-fill New Investment ($)</label>
+    <input type="number" id="bulk-inv" step="0.01" min="0" placeholder="e.g. 50000" style="width:160px;">
+  </div>
+  <div class="form-group">
+    <label>Apply to months</label>
+    <input type="number" id="bulk-from" min="1" max="60" value="1" style="width:70px;"> to
+    <input type="number" id="bulk-to" min="1" max="60" value="60" style="width:70px;">
+  </div>
+  <div class="form-group">
+    <label>Bulk-fill Growth %</label>
+    <input type="number" id="bulk-growth" step="0.001" min="0" max="100" placeholder="e.g. 2.5" style="width:100px;">
+  </div>
+  <button type="button" class="btn btn-outline" onclick="applyBulk()">Apply</button>
+  <button type="button" class="btn btn-outline" onclick="clearAll()">Clear All</button>
+</div>
+
+<form method="post">
+  {% csrf_token %}
+  {{ formset.management_form }}
+
+  <div class="card" style="padding:0;">
+    <div class="table-wrap">
+      <table class="schedule-table">
+        <thead>
+          <tr>
+            <th style="text-align:center; width:60px;">Month</th>
+            <th style="text-align:left;">Date</th>
+            <th>New Investment ($)</th>
+            <th>Growth %</th>
+            <th>New Growth %</th>
+          </tr>
+        </thead>
+        <tbody>
+          {% for form in formset %}
+            {% with month=form.instance.month %}
+            <tr class="{% if form.instance.new_investment %}row-highlight{% endif %}" data-month="{{ month }}">
+              <td style="text-align:center; color:var(--muted);">
+                {{ form.month }}
+                {{ month }}
+              </td>
+              <td style="text-align:left; color:var(--muted);">
+                {{ month_dates|default_if_none:'' }}
+                {% for m, d in month_dates.items %}{% if m == month %}{{ d|date:"M Y" }}{% endif %}{% endfor %}
+              </td>
+              <td>{{ form.new_investment }}</td>
+              <td>{{ form.growth_pct }}</td>
+              <td>{{ form.new_growth_pct }}</td>
+            </tr>
+            {% endwith %}
+          {% endfor %}
+        </tbody>
+      </table>
+    </div>
+  </div>
+
+  <div style="display:flex; gap:12px; margin-top:20px;">
+    <button type="submit" class="btn btn-primary">Save Schedule &amp; Continue to Rates</button>
+    <a href="{% url 'calculator:index' %}" class="btn btn-outline">Back to Scenarios</a>
+  </div>
+</form>
+{% endblock %}
+
+{% block scripts %}
+<script>
+  function applyBulk() {
+    const inv = document.getElementById('bulk-inv').value;
+    const growth = document.getElementById('bulk-growth').value;
+    const from = parseInt(document.getElementById('bulk-from').value);
+    const to = parseInt(document.getElementById('bulk-to').value);
+
+    document.querySelectorAll('tr[data-month]').forEach(row => {
+      const m = parseInt(row.dataset.month);
+      if (m >= from && m <= to) {
+        if (inv !== '') {
+          const inp = row.querySelector('.inv-input');
+          if (inp) inp.value = inv;
+        }
+        if (growth !== '') {
+          const inp = row.querySelector('.pct-input');
+          if (inp) inp.value = (parseFloat(growth) / 100).toFixed(5);
+        }
+        row.classList.add('row-highlight');
+      }
+    });
+  }
+
+  function clearAll() {
+    document.querySelectorAll('.inv-input').forEach(i => i.value = '0');
+    document.querySelectorAll('.pct-input').forEach(i => i.value = '0');
+    document.querySelectorAll('tr[data-month]').forEach(r => r.classList.remove('row-highlight'));
+  }
+
+  // Highlight rows with non-zero investment on input change
+  document.addEventListener('input', e => {
+    if (e.target.classList.contains('inv-input')) {
+      const row = e.target.closest('tr');
+      if (parseFloat(e.target.value) > 0) {
+        row.classList.add('row-highlight');
+      } else {
+        row.classList.remove('row-highlight');
+      }
+    }
+  });
+</script>
+{% endblock %}
