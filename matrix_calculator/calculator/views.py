@@ -219,42 +219,145 @@ class ScheduleTemplateView(View):
         return response
 
 
+def _bloomberg_chart_data():
+    """Return JSON-serialisable data for the Bloomberg history chart."""
+    rows = BloombergRate.objects.order_by('date')
+    labels = [r.date.strftime('%b %Y') for r in rows]
+    # Show 5 representative term curves
+    series = {
+        '1M':  [float(r.rate_1m  or 0) for r in rows],
+        '12M': [float(r.rate_12m or 0) for r in rows],
+        '60M': [float(r.rate_60m or 0) for r in rows],
+        '84M': [float(r.rate_84m or 0) for r in rows],
+        '120M':[float(r.rate_120m or 0) for r in rows],
+    }
+    return {'labels': labels, 'series': series}
+
+
+def _forecast_rows(scenario):
+    """Build the forecast table: last 6 Bloomberg rows (read-only) + existing forecast rows."""
+    last_bloomberg = list(BloombergRate.objects.order_by('-date')[:6])[::-1]
+    existing_forecast = {r.date: r for r in scenario.forecast_rates.all()}
+
+    from dateutil.relativedelta import relativedelta
+    import calendar
+    from datetime import date as date_cls
+
+    # Generate 24 future month slots from the month after last Bloomberg
+    if last_bloomberg:
+        last_date = last_bloomberg[-1].date
+    else:
+        last_date = scenario.start_date
+
+    future_rows = []
+    for i in range(1, 25):
+        d = last_date + relativedelta(months=i)
+        last_day = calendar.monthrange(d.year, d.month)[1]
+        month_end = date_cls(d.year, d.month, last_day)
+        fr = existing_forecast.get(month_end)
+        row = {'date': month_end, 'existing': fr}
+        for term, field in TERM_TO_FIELD.items():
+            row[f'r_{term}'] = float(getattr(fr, field) or 0) if fr else ''
+        future_rows.append(row)
+
+    return last_bloomberg, future_rows
+
+
 class RatesView(View):
+    """3-tab rates page: Bloomberg Historical / Custom / Historical + Forecast."""
     template_name = 'calculator/rates.html'
 
-    def _initial_rates(self, scenario):
-        return {
-            r.term_months: float(r.annual_rate)
-            for r in scenario.rates.all()
-        }
+    def _initial_custom_rates(self, scenario):
+        return {r.term_months: float(r.annual_rate) for r in scenario.rates.all()}
 
     def get(self, request, pk):
         scenario = get_object_or_404(Scenario, pk=pk)
-        form = InterestRateForm(initial_rates=self._initial_rates(scenario))
+        custom_form = InterestRateForm(initial_rates=self._initial_custom_rates(scenario))
+        bloomberg_rows = BloombergRate.objects.order_by('date')
+        last_bloomberg, future_rows = _forecast_rows(scenario)
+        chart_data = _bloomberg_chart_data()
         return render(request, self.template_name, {
             'scenario': scenario,
-            'form': form,
+            'custom_form': custom_form,
+            'bloomberg_rows': bloomberg_rows,
+            'last_bloomberg': last_bloomberg,
+            'future_rows': future_rows,
             'term_buckets': TERM_BUCKETS,
+            'chart_data': json.dumps(chart_data),
+            'active_tab': scenario.rate_mode,
         })
 
     def post(self, request, pk):
         scenario = get_object_or_404(Scenario, pk=pk)
-        form = InterestRateForm(request.POST, initial_rates=self._initial_rates(scenario))
-        if form.is_valid():
-            rate_dict = form.get_rate_dict()
-            for term, annual_rate in rate_dict.items():
-                InterestRate.objects.update_or_create(
-                    scenario=scenario,
-                    term_months=term,
-                    defaults={'annual_rate': annual_rate},
-                )
-            messages.success(request, 'Interest rates saved.')
+        action = request.POST.get('action', 'custom')
+
+        if action == 'bloomberg':
+            scenario.rate_mode = 'bloomberg'
+            scenario.save(update_fields=['rate_mode'])
+            messages.success(request, 'Using Bloomberg historical rates.')
             return redirect('calculator:run', pk=pk)
-        return render(request, self.template_name, {
-            'scenario': scenario,
-            'form': form,
-            'term_buckets': TERM_BUCKETS,
-        })
+
+        elif action == 'custom':
+            form = InterestRateForm(request.POST, initial_rates=self._initial_custom_rates(scenario))
+            if form.is_valid():
+                rate_dict = form.get_rate_dict()
+                for term, annual_rate in rate_dict.items():
+                    InterestRate.objects.update_or_create(
+                        scenario=scenario, term_months=term,
+                        defaults={'annual_rate': annual_rate},
+                    )
+                scenario.rate_mode = 'custom'
+                scenario.save(update_fields=['rate_mode'])
+                messages.success(request, 'Custom rates saved.')
+                return redirect('calculator:run', pk=pk)
+            bloomberg_rows = BloombergRate.objects.order_by('date')
+            last_bloomberg, future_rows = _forecast_rows(scenario)
+            return render(request, self.template_name, {
+                'scenario': scenario,
+                'custom_form': form,
+                'bloomberg_rows': bloomberg_rows,
+                'last_bloomberg': last_bloomberg,
+                'future_rows': future_rows,
+                'term_buckets': TERM_BUCKETS,
+                'chart_data': json.dumps(_bloomberg_chart_data()),
+                'active_tab': 'custom',
+            })
+
+        elif action == 'forecast':
+            # Save forecast rows from POST
+            from dateutil.relativedelta import relativedelta
+            import calendar
+            from datetime import date as date_cls
+
+            last_bb = BloombergRate.objects.order_by('-date').first()
+            last_date = last_bb.date if last_bb else scenario.start_date
+
+            saved = 0
+            for i in range(1, 25):
+                d = last_date + relativedelta(months=i)
+                last_day = calendar.monthrange(d.year, d.month)[1]
+                month_end = date_cls(d.year, d.month, last_day)
+                key = month_end.strftime('%Y-%m-%d')
+                # Check if any rate was entered for this row
+                has_data = any(
+                    request.POST.get(f'fc_{key}_{term}', '').strip()
+                    for term in TERM_BUCKETS
+                )
+                if not has_data:
+                    continue
+                defaults = {}
+                for term, field in TERM_TO_FIELD.items():
+                    val = request.POST.get(f'fc_{key}_{term}', '').strip()
+                    defaults[field] = float(val) if val else None
+                ForecastRate.objects.update_or_create(
+                    scenario=scenario, date=month_end, defaults=defaults
+                )
+                saved += 1
+
+            scenario.rate_mode = 'forecast'
+            scenario.save(update_fields=['rate_mode'])
+            messages.success(request, f'Forecast rates saved ({saved} months). Using Historical + Forecast.')
+            return redirect('calculator:run', pk=pk)
 
 
 class RunCalculationView(View):
