@@ -262,8 +262,103 @@ function ordinal(n) {
   return n + (s[(v-20)%10] || s[v] || s[0]);
 }
 
+function switchType() {
+  var type = document.getElementById('contract-type').value;
+  var isProfit = (type === 'profit');
+  document.querySelectorAll('.profit-field').forEach(function(el){ el.style.display = isProfit ? '' : 'none'; });
+  document.querySelectorAll('.service-field').forEach(function(el){ el.style.display = isProfit ? 'none' : ''; });
+}
+
 function generateContract() {
-  var owner   = document.getElementById('owner-name').value.trim();
+  var type  = document.getElementById('contract-type').value;
+  var owner = document.getElementById('owner-name').value.trim();
+  if (!owner) { alert('Please enter your name.'); return; }
+
+  if (type === 'profit') {
+    generateProfitContract(owner);
+  } else {
+    generateServiceContract(owner, type);
+  }
+}
+
+function generateServiceContract(owner, type) {
+  var customer = document.getElementById('customer-name').value.trim();
+  var address  = document.getElementById('service-address').value.trim();
+  var price    = parseFloat(document.getElementById('service-price').value);
+  var dateVal  = document.getElementById('service-date').value;
+  var notes    = document.getElementById('service-notes').value.trim();
+
+  if (!customer || !address || !price || !dateVal) {
+    alert('Please fill in customer name, address, price, and service date.');
+    return;
+  }
+
+  var serviceLabels = {
+    pressure: 'Pressure Washing',
+    lawn:     'Lawn Mowing',
+    carwash:  'Car Wash',
+    snow:     'Snow Removal'
+  };
+  var scopeDefaults = {
+    pressure: 'Full pressure wash of specified areas including driveway, walkways, and/or siding as agreed.',
+    lawn:     'Full lawn mow, edge trim, and cleanup of clippings for the specified property.',
+    carwash:  'Full hand car wash including exterior wash, rinse, and dry. Interior not included unless noted.',
+    snow:     'Snow removal from driveway and/or walkways following snowfall of 2cm or more.'
+  };
+
+  var serviceLabel = serviceLabels[type];
+  var scopeText = notes || scopeDefaults[type];
+  var today = new Date();
+  var todayStr = fmtDate(today.getFullYear()+'-'+String(today.getMonth()+1).padStart(2,'0')+'-'+String(today.getDate()).padStart(2,'0'));
+
+  var html = '<h1>' + serviceLabel + ' Service Agreement</h1>' +
+    '<div class="doc-sub">WaterWorks &amp; Lawn Care &mdash; Prepared ' + todayStr + '</div>' +
+
+    '<h2>1. Parties</h2>' +
+    '<p>This Service Agreement is between <span class="highlight">' + owner + '</span>, operating as WaterWorks &amp; Lawn Care (the <span class="highlight">"Service Provider"</span>), and <span class="highlight">' + customer + '</span> (the <span class="highlight">"Customer"</span>).</p>' +
+
+    '<h2>2. Service</h2>' +
+    '<p>The Service Provider agrees to perform <span class="highlight">' + serviceLabel + '</span> services at the following location:</p>' +
+    '<p><span class="highlight">' + address + '</span></p>' +
+    '<p><strong>Scope of Work:</strong> ' + scopeText + '</p>' +
+
+    '<h2>3. Service Date</h2>' +
+    '<p>Service is scheduled for <span class="highlight">' + fmtDate(dateVal) + '</span>. The Service Provider will make reasonable efforts to arrive on time. In the event of weather or emergency delays, both parties agree to reschedule at the earliest convenience.</p>' +
+
+    '<h2>4. Payment</h2>' +
+    '<p>The Customer agrees to pay <span class="highlight">$' + price.toFixed(2) + '</span> for the service described above. Payment is due upon completion of service unless otherwise agreed in writing. Accepted methods: cash or e-transfer.</p>' +
+
+    '<h2>5. Satisfaction</h2>' +
+    '<p>If the Customer is not satisfied with the quality of service, they must notify the Service Provider within <span class="highlight">24 hours</span> of completion. The Service Provider will make reasonable efforts to correct any issues at no additional charge.</p>' +
+
+    '<h2>6. Liability</h2>' +
+    '<p>The Service Provider takes reasonable care in performing all services. The Service Provider is not liable for pre-existing damage, normal wear, or damage caused by conditions beyond reasonable control. The Customer agrees to point out any sensitive areas or concerns before work begins.</p>' +
+
+    '<h2>7. Cancellation</h2>' +
+    '<p>Either party may cancel this agreement with reasonable notice. Cancellations made less than 24 hours before the scheduled service may be subject to a cancellation fee of up to 50% of the agreed price.</p>' +
+
+    '<div class="sig-block">' +
+      '<div class="sig-party">' +
+        '<div class="sig-line"></div>' +
+        '<div><strong>' + owner + '</strong></div>' +
+        '<div class="sig-label">Service Provider, WaterWorks &amp; Lawn Care</div>' +
+        '<div class="sig-label" style="margin-top:0.8rem;">Date: ___________________</div>' +
+      '</div>' +
+      '<div class="sig-party">' +
+        '<div class="sig-line"></div>' +
+        '<div><strong>' + customer + '</strong></div>' +
+        '<div class="sig-label">Customer</div>' +
+        '<div class="sig-label" style="margin-top:0.8rem;">Date: ___________________</div>' +
+      '</div>' +
+    '</div>' +
+    '<div class="doc-footer">Generated by WaterWorks &amp; Lawn Care. Both parties should retain a signed copy.</div>';
+
+  document.getElementById('contract-doc').innerHTML = html;
+  document.getElementById('contract-wrap').classList.add('show');
+  document.getElementById('contract-wrap').scrollIntoView({ behavior: 'smooth', block: 'start' });
+}
+
+function generateProfitContract(owner) {
   var party   = document.getElementById('party-name').value.trim();
   var pct     = parseFloat(document.getElementById('percentage').value);
   var sched   = document.getElementById('payment-schedule').value;
@@ -271,8 +366,8 @@ function generateContract() {
   var endD    = document.getElementById('end-date').value;
   var reason  = document.getElementById('reason').value.trim();
 
-  if (!owner || !party || !pct || !startD) {
-    alert('Please fill in your name, their name, the percentage, and a start date.');
+  if (!party || !pct || !startD) {
+    alert('Please fill in the other party\'s name, percentage, and start date.');
     return;
   }
 
@@ -348,10 +443,12 @@ function resetContract() {
 }
 
 function resetForm() {
-  ['owner-name','party-name','percentage','end-date','reason'].forEach(function(id) {
+  ['owner-name','party-name','percentage','end-date','reason','customer-name','service-address','service-price','service-date','service-notes'].forEach(function(id) {
     document.getElementById(id).value = '';
   });
   document.getElementById('payment-schedule').value = 'monthly';
+  document.getElementById('contract-type').value = 'profit';
+  switchType();
   resetContract();
 }
 </script>
