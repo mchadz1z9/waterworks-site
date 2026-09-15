@@ -1,0 +1,96 @@
+<!--
+  Paste this into your existing site's HTML wherever you want:
+    1) content that the admin page controls (hero text, services, contact info)
+    2) approved customer reviews
+    3) a form for new customers to submit a review
+
+  Everything here talks to /api/... on the SAME domain, so no extra setup
+  needed on your Pages site — just paste this block in.
+-->
+
+<section id="ww-hero">
+  <h1 id="ww-hero-title">Loading…</h1>
+  <p id="ww-hero-subtitle"></p>
+</section>
+
+<section id="ww-services">
+  <h2>Services</h2>
+  <div id="ww-services-list"></div>
+</section>
+
+<section id="ww-info">
+  <p id="ww-service-area"></p>
+  <p id="ww-hours"></p>
+  <p id="ww-contact"></p>
+</section>
+
+<section id="ww-reviews">
+  <h2>What customers say</h2>
+  <div id="ww-reviews-list">Loading…</div>
+</section>
+
+<section id="ww-review-form">
+  <h2>Leave a review</h2>
+  <form id="reviewForm">
+    <label>Name<br><input type="text" id="rf-name" required></label><br><br>
+    <label>Rating (1–5)<br><input type="number" id="rf-rating" min="1" max="5" required></label><br><br>
+    <label>Your review<br><textarea id="rf-comment" required></textarea></label><br><br>
+    <button type="submit">Submit review</button>
+  </form>
+  <p id="rf-msg"></p>
+</section>
+
+<script>
+// Load live site content (edited from /admin)
+fetch('/api/content').then(function(r){return r.json();}).then(function(c){
+  document.getElementById('ww-hero-title').innerText = c.hero_title || '';
+  document.getElementById('ww-hero-subtitle').innerText = c.hero_subtitle || '';
+  document.getElementById('ww-service-area').innerText = c.service_area || '';
+  document.getElementById('ww-hours').innerText = c.hours || '';
+  var contact = [c.contact_phone, c.contact_email].filter(Boolean).join(' · ');
+  document.getElementById('ww-contact').innerText = contact;
+
+  var list = document.getElementById('ww-services-list');
+  list.innerHTML = '';
+  (c.services || []).forEach(function(s){
+    var div = document.createElement('div');
+    div.innerHTML = '<strong>' + (s.name||'') + '</strong>' +
+      (s.price ? ' — ' + s.price : '') +
+      (s.description ? '<br><span>' + s.description + '</span>' : '');
+    list.appendChild(div);
+  });
+});
+
+// Load approved reviews
+fetch('/api/reviews/approved').then(function(r){return r.json();}).then(function(reviews){
+  var list = document.getElementById('ww-reviews-list');
+  if (reviews.length === 0) { list.innerHTML = '<p>No reviews yet.</p>'; return; }
+  list.innerHTML = '';
+  reviews.forEach(function(rv){
+    var div = document.createElement('div');
+    div.innerHTML = '<strong>' + rv.name + '</strong> — ' + rv.rating + '/5<br><p>' + rv.comment + '</p>';
+    list.appendChild(div);
+  });
+});
+
+// Handle new review submissions
+document.getElementById('reviewForm').addEventListener('submit', function(e){
+  e.preventDefault();
+  var body = {
+    name: document.getElementById('rf-name').value,
+    rating: document.getElementById('rf-rating').value,
+    comment: document.getElementById('rf-comment').value
+  };
+  fetch('/api/reviews', {
+    method: 'POST',
+    headers: {'Content-Type': 'application/json'},
+    body: JSON.stringify(body)
+  }).then(function(r){return r.json().then(function(d){return {ok:r.ok,d:d};});})
+    .then(function(res){
+      document.getElementById('rf-msg').innerText = res.ok
+        ? 'Thanks! Your review is awaiting approval.'
+        : (res.d.error || 'Something went wrong.');
+      if (res.ok) document.getElementById('reviewForm').reset();
+    });
+});
+</script>
