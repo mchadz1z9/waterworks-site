@@ -1,3 +1,6 @@
+Yes — paste it right into that "enter file contents here" box. Here's the full code:
+
+```javascript
 // WaterWorks Lawn & Landscaping — single-file admin + API
 //
 // HOW TO USE: put this file, named exactly "_worker.js", in the ROOT of your
@@ -177,7 +180,6 @@ export default {
         return new Response(ADMIN_HTML, { headers: { "Content-Type": "text/html;charset=UTF-8" } });
       }
 
-      // Anything else: hand off to your normal site files, unchanged.
       return env.ASSETS.fetch(request);
     } catch (err) {
       return jsonResponse({ error: "Server error", detail: String(err) }, 500);
@@ -412,3 +414,8 @@ const ADMIN_HTML = "<!DOCTYPE html>" +
 "checkSession();" +
 "</" + "script>" +
 "</body></html>";
+```
+
+---
+
+Yes — paste all of it into the "Enter file contents here" box. Then above that box, make sure the filename says exactly `_worker.js`, then scroll down and click **Commit new file**.
