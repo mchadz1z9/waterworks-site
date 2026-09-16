@@ -26,7 +26,7 @@
   // fetched separately and nothing else can go wrong.
   var TEAM = [
     {
-      name: "Aiden",
+      name: "Aiden chad",
       role: "Founder",
       bio: "Started WaterWorks and runs the day-to-day operations."
     },
@@ -41,7 +41,7 @@
       bio: "Helped build WaterWorks from the ground up alongside the rest of the founding crew."
     },
     {
-      name: "Noah",
+      name: "Noah b",
       role: "Crew Member",
       bio: "Dependable and hardworking, showing up ready to get the job done right."
     }
