@@ -26,9 +26,19 @@
   // fetched separately and nothing else can go wrong.
   var TEAM = [
     {
+      name: "Aiden",
+      role: "Founder",
+      bio: "Started WaterWorks and runs the day-to-day operations."
+    },
+    {
       name: "Noah Carter",
       role: "Co-Founder",
       bio: "Been part of building WaterWorks from day one and helps run the crew on every job."
+    },
+    {
+      name: "Max",
+      role: "Co-Founder",
+      bio: "Helped build WaterWorks from the ground up alongside the rest of the founding crew."
     },
     {
       name: "Noah",
@@ -37,13 +47,30 @@
     }
   ];
 
+  function injectTeamStyles() {
+    if (document.getElementById("team-styles")) return;
+    var style = document.createElement("style");
+    style.id = "team-styles";
+    style.textContent =
+      ".team-section { max-width: 1100px; margin: 0 auto; padding: 48px 20px; }" +
+      ".team-section h2 { color: #1a3a6b; font-size: 1.6rem; margin-bottom: 24px; }" +
+      ".team-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(220px, 1fr)); gap: 20px; }" +
+      ".team-item { background: #fff; border: 1px solid #dbe4f0; border-radius: 10px; padding: 20px; box-shadow: 0 1px 4px rgba(0,0,0,0.06); }" +
+      ".team-item h3 { margin: 0 0 4px 0; color: #1a3a6b; font-size: 1.1rem; }" +
+      ".team-role { font-weight: 600; color: #2f6bd6; margin: 0 0 10px 0; font-size: 0.9rem; }" +
+      ".team-item p:last-child { margin: 0; color: #445; font-size: 0.95rem; }";
+    document.head.appendChild(style);
+  }
+
   function renderTeam() {
     if (document.getElementById("team-list")) return; // already added
+    injectTeamStyles();
     var teamSection = document.createElement("section");
     teamSection.className = "team-section";
     teamSection.innerHTML = "<h2>Our Team</h2>";
     var teamEl = document.createElement("div");
     teamEl.id = "team-list";
+    teamEl.className = "team-grid";
     teamSection.appendChild(teamEl);
 
     var footer2 = document.querySelector("footer");
