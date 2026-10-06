@@ -41,7 +41,7 @@
       bio: "Helped build WaterWorks from the ground up alongside the rest of the founding crew."
     },
     {
-      name: "Noah B",
+      name: "Noah Ben Avraham",
       role: "Crew Member",
       bio: "Dependable and hardworking, showing up ready to get the job done right."
     }
