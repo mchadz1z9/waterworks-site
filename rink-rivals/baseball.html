@@ -889,7 +889,8 @@ function startGame(){
   beginGame(o,auto?[null,null]:menuMode===2?['p1','p2']:['solo',null],false);
 }
 function beginGame(o,ctrl,league,career){
-  G=newState(o); setPark(o.t[1]); G.ctrl=ctrl; G.career=career||null; G.ast=assistsB(league); G.lvl=DIFF_T[diff]; G.derby=o.kind==='derby'?{outs:0,hr:0,long:0}:null; G.over=false; G.inLeague=league; G.ffast=false; G.day=!G.derby&&Math.random()<.4;
+  G=newState(o); setPark(o.t[1]); G.ctrl=ctrl;
+  { const sp=Math.max(0,Math.round(rnd(0,o.t[1]==='chc'?20:11)*(['tb','tor','mia','hou','mil','ari','sea','tex'].includes(o.t[1])?0:1))), a=rnd(-Math.PI,Math.PI); G.wind={s:sp,x:Math.sin(a)*sp,y:Math.cos(a)*sp,a}; } G.career=career||null; G.ast=assistsB(league); G.lvl=DIFF_T[diff]; G.derby=o.kind==='derby'?{outs:0,hr:0,long:0}:null; G.over=false; G.inLeague=league; G.ffast=false; G.day=!G.derby&&Math.random()<.4;
   hideHub(); $('menu').classList.add('hidden'); $('result').classList.add('hidden');
   P=null; F=null; paused=false; lastBoard=''; cur.bat={u:0,v:0}; cur.pit={u:.3,v:-.3}; ptype=0;
   startAim(); sfx.organ();
@@ -1108,6 +1109,7 @@ function gameOver(){
 
 /* ---------- field play ---------- */
 function ballStep(b,dt){
+  if(b.z>0&&G&&G.wind&&!G.derby){ b.vx+=G.wind.x*dt*.32; b.vy+=G.wind.y*dt*.32; }
   if(b.z>0||b.vz>0){ const s=Math.hypot(b.vx,b.vy,b.vz); b.vx-=K_DRAG*s*b.vx*dt; b.vy-=K_DRAG*s*b.vy*dt; b.vz-=(GRAV+K_DRAG*s*b.vz)*dt; }
   b.x+=b.vx*dt; b.y+=b.vy*dt; b.z+=b.vz*dt;
   let ev=null;
@@ -1673,6 +1675,9 @@ function drawBug(){
   const bx=x+128, by=y+33;
   for(const [i,dx,dy] of [[0,14,0],[1,0,-13],[2,-14,0]]){ ctx.save(); ctx.translate(bx+dx+14,by+dy); ctx.rotate(Math.PI/4); ctx.fillStyle=G.bases[i]?'#ffd166':'transparent'; ctx.strokeStyle='#ffd166'; ctx.lineWidth=2; ctx.fillRect(-6,-6,12,12); ctx.strokeRect(-6,-6,12,12); ctx.restore(); }
   hudText(`${G.half?'▼':'▲'}${G.inn}`,x+186,y+28,20,'#fff');
+  if(G.wind){ const w=G.wind; ctx.fillStyle='rgba(5,8,18,.82)'; ctx.beginPath(); ctx.roundRect(x,y-30,236,26,8); ctx.fill();
+    let txt='Wind calm (roof)'; if(w.s>0||!['tb','tor','mia','hou','mil','ari','sea','tex'].includes(G.t[1])){ const out=w.y>Math.abs(w.x)*.7, inn=w.y<-Math.abs(w.x)*.7; txt=w.s<2?'Wind calm':`Wind ${w.s} mph ${out?(Math.abs(w.x)>2?(w.x<0?'out to left':'out to right'):'out to center'):inn?'blowing in':(w.x<0?'right to left':'left to right')}`; }
+    hudText(txt,x+12,y-12,15,'#b7c2dd'); if(w.s>=2){ ctx.save(); ctx.translate(x+218,y-17); ctx.rotate(Math.atan2(-w.y,w.x)); ctx.strokeStyle='#ffd166'; ctx.lineWidth=2.5; ctx.beginPath(); ctx.moveTo(-8,0); ctx.lineTo(8,0); ctx.lineTo(3,-5); ctx.moveTo(8,0); ctx.lineTo(3,5); ctx.stroke(); ctx.restore(); } }
   hudText(`${G.balls}-${G.strikes}`,x+186,y+54,20,'#fff');
   for(let i=0;i<2;i++){ ctx.fillStyle=i<G.outs?'#ef4444':'rgba(255,255,255,.2)'; ctx.beginPath(); ctx.arc(x+140+i*14,y+56,5,0,Math.PI*2); ctx.fill(); }
 }
