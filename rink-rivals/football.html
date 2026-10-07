@@ -394,7 +394,17 @@ const OFF_PLAYS=[
   {n:'HB dive',type:'run',path:[[1.5,.6]]},
   {n:'HB sweep',type:'run',path:[[-1,9],[4,15]]}
 ];
-const DEF_PLAYS=[{n:'Man coverage'},{n:'Zone'},{n:'Blitz'}];
+OFF_PLAYS.push(
+  {n:'Mesh',type:'pass',r:{WR1:[[3,0],[6,15]],WR2:[[2,0],[5,17]],TE:[[22,0]],RB:[[3,-5],[18,-6]]}},
+  {n:'Smash',type:'pass',r:{WR1:[[10,0],[22,-8]],WR2:[[6,0],[5,1]],TE:[[8,0],[18,-8]],RB:[[2,5],[4,8]]}},
+  {n:'RB screen',type:'pass',r:{WR1:[[24,1]],WR2:[[24,1]],TE:[[3,0],[4,-3]],RB:[[-3,-6],[-2,-10]]}},
+  {n:'Deep outs',type:'pass',r:{WR1:[[15,0],[16,-9]],WR2:[[15,0],[16,-9]],TE:[[10,0],[11,7]],RB:[[2,-4],[4,-4]]}},
+  {n:'Hail Mary',type:'pass',r:{WR1:[[42,6]],WR2:[[42,6]],TE:[[40,0]],RB:[[32,-4]]}},
+  {n:'QB draw',type:'run',qb:true,path:[[2,0]]}
+);
+const DEF_PLAYS=[{n:'Man coverage'},{n:'Zone'},{n:'Blitz'},{n:'Prevent'},{n:'Corner blitz'}];
+const offCard=i=>({x:W/2-(4*170)/2+(i%4)*170+5,y:H/2-50+(Math.floor(i/4)-1)*112,w:160,h:100});
+const defCard=i=>({x:W/2-(5*170)/2+i*170+5,y:H/2-50,w:160,h:100});
 const OFF_SLOTS={QB:[-4,0],OL1:[-.8,-1.4],OL2:[-.8,1.4],RB:[-6,1.4],TE:[-.9,4.4],WR1:[-.8,-17],WR2:[-.8,17]};
 const DEF_SLOTS={DL1:[1.3,-1.5],DL2:[1.3,1.5],LB1:[5,-4.5],LB2:[5,4.5],CB1:[6.5,-17],CB2:[6.5,17],S:[14,0]};
 const OUT={WR1:-1,WR2:1,TE:1,RB:1};
@@ -408,7 +418,7 @@ const keys=new Set();
 const SCHEME={
   p1:{spin:['KeyE'],arm:['KeyF'],dv:['KeyC'],up:['KeyW'],down:['KeyS'],left:['KeyA'],right:['KeyD'],act:['Space'],spr:['ShiftLeft'],sw:['KeyQ'],thr:['Digit1','Digit2','Digit3','Digit4'],call:['Digit1','Digit2','Digit3','Digit4','Digit5','Digit6']},
   p2:{spin:['Period'],arm:['Comma'],dv:['KeyL'],up:['ArrowUp'],down:['ArrowDown'],left:['ArrowLeft'],right:['ArrowRight'],act:['Enter','NumpadEnter'],spr:['ShiftRight'],sw:['Slash'],thr:['Digit7','Digit8','Digit9','Digit0'],call:['Digit7','Digit8','Digit9','Digit0','Minus','Equal']},
-  solo:{spin:['KeyE'],arm:['KeyF'],dv:['KeyC'],up:['KeyW','ArrowUp'],down:['KeyS','ArrowDown'],left:['KeyA','ArrowLeft'],right:['KeyD','ArrowRight'],act:['Space','Enter'],spr:['ShiftLeft','ShiftRight'],sw:['KeyQ','Slash'],thr:['Digit1','Digit2','Digit3','Digit4'],call:['Digit1','Digit2','Digit3','Digit4','Digit5','Digit6']}
+  solo:{call12:['Digit1','Digit2','Digit3','Digit4','Digit5','Digit6','Digit7','Digit8','Digit9','Digit0','Minus','Equal'],spin:['KeyE'],arm:['KeyF'],dv:['KeyC'],up:['KeyW','ArrowUp'],down:['KeyS','ArrowDown'],left:['KeyA','ArrowLeft'],right:['KeyD','ArrowRight'],act:['Space','Enter'],spr:['ShiftLeft','ShiftRight'],sw:['KeyQ','Slash'],thr:['Digit1','Digit2','Digit3','Digit4'],call:['Digit1','Digit2','Digit3','Digit4','Digit5','Digit6']}
 };
 const held=a=>a.some(k=>keys.has(k));
 const offT=()=>G.poss, defT=()=>1-G.poss;
@@ -446,11 +456,11 @@ function startCall(){
   if(G.down===4&&!G.goFor){ fourthDown(); return; }
   G.goFor=false;
   if(!G.ctrl[o]) G.call.off=cpuOffCall();
-  if(!G.ctrl[d]) G.call.def=Math.random()<.2+G.lvl*.1?2:Math.random()<.5?0:1;
+  if(!G.ctrl[d]){ const late=G.q>=4&&G.clock<60&&G.score[d]>G.score[o]; G.call.def=late?3:wpick([0,1,2,4],x=>x===0?3:x===1?3:x===2?1.2+G.lvl:1); }
   buildField(TEAMS[G.t[o]],TEAMS[G.t[d]]);
   if(G.call.off!==null&&G.call.def!==null) later(.35,()=>{ if(phase==='call') lineUp(); });
 }
-function cpuOffCall(){ const short=G.togo<=3, run=short?.55:G.togo>=8?.25:.4; if(Math.random()<run) return Math.random()<.6?4:5; return pick([0,1,2,3,2,0]); }
+function cpuOffCall(){ const short=G.togo<=3, late=G.q>=4&&G.clock<20&&G.score[offT()]<G.score[defT()], run=short?.55:G.togo>=8?.22:.4; if(late&&100-G.los>30) return 10; if(Math.random()<run) return pick([4,4,5,11]); return pick([0,1,2,3,6,7,8,9,2,0]); }
 function fourthDown(){
   const o=offT(), fgYds=100-G.los+17, trail=G.score[1-o]-G.score[o], late=G.q>=4&&G.clock<120;
   if(G.ctrl[o]&&!G.ffast){ phase='fourth'; phT=0; return; }
@@ -535,13 +545,15 @@ function lineUp(){
   const o=offT(), d=defT(), Do=G.depth[o], Dd=G.depth[d], los=G.los, play=OFF_PLAYS[G.call.off], dp=G.call.def;
   const ents=[], cy=y=>clamp(y,1.2,FH-1.2), cx=x=>Math.min(x,109);
   for(const [slot,[dx,dy]] of Object.entries(OFF_SLOTS)) ents.push(mkEnt(Do[slot],slot,0,o,los+dx,cy(CY+dy)));
-  for(const [slot,[dx,dy]] of Object.entries(DEF_SLOTS)){ let x=los+dx; if(slot==='S') x=los+(dp===2?11:dp===1?16:13); ents.push(mkEnt(Dd[slot],slot,1,d,cx(x),cy(CY+dy))); }
+  for(const [slot,[dx,dy]] of Object.entries(DEF_SLOTS)){ let x=los+dx; if(slot==='S') x=los+(dp===2?11:dp===3?26:dp===1?16:13); ents.push(mkEnt(Dd[slot],slot,1,d,cx(x),cy(CY+dy))); }
   const E=s=>ents.find(e=>e.slot===s);
   for(const k of ['WR1','WR2','TE','RB']){ const e=E(k), r=play.type==='pass'?play.r[k]:null; if(r) e.route=r.map(([dx,din])=>({x:Math.min(e.x+dx,109),y:cy(e.y-OUT[k]*din)})); }
   if(play.type==='run'){ const rb=E('RB'), side=Math.random()<.5?-1:1; rb.route=play.path.map(([dx,dy])=>({x:los+dx,y:cy(CY+dy*side)})); }
   if(dp===0||dp===2){ E('CB1').assign=E('WR1'); E('CB2').assign=E('WR2'); if(dp===0){ E('LB1').assign=E('RB'); E('LB2').assign=E('TE'); } }
   if(dp===1){ E('CB1').zone={x:los+13,y:cy(CY-15)}; E('CB2').zone={x:los+13,y:cy(CY+15)}; E('LB1').zone={x:los+6,y:CY-7}; E('LB2').zone={x:los+6,y:CY+7}; E('S').zone={x:los+19,y:CY}; }
   if(dp===2){ E('LB1').blitz=E('LB2').blitz=true; }
+  if(dp===3){ E('CB1').zone={x:los+24,y:cy(CY-13)}; E('CB2').zone={x:los+24,y:cy(CY+13)}; E('LB1').zone={x:los+11,y:CY-8}; E('LB2').zone={x:los+11,y:CY+8}; E('S').zone={x:los+32,y:CY}; for(const k of ['CB1','CB2','LB1','LB2']) E(k).x=Math.min(109,E(k).x+5); }
+  if(dp===4){ E('CB1').assign=E('WR1'); E('S').assign=E('WR2'); E('CB2').blitz=true; E('LB1').assign=E('RB'); E('LB2').assign=E('TE'); E('CB2').x=Math.min(109,los+4); }
   PL={ents,E,play,dp,t:0,los,ball:{st:'pre',holder:E('QB'),x:0,y:0,z:0},carrier:null,thrown:false,result:null,hum:[null,null],qbLook:0,maxX:los};
   for(const e of ents) e.face=e.side?Math.PI:0;
   setHumans();
@@ -698,7 +710,8 @@ function tackled(c,f){
 function liveStep(dt){
   PL.t+=dt; const B=PL.ball, qb=PL.E('QB');
   if(PL.aim&&(B.holder!==qb||PL.thrown||qb.x>PL.los+.5)) PL.aim=null;
-  if(PL.play.type==='run'&&B.holder===qb&&PL.t>.42){ const rb=PL.E('RB'); give(rb); qb.route=null; }
+  if(PL.play.qb&&B.holder===qb&&PL.t>.35) PL.scramble=true;
+  if(PL.play.type==='run'&&!PL.play.qb&&B.holder===qb&&PL.t>.42){ const rb=PL.E('RB'); give(rb); qb.route=null; }
   for(const e of PL.ents){
     e.stun=Math.max(0,e.stun-dt); if(e.free) e.free=Math.max(0,e.free-dt); e.tkCd=Math.max(0,e.tkCd-dt); e.juke=Math.max(0,e.juke-dt); e.jukeCd=Math.max(0,e.jukeCd-dt); e.spin=Math.max(0,(e.spin||0)-dt); e.spinCd=Math.max(0,(e.spinCd||0)-dt); e.armCd=Math.max(0,(e.armCd||0)-dt); e.armT=Math.max(0,(e.armT||0)-dt); if(e.diving){ e.diving-=dt; if(e.diving<=0){ e.diving=0; if(carrierOf()===e&&phase==='live'){ dead('tackle','Dove forward'); return; } } } if(e.dive>0){ e.dive-=dt; if(e.dive<=0&&e.diveEnd){ e.diveEnd=false; e.stun=.5; } }
     const team=e.team, hum=humEnt(team)===e;
@@ -902,9 +915,9 @@ function act(team){
 }
 function switchDef(team){ if(!PL||phase!=='live'&&phase!=='pre') return; const c=carrierOf()||PL.ball.air&&{x:PL.ball.air.lx,y:PL.ball.air.ly}||PL.E('QB'); const side=team===offT()?0:1; if(side===0&&carrierOf()&&carrierOf().side===0) return; const list=PL.ents.filter(e=>e.team===team&&e.side!==(carrierOf()||{side:0}).side).sort((a,b)=>dist(a,c)-dist(b,c)); const cur=humEnt(team); const n=list.find(e=>e!==cur)||list[0]; if(!n) return; if(side===0) PL.hum[0]=n; else PL.hum[1]=n; sfx.click(); }
 function callKey(code){
-  for(let t=0;t<2;t++){ const s=sch(t); if(!s) continue; const i=s.call.indexOf(code); if(i<0) continue;
-    if(t===offT()&&G.call.off===null&&i<6){ G.call.off=i; sfx.click(); }
-    else if(t===defT()&&G.call.def===null&&i<3){ G.call.def=i; sfx.click(); }
+  for(let t=0;t<2;t++){ const s=sch(t); if(!s) continue; const i=s.call.indexOf(code), j=s.call12?s.call12.indexOf(code):i; if(i<0&&j<0) continue;
+    if(t===offT()&&G.call.off===null){ if(j>=0&&j<OFF_PLAYS.length){ G.call.off=j; sfx.click(); } }
+    else if(t===defT()&&G.call.def===null&&i>=0&&i<DEF_PLAYS.length){ G.call.def=i; sfx.click(); }
   }
   if(G.call.off!==null&&G.call.def!==null) lineUp();
 }
@@ -941,8 +954,8 @@ cv.addEventListener('pointerdown',e=>{
   audio(); e.preventDefault(); if(!G||paused) return; const [x,y]=canvasXY(e);
   if(phase==='call'){
     const t=G.ctrl[offT()]&&G.call.off===null?offT():G.ctrl[defT()]&&G.call.def===null?defT():-1; if(t<0) return;
-    const off=t===offT(), n=off?6:3;
-    for(let i=0;i<n;i++){ const c=CARD(i%(off?3:3),3), cy=off?(i<3?c.y-58:c.y+58):c.y; if(x>=c.x&&x<=c.x+c.w&&y>=cy&&y<=cy+c.h){ if(off) G.call.off=i; else G.call.def=i; sfx.click(); if(G.call.off!==null&&G.call.def!==null) lineUp(); return; } }
+    const off=t===offT(), n=off?OFF_PLAYS.length:DEF_PLAYS.length;
+    for(let i=0;i<n;i++){ const c=off?offCard(i):defCard(i), cy=c.y; if(x>=c.x&&x<=c.x+c.w&&y>=cy&&y<=cy+c.h){ if(off) G.call.off=i; else G.call.def=i; sfx.click(); if(G.call.off!==null&&G.call.def!==null) lineUp(); return; } }
     return;
   }
   if(phase==='pat'){ for(let i=0;i<2;i++){ const c=CARD(i,2); if(x>=c.x&&x<=c.x+c.w&&y>=c.y&&y<=c.y+c.h){ if(i===0) startKick('xp',G.patTeam); else goTwo(G.patTeam); return; } } return; }
@@ -999,15 +1012,16 @@ function drawBall(){
   ctx.save(); ctx.translate(x,yy); ctx.rotate(ang); ctx.fillStyle='#7b3f13'; ctx.beginPath(); ctx.ellipse(0,0,7,4.5,0,0,Math.PI*2); ctx.fill(); ctx.strokeStyle='#fff'; ctx.lineWidth=1.2; ctx.beginPath(); ctx.moveTo(-3,0); ctx.lineTo(3,0); ctx.stroke(); ctx.restore();
 }
 function drawCards(){
+  if(bannerT>0&&bannerT<1e8){ bannerT=0; $('banner').classList.remove('on'); }
   ctx.fillStyle='rgba(5,8,18,.6)'; ctx.fillRect(0,0,W,H);
   const o=offT(), d=defT(), wantO=G.ctrl[o]&&G.call.off===null, wantD=G.ctrl[d]&&G.call.def===null;
   const team=wantO?o:wantD?d:-1; if(team<0){ hudText('Lining up...',W/2,H/2,30,'#fff','center'); return; }
   const off=team===o, list=off?OFF_PLAYS:DEF_PLAYS, s=SCHEME[G.ctrl[team]], T=TEAMS[G.t[team]];
-  hudText(`${T.full}: ${off?'call your offensive play':'call your defense'}`,W/2,H/2-(off?150:85),28,'#ffd166','center');
-  list.forEach((p,i)=>{ const c=CARD(i%3,3), y=off?(i<3?c.y-58:c.y+58):c.y;
+  hudText(`${T.full}: ${off?'call your offensive play':'call your defense'}`,W/2,H/2-(off?185:85),28,'#ffd166','center');
+  list.forEach((p,i)=>{ const c=off?offCard(i):defCard(i), y=c.y;
     ctx.fillStyle='#141c33'; ctx.strokeStyle=T.c1; ctx.lineWidth=3; ctx.beginPath(); ctx.roundRect(c.x,y,c.w,c.h,14); ctx.fill(); ctx.stroke();
     hudText(p.n,c.x+c.w/2,y+42,22,'#fff','center'); hudText(off?(p.type==='run'?'Run':'Pass'):'',c.x+c.w/2,y+66,16,'#93a0bd','center');
-    const k=s.call[i].replace('Digit','').replace('Minus','-').replace('Equal','='); hudText(`Key ${k}`,c.x+c.w/2,y+88,15,'#ffd166','center'); });
+    const kk=off&&s.call12?s.call12[i]:s.call[i]; if(!kk) return; const k=kk.replace('Digit','').replace('Minus','-').replace('Equal','='); hudText(`Key ${k}`,c.x+c.w/2,y+88,15,'#ffd166','center'); });
 }
 function drawPat(){
   ctx.fillStyle='rgba(5,8,18,.6)'; ctx.fillRect(0,0,W,H);
