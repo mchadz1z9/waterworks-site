@@ -86,6 +86,8 @@ table.ls{ margin:12px auto 0; border-collapse:collapse; font-size:18px; font-var
 .ls th,.ls td{ padding:3px 9px; text-align:center; border-left:1px solid #27345a; }
 .ls th{ color:#93a0bd; font-weight:600; }
 .ls td:first-child,.ls th:first-child{ text-align:left; border-left:0; }
+.potg{ margin:12px auto 0; max-width:420px; background:#141c33; border-left:8px solid var(--tc); border-radius:10px; padding:8px 14px; text-align:left; display:flex; flex-direction:column; }
+.potg small{ color:#fbbf24; font-weight:800; text-transform:uppercase; letter-spacing:.06em; } .potg b{ font-size:24px; color:#fff; } .potg span{ color:#93a0bd; }
 .ls .tot{ color:var(--led); font-weight:800; }
 .keys{ margin-top:12px; display:flex; flex-wrap:wrap; gap:8px 26px; font-size:17px; color:var(--muted); justify-content:center; }
 .keys b{ color:var(--ink); margin-right:4px; }
@@ -1046,6 +1048,16 @@ function derbyOut(txt){
   G.derby.outs++; toast(`${txt} · out ${G.derby.outs} of 10`,'#f87171'); sfx.out();
   if(G.derby.outs>=10) after(1.2,gameOver); else nextPitch(.9);
 }
+function potg(S){
+  let best=null, bs=-1;
+  for(const b of Object.values(S.box)){ const win=S.score[b.s]>S.score[1-b.s]?1.15:1;
+    const v=((b.h||0)+(b.d||0)*.5+(b.t||0)+(b.hr||0)*2+(b.rbi||0)+(b.r||0)*.6+(b.bb||0)*.3+(b.outs||0)/3*.9+(b.pk||0)*.35-(b.pr||0)*1.2)*win;
+    if(v>bs){ bs=v; best=b; } }
+  if(!best) return ''; const b=best, parts=[];
+  if(b.outs){ parts.push(`${ipS(b.outs)} IP`,`${b.pr} R`,`${b.pk} K`); } if(b.ab||b.bb){ parts.push(`${b.h}-for-${b.ab}`); if(b.hr) parts.push(b.hr>1?`${b.hr} HR`:'HR'); if(b.rbi) parts.push(`${b.rbi} RBI`); if(b.r) parts.push(`${b.r} R`); }
+  const t=TEAMS[S.t[b.s]];
+  return `<div class="potg" style="--tc:${t.c1}"><small>Player of the game</small><b>${esc(b.p.name)}</b><span>${esc(t.abbr)} · ${parts.join(', ')}</span></div>`;
+}
 function boxHTML(S){
   const side=s=>{
     const t=TEAMS[S.t[s]], bats=S.lu[s].map(x=>[x,S.box[x.p.id]]), pits=S.used[s].map(p=>S.box[p.id]);
@@ -1067,7 +1079,7 @@ function gameOver(){
     const row=(t,s)=>`<tr><td>${esc(t.abbr)}</td>${Array.from({length:n},(_,i)=>`<td>${G.line[s][i]??''}</td>`).join('')}<td class="tot">${G.score[s]}</td><td>${G.hits[s]}</td><td>${(G.err||[0,0])[s]}</td></tr>`;
     ri.innerHTML=`<h2>${w?esc(w.full)+' win!':'Tie game'}</h2><div class="rs">${G.score[0]} - ${G.score[1]}</div>
       <table class="ls"><tr><th></th>${Array.from({length:n},(_,i)=>`<th>${i+1}</th>`).join('')}<th>R</th><th>H</th><th>E</th></tr>${row(a,0)}${row(h,1)}</table>
-      ${boxHTML(G)}<p>${G.inLeague?'Enter or click to go back to your franchise.':'Enter for the menu, R for a rematch.'}</p>`;
+      ${potg(G)}${boxHTML(G)}<p>${G.inLeague?'Enter or click to go back to your franchise.':'Enter for the menu, R for a rematch.'}</p>`;
     if(w) banner('Ballgame!',`${w.full} win`,w.c1,2); if(w&&G.half===1&&G.score[1]>G.score[0]&&G.line[1][G.inn-1]!=='X') speak('Walk-off! They win it!',true); else if(w) speak(`And that's the ballgame. The ${w.name} win.`,true);
     if(G.inLeague) userGame(G);
   }
