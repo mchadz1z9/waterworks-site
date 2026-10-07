@@ -415,8 +415,15 @@ const offT=()=>G.poss, defT=()=>1-G.poss;
 const sch=team=>G.ctrl[team]?SCHEME[G.ctrl[team]]:null;
 
 /* ---------- game flow ---------- */
+const UPS=[['hands','Hands','Receivers catch more passes, even in traffic'],['pro','Pass protection','Your line holds blocks longer'],['spd','Speed','Your players run faster'],['arm','Arm','Throws are more accurate'],['def','Defense','Your defenders cover and tackle better']];
+const upCost=l=>120+60*l;
+/* human-player help that shrinks as a franchise season goes on (live games only, never sims) */
+function assists(league){
+  const ramp=league&&L?(L.phase==='playoffs'?1:L.round/Math.max(1,L.len)):0, U=(league&&L&&L.ups)||{};
+  return {ramp,catch:1.6-.45*ramp+.08*(U.hands||0),pro:1.8-.6*ramp+.15*(U.pro||0),rush:.86+.12*ramp,arm:Math.max(.5,1-.07*(U.arm||0)),spd:1+.02*(U.spd||0),def:.04*(U.def||0),cpuTkl:.1*ramp,cpuCov:.07*ramp,intMul:.45+.35*ramp};
+}
 function newGame(o,ctrl,league){
-  G={kind:o.kind,t:o.t,ros:o.ros,depth:[depth(o.ros[0]),depth(o.ros[1])],ctrl,lvl:DIFF_T[diff],q:1,qlen:o.qlen||180,clock:o.qlen||180,score:[0,0],qs:[[0,0,0,0,0],[0,0,0,0,0]],poss:0,los:25,down:1,togo:10,box:{},inLeague:league,ffast:false,over:false,first:0,msg:''};
+  G={ast:assists(league),kind:o.kind,t:o.t,ros:o.ros,depth:[depth(o.ros[0]),depth(o.ros[1])],ctrl,lvl:DIFF_T[diff],q:1,qlen:o.qlen||180,clock:o.qlen||180,score:[0,0],qs:[[0,0,0,0,0],[0,0,0,0,0]],poss:0,los:25,down:1,togo:10,box:{},inLeague:league,ffast:false,over:false,first:0,msg:''};
   hideHub(); $('menu').classList.add('hidden'); $('result').classList.add('hidden');
   paused=false; lastBoard='';
   kickoff(0,true); sfx.whistle();
@@ -523,7 +530,7 @@ function simRest(){
 
 /* ---------- lining up ---------- */
 const spdOf=p=>5.3+p.a.spd*.038;
-function mkEnt(pl,slot,side,team,x,y){ return {pl,slot,side,team,x,y,vx:0,vy:0,face:side?Math.PI:0,max:spdOf(pl),stun:0,eng:null,shedT:0,route:null,ri:0,tkCd:0,juke:0,jukeCd:0,dive:0,assign:null,zone:null,blitz:false,blocked:0}; }
+function mkEnt(pl,slot,side,team,x,y){ return {pl,slot,side,team,x,y,vx:0,vy:0,face:side?Math.PI:0,max:spdOf(pl)*(G.ctrl[team]?G.ast.spd:1),stun:0,eng:null,shedT:0,route:null,ri:0,tkCd:0,juke:0,jukeCd:0,dive:0,assign:null,zone:null,blitz:false,blocked:0}; }
 function lineUp(){
   const o=offT(), d=defT(), Do=G.depth[o], Dd=G.depth[d], los=G.los, play=OFF_PLAYS[G.call.off], dp=G.call.def;
   const ents=[], cy=y=>clamp(y,1.2,FH-1.2), cx=x=>Math.min(x,109);
@@ -582,8 +589,8 @@ function aiMove(e){
     if(e.route){ const wp=e.route[e.ri]; if(wp){ if(dist(e,wp)<.7) e.ri++; return steer(e,wp.x,wp.y,1); } const last=e.route[e.route.length-1], prev=e.route.length>1?e.route[e.route.length-2]:{x:PL.los,y:e.y}; if(last.x-prev.x>12) return [e.max,0]; return [0,0]; }
     return [0,0];
   }
-  if(e.slot.startsWith('DL')||e.blitz){ if(e.eng) return [0,0]; const t=B.holder||PL.E('QB'); return steer(e,t.x,t.y,.92+lvl*.08); }
-  if(e.assign){ const r=e.assign, f=Math.max(.92,(r.max*(.86+e.pl.a.cov/2500+lvl*.04))/e.max); return steer(e,r.x+r.vx*.25+1.8,r.y+r.vy*.25,f); }
+  if(e.slot.startsWith('DL')||e.blitz){ if(e.eng) return [0,0]; const t=B.holder||PL.E('QB'); return steer(e,t.x,t.y,(.92+lvl*.08)*(G.ctrl[1-e.team]?G.ast.rush:1)); }
+  if(e.assign){ const r=e.assign, f=Math.max(.92,(r.max*(.86+e.pl.a.cov/2500+lvl*.04+(G.ctrl[e.team]?G.ast.def:G.ctrl[r.team]?G.ast.cpuCov:0)))/e.max); return steer(e,r.x+r.vx*.25+1.8,r.y+r.vy*.25,f); }
   if(e.zone){ const z=e.zone, near=PL.ents.filter(r=>r.side===0&&r.route&&dist(r,z)<7).sort((a,b)=>dist(a,z)-dist(b,z))[0]; return near?steer(e,lerp(z.x,near.x,.45)+1.5,lerp(z.y,near.y,.45),.9):steer(e,z.x,z.y,.9); }
   if(e.slot==='S'){ const deep=PL.ents.filter(r=>r.side===0&&r.route).sort((a,b)=>b.x-a.x)[0]; return deep?steer(e,Math.max(PL.los+12,deep.x+5),lerp(CY,deep.y,.5),.95):[0,0]; }
   return [0,0];
@@ -620,7 +627,7 @@ function throwTo(slot){
   for(let i=0;i<3;i++){ const px=r.x+r.vx*T, py=r.y+r.vy*T; T=Math.hypot(px-qb.x,py-qb.y)/spd; }
   let lx=r.x+r.vx*T, ly=r.y+r.vy*T;
   const pressure=PL.ents.some(f=>f.side===1&&!f.eng&&dist(f,qb)<2.5)?.8:0, dd=Math.hypot(lx-qb.x,ly-qb.y);
-  const sig=(.5+dd*.045)*(1.35-qb.pl.a.tha/100)*(1+pressure);
+  const sig=(.5+dd*.045)*(1.35-qb.pl.a.tha/100)*(1+pressure)*(G.ctrl[qb.team]?G.ast.arm:1);
   lx+=gauss()*sig; ly+=gauss()*sig;
   PL.ball.st='air'; PL.ball.holder=null; PL.ball.air={x0:qb.x,y0:qb.y,lx,ly:clamp(ly,-2,FH+2),T:Math.max(.25,T),t:0,to:r,peak:dd*.16+1}; PL.thrown=true;
   bx(G,qb.pl,qb.team).pa++; sfx.throw();
@@ -637,7 +644,7 @@ const passPeak=(dd,bullet)=>bullet?dd*.07+1:dd*.17+1.6;
 function throwAt(x,y,slot,bullet){
   const qb=PL.E('QB'), r=PL.E(slot); if(!r||PL.ball.holder!==qb||qb.x>PL.los+.5||PL.thrown) return;
   const spd=(15+qb.pl.a.thp*.09)*(bullet?1.3:1), dd=Math.hypot(x-qb.x,y-qb.y), T=dd/spd;
-  const pressure=PL.ents.some(f=>f.side===1&&!f.eng&&dist(f,qb)<2.5)?.8:0, sig=(.3+dd*.03)*(1.35-qb.pl.a.tha/100)*(1+pressure)*(bullet?1.15:1);
+  const pressure=PL.ents.some(f=>f.side===1&&!f.eng&&dist(f,qb)<2.5)?.8:0, sig=(.3+dd*.03)*(1.35-qb.pl.a.tha/100)*(1+pressure)*(bullet?1.15:1)*(G.ctrl[qb.team]?G.ast.arm:1);
   const lx=x+gauss()*sig, ly=y+gauss()*sig;
   PL.ball.st='air'; PL.ball.holder=null; PL.ball.air={x0:qb.x,y0:qb.y,lx,ly:clamp(ly,-2,FH+2),T:Math.max(.25,T),t:0,to:r,peak:passPeak(dd,bullet)}; PL.thrown=true;
   bx(G,qb.pl,qb.team).pa++; sfx.throw(); if(!G.ffast) toast(bullet?'Bullet pass':'Touch pass','#ffd166');
@@ -647,12 +654,15 @@ function resolveCatch(){
   const A=PL.ball.air, pt={x:A.lx,y:A.ly}, r=A.to, qb=PL.E('QB');
   const dr=dist(r,pt), defs=PL.ents.filter(f=>f.side===1&&f.stun<=0).map(f=>[f,dist(f,pt)]).sort((a,b)=>a[1]-b[1]), nd=defs[0];
   if(nd&&nd[1]<1.2&&nd[1]<dr+.3){
-    if(Math.random()<.04+nd[0].pl.a.cov/800+(nd[0].pl.a.han-60)/600){ const f=nd[0]; bx(G,qb.pl,qb.team).pint++; bx(G,f.pl,f.team).int++; give(f); say(`Intercepted by ${shortNm(f.pl.name)}!`,'#f87171'); return; }
+    const humO=!!G.ctrl[r.team];
+    if(humO&&dr<1.8&&Math.random()<.5*(G.ast.catch-.6)){ r.x=pt.x; r.y=pt.y; give(r); PL.caught=true; sfx.catch(); say(`${shortNm(r.pl.name)} goes up and gets it!`,'#34d399'); return; }
+    if(Math.random()<(.04+nd[0].pl.a.cov/800+(nd[0].pl.a.han-60)/600)*(humO?G.ast.intMul:1)){ const f=nd[0]; bx(G,qb.pl,qb.team).pint++; bx(G,f.pl,f.team).int++; give(f); say(`Intercepted by ${shortNm(f.pl.name)}!`,'#f87171'); return; }
     return dead('inc','Pass broken up');
   }
   if(pt.y<0||pt.y>FH||pt.x>110) return dead('inc','Incomplete, out of bounds');
-  if(dr<1.4){
-    const press=nd&&nd[1]<1.6?.26*(1.6-nd[1])/1.6+.08-(r.pl.a.han-70)/400:0, p=.56+r.pl.a.han/300+(1.4-dr)/6-press;
+  const humR=!!G.ctrl[r.team];
+  if(dr<(humR?1.75:1.4)){
+    const press=nd&&nd[1]<1.6?.26*(1.6-nd[1])/1.6+.08-(r.pl.a.han-70)/400:0, p=Math.min(.97,(.56+r.pl.a.han/300+(1.4-Math.min(dr,1.4))/6-press)*(humR?G.ast.catch:1));
     if(Math.random()<p){ r.x=pt.x; r.y=pt.y; give(r); PL.caught=true; sfx.catch(); return; }
   }
   dead('inc','Incomplete');
@@ -664,7 +674,7 @@ function tackleCheck(dt){
     if(f.side===c.side||f.stun>0||f.tkCd>0||f.eng) continue;
     if(dist(f,c)<(f.dive>0?1.5:1.05)){
       f.tkCd=.6;
-      const p=.66+(f.pl.a.tkl-c.pl.a.btk)/150+(f.dive>0?.15:0)-(c.juke>0?.42:0)-(c.spin>0?.45:0)+(G.ctrl[f.team]?0:(G.lvl-.5)*.1);
+      const p=.66+(f.pl.a.tkl-c.pl.a.btk)/150+(f.dive>0?.15:0)-(c.juke>0?.42:0)-(c.spin>0?.45:0)+(G.ctrl[f.team]?G.ast.def:(G.lvl-.5)*.1+(G.ctrl[c.team]?G.ast.cpuTkl:0));
       if(Math.random()<p){ sfx.hit(); bx(G,f.pl,f.team).tk++; return tackled(c,f); }
       f.stun=.35; sfx.hit();
     }
@@ -696,7 +706,7 @@ function liveStep(dt){
     const isBlk=b.side===0&&(b.slot==='OL1'||b.slot==='OL2'||(PL.play.type==='run'&&b.slot!=='RB'&&b.slot!=='QB'));
     if(!isBlk||b.stun>0) continue;
     if(b.eng){ const f=b.eng; f.shedT-=dt; if(f.shedT<=0||dist(b,f)>2.2){ f.eng=null; b.eng=null; b.stun=1.2; f.free=1.2; } else { const mx=(b.x+f.x)/2, my=(b.y+f.y)/2; b.x=lerp(b.x,mx-(f.side?.5:-.5),.1); f.x=lerp(f.x,mx+.5,.1); } continue; }
-    for(const f of PL.ents){ if(f.side!==1||f.eng||f.stun>0||f.free>0) continue; if(PL.play.type==='pass'&&!(f.slot.startsWith('DL')||f.blitz)&&!carrierOf()) continue; if(dist(b,f)<1.25){ b.eng=f; f.eng=b; f.shedT=Math.max(.25,.95+(b.pl.a.blk-(f.pl.a.prs*.6+f.pl.a.str*.4))*.04+gauss()*.45); break; } }
+    for(const f of PL.ents){ if(f.side!==1||f.eng||f.stun>0||f.free>0) continue; if(PL.play.type==='pass'&&!(f.slot.startsWith('DL')||f.blitz)&&!carrierOf()) continue; if(dist(b,f)<1.25){ b.eng=f; f.eng=b; f.shedT=Math.max(.25,.95+(b.pl.a.blk-(f.pl.a.prs*.6+f.pl.a.str*.4))*.04+gauss()*.45)*(G.ctrl[b.team]?G.ast.pro:1); break; } }
   }
   /* separation */
   for(let i=0;i<PL.ents.length;i++) for(let j=i+1;j<PL.ents.length;j++){ const a=PL.ents[i], b=PL.ents[j]; if(a.eng===b) continue; const dx=b.x-a.x, dy=b.y-a.y, d=Math.hypot(dx,dy); if(d>0&&d<.9){ const p=(.9-d)/2; a.x-=dx/d*p; a.y-=dy/d*p; b.x+=dx/d*p; b.y+=dy/d*p; } }
@@ -1112,13 +1122,19 @@ function showHub(){ phase='hub'; G=null; PL=null; document.body.classList.add('i
 function newFranchise(){ L=newLeague(frLen,curTeam(0)); saveL(L); hubTab='home'; rosTeam=null; showHub(); }
 function continueFr(){ const s=readSave(); if(!s) return; L=s; hubTab='home'; rosTeam=null; showHub(); }
 const resultLine=S=>{ const me=S.t[0]===L.id?0:1, won=S.score[me]>S.score[1-me]; return `Last game: ${won?'won':'lost'} ${S.score[me]}-${S.score[1-me]} ${me?'vs':'at'} the ${TEAMS[S.t[1-me]].full}.`; };
-function userGame(S){ L.last=resultLine(S); if(L.phase==='season') finishRound(L,S); else if(L.phase==='playoffs') poRound(L,S); saveL(L); }
+function userGame(S){ L.last=resultLine(S); { const me=S.t[0]===L.id?0:1, won=S.score[me]>S.score[1-me], c=(won?100:40)+(S===G?40:0); L.coins=(L.coins||0)+c; L.last+=` +${c} coins.`; } if(L.phase==='season') finishRound(L,S); else if(L.phase==='playoffs') poRound(L,S); saveL(L); }
 const userPair=()=>L.phase==='season'?myPair(L):myPO(L);
 function simUser(){ const pr=userPair(); if(!pr) return; userGame(simGame(gameOpts(L,pr[0],pr[1]))); }
 function playLeague(){ const pr=userPair(); if(!pr) return; const side=pr[0]===L.id?0:1; newGame(gameOpts(L,pr[0],pr[1]),side?[null,'solo']:['solo',null],true); }
 const phaseTxt=()=>L.phase==='season'?`Week ${L.round+1} of ${L.len}`:L.phase==='playoffs'?RND_NAMES[L.po.rnd]:'Draft';
 function oppCard(a,h){ const opp=a===L.id?h:a, o=TEAMS[opp], D=depth(ros(L,opp)); return `<div class="opp"><img src="${o.logo}" alt=""><div><div class="on">${a===L.id?'at':'vs'} ${esc(o.full)}</div><div class="hsub">${L.tbl[opp].w}-${L.tbl[opp].l} · OVR ${teamOvr(ros(L,opp))} · QB ${esc(D.QB.name)}</div></div></div>`; }
 function standTable(ids){ const s=ids.slice().sort((a,b)=>pctOf(L.tbl[b])-pctOf(L.tbl[a])||(L.tbl[b].pf-L.tbl[b].pa)-(L.tbl[a].pf-L.tbl[a].pa)); return `<table class="st"><tr><th>Team</th><th>W</th><th>L</th><th>PF</th><th>PA</th><th>DIFF</th></tr>${s.map(id=>{ const r=L.tbl[id]; return `<tr class="${id===L.id?'me':''}"><td><img src="${TEAMS[id].logo}" alt="">${esc(TEAMS[id].name)}</td><td>${r.w}</td><td>${r.l}</td><td>${r.pf}</td><td>${r.pa}</td><td>${r.pf-r.pa>0?'+':''}${r.pf-r.pa}</td></tr>`; }).join('')}</table>`; }
+function hubUps(){
+  const U=L.ups||{}, a=assists(true);
+  return `<div class="hgrid"><div class="hcard wide"><h3>Upgrades · ${L.coins||0} coins</h3><p class="hsub">Earn coins every game (100 for a win, 40 for a loss, +40 for playing it yourself). Early in the season you have an edge; the CPU gets tougher every week and is close to your level by the playoffs, so upgrades keep you ahead. Upgrades only affect games you play.</p>
+  ${UPS.map(([k,n,d])=>{ const l=U[k]||0; return `<div class="up"><div><div class="n">${n}</div><div class="d">${d}</div></div><div class="pips">${[0,1,2,3,4].map(i=>`<i class="pip${i<l?' on':''}"></i>`).join('')}</div><button class="btn sm" data-a="up" data-k="${k}"${l>=5||(L.coins||0)<upCost(l)?' disabled':''}>${l>=5?'Max':upCost(l)+' coins'}</button></div>`; }).join('')}
+  <p class="hsub" style="margin-top:10px">CPU strength this week: ${Math.round(a.ramp*100)}% of full.</p></div></div>`;
+}
 function hubHome(){
   let m='';
   if(L.phase==='season'){ const pr=myPair(L); m=`<h3>Next game</h3>${oppCard(pr[0],pr[1])}<div class="btns" style="margin-top:10px"><button class="btn" data-a="play">Play game</button><button class="btn alt" data-a="sim">Sim game</button><button class="btn alt" data-a="simn" data-n="99">Sim to playoffs</button></div>`; }
@@ -1156,10 +1172,10 @@ function hubDraft(){
 function hubLog(){ return `<div class="hgrid"><div class="hcard"><h3>Champions and awards</h3><table class="st"><tr><th>Year</th><th>Champion</th><th>MVP</th><th>Defense</th><th>Rookie</th></tr>${L.awards.map(a=>`<tr><td>${a.season}</td><td>${esc(TEAMS[a.champ].name)}</td><td class="l">${esc(a.mvp)}</td><td class="l">${esc(a.dpoy)}</td><td class="l">${esc(a.roy)}</td></tr>`).join('')||'<tr><td>None yet</td></tr>'}</table></div><div class="hcard"><h3>History</h3><ul class="log">${L.log.slice(0,60).map(x=>`<li>${esc(x)}</li>`).join('')}</ul></div></div>`; }
 function renderHub(){
   const t=TEAMS[L.id], r=L.tbl[L.id];
-  const tabs=[['home','Home'],['roster','Roster'],['stand','Standings'],['lead','Leaders'],['trade','Trades'],...(L.phase==='draft'?[['draft','Draft']]:[]),['log','History']];
+  const tabs=[['home','Home'],['ups','Upgrades'],['roster','Roster'],['stand','Standings'],['lead','Leaders'],['trade','Trades'],...(L.phase==='draft'?[['draft','Draft']]:[]),['log','History']];
   let h=`<div class="hhead" style="--tc:${t.c1}"><img src="${t.logo}" alt=""><div><div class="hname">${esc(t.full)}</div><div class="hsub">${L.season} · ${r.w}-${r.l} · ${phaseTxt()}</div></div><div class="coins">Team OVR ${teamOvr(ros(L,L.id))}</div></div>
   <div class="tabs">${tabs.map(([k,n])=>`<button data-a="tab" data-k="${k}" class="${hubTab===k?'on':''}${k==='draft'?' alert':''}">${n}</button>`).join('')}</div>`;
-  h+=({home:hubHome,roster:hubRoster,stand:hubStand,lead:hubLead,trade:hubTrade,draft:hubDraft,log:hubLog}[hubTab]||hubHome)();
+  h+=({home:hubHome,ups:hubUps,roster:hubRoster,stand:hubStand,lead:hubLead,trade:hubTrade,draft:hubDraft,log:hubLog}[hubTab]||hubHome)();
   h+=`<div class="hfoot"><span>Saved automatically in this browser.</span><button class="btn alt sm" data-a="menu">Main menu</button></div>`;
   hubEl.innerHTML=h;
 }
@@ -1169,6 +1185,7 @@ hubEl.addEventListener('click',e=>{
   if(a==='play'){ playLeague(); return; }
   if(a==='tab'){ hubTab=b.dataset.k; hubMsg=''; }
   else if(a==='sim') simUser();
+  else if(a==='up'){ const k=b.dataset.k; L.ups=L.ups||{}; const l=L.ups[k]||0; if(l<5&&(L.coins||0)>=upCost(l)){ L.coins-=upCost(l); L.ups[k]=l+1; } }
   else if(a==='simn'){ for(let i=0;i<+b.dataset.n&&L.phase==='season';i++) simUser(); }
   else if(a==='poday') poRound(L,null);
   else if(a==='poall'){ while(L.phase==='playoffs') poRound(L,null); }
