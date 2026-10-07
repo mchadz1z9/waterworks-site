@@ -927,18 +927,23 @@ function stealTry(){
   if(Math.random()<p){ B[from+1]=r; B[from]=null; toast(`${shortNm(r.name)} steals ${base}!`,'#34d399'); return 'safe'; }
   B[from]=null; recordOut(G); toast(`${shortNm(r.name)} caught stealing ${base}`,'#f87171'); sfx.out(); return G.outs>=3?'end':'out';
 }
+let lastSay=0;
+function speak(t,pri){ if(muted||!window.speechSynthesis||!G||G.ffast||G.skip) return; const now=performance.now(); if(!pri&&now-lastSay<2500) return; lastSay=now; try{ speechSynthesis.cancel(); const u=new SpeechSynthesisUtterance(t); u.rate=1.08; u.pitch=.95; speechSynthesis.speak(u); }catch(e){} }
+const pickL=a=>a[Math.floor(Math.random()*a.length)];
+function trackPitch(r){ if(!G||G.derby||!P) return; (G.trk=G.trk||[]).push({u:P.fu,v:P.fv,r}); }
 function callPitch(){
   P.done=true;
   if(G.steal){ G.steal=false; if(stealTry()==='end'){ G.balls=G.strikes=0; after(1.2,()=>endHalf()); return; } }
   const inZ=Math.abs(P.fu)<=1.08&&Math.abs(P.fv)<=1.08;
   sfx.pop();
+  trackPitch(P.swung||inZ?'s':'b');
   if(P.swung){ addStrike('Swing and a miss',true); return; }
   if(inZ) addStrike('Strike',false); else addBall();
 }
 function addStrike(txt,swung){
   if(G.derby){ derbyOut(swung?'Swing and miss':'Called strike'); return; }
   G.strikes++;
-  if(G.strikes>=3){ if(TEST) LOG.push({txt:'K'}); toast(swung?'Strikeout swinging':'Strikeout looking','#f87171'); recPA(G,'K',0); recordOut(G); sfx.out(); endPA(); return; }
+  if(G.strikes>=3){ if(TEST) LOG.push({txt:'K'}); toast(swung?'Strikeout swinging':'Strikeout looking','#f87171'); speak(pickL(swung?['Strike three, he got him swinging!','Swing and a miss, strike three!','He punches him out!']:['Strike three called!','Caught looking!','He froze him, strike three!'])); recPA(G,'K',0); recordOut(G); sfx.out(); endPA(); return; }
   toast(txt+'!','#f87171'); nextPitch(.7);
 }
 function addBall(){
@@ -957,7 +962,7 @@ let waitT=0, waitFn=null;
 function after(t,fn){ waitT=t; waitFn=fn; phase='wait'; phT=0; }
 function nextPitch(t){ after(t,()=>startAim()); }
 function endPA(wait=1.1){
-  G.ord[batSide()]++; G.balls=0; G.strikes=0;
+  G.ord[batSide()]++; G.balls=0; G.strikes=0; G.trk=[];
   const fn=()=>{ P=null; F=null; if(walkOffS(G)){ gameOver(); return; } if(G.outs>=3) endHalf(); else startAim(); };
   if(wait<=0) fn(); else after(wait,fn);
 }
@@ -993,7 +998,7 @@ function gameOver(){
     ri.innerHTML=`<h2>${w?esc(w.full)+' win!':'Tie game'}</h2><div class="rs">${G.score[0]} - ${G.score[1]}</div>
       <table class="ls"><tr><th></th>${Array.from({length:n},(_,i)=>`<th>${i+1}</th>`).join('')}<th>R</th><th>H</th></tr>${row(a,0)}${row(h,1)}</table>
       ${boxHTML(G)}<p>${G.inLeague?'Enter or click to go back to your franchise.':'Enter for the menu, R for a rematch.'}</p>`;
-    if(w) banner('Ballgame!',`${w.full} win`,w.c1,2);
+    if(w) banner('Ballgame!',`${w.full} win`,w.c1,2); if(w&&G.half===1&&G.score[1]>G.score[0]&&G.line[1][G.inn-1]!=='X') speak('Walk-off! They win it!',true); else if(w) speak(`And that's the ballgame. The ${w.name} win.`,true);
     if(G.inLeague) userGame(G);
   }
   sfx.organ(); updateBoard();
@@ -1144,7 +1149,7 @@ function fieldTick(dt){
       const reach=f===F.hum?(F.diveT>0?7.5:4.2):F.humSch&&f===F.chaser?2.5:f===F.chaser?4:2.5, d=Math.hypot(b.x-f.x,b.y-f.y);
       if(d<reach&&b.z<(b.bounced?4:7.5)&&F.t>f.react){
         b.held=f; f.holdT=0; sfx.pop(); if(!b.bounced&&f===F.hum&&F.diveT>0) F.diveCatch=true;
-        if(!b.bounced&&f===F.hum&&F.diveT>0) banner('Diving catch!','','#34d399',1.2);
+        if(!b.bounced&&f===F.hum&&F.diveT>0){ banner('Diving catch!','','#34d399',1.2); speak('What a diving catch!',true); }
         if(!b.bounced){
           F.fly=false; const bat=F.run.find(r=>r.bat);
           if(bat) outRunner(bat,'fly'); else F.batOut='fly';
@@ -1217,7 +1222,7 @@ function startHR(){
   const side=F.side; F.fly=false;
   for(const r of F.run){ if(r.to===null&&r.at<4){ r.from=r.at; r.to=r.at+1; r.p=0; } r.spd=30; r.delay=Math.min(r.delay,.2); r.ret=false; if(r.from>r.to){ const a=r.from; r.from=r.to; r.to=a; r.p=1-r.p; } }
   if(G.derby){ G.derby.hr++; G.derby.long=Math.max(G.derby.long,F.hrDist); }
-  sfx.hr(); banner('Home run!',`${F.hrDist} ft`,TEAMS[G.t[side]].c2,2.2);
+  sfx.hr(); banner('Home run!',`${F.hrDist} ft`,TEAMS[G.t[side]].c2,2.2); if(!G.derby) speak(pickL(['That ball is gone!','Way back, and gone! Home run!','See ya! A long home run!',`Get out of here! ${F.hrDist} feet!`]),true); F.fw=1;
 }
 function snapF(){ return {fl:F.fl.map(f=>[f.x,f.y]),run:F.run.map(r=>({...r})),b:[F.ball.x,F.ball.y,F.ball.z,F.ball.gone,F.ball.held]}; }
 function applyF(fr){ fr.fl.forEach((a,i)=>{ F.fl[i].x=a[0]; F.fl[i].y=a[1]; }); F.run=fr.run.map(r=>({...r})); [F.ball.x,F.ball.y,F.ball.z,F.ball.gone,F.ball.held]=fr.b; }
@@ -1246,6 +1251,8 @@ function finishPlay(){
   else { txt=res.outs>1?'Double play':'Out'; code=res.outs>1?'DP':'GO'; }
   recPA(G,code,code==='DP'?0:res.runs);
   if(!res.hr&&res.runs) txt+=` · ${res.runs} run${res.runs>1?'s':''} score${res.runs>1?'':'s'}`;
+  if(/Double play|Triple play/.test(txt)) speak(pickL(['Turned two!','Around the horn, double play!','Two for the price of one!']));
+  else if(/Triple|Double/.test(txt)&&!res.hr) speak(pickL(['Into the gap!','That one is in the gap, extra bases!']));
   if(TEST) LOG.push({txt,ev:Math.round(res.res.ev),la:Math.round(res.res.la),sp:Math.round(res.res.spray),runs:res.runs,outs:res.outs});
   if(!res.hr) toast(`${shortNm(bat.name)}: ${txt}`,res.batOut?'#f87171':'#34d399');
   else toast(`${shortNm(bat.name)}: ${txt}`,'#ffd166');
@@ -1353,10 +1360,10 @@ function step(dt){
     if(P.cpuSw&&!P.swung&&P.t>=P.cpuSw.t) doSwing(P.cpuSw.u,P.cpuSw.v);
     if(!P.done&&P.res&&!P.res.miss&&P.t>=Math.min(P.T,P.sw?Math.max(P.sw.t,P.T-0.13):P.T)){
       P.done=true;
-      if(P.res.foul){ sfx.crack(.2); P.flyOff=true; foul(); return; }
+      if(P.res.foul){ sfx.crack(.2); P.flyOff=true; trackPitch('f'); foul(); return; }
       sfx.crack(P.res.q);
       if(!!G.derby&&P.res.la<10){ /* worm burner */ }
-      startPlay(P.res); return;
+      trackPitch('x'); startPlay(P.res); return;
     }
     if(!P.done&&P.t>P.T+.12) callPitch();
   } else if(phase==='replay'&&F&&F.rp){ replayStepB(dt);
@@ -1489,6 +1496,8 @@ function drawBattingView(){
     hudText(`${Math.round(mphOf(G,fs))} mph  ·  ${G.pc[fs]} pitches${fatigue(G,fs)>.3?'  ·  Tired':''}`,W-34,102,17,fatigue(G,fs)>.3?'#fca5a5':'#b7c2dd','right');
   }
   if(hud.pitchTxt&&hud.pitchT<1.6&&P) hudText(hud.pitchTxt,ZX,118,26,'#ffd166','center');
+  if(!G.derby&&G.trk&&G.trk.length){ const bxX=W-128, bxY=128, bw=110, bh=130; ctx.fillStyle='rgba(5,8,18,.72)'; ctx.beginPath(); ctx.roundRect(bxX,bxY,bw,bh,8); ctx.fill(); ctx.strokeStyle='rgba(255,255,255,.6)'; ctx.lineWidth=1.5; const zx2=u=>bxX+bw/2+u*24, zy2=v=>bxY+bh/2-v*30; ctx.strokeRect(zx2(-1),zy2(1),48,60);
+    G.trk.forEach((q,i)=>{ const col={s:'#ef4444',b:'#e2e8f0',f:'#fbbf24',x:'#34d399'}[q.r]; ctx.fillStyle=col; ctx.beginPath(); ctx.arc(zx2(clamp(q.u,-1.9,1.9)),zy2(clamp(q.v,-1.9,1.9)),7,0,Math.PI*2); ctx.fill(); ctx.fillStyle='#08101f'; ctx.font='800 10px Arial'; ctx.textAlign='center'; ctx.fillText(i+1,zx2(clamp(q.u,-1.9,1.9)),zy2(clamp(q.v,-1.9,1.9))+3.5); }); }
   if(hud.timing&&hud.timingT<1.1){ hud.timingT+=frameDtG; hudText(hud.timing,ZX,ZY-ZH-26,hud.timing==='PERFECT!'?34:26,hud.timing==='PERFECT!'?'#34d399':'#fbbf24','center'); }
   /* pitch selector */
   if(ctrlOf(fs)&&!G.derby&&phase==='aim'){
@@ -2055,7 +2064,10 @@ function render3D(dt){
     if(!cam3) cam3={e,c}; const k=1-Math.exp(-dt*3.2); for(let i=0;i<3;i++){ cam3.e[i]+=(e[i]-cam3.e[i])*k; cam3.c[i]+=(c[i]-cam3.c[i])*k; }
     cam={eye:W3(cam3.e[0],cam3.e[2],cam3.e[1]),center:W3(cam3.c[0],cam3.c[2],cam3.c[1]),fov:50};
   } else { cam3=null; cam={eye:W3(0,-44,15),center:W3(0,58,3),fov:24}; }
+  if(F&&F.fw&&inPlay){ F.fwT=(F.fwT||0)+dt; G.fwp=G.fwp||[]; if(Math.random()<.25) { const ox=rnd(-200,200), oy=rnd(360,440), col=pick(['#f87171','#fbbf24','#60a5fa','#34d399','#f472b6','#ffffff']); for(let i=0;i<26;i++){ const a=Math.random()*Math.PI*2, b2=Math.random()*Math.PI, sp=rnd(20,40); G.fwp.push({x:ox,y:oy,z:rnd(90,140),vx:Math.cos(a)*Math.sin(b2)*sp,vy:Math.sin(a)*Math.sin(b2)*sp,vz:Math.cos(b2)*sp,col,t:0}); } } }
+  if(G&&G.fwp){ for(const q of G.fwp){ q.t+=dt; q.x+=q.vx*dt; q.y+=q.vy*dt; q.z+=q.vz*dt; q.vz-=12*dt; } G.fwp=G.fwp.filter(q=>q.t<1.6); if(!inPlay) G.fwp.length=0; }
   R3.frame({...cam,cheer:F&&F.hr?1:0},()=>{
+    if(G&&G.fwp) for(const q of G.fwp){ const [x,y,z]=W3(q.x,q.y,q.z); R3.part(R3.UB,R3.mm(R3.T(x,y,z),R3.S(9,9,9)),q.col); }
     if(!G) return;
     const fs=fieldSide(), bs=batSide(), fu=uni(fs), bu=uni(bs);
     if(inPlay){
