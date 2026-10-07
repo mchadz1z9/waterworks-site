@@ -955,6 +955,12 @@ function assistsB(league){
 const BMODES=[['Normal',1,1,0],['Power',.76,1.13,4],['Contact',1.24,.86,-4],['Bunt',1.45,.4,0]];
 let bmode=0;
 function batR(b,human){ return (human?BMODES[bmode][1]:1)*(human?.36:.29)+b.a.con/100*.12+(human?[.07,.02,0][G.kind==='2p'?1:diff]+(G.ast?G.ast.pci:0):0); }
+/* hot and cold zones: 3x3 grid per batter, seeded from the player id and shaped by power and contact */
+function hotZones(b){ if(b._hz) return b._hz; let h=0; for(const ch of String(b.id)) h=(h*31+ch.charCodeAt(0))>>>0; const r=()=>{ h=(h*1103515245+12345)>>>0; return (h>>>8)/16777216; };
+  const pw=((b.a.pow||60)-70)/30, ct=((b.a.con||60)-70)/30, z=[];
+  for(let row=0;row<3;row++) for(let col=0;col<3;col++){ const mid=row===1&&col===1, up=row===0, low=row===2; z.push(clamp((r()-.5)*1.1+(mid?.45:0)+(up?pw*.4:0)+(low?ct*.3-.15:0)+ct*.15,-1,1)); }
+  Object.defineProperty(b,'_hz',{value:z,enumerable:false,writable:true}); return z; }
+const zoneIdx=(u,v)=>Math.abs(u)>1.08||Math.abs(v)>1.08?-1:clamp(Math.floor((1-v)/2*3),0,2)*3+clamp(Math.floor((u+1)/2*3),0,2);
 function doSwing(u,v){
   if(!P||P.swung||P.done) return;
   P.swung=true; P.sw={t:P.t,u,v}; swingAnim=0;
@@ -966,7 +972,7 @@ function doSwing(u,v){
   if(Math.abs(dt)>win){ P.res={miss:1}; return; }
   const d=Math.hypot(u-P.fu,(v-P.fv)*.85);
   if(d>R){ P.res={miss:1}; return; }
-  const qa=1-d/R, qt=1-Math.abs(dt)/win, q=.55*qa+.45*qt;
+  const qa=1-d/R, qt=1-Math.abs(dt)/win, zi=zoneIdx(P.fu,P.fv), q=clamp(.55*qa+.45*qt+(zi>=0?hotZones(b)[zi]*.07:0),0,1);
   if(human&&bmode===3){ if(Math.random()<.22){ P.res={foul:1,q}; return; } const sp=gauss()*22; P.res={ev:clamp(20+q*14+gauss()*3,14,40),la:clamp(-6+gauss()*6,-20,14),spray:sp,q,foul:Math.abs(sp)>45,bunt:1}; return; }
   if(q<.3&&Math.random()<.55){ P.res={foul:1,q}; return; }
   const ev=clamp(46+72*q*pow+gauss()*6,35,119);
@@ -1504,6 +1510,8 @@ function drawZoneUI(){
     const g=ctx.createLinearGradient(mx,0,mx+mw,0); g.addColorStop(0,'#475569'); g.addColorStop(.6,'#fbbf24'); g.addColorStop(.85,'#34d399'); g.addColorStop(1,'#ef4444'); ctx.fillStyle=g; ctx.fillRect(mx,my,mw,14);
     ctx.strokeStyle='#fff'; ctx.lineWidth=2; ctx.strokeRect(mx+mw*.78,my-2,mw*.14,18);
     ctx.fillStyle='#fff'; ctx.fillRect(mx+mw*n-2,my-6,4,26); hudText('Press again in the green zone',ZX,my-14,16,'#dbe3f5','center'); }
+  if((ctrlOf(bs)||ctrlOf(fs))&&!G.derby){ const hz=hotZones(batterOf(bs)), cw=ZW*2/3, chh=ZH*2/3;
+    for(let i=0;i<9;i++){ const h=hz[i]; if(Math.abs(h)<.2) continue; ctx.fillStyle=h>0?`rgba(239,68,68,${.1+h*.16})`:`rgba(59,130,246,${.1-h*.16})`; ctx.fillRect(zx(-1)+(i%3)*cw+1,zy(1)+Math.floor(i/3)*chh+1,cw-2,chh-2); } }
   /* batter contact cursor */
   if(ctrlOf(bs)){
     const b=batterOf(bs), R=batR(b,true), c=P&&P.sw?P.sw:cur.bat;
@@ -2150,6 +2158,7 @@ const UMP={jersey:'#1f2937',pants:'#4b5563',dark:'#111827',trim:'#111827',helmet
 function ath(key,o){ const p=RPOS.get(key); if(p){ o.run=Math.min(1,Math.hypot(o.x-p.x,o.z-p.z)/(frameDtG*K3*24)); o.ph=p.ph; } else o.run=0; o.dt=frameDtG; R3.athlete(o); RPOS.set(key,{x:o.x,z:o.z,ph:o.ph}); }
 const faceTo=(x,y,tx,ty)=>Math.atan2(-(ty-y),tx-x);
 let cam3=null;
+let BCAM={e:[2,-26,7.5],c:[-1,40,5],f:32};
 function render3D(dt){
   build3();
   const inPlay=G&&F&&(phase==='play'||phase==='wait'||phase==='replay');
@@ -2160,7 +2169,7 @@ function render3D(dt){
     const e=[bx*.35,42+by*.2,by*.35-85], c=[bx,b.z*.3,by*.9+10];
     if(!cam3) cam3={e,c}; const k=1-Math.exp(-dt*3.2); for(let i=0;i<3;i++){ cam3.e[i]+=(e[i]-cam3.e[i])*k; cam3.c[i]+=(c[i]-cam3.c[i])*k; }
     cam={eye:W3(cam3.e[0],cam3.e[2],cam3.e[1]),center:W3(cam3.c[0],cam3.c[2],cam3.c[1]),fov:50};
-  } else { cam3=null; cam={eye:W3(0,-44,15),center:W3(0,58,3),fov:24}; }
+  } else { cam3=null; cam={eye:W3(...BCAM.e),center:W3(...BCAM.c),fov:BCAM.f}; }
   if(F&&F.fw&&inPlay){ F.fwT=(F.fwT||0)+dt; G.fwp=G.fwp||[]; if(Math.random()<.25) { const ox=rnd(-200,200), oy=rnd(360,440), col=pick(['#f87171','#fbbf24','#60a5fa','#34d399','#f472b6','#ffffff']); for(let i=0;i<26;i++){ const a=Math.random()*Math.PI*2, b2=Math.random()*Math.PI, sp=rnd(20,40); G.fwp.push({x:ox,y:oy,z:rnd(90,140),vx:Math.cos(a)*Math.sin(b2)*sp,vy:Math.sin(a)*Math.sin(b2)*sp,vz:Math.cos(b2)*sp,col,t:0}); } } }
   if(G&&G.fwp){ for(const q of G.fwp){ q.t+=dt; q.x+=q.vx*dt; q.y+=q.vy*dt; q.z+=q.vz*dt; q.vz-=12*dt; } G.fwp=G.fwp.filter(q=>q.t<1.6); if(!inPlay) G.fwp.length=0; }
   R3.frame({...cam,cheer:F&&F.hr?1:0},()=>{
@@ -2210,7 +2219,7 @@ $('btnFs').addEventListener('click',toggleFs);
 $('btnSnd').addEventListener('click',()=>{ muted=!muted; $('btnSnd').textContent=muted?'Sound off':'Sound on'; if(!muted){ audio(); sfx.click(); } });
 $('result').addEventListener('click',()=>{ if(phase==='over'){ if(G&&G.inLeague) showHub(); else toMenu(); } });
 
-if(TEST) window.__bb={LOG,DEF,setL:x=>{L=x;},doSwing,setBm:m=>{bmode=m;},get P(){return P;},newCareer,carForm,findMe,playLeague,setSel:(i,id)=>{ sel[i]=listFor().indexOf(id); },setMenu:m=>{ menuMode=m; },get L(){return L;},newLeague,simGame,gameOpts,finishRound,poDay,simDraft,simUser,showHub,hubSet:t=>{hubTab=t;renderHub();},setFrLen:n=>{frLen=n;},get G(){return G;},get F(){return F;},get phase(){return phase;},step,startGame,setMode:m=>{menuMode=m;}};
+if(TEST) window.__bb={LOG,DEF,setCam:c=>{BCAM=c;},setL:x=>{L=x;},doSwing,setBm:m=>{bmode=m;},get P(){return P;},newCareer,carForm,findMe,playLeague,setSel:(i,id)=>{ sel[i]=listFor().indexOf(id); },setMenu:m=>{ menuMode=m; },get L(){return L;},newLeague,simGame,gameOpts,finishRound,poDay,simDraft,simUser,showHub,hubSet:t=>{hubTab=t;renderHub();},setFrLen:n=>{frLen=n;},get G(){return G;},get F(){return F;},get phase(){return phase;},step,startGame,setMode:m=>{menuMode=m;}};
 setView3(view3);
 renderMenu();
 requestAnimationFrame(frame);
