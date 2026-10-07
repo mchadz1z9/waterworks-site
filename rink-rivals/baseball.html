@@ -1267,7 +1267,8 @@ function fieldTick(dt){
   if(F.diveT>0){ F.diveT-=dt; if(F.diveT<=0) F.humStun=.5; } else if(F.humStun>0) F.humStun-=dt;
   if(F.hum&&!b.held&&F.t>10){ F.hum=null; F.humSch=null; }
   for(const f of F.fl){
-    if(f===F.hum&&b.held!==f&&!F.hr){ if(F.t>=f.react&&F.humStun<=0){ const d=fieldDir(), sp=fSpd(f)*(F.diveT>0?1.5:1.05); f.x+=d[0]*sp*dt; f.y+=d[1]*sp*dt; } continue; }
+    if(f===F.hum&&b.held!==f&&!F.hr&&!F.humTouched){ const d0=fieldDir(); if(d0[0]||d0[1]||F.diveT>0) F.humTouched=true; }
+    if(f===F.hum&&b.held!==f&&!F.hr&&F.humTouched){ if(F.t>=f.react&&F.humStun<=0){ const d=fieldDir(), sp=fSpd(f)*(F.diveT>0?1.5:1.05); f.x+=d[0]*sp*dt; f.y+=d[1]*sp*dt; } continue; }
     let tx=HOME_POS[f.pos][0], ty=HOME_POS[f.pos][1];
     if(F.hr){ continue; }
     if(f===F.chaser&&!b.held&&!b.thr){
@@ -1305,7 +1306,7 @@ function fieldTick(dt){
   if(b.held){
     const f=b.held; f.holdT+=dt;
     if(F.humSch) F.hum=f;
-    const wait=F.humSch?3.5:isOF(f.pos)?.45:.3;
+    const wait=F.humSch&&F.humTouched?3.5:isOF(f.pos)?.45:.3;
     if(f.holdT>wait&&F.throws<4){
       const c=chooseThrow(f);
       if(c){ if(c.tb===0){ outRunner(c.r,c.r.ret?'fly':'ground'); f.holdT=0; } else throwTo(f,c.n); }
@@ -1734,7 +1735,7 @@ function fieldDir(){
   const s=SCHEME[F.humSch]; let x=0,y=0; if(held(s.left)) x--; if(held(s.right)) x++; if(held(s.up)) y++; if(held(s.down)) y--; const d=Math.hypot(x,y); return d?[x/d,y/d]:[0,0];
 }
 function humanThrow(n){
-  if(phase!=='play'||!F||!F.hum||F.ball.held!==F.hum) return;
+  if(phase!=='play'||!F||!F.hum||F.ball.held!==F.hum) return; F.humTouched=true;
   const f=F.hum, bp=BASE[n];
   if(Math.hypot(f.x-bp[0],f.y-bp[1])<6){ for(const r of F.run.slice()) if(r.to===n&&r.delay<=0){ outRunner(r,r.ret?'fly':'ground'); if(G.outs>=3) break; } f.holdT=0; return; }
   if(F.cover[n]===f) return;
@@ -1747,7 +1748,7 @@ function fieldHud(){
   if(F.ball.held===F.hum){
     for(let n=1;n<=4;n++){ const [x,y]=baseScr(n); ctx.fillStyle='#ffd166'; ctx.beginPath(); ctx.arc(x,y-18,13,0,Math.PI*2); ctx.fill(); ctx.fillStyle='#08101f'; ctx.font='800 15px Arial'; ctx.textAlign='center'; ctx.fillText(n,x,y-13); }
     hudText('Throw: 1 first · 2 second · 3 third · 4 home (or click a base)',W/2,H-24,20,'#ffd166','center');
-  } else if(!F.ball.held&&!F.hr) hudText('Run to the ball: WASD or arrows · Space dive · Q switch fielder',W/2,H-24,20,'#ffd166','center');
+  } else if(!F.ball.held&&!F.hr) hudText(F.humTouched?'Run to the ball: WASD or arrows · Space dive · Q switch fielder':'Auto-fielding · press WASD or arrows to take over · Space dive',W/2,H-24,20,'#ffd166','center');
   if(!view3){ ctx.strokeStyle='#ffd166'; ctx.lineWidth=3; ctx.beginPath(); ctx.arc(fx(F.hum.x),fy(F.hum.y),12,0,Math.PI*2); ctx.stroke(); }
 }
 
@@ -2259,7 +2260,7 @@ $('btnFs').addEventListener('click',toggleFs);
 $('btnSnd').addEventListener('click',()=>{ muted=!muted; $('btnSnd').textContent=muted?'Sound off':'Sound on'; if(!muted){ audio(); sfx.click(); } });
 $('result').addEventListener('click',()=>{ if(phase==='over'){ if(G&&G.inLeague) showHub(); else toMenu(); } });
 
-if(TEST) window.__bb={LOG,DEF,setCam:c=>{BCAM=c;},setL:x=>{L=x;},doSwing,setBm:m=>{bmode=m;},get P(){return P;},newCareer,carForm,findMe,playLeague,setSel:(i,id)=>{ sel[i]=listFor().indexOf(id); },setMenu:m=>{ menuMode=m; },get L(){return L;},newLeague,simGame,gameOpts,finishRound,poDay,simDraft,simUser,showHub,hubSet:t=>{hubTab=t;renderHub();},setFrLen:n=>{frLen=n;},get G(){return G;},get F(){return F;},get phase(){return phase;},step,startGame,setMode:m=>{menuMode=m;}};
+if(TEST) window.__bb={LOG,DEF,act,cur,setPt:i=>{ptype=i;},get meter(){return G&&G.meter;},setCam:c=>{BCAM=c;},setL:x=>{L=x;},doSwing,setBm:m=>{bmode=m;},get P(){return P;},newCareer,carForm,findMe,playLeague,setSel:(i,id)=>{ sel[i]=listFor().indexOf(id); },setMenu:m=>{ menuMode=m; },get L(){return L;},newLeague,simGame,gameOpts,finishRound,poDay,simDraft,simUser,showHub,hubSet:t=>{hubTab=t;renderHub();},setFrLen:n=>{frLen=n;},get G(){return G;},get F(){return F;},get phase(){return phase;},step,startGame,setMode:m=>{menuMode=m;}};
 setView3(view3);
 renderMenu();
 requestAnimationFrame(frame);
