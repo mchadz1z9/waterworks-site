@@ -282,7 +282,7 @@ const POS_NAME={C:'Catcher','1B':'First base','2B':'Second base',SS:'Shortstop',
 const isP=p=>p.pos==='SP'||p.pos==='RP';
 const byOvr=(a,b)=>b.ovr-a.ovr;
 const blankSt=()=>({g:0,ab:0,h:0,d:0,t:0,hr:0,rbi:0,r:0,bb:0,k:0,gp:0,gs:0,outs:0,ph:0,per:0,pbb:0,pk:0,w:0,l:0,sv:0});
-function calcOvr(p){ const w=W8[p.pos]; let s=0; for(const k in w) s+=w[k]*(p.a[k]??50); return Math.round(s); }
+function calcOvr(p){ const w=W8[p.pos]; let s=0; for(const k in w) s+=w[k]*(p.a[k]??50); return Math.min(99,Math.round(s)+(p.ob||0)); }
 function pickNum(used){ let n; do{ n=1+Math.floor(RNG()*98); }while(used.has(n)); used.add(n); return n; }
 const randAge=()=>Math.round(22+(RNG()+RNG())/2*14);
 function genPlayer(pos,target,age,used,nat){
@@ -330,6 +330,31 @@ const STARS={
  ari:[['Ketel Marte','2B',4,90,32,'DOM'],['Corbin Carroll','RF',7,88,25,'USA'],['Geraldo Perdomo','SS',2,84,26,'DOM'],['Brandon Pfaadt','SP',32,79,27,'USA']],
  col:[['Hunter Goodman','C',15,82,26,'USA'],['Ezequiel Tovar','SS',14,80,24,'VEN'],['Brenton Doyle','CF',9,78,28,'USA'],['Kyle Freeland','SP',21,75,33,'USA']]
 };
+/* star profiles: fixed attributes so stars feel like themselves (others are tuned to hit the overall) */
+const PROF={
+ 'Aaron Judge':'pow99 eye95 con86 spd52 fld72 arm80','Shohei Ohtani':'pow98 con88 eye88 spd80 fld40 arm60','Juan Soto':'eye99 con90 pow88 spd50 fld60 arm62',
+ 'Bobby Witt Jr.':'spd97 fld90 arm88 con88 pow80 eye66','Cal Raleigh':'pow97 con66 eye78 spd30 fld86 arm80','Kyle Schwarber':'pow97 eye90 con62 spd34 fld30 arm40',
+ 'Elly De La Cruz':'spd99 arm97 pow80 con68 eye60 fld76','Pete Crow-Armstrong':'spd93 fld99 arm84 con70 pow72 eye54','Luis Arraez':'con99 pow30 eye80 spd52',
+ 'Jose Ramirez':'con88 pow84 eye88 spd84 fld80 arm72','Vladimir Guerrero Jr.':'con92 pow88 eye86 spd36 fld66 arm68','Yordan Alvarez':'pow95 con92 eye90 spd30 fld30 arm40',
+ 'Gunnar Henderson':'pow86 con82 spd84 fld82 arm88 eye76','Julio Rodriguez':'spd90 pow84 arm86 fld86 con80 eye64','Ronald Acuna Jr.':'spd94 pow88 con86 eye84 arm84 fld76',
+ 'Fernando Tatis Jr.':'pow86 arm96 spd84 fld90 con80 eye72','Mookie Betts':'con86 eye90 fld88 arm76 spd70 pow74','Freddie Freeman':'con93 eye88 pow78 spd50 fld80 arm60',
+ 'Corey Seager':'con90 pow88 eye84 spd44 fld76 arm78','Ketel Marte':'con90 pow84 eye86 spd60 fld74 arm72','Jackson Chourio':'spd92 pow80 con80 fld82 arm80 eye56',
+ 'Mike Trout':'pow88 eye92 con78 spd66 fld74 arm66','Byron Buxton':'spd94 fld95 pow84 con70 eye60 arm78','Steven Kwan':'con95 eye92 pow44 spd74 fld92 arm68',
+ 'Nick Kurtz':'pow92 eye90 con80 spd44 fld72 arm56','Bryce Harper':'pow86 eye92 con84 spd56 fld74 arm76','Kyle Tucker':'con86 pow84 eye90 spd76 fld84 arm80',
+ 'Salvador Perez':'pow84 con76 eye54 spd24 fld80 arm86','Adley Rutschman':'eye88 con80 pow72 spd34 fld86 arm78','Jose Altuve':'con88 spd68 pow70 eye70 fld66 arm60',
+ 'Matt Chapman':'fld99 arm94 pow78 con66 eye74 spd54','Oneil Cruz':'pow96 arm99 spd88 con60 eye58 fld66','Rafael Devers':'pow92 con86 eye80 spd38 fld56 arm70',
+ 'Paul Skenes':'vel99 stf95 ctl90 sta88','Tarik Skubal':'vel95 stf97 ctl94 sta90','Garrett Crochet':'vel96 stf94 ctl86 sta84','Jacob deGrom':'vel97 stf95 ctl92 sta60',
+ 'Hunter Greene':'vel99 stf88 ctl76 sta76','Jacob Misiorowski':'vel99 stf88 ctl66 sta70','Logan Webb':'vel78 stf86 ctl94 sta97','Yoshinobu Yamamoto':'vel88 stf96 ctl90 sta82',
+ 'Zack Wheeler':'vel92 stf92 ctl90 sta92','Chris Sale':'vel88 stf94 ctl90 sta78','Max Fried':'vel84 stf92 ctl90 sta88','Gerrit Cole':'vel92 stf88 ctl86 sta86',
+ 'Mason Miller':'vel99 stf95 ctl80 sta20','Josh Hader':'vel92 stf94 ctl80 sta18','Cade Smith':'vel90 stf92 ctl84 sta20','Cristopher Sanchez':'vel86 stf94 ctl92 sta90'
+};
+function applyProf(p,tgt){
+  const pr=PROF[p.name]; if(!pr) return;
+  const fix={}; for(const t of pr.split(' ')){ const k=t.slice(0,3); fix[k]=+t.slice(3); p.a[k]=fix[k]; }
+  const free=Object.keys(p.a).filter(k=>!(k in fix));
+  for(let i=0;i<4&&free.length;i++){ const d=tgt-calcOvr(p); if(!d) break; for(const k of free) p.a[k]=clamp(p.a[k]+d,25,99); }
+  p.ob=Math.max(0,tgt-calcOvr(p)); p.ovr=calcOvr(p);
+}
 function addStars(id,R){
   const st=STARS[id]; if(!st) return;
   const used=new Set(R.map(p=>p.num)), taken=new Set();
@@ -337,7 +362,7 @@ function addStars(id,R){
     const pit=pos==='SP'||pos==='RP';
     const cand=R.filter(p=>p.pos===pos&&!taken.has(p)).sort(byOvr)[0]||R.filter(p=>isP(p)===pit&&!taken.has(p)).sort((a,b)=>a.ovr-b.ovr)[0];
     if(!cand) continue;
-    const np=genPlayer(pos,ovr,age,null,nat); np.name=name; np.real=true; np.pot=age<25?Math.min(98,ovr+4):ovr;
+    const np=genPlayer(pos,ovr,age,null,nat); np.name=name; np.real=true; applyProf(np,ovr); np.pot=age<25?Math.min(98,ovr+4):ovr;
     const clash=R.find(p=>p.num===num&&p!==cand); if(clash){ used.delete(clash.num); clash.num=pickNum(used); }
     np.num=num; used.add(num); R[R.indexOf(cand)]=np; taken.add(np);
   }
@@ -849,6 +874,24 @@ function startAim(){
   if(G.career){ const fs=fieldSide();
     if(fs===G.career.side){ const m=G.pen[fs].find(p=>p.id===G.career.pid); if(m&&m.pos==='RP'&&G.inn>=7&&!G.ffast){ changePitcher(G,fs,m); G.skip=false; banner('You are in!','Coming in from the bullpen','#ffd166',1.4); } }
     if(G.skip&&(ctrlOf(batSide())||ctrlOf(fieldSide()))){ G.skip=false; toast(ctrlOf(batSide())?'You are up to bat!':'You are pitching!','#ffd166'); } }
+  walkUp();
+}
+function walkUp(){
+  if(!G||G.derby||G.ffast||G.skip) return; const bs=batSide(), b=batterOf(bs); if(G.lastB===b.id) return; G.lastB=b.id;
+  const s=b.st||{}, gb=G.box[b.id]||{h:0,ab:0,hr:0}, me=G.career&&b.id===G.career.pid;
+  let tag=''; if(gb.hr) tag='🔥 Homered today'; else if(gb.ab>=2&&gb.h>=2) tag='🔥 Hot today'; else if(gb.ab>=2&&!gb.h) tag='❄️ Hitless today'; else if(b.a.pow>=92) tag='💪 Big-time power'; else if(b.a.con>=90) tag='🎯 Pure hitter'; else if(b.a.spd>=92) tag='⚡ Elite speed';
+  hud.intro={b,t:0,line:G.inLeague&&s.ab?`${avgS(s)} AVG  ·  ${s.hr} HR  ·  ${s.rbi} RBI`:`CON ${b.a.con}  POW ${b.a.pow}  SPD ${b.a.spd}`,tag,c:TEAMS[G.t[bs]].c1,me};
+  if(b.real||me) speak(`Now batting, number ${b.num}, ${b.name}`,true);
+}
+function drawIntro(){
+  const I=hud.intro; if(!I) return; I.t+=frameDtG; if(I.t>3){ hud.intro=null; return; }
+  const a=Math.min(1,I.t*4,(3-I.t)*3), x=24-(1-a)*60, y=H-170;
+  ctx.save(); ctx.globalAlpha=a; ctx.fillStyle='rgba(5,8,18,.86)'; ctx.beginPath(); ctx.roundRect(x,y,380,86,10); ctx.fill();
+  ctx.fillStyle=I.c; ctx.fillRect(x,y,10,86);
+  hudText(`${I.b.num}`,x+60,y+58,48,'#ffd166','center');
+  hudText(`${I.me?'⭐ ':''}${I.b.name}`,x+102,y+32,24);
+  hudText(I.line,x+102,y+56,17,'#b7c2dd'); if(I.tag) hudText(I.tag,x+102,y+77,16,'#fbbf24');
+  ctx.restore();
 }
 function toMenu(){ phase='menu'; G=null; P=null; F=null; hideHub(); $('result').classList.add('hidden'); $('menu').classList.remove('hidden'); renderMenu(); }
 
@@ -1511,7 +1554,7 @@ function drawBattingView(){
   } else if(ctrlOf(bs)&&(phase==='aim'||phase==='wind')){
     hudText(G.kind==='2p'?(ctrlOf(bs)==='p1'?'Player 1 batting: WASD to aim, Space to swing':'Player 2 batting: arrows to aim, Enter to swing'):'Line up the circle with the ball and swing as it reaches the plate',24,H-24,18,'#ffd166');
   }
-  drawBug();
+  drawIntro(); drawBug();
 }
 function drawBug(){
   if(!!G.derby){
@@ -2109,7 +2152,7 @@ $('btnFs').addEventListener('click',toggleFs);
 $('btnSnd').addEventListener('click',()=>{ muted=!muted; $('btnSnd').textContent=muted?'Sound off':'Sound on'; if(!muted){ audio(); sfx.click(); } });
 $('result').addEventListener('click',()=>{ if(phase==='over'){ if(G&&G.inLeague) showHub(); else toMenu(); } });
 
-if(TEST) window.__bb={LOG,newCareer,carForm,findMe,playLeague,setSel:(i,id)=>{ sel[i]=listFor().indexOf(id); },setMenu:m=>{ menuMode=m; },get L(){return L;},newLeague,simGame,gameOpts,finishRound,poDay,simDraft,simUser,showHub,hubSet:t=>{hubTab=t;renderHub();},setFrLen:n=>{frLen=n;},get G(){return G;},get F(){return F;},get phase(){return phase;},step,startGame,setMode:m=>{menuMode=m;}};
+if(TEST) window.__bb={LOG,DEF,newCareer,carForm,findMe,playLeague,setSel:(i,id)=>{ sel[i]=listFor().indexOf(id); },setMenu:m=>{ menuMode=m; },get L(){return L;},newLeague,simGame,gameOpts,finishRound,poDay,simDraft,simUser,showHub,hubSet:t=>{hubTab=t;renderHub();},setFrLen:n=>{frLen=n;},get G(){return G;},get F(){return F;},get phase(){return phase;},step,startGame,setMode:m=>{menuMode=m;}};
 setView3(view3);
 renderMenu();
 requestAnimationFrame(frame);
