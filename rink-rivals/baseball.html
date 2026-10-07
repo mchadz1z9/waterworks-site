@@ -885,7 +885,7 @@ function walkUp(){
 }
 function drawIntro(){
   const I=hud.intro; if(!I) return; I.t+=frameDtG; if(I.t>3){ hud.intro=null; return; }
-  const a=Math.min(1,I.t*4,(3-I.t)*3), x=24-(1-a)*60, y=H-170;
+  const a=Math.min(1,I.t*4,(3-I.t)*3), x=24-(1-a)*60, y=H-196;
   ctx.save(); ctx.globalAlpha=a; ctx.fillStyle='rgba(5,8,18,.86)'; ctx.beginPath(); ctx.roundRect(x,y,380,86,10); ctx.fill();
   ctx.fillStyle=I.c; ctx.fillRect(x,y,10,86);
   hudText(`${I.b.num}`,x+60,y+58,48,'#ffd166','center');
@@ -944,22 +944,25 @@ function assistsB(league){
   const ramp=league&&L&&L.kind!=='car'?(L.phase==='playoffs'?1:L.round/Math.max(1,L.len)):league&&L?(L.phase==='playoffs'?1:L.round/Math.max(1,L.len))*.7:0, U=(league&&L&&L.ups)||{};
   return {ramp,pci:.1-.08*ramp+.018*(U.con||0),pow:1.08-.06*ramp+.03*(U.pow||0),spd:1+.025*(U.spd||0),cpuBat:-.28+.26*ramp-.04*(U.pit||0),velo:1.2*(U.pit||0),fld:.05*(U.fld||0)};
 }
-function batR(b,human){ return (human?.36:.29)+b.a.con/100*.12+(human?[.07,.02,0][G.kind==='2p'?1:diff]+(G.ast?G.ast.pci:0):0); }
+const BMODES=[['Normal',1,1,0],['Power',.76,1.13,4],['Contact',1.24,.86,-4],['Bunt',1.45,.4,0]];
+let bmode=0;
+function batR(b,human){ return (human?BMODES[bmode][1]:1)*(human?.36:.29)+b.a.con/100*.12+(human?[.07,.02,0][G.kind==='2p'?1:diff]+(G.ast?G.ast.pci:0):0); }
 function doSwing(u,v){
   if(!P||P.swung||P.done) return;
   P.swung=true; P.sw={t:P.t,u,v}; swingAnim=0;
   const bs=batSide(), b=batterOf(bs), human=!!ctrlOf(bs);
   const win=human?[.13,.11,.1][G.kind==='2p'?1:diff]:.11;
   const dt=P.t-P.T;
-  const R=batR(b,human), pow=(.82+b.a.pow/100*.32)*(human&&G.ast?G.ast.pow:1);
+  const R=batR(b,human), bm=human?BMODES[bmode]:BMODES[0], pow=(.82+b.a.pow/100*.32)*(human&&G.ast?G.ast.pow:1)*bm[2];
   if(human&&!G.ffast){ const a=Math.abs(dt)/win; hud.timing=a<.22?'PERFECT!':a>1?(dt<0?'Way early':'Way late'):dt<0?'Early':'Late'; hud.timingT=0; }
   if(Math.abs(dt)>win){ P.res={miss:1}; return; }
   const d=Math.hypot(u-P.fu,(v-P.fv)*.85);
   if(d>R){ P.res={miss:1}; return; }
   const qa=1-d/R, qt=1-Math.abs(dt)/win, q=.55*qa+.45*qt;
+  if(human&&bmode===3){ if(Math.random()<.22){ P.res={foul:1,q}; return; } const sp=gauss()*22; P.res={ev:clamp(20+q*14+gauss()*3,14,40),la:clamp(-6+gauss()*6,-20,14),spray:sp,q,foul:Math.abs(sp)>45,bunt:1}; return; }
   if(q<.3&&Math.random()<.55){ P.res={foul:1,q}; return; }
   const ev=clamp(46+72*q*pow+gauss()*6,35,119);
-  const la=clamp(13+(P.fv-v)/R*44+gauss()*7,-25,78);
+  const la=clamp(13+bm[3]+(P.fv-v)/R*44+gauss()*7,-25,78);
   const spray=dt/win*52+gauss()*10;
   P.res={ev,la,spray,q,foul:Math.abs(spray)>45};
 }
@@ -1347,6 +1350,7 @@ addEventListener('keydown',e=>{
   if(e.code==='KeyG'&&phase==='play'&&F&&ctrlOf(F.side)){ F.aggr=true; toast('Runners: go for the extra base!','#ffd166'); return; }
   if(phase==='play'&&F&&F.humSch){ const sc=SCHEME[F.humSch], nums=F.humSch==='p2'?['Digit7','Digit8','Digit9','Digit0']:['Digit1','Digit2','Digit3','Digit4'], i=nums.indexOf(e.code.replace('Numpad','Digit')); if(i>=0){ humanThrow(i+1); return; } if(sc.act.includes(e.code)){ fieldDive(); return; } if(sc.cyc.includes(e.code)){ fieldSwitch(); return; } }
   if(e.code==='KeyB'&&!G.derby&&phase==='aim'&&ctrlOf(fieldSide())){ const n=changePitcher(G,fieldSide()); toast(n?`Now pitching: ${n.name}`:'Bullpen is empty','#60a5fa'); return; }
+  if(G.kind!=='2p'&&ctrlOf(batSide())&&!ctrlOf(fieldSide())&&(phase==='aim'||phase==='wind')){ const i=['Digit1','Digit2','Digit3','Digit4'].indexOf(e.code.replace('Numpad','Digit')); if(i>=0&&!(G.derby&&i===3)){ bmode=i; sfx.click(); toast(`${BMODES[i][0]} swing`,'#ffd166'); return; } }
   cycleFor(e.code);
   const s=schemeOfKey(e.code); if(s){ ptrUsed=false; act(s); }
 });
@@ -1368,6 +1372,9 @@ cv.addEventListener('pointerdown',e=>{
   const [x,y]=canvasXY(e);
   if(phase==='aim'&&ctrlOf(fieldSide())&&!G.derby){
     for(const b of PT_BTNS()) if(x>=b.x&&x<=b.x+b.w&&y>=b.y&&y<=b.y+b.h){ ptype=b.i; sfx.click(); return; }
+  }
+  if(ctrlOf(batSide())&&!ctrlOf(fieldSide())&&G.kind!=='2p'&&(phase==='aim'||phase==='wind')){
+    for(const b of PT_BTNS()) if(x>=b.x&&x<=b.x+b.w&&y>=b.y&&y<=b.y+b.h){ if(!(G.derby&&b.i===3)){ bmode=b.i; sfx.click(); } return; }
   }
   const a=actorPointer(); if(!a) return;
   ptrUsed=true; cur[a].u=clamp((x-ZX)/ZW,-1.8,1.8); cur[a].v=clamp((ZY-y)/ZH,-1.8,1.8);
@@ -1551,8 +1558,14 @@ function drawBattingView(){
       ctx.fillText(`${bt2.i+1} ${PITCHES[arsenal(pitcherOf(fieldSide()))[bt2.i]].n}`,bt2.x+bt2.w/2,bt2.y+27);
     }
     hudText(G.kind==='2p'?(ctrlOf(fs)==='p1'?'Player 1 pitching: aim WASD, Q pitch type, Space to throw':'Player 2 pitching: aim arrows, / pitch type, Enter to throw'):'Aim, pick a pitch, then Space or tap the zone to throw. B for the bullpen.',24,H-72,18,'#ffd166');
-  } else if(ctrlOf(bs)&&(phase==='aim'||phase==='wind')){
-    hudText(G.kind==='2p'?(ctrlOf(bs)==='p1'?'Player 1 batting: WASD to aim, Space to swing':'Player 2 batting: arrows to aim, Enter to swing'):'Line up the circle with the ball and swing as it reaches the plate',24,H-24,18,'#ffd166');
+  } else if(ctrlOf(bs)&&(phase==='aim'||phase==='wind'||phase==='pitch')){
+    if(G.kind!=='2p') for(const bt2 of PT_BTNS()){ if(G.derby&&bt2.i===3) continue;
+      const on=bt2.i===bmode; ctx.fillStyle=on?'#ffd166':'rgba(5,8,18,.78)'; ctx.beginPath(); ctx.roundRect(bt2.x,bt2.y,bt2.w,bt2.h,20); ctx.fill();
+      ctx.strokeStyle=on?'#ffd166':'#27345a'; ctx.lineWidth=2; ctx.stroke();
+      ctx.font="800 18px 'Big Shoulders Display','Arial Narrow',sans-serif"; ctx.textAlign='center'; ctx.fillStyle=on?'#08101f':'#dbe3f5';
+      ctx.fillText(`${bt2.i+1} ${BMODES[bt2.i][0]}`,bt2.x+bt2.w/2,bt2.y+27);
+    }
+    hudText(G.kind==='2p'?(ctrlOf(bs)==='p1'?'Player 1 batting: WASD to aim, Space to swing':'Player 2 batting: arrows to aim, Enter to swing'):'Line up the circle with the ball and swing as it reaches the plate. 1-4 changes the swing.',24,H-72,18,'#ffd166');
   }
   drawIntro(); drawBug();
 }
@@ -2152,7 +2165,7 @@ $('btnFs').addEventListener('click',toggleFs);
 $('btnSnd').addEventListener('click',()=>{ muted=!muted; $('btnSnd').textContent=muted?'Sound off':'Sound on'; if(!muted){ audio(); sfx.click(); } });
 $('result').addEventListener('click',()=>{ if(phase==='over'){ if(G&&G.inLeague) showHub(); else toMenu(); } });
 
-if(TEST) window.__bb={LOG,DEF,newCareer,carForm,findMe,playLeague,setSel:(i,id)=>{ sel[i]=listFor().indexOf(id); },setMenu:m=>{ menuMode=m; },get L(){return L;},newLeague,simGame,gameOpts,finishRound,poDay,simDraft,simUser,showHub,hubSet:t=>{hubTab=t;renderHub();},setFrLen:n=>{frLen=n;},get G(){return G;},get F(){return F;},get phase(){return phase;},step,startGame,setMode:m=>{menuMode=m;}};
+if(TEST) window.__bb={LOG,DEF,doSwing,setBm:m=>{bmode=m;},get P(){return P;},newCareer,carForm,findMe,playLeague,setSel:(i,id)=>{ sel[i]=listFor().indexOf(id); },setMenu:m=>{ menuMode=m; },get L(){return L;},newLeague,simGame,gameOpts,finishRound,poDay,simDraft,simUser,showHub,hubSet:t=>{hubTab=t;renderHub();},setFrLen:n=>{frLen=n;},get G(){return G;},get F(){return F;},get phase(){return phase;},step,startGame,setMode:m=>{menuMode=m;}};
 setView3(view3);
 renderMenu();
 requestAnimationFrame(frame);
