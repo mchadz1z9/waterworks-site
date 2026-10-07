@@ -609,14 +609,20 @@ function noise(d,v,fc,delay=0){
   const s=AC.createBufferSource(), f=AC.createBiquadFilter(), g=AC.createGain(); s.buffer=b; f.type='lowpass'; f.frequency.value=fc; g.gain.value=v;
   s.connect(f); f.connect(g); g.connect(AC.destination); s.start(t);
 }
+/* crowd ambience: looping filtered noise that swells on big moments */
+let crowdG=null, crowdSw=0;
+function crowdInit(){ if(crowdG||!AC) return; try{ const n=AC.sampleRate*3, b=AC.createBuffer(2,n,AC.sampleRate); for(let c=0;c<2;c++){ const x=b.getChannelData(c); let l=0; for(let i=0;i<n;i++){ l=l*.97+(Math.random()*2-1)*.03; x[i]=(Math.random()*2-1)*.6+l*6; } }
+  const s=AC.createBufferSource(); s.buffer=b; s.loop=true; const f=AC.createBiquadFilter(); f.type='bandpass'; f.frequency.value=900; f.Q.value=.6; crowdG=AC.createGain(); crowdG.gain.value=0; s.connect(f); f.connect(crowdG); crowdG.connect(AC.destination); s.start(); }catch(e){} }
+function cheer(a){ crowdSw=Math.max(crowdSw,a); }
+function crowdTick(dt){ if(!AC) return; crowdInit(); if(!crowdG) return; crowdSw=Math.max(0,crowdSw-dt*.09); const on=!muted&&G&&!G.ffast&&phase!=='hub'&&phase!=='menu'&&phase!=='over'&&!paused; crowdG.gain.setTargetAtTime(on?.018+crowdSw*.35:0,AC.currentTime,.15); }
 const sfx={
-  crack:q=>{ noise(.09,.5,4000); tone(900+q*500,.06,'square',.06,300); },
+  crack:q=>{ cheer(.08+q*.2); noise(.09,.5,4000); tone(900+q*500,.06,'square',.06,300); },
   pop:()=>{ noise(.05,.35,1800); tone(220,.05,'sine',.08,120); },
   whiff:()=>{ noise(.18,.12,700); },
   throw:()=>tone(520,.08,'triangle',.04,380),
   out:()=>{ tone(330,.12,'square',.05,220); },
   run:()=>{ tone(660,.09,'square',.05); tone(880,.12,'square',.05,null,.1); },
-  hr:()=>{ noise(1.8,.25,1400); [0,4,7,12,7,12].forEach((s,i)=>tone(392*Math.pow(2,s/12),.16,'square',.05,null,i*.14)); },
+  hr:()=>{ cheer(.6); noise(1.8,.25,1400); [0,4,7,12,7,12].forEach((s,i)=>tone(392*Math.pow(2,s/12),.16,'square',.05,null,i*.14)); },
   organ:()=>{ [0,4,7,12].forEach((s,i)=>tone(262*Math.pow(2,s/12),.18,'sine',.06,null,i*.16)); },
   click:()=>tone(700,.04,'square',.03)
 };
@@ -991,7 +997,7 @@ function callPitch(){
 function addStrike(txt,swung){
   if(G.derby){ derbyOut(swung?'Swing and miss':'Called strike'); return; }
   G.strikes++;
-  if(G.strikes>=3){ if(TEST) LOG.push({txt:'K'}); toast(swung?'Strikeout swinging':'Strikeout looking','#f87171'); speak(pickL(swung?['Strike three, he got him swinging!','Swing and a miss, strike three!','He punches him out!']:['Strike three called!','Caught looking!','He froze him, strike three!'])); recPA(G,'K',0); recordOut(G); sfx.out(); endPA(); return; }
+  if(G.strikes>=3){ if(TEST) LOG.push({txt:'K'}); cheer(.25); toast(swung?'Strikeout swinging':'Strikeout looking','#f87171'); speak(pickL(swung?['Strike three, he got him swinging!','Swing and a miss, strike three!','He punches him out!']:['Strike three called!','Caught looking!','He froze him, strike three!'])); recPA(G,'K',0); recordOut(G); sfx.out(); endPA(); return; }
   toast(txt+'!','#f87171'); nextPitch(.7);
 }
 function addBall(){
@@ -1189,7 +1195,7 @@ function fieldTick(dt){
         if(ok){ const r=Math.hypot(b.x,b.y), fr=fenceR(Math.atan2(b.x,b.y))-1.5; b.gone=false; b.x=b.x/r*fr; b.y=b.y/r*fr; b.vx=b.vy=b.vz=0; f.x=b.x; f.y=b.y; ev=null;
           b.held=f; f.holdT=0; sfx.pop(); F.fly=false; F.robbed=true; F.diveCatch=true; const bat=F.run.find(q=>q.bat); if(bat) outRunner(bat,'fly'); else F.batOut='fly';
           for(const q of F.run){ if(q.to!==null&&!q.bat&&q.to>q.from){ const a=q.from; q.from=q.to; q.to=a; q.p=1-q.p; q.ret=true; } }
-          banner('ROBBED!',`${f.pl.name} takes away a home run!`,'#34d399',1.6); speak(pickL(['He robbed him! What a catch at the wall!','Taken away! He brings it back!','Over the wall and he steals a home run!']),true); if(TEST) LOG.push({txt:'Robbed'}); } }
+          cheer(.6); banner('ROBBED!',`${f.pl.name} takes away a home run!`,'#34d399',1.6); speak(pickL(['He robbed him! What a catch at the wall!','Taken away! He brings it back!','Over the wall and he steals a home run!']),true); if(TEST) LOG.push({txt:'Robbed'}); } }
     }
     if(ev==='hr'&&!F.hr){
       F.hr=true; F.hrT=F.t; const c=Object.assign({},b); c.gone=true; while(c.z>0) ballStep(c,1/60); F.hrDist=Math.round(Math.hypot(c.x,c.y));
@@ -1406,7 +1412,7 @@ function moveCursors(dt){
 }
 
 /* ---------- update ---------- */
-function step(dt){
+function step(dt){ crowdTick(dt);
   time+=dt;
   if(toastT>0){ toastT-=dt; if(toastT<=0) $('toast').classList.remove('on'); }
   if(bannerT>0&&!paused){ bannerT-=dt; if(bannerT<=0) $('banner').classList.remove('on'); }
