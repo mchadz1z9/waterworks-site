@@ -45,6 +45,8 @@ main{ max-width:1060px; margin:0 auto; padding:12px 14px 22px; }
 #cv{ display:block; width:100%; height:auto; position:relative; z-index:1; }
 #gl{ position:absolute; inset:0; width:100%; height:100%; display:none; }
 .r3 #gl{ display:block; }
+.viewbtn{ position:absolute; top:8px; right:8px; z-index:4; font:inherit; font-size:15px; color:#fff; background:rgba(5,8,18,.78); border:2px solid #ffd166; border-radius:999px; padding:3px 12px; cursor:pointer; }
+.viewbtn:hover{ background:rgba(20,28,51,.95); }
 .stage:fullscreen{ width:100vw; height:100vh; border-radius:0; display:flex; align-items:center; justify-content:center; background:#05080f; }
 .stage:fullscreen #cv{ width:min(100vw, calc(100vh * 1.806)); }
 
@@ -172,6 +174,7 @@ kbd{ display:inline-block; min-width:24px; padding:1px 7px; margin:0 2px; border
 
   <div class="stage" id="stage">
     <canvas id="gl"></canvas>
+    <button class="viewbtn" id="viewBtn2" tabindex="-1">View: Broadcast 3D</button>
     <canvas id="cv" role="img" aria-label="Football field"></canvas>
     <div class="banner" id="banner"></div>
     <div class="toast" id="toast" role="status"></div>
@@ -959,8 +962,10 @@ function draw(){
   if(PL){
     if(!view3){ const ents=PL.ents.slice().sort((a,b)=>a.y-b.y); for(const e of ents) drawPlayer(e); drawBall(); }
     const he=PL.hum[0];
-    if(he&&he.slot==='QB'&&PL.ball.holder===he&&!PL.thrown&&(phase==='live'||phase==='pre')&&PL.play.type==='pass'){ const s=sch(offT()); ['WR1','WR2','TE','RB'].forEach((k,i)=>{ const r=PL.E(k), [x,y]=iconPos(r); ctx.fillStyle='#ffd166'; ctx.beginPath(); ctx.arc(x,y,10,0,Math.PI*2); ctx.fill(); ctx.fillStyle='#08101f'; ctx.font="800 14px Arial"; ctx.textAlign='center'; ctx.fillText(s.thr[i].replace('Digit',''),x,y+5); }); }
-    if(PL.aim){ const qb=PL.E('QB'); if(!view3){ ctx.strokeStyle='rgba(255,209,102,.8)'; ctx.setLineDash([6,6]); ctx.lineWidth=2; ctx.beginPath(); ctx.moveTo(sx(qb.x),sy(qb.y)); ctx.lineTo(sx(PL.aim.x),sy(PL.aim.y)); ctx.stroke(); ctx.setLineDash([]); ctx.lineWidth=3; ctx.beginPath(); ctx.arc(sx(PL.aim.x),sy(PL.aim.y),Z*1.2,0,Math.PI*2); ctx.stroke(); } hudText('Aiming: move the circle with WASD, let go to throw',W/2,H-24,20,'#ffd166','center'); }
+    if(he&&he.slot==='QB'&&PL.ball.holder===he&&!PL.thrown&&(phase==='live'||phase==='pre')&&PL.play.type==='pass'){ const s=sch(offT()); ['WR1','WR2','TE','RB'].forEach((k,i)=>{ const r=PL.E(k), [x,y]=iconPos(r), sep=Math.min(...PL.ents.filter(f=>f.side===1).map(f=>dist(f,r))); ctx.fillStyle=sep>3?'#34d399':'#ffd166'; ctx.beginPath(); ctx.arc(x,y,10,0,Math.PI*2); ctx.fill(); ctx.fillStyle='#08101f'; ctx.font="800 14px Arial"; ctx.textAlign='center'; ctx.fillText(s.thr[i].replace('Digit',''),x,y+5); }); }
+    if(PL.aim){ const qb=PL.E('QB'); if(!view3){ ctx.strokeStyle='rgba(255,209,102,.8)'; ctx.setLineDash([6,6]); ctx.lineWidth=2; ctx.beginPath(); ctx.moveTo(sx(qb.x),sy(qb.y)); ctx.lineTo(sx(PL.aim.x),sy(PL.aim.y)); ctx.stroke(); ctx.setLineDash([]); ctx.lineWidth=3; ctx.beginPath(); ctx.arc(sx(PL.aim.x),sy(PL.aim.y),Z*1.2,0,Math.PI*2); ctx.stroke(); } const dd=Math.hypot(PL.aim.x-qb.x,PL.aim.y-qb.y), pk=dd*.16+1; ctx.strokeStyle='#ffd166'; ctx.lineWidth=4; ctx.setLineDash([]); ctx.beginPath(); let st=false;
+      for(let i=0;i<=24;i++){ const t=i/24, X=lerp(qb.x,PL.aim.x,t), Y=lerp(qb.y,PL.aim.y,t), h=Math.sin(Math.PI*t)*pk; let px,py; if(view3&&R3.ok){ const q=R3.proj(X*K3,(h*.6+1.4)*K3,Y*K3); if(!q) continue; px=q[0]*W; py=q[1]*H; } else { px=sx(X); py=sy(Y)-h*Z*.6; } if(st) ctx.lineTo(px,py); else { ctx.moveTo(px,py); st=true; } }
+      ctx.stroke(); hudText('Aiming: move the target with WASD, let go to throw',W/2,H-24,20,'#ffd166','center'); }
     hudText(`${TEAMS[G.t[offT()]].abbr} ball · ${ddTxt()} at the ${spotTxt(G.los)} · ${PL.play.n} vs ${DEF_PLAYS[PL.dp].n}`,20,34,20,'#fff');
     if(phase==='pre') hudText(G.ctrl[offT()]?`Press ${G.kind==='2p'?(G.ctrl[offT()]==='p1'?'Space':'Enter'):'Space'} (or tap) to hike`:'',W/2,H-24,22,'#ffd166','center');
   }
@@ -1398,7 +1403,7 @@ const R3=makeR3($('gl'),$('stage'));
 const K3=20, W3=(x,y,h=0)=>[x*K3,h*K3,y*K3];
 let view3=R3.ok, frameDtG=1/60, built3=false, groundKey='';
 try{ const v=localStorage.getItem('rinkRivalsFBView'); if(v) view3=R3.ok&&v==='3d'; }catch(e){}
-function setView3(on){ view3=R3.ok&&on; $('stage').classList.toggle('r3',view3); $('btnView').textContent=view3?'Broadcast 3D':'Classic 2D'; try{ localStorage.setItem('rinkRivalsFBView',view3?'3d':'2d'); }catch(e){} if(view3) build3(); }
+function setView3(on){ view3=R3.ok&&on; $('stage').classList.toggle('r3',view3); $('btnView').textContent=view3?'Broadcast 3D':'Classic 2D'; $('viewBtn2').textContent=view3?'View: Broadcast 3D (V)':'View: Classic 2D (V)'; try{ localStorage.setItem('rinkRivalsFBView',view3?'3d':'2d'); }catch(e){} if(view3) build3(); }
 function build3(){
   if(!R3.ok) return;
   if(!built3){ built3=true; R3.setStatic((g,cr,P)=>{
@@ -1447,6 +1452,8 @@ function render3D(dt){
 const scr2w=(x,y)=>{ if(view3&&R3.ok){ const g=R3.unproject(x/W,y/H); return [g[0]/K3,g[1]/K3]; } return [(x-W/2)/Z+camX,(y-H/2)/Z+camY]; };
 const iconPos=r=>{ if(view3&&R3.ok){ const p=R3.proj(r.x*K3,58,r.y*K3); return p?[p[0]*W,p[1]*H]:[-99,-99]; } return [sx(r.x),sy(r.y)-Z-14]; };
 $('btnView').addEventListener('click',()=>setView3(!view3));
+$('viewBtn2').addEventListener('click',e=>{ e.stopPropagation(); audio(); setView3(!view3); });
+$('viewBtn2').addEventListener('pointerdown',e=>e.stopPropagation());
 
 /* ---------- loop ---------- */
 let last=performance.now();
