@@ -432,7 +432,7 @@ function kickoff(recv,quiet){
 function addPoints(team,n){ G.score[team]+=n; G.qs[team][Math.min(4,G.q-1)]+=n; }
 function changePoss(spot){ G.poss=1-G.poss; G.los=clamp(100-spot,1,99); G.down=1; G.togo=Math.min(10,100-G.los); }
 function startCall(){
-  if(G.clock<=0){ endQuarter(); return; }
+  if(G.clock<=0&&!G.two){ endQuarter(); return; }
   if(G.ffast){ simRest(); return; }
   phase='call'; phT=0; G.call={off:null,def:null};
   const o=offT(), d=defT();
@@ -453,9 +453,38 @@ function fourthDown(){
   else if(G.togo<=2&&G.los>=45) ch='go';
   fourthChoice(ch);
 }
+/* kicking: humans time a meter, the CPU rolls */
+function startKick(type,team){ phase='kick'; phT=0; G.kick={type,team,yds:type==='xp'?20:100-G.los+17,t:0,spd:type==='punt'?2.4:2.2+(type==='fg'?(100-G.los)/40:0)}; }
+const kickNeedle=()=>Math.sin(G.kick.t*G.kick.spd*Math.PI);
+function resolveKick(){
+  const K=G.kick; if(!K) return; const n=kickNeedle(), D=G.depth[K.team]; G.kick=null;
+  if(K.type==='punt'){ const pow=(n+1)/2; doPunt(Math.round(26+pow*24+(D.K.a.kck-70)*.15+gauss()*2)); return; }
+  const off=Math.abs(n), base=K.type==='xp'?.985:fgProb(D.K,K.yds), p=clamp(base*(1-Math.max(0,off-.14)*1.15),.02,.995);
+  const good=Math.random()<p, side=n<0?'left':'right';
+  if(K.type==='xp'){ if(good){ addPoints(K.team,1); say('Extra point is good','#34d399'); } else say(`Extra point is no good, wide ${side}`,'#f87171'); afterScore(K.team); return; }
+  doFG(good,side);
+}
+function doFG(good,side){
+  const o=offT(), D=G.depth[o], yds=100-G.los+17, k=bx(G,D.K,o); k.fga++; G.clock=Math.max(0,G.clock-5);
+  if(good){ k.fgm++; addPoints(o,3); banner('It\'s good!',`${yds}-yard field goal`,TEAMS[G.t[o]].c1,1.6); sfx.td(); afterScore(o); }
+  else { say(`${yds}-yard field goal is no good${side?`, wide ${side}`:''}`,'#f87171'); changePoss(Math.max(G.los-7,20)); nextPlay(1.6); }
+}
+function doPunt(net){
+  G.clock=Math.max(0,G.clock-8); const spot=G.los+net;
+  if(spot>=100){ say('Punt into the end zone. Touchback.','#60a5fa'); changePoss(80); }
+  else { const ret=Math.random()<.45?0:rint(0,12); say(`Punt, ${net} yards${ret?`, returned ${ret}`:', fair catch'}`,'#60a5fa'); changePoss(Math.min(99,spot-ret)); }
+  nextPlay(1.6);
+}
+function patChoice(tm){
+  if(G.ffast||!G.ctrl[tm]){ const late=G.q>=4&&G.clock<240, diff=G.score[tm]-G.score[1-tm]; if(!G.ffast&&late&&(diff===-2||diff===-5||diff===1)) return goTwo(tm); if(Math.random()<.94) addPoints(tm,1); else say('Extra point is no good','#f87171'); afterScore(tm); return; }
+  phase='pat'; phT=0; G.patTeam=tm;
+}
+function goTwo(tm){ G.two={team:tm}; G.poss=tm; G.los=97; G.down=1; G.togo=3; say('Going for two!','#ffd166'); PL=null; startCall(); }
 function fourthChoice(ch){
   const o=offT(), D=G.depth[o];
   if(ch==='go'){ G.goFor=true; startCall(); return; }
+  if(G.ctrl[o]&&!G.ffast&&(ch==='fg'||ch==='punt')){ startKick(ch,o); return; }
+  if(ch==='punt'){ doPunt(Math.round(40+(D.K.a.kck-70)*.2+gauss()*6)); return; }
   if(ch==='fg'){
     const yds=100-G.los+17, k=bx(G,D.K,o); k.fga++; G.clock=Math.max(0,G.clock-5);
     if(Math.random()<fgProb(D.K,yds)){ k.fgm++; addPoints(o,3); say(`${yds}-yard field goal is good!`,TEAMS[G.t[o]].c1); sfx.td(); afterScore(o); }
@@ -699,13 +728,15 @@ function cpuQB(dt){
 function touchdown(c){
   const tm=c.team; sfx.td();
   if(c.side===0){ if(PL.caught){ const qb=PL.E('QB'); const pb=bx(G,qb.pl,qb.team); pb.pc++; pb.py+=Math.round(100-PL.los); pb.ptd++; const rb=bx(G,c.pl,tm); rb.rec++; rb.rey+=Math.round(100-PL.los); rb.retd++; } else { const b=bx(G,c.pl,tm); b.ra++; b.ry+=Math.round(100-PL.los); b.rtd++; } }
-  addPoints(tm,6); const xp=Math.random()<.94; if(xp) addPoints(tm,1);
-  banner('Touchdown!',`${shortNm(c.pl.name)} · ${TEAMS[G.t[tm]].full}${xp?'':' · extra point missed'}`,TEAMS[G.t[tm]].c1,2);
-  phase='dead'; PL.result='td'; afterScore(tm);
+  if(G.two){ const t2=G.two.team; G.two=null; if(tm===t2){ addPoints(tm,2); banner('Two-point conversion!','It\'s good',TEAMS[G.t[tm]].c1,1.8); } else banner('Conversion fails','Returned by the defense','#f87171',1.6); phase='dead'; PL.result='td'; afterScore(t2); return; }
+  addPoints(tm,6);
+  banner('Touchdown!',`${shortNm(c.pl.name)} · ${TEAMS[G.t[tm]].full}`,TEAMS[G.t[tm]].c1,2);
+  phase='dead'; PL.result='td'; G.nextT=null; later(G.ffast?0:1.8,()=>{ PL=null; patChoice(tm); });
 }
 function dead(kind,txt){
   if(phase!=='live') return;
   phase='dead'; phT=0; sfx.whistle(); PL.aim=null;
+  if(G.two){ const t2=G.two.team; G.two=null; say('Two-point try fails','#f87171'); afterScore(t2); return; }
   const o=offT(), c=carrierOf(), qb=PL.E('QB');
   let spot=PL.los, gain=0;
   if(kind==='inc'){ gain=0; G.clock=Math.max(0,G.clock); }
@@ -866,6 +897,8 @@ addEventListener('keydown',e=>{
   if(e.code==='KeyM'){ if(G.inLeague){ if(confirm('Sim the rest of this game?')) G.ffast=true; } else if(confirm('Quit to the menu? This game will end.')) toMenu(); keys.clear(); return; }
   if(e.code==='KeyX'){ G.ffast=true; return; }
   if(phase==='call'){ callKey(e.code); return; }
+  if(phase==='pat'){ const dg=e.code.replace('Numpad','Digit'); if(dg==='Digit1'||dg==='Digit7'){ startKick('xp',G.patTeam); } else if(dg==='Digit2'||dg==='Digit8'){ goTwo(G.patTeam); } return; }
+  if(phase==='kick'){ const S2=sch(G.kick.team); if(S2&&S2.act.includes(e.code)) resolveKick(); return; }
   if(phase==='fourth'){ const dg=e.code.replace('Numpad','Digit'); const ch={Digit1:'go',Digit2:'punt',Digit3:'fg',Digit7:'go',Digit8:'punt',Digit9:'fg'}[dg]; if(ch&&(ch!=='fg'||100-G.los+17<=62)) fourthChoice(ch); return; }
   for(const s of ['p1','p2','solo']){
     const S=SCHEME[s], t=teamOfScheme(s); if(t<0) continue; if(G.kind==='2p'&&s==='solo') continue; if(G.kind!=='2p'&&s!=='solo') continue;
@@ -887,6 +920,8 @@ cv.addEventListener('pointerdown',e=>{
     for(let i=0;i<n;i++){ const c=CARD(i%(off?3:3),3), cy=off?(i<3?c.y-58:c.y+58):c.y; if(x>=c.x&&x<=c.x+c.w&&y>=cy&&y<=cy+c.h){ if(off) G.call.off=i; else G.call.def=i; sfx.click(); if(G.call.off!==null&&G.call.def!==null) lineUp(); return; } }
     return;
   }
+  if(phase==='pat'){ for(let i=0;i<2;i++){ const c=CARD(i,2); if(x>=c.x&&x<=c.x+c.w&&y>=c.y&&y<=c.y+c.h){ if(i===0) startKick('xp',G.patTeam); else goTwo(G.patTeam); return; } } return; }
+  if(phase==='kick'){ resolveKick(); return; }
   if(phase==='fourth'){ const opts=['go','punt','fg']; for(let i=0;i<3;i++){ const c=CARD(i,3); if(x>=c.x&&x<=c.x+c.w&&y>=c.y&&y<=c.y+c.h&&(i<2||100-G.los+17<=62)){ fourthChoice(opts[i]); return; } } return; }
   const t=G.ctrl[0]==='solo'?0:G.ctrl[1]==='solo'?1:-1; if(t<0) return;
   if(phase==='pre'){ if(t===offT()) snap(); return; }
@@ -908,9 +943,12 @@ function step(dt){
   phT+=dt;
   if(G.pend){ G.pend.t-=dt; if(G.pend.t<=0){ const f=G.pend.fn; G.pend=null; f(); if(!G||phase==='over') return; } }
   if(G.ffast&&(phase==='call'||phase==='pre'||phase==='fourth'||phase==='dead'&&!PL)){ simRest(); return; }
+  if(phase==='kick'&&G.kick){ G.kick.t+=dt; if(G.ffast) resolveKick(); }
+  if(phase==='pat'&&G.ffast){ addPoints(G.patTeam,1); afterScore(G.patTeam); }
   if(phase==='pre'){ if(!G.ctrl[offT()]&&phT>.9) snap(); }
   else if(phase==='live'){ const sub=3; for(let i=0;i<sub&&phase==='live';i++) liveStep(dt/sub); }
   else if(phase==='dead'&&G.nextT!==undefined&&G.nextT!==null){ if(phT>G.nextT){ G.nextT=null; PL=null; if(G.ffast){ simRest(); return; } startCall(); } }
+  if(!PL&&G){ camX=lerp(camX,clamp(G.los+8,FX0+W/2/Z,FX1-W/2/Z),Math.min(1,dt*3)); }
   if(PL){ const c=carrierOf(), B=PL.ball, tx=c?c.x+(c.side?-6:6):B.st==='air'?B.x:PL.los+8, ty=c?c.y:B.st==='air'?B.y:CY; camX=lerp(camX,clamp(tx,FX0+W/2/Z,FX1-W/2/Z),Math.min(1,dt*3)); camY=lerp(camY,clamp(ty,FY0+H/2/Z,FY1-H/2/Z),Math.min(1,dt*3)); }
   updateBoard();
 }
@@ -945,6 +983,19 @@ function drawCards(){
     ctx.fillStyle='#141c33'; ctx.strokeStyle=T.c1; ctx.lineWidth=3; ctx.beginPath(); ctx.roundRect(c.x,y,c.w,c.h,14); ctx.fill(); ctx.stroke();
     hudText(p.n,c.x+c.w/2,y+42,22,'#fff','center'); hudText(off?(p.type==='run'?'Run':'Pass'):'',c.x+c.w/2,y+66,16,'#93a0bd','center');
     const k=s.call[i].replace('Digit','').replace('Minus','-').replace('Equal','='); hudText(`Key ${k}`,c.x+c.w/2,y+88,15,'#ffd166','center'); });
+}
+function drawPat(){
+  ctx.fillStyle='rgba(5,8,18,.6)'; ctx.fillRect(0,0,W,H);
+  hudText(`${TEAMS[G.t[G.patTeam]].full}: extra point or go for two?`,W/2,H/2-85,28,'#ffd166','center');
+  [['Kick extra point','1'],['Go for two','2']].forEach(([n,k],i)=>{ const c=CARD(i,2); ctx.fillStyle='#141c33'; ctx.strokeStyle='#ffd166'; ctx.lineWidth=3; ctx.beginPath(); ctx.roundRect(c.x,c.y,c.w,c.h,14); ctx.fill(); ctx.stroke(); hudText(n,c.x+c.w/2,c.y+48,20,'#fff','center'); hudText(`Key ${k}`,c.x+c.w/2,c.y+80,15,'#ffd166','center'); });
+}
+function drawKick(){
+  const K=G.kick, n=kickNeedle(), w=420, x0=W/2-w/2, y=H-120;
+  ctx.fillStyle='rgba(5,8,18,.85)'; ctx.beginPath(); ctx.roundRect(x0-20,y-60,w+40,110,14); ctx.fill();
+  hudText(K.type==='punt'?'Punt: press Space at full power':`${K.type==='xp'?'Extra point':K.yds+'-yard field goal'}: press Space in the green`,W/2,y-30,22,'#ffd166','center');
+  if(K.type==='punt'){ const g=ctx.createLinearGradient(x0,0,x0+w,0); g.addColorStop(0,'#ef4444'); g.addColorStop(.6,'#fbbf24'); g.addColorStop(1,'#22c55e'); ctx.fillStyle=g; ctx.fillRect(x0,y-8,w,22); }
+  else { ctx.fillStyle='#ef4444'; ctx.fillRect(x0,y-8,w,22); ctx.fillStyle='#fbbf24'; ctx.fillRect(W/2-w*.22,y-8,w*.44,22); ctx.fillStyle='#22c55e'; ctx.fillRect(W/2-w*.07,y-8,w*.14,22); }
+  const nx=W/2+n*w/2; ctx.fillStyle='#fff'; ctx.fillRect(nx-3,y-16,6,38);
 }
 function drawFourth(){
   ctx.fillStyle='rgba(5,8,18,.6)'; ctx.fillRect(0,0,W,H);
@@ -985,6 +1036,8 @@ function draw(){
   drawBug();
   if(phase==='call') drawCards();
   if(phase==='fourth') drawFourth();
+  if(phase==='pat') drawPat();
+  if(phase==='kick'&&G.kick) drawKick();
 }
 
 /* ---------- franchise ---------- */
@@ -1476,7 +1529,7 @@ function toggleFs(){ const st=$('stage'); try{ if(document.fullscreenElement) do
 $('btnFs').addEventListener('click',toggleFs);
 $('btnSnd').addEventListener('click',()=>{ muted=!muted; $('btnSnd').textContent=muted?'Sound off':'Sound on'; if(!muted){ audio(); sfx.click(); } });
 $('result').addEventListener('click',()=>{ if(phase==='over'){ if(G&&G.inLeague) showHub(); else toMenu(); } });
-if(TEST) window.__fb={get G(){return G;},get PL(){return PL;},get phase(){return phase;},step,startGame,setMode:m=>{menuMode=m;},newLeague,finishRound,poRound,simDraft,simGame,gameOpts};
+if(TEST) window.__fb={startCall,patChoice,get G(){return G;},get PL(){return PL;},get phase(){return phase;},step,startGame,setMode:m=>{menuMode=m;},newLeague,finishRound,poRound,simDraft,simGame,gameOpts};
 setView3(view3);
 renderMenu();
 requestAnimationFrame(frame);
