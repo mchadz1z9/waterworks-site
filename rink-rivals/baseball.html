@@ -501,7 +501,7 @@ function gameOpts(L,away,home){ return {kind:'fr',t:[away,home],ros:[ros(L,away)
 function applyBox(S){ for(const k in S.box){ const e=S.box[k], st=e.p.st; if(!st) continue; if(e.pit){ st.gp++; st.gs+=e.gs; st.outs+=e.outs; st.ph+=e.ph; st.per+=e.pr; st.pbb+=e.pbb; st.pk+=e.pk; st.w+=e.w; st.l+=e.l; st.sv+=e.sv; } else { st.g++; for(const f of ['ab','h','d','t','hr','rbi','r','bb','k']) st[f]+=e[f]; } } }
 function recordGame(L,S){ const [a,h]=S.t, ta=L.tbl[a], th=L.tbl[h]; ta.rs+=S.score[0]; ta.ra+=S.score[1]; th.rs+=S.score[1]; th.ra+=S.score[0]; if(S.score[0]>S.score[1]){ ta.w++; th.l++; } else { th.w++; ta.l++; } applyBox(S); for(const id of S.t) L.rot[id]=(L.rot[id]||0)+1; }
 const myPair=L=>L.sched[L.round]&&L.sched[L.round].find(p=>p.includes(L.id));
-function finishRound(L,userS){
+function finishRound(L,userS){ if(L.fa&&Math.random()<.08) aiFA(L);
   for(const pr of L.sched[L.round]) recordGame(L,userS&&pr.includes(L.id)?userS:simGame(gameOpts(L,pr[0],pr[1])));
   L.round++; if(L.round>=L.len) startPlayoffs(L);
 }
@@ -574,6 +574,7 @@ function offseason(L){
   const gone=[];
   for(const id of LEAGUE_IDS){ const R=ros(L,id); for(const p of R.slice()){ p.age++; progress(p); p.st=blankSt(); if(p.id!==CAREER_ID&&(p.age>=41||(p.age>=38&&Math.random()<.5)||(p.age>=35&&p.ovr<66&&Math.random()<.6))){ R.splice(R.indexOf(p),1); if(p.real||p.ovr>=84) gone.push(p.name); } } trimRoster(R); }
   if(gone.length) L.log.unshift(`Retired: ${gone.slice(0,10).join(', ')}.`);
+  L.fa=[...(L.fa||[]).filter(p=>p.age<37).slice(0,8),...genFA()].sort(byOvr); aiFA(L);
   L.season++; L.sched=makeSched(L.len); L.round=0; L.tbl=blankTbl(); L.phase='season'; L.rot={}; L.po=null; L.draft=null;
   L.log.unshift(`${L.season}: New season begins.`);
 }
@@ -1755,6 +1756,17 @@ function hubTrade(){
   return `<div class="hgrid"><div class="hcard wide">Trade with ${teamSelect('tteam',o,L.id)} <button class="btn sm" data-a="tprop">Propose trade</button> <span class="hsub">Click players on both sides.</span><div class="msg ${hubMsg.startsWith('Trade done')?'ok':'no'}">${esc(hubMsg)}</div></div>
    <div class="hcard"><h3>You give</h3>${tbl(ros(L,L.id),'tgive',trd.give)}</div><div class="hcard"><h3>You get</h3>${tbl(ros(L,o),'tget',trd.get)}</div></div>`;
 }
+const faCost=p=>Math.round(60+Math.max(0,p.ovr-62)*14+(p.real?60:0));
+function genFA(){ const out=[]; for(let i=0;i<16;i++){ const pos=pick(['C','1B','2B','SS','3B','LF','CF','RF','DH','SP','SP','SP','RP','RP','RP']); out.push(genPlayer(pos,rnd(64,81),rint(27,35))); } return out.sort(byOvr); }
+function aiFA(L){ if(!L.fa) return; for(const id of LEAGUE_IDS){ if(id===L.id||!L.fa.length||Math.random()>.35) continue; const R=ros(L,id), p=L.fa[0], worst=R.filter(q=>q.pos===p.pos).sort(byOvr).pop(); if(worst&&worst.ovr<p.ovr-3){ L.fa.shift(); R[R.indexOf(worst)]=p; p.num=pickNum(new Set(R.map(q=>q.num))); } } }
+function hubFA(){
+  if(!L.fa) L.fa=genFA(); const R=ros(L,L.id);
+  const rows=L.fa.slice(0,30).map(p=>{ const c=faCost(p), ok=(L.coins||0)>=c&&R.length<30; return `<tr><td>${esc(p.name)}${p.real?' ★':''}</td><td>${p.pos}</td><td>${p.age}</td><td>${ovrTag(p.ovr)}</td><td>${isP(p)?`VEL ${p.a.vel} STF ${p.a.stf} CTL ${p.a.ctl}`:`CON ${p.a.con} POW ${p.a.pow} SPD ${p.a.spd}`}</td><td><button class="btn sm${ok?'':' alt'}" data-a="fasign" data-id="${p.id}" ${ok?'':'disabled'}>Sign · ${c}</button></td></tr>`; }).join('');
+  const mine=R.slice().sort((a,b)=>tval(a)-tval(b)).slice(0,10).map(p=>`<tr><td>${esc(p.name)}</td><td>${p.pos}</td><td>${p.age}</td><td>${ovrTag(p.ovr)}</td><td><button class="btn sm alt" data-a="farel" data-id="${p.id}">Release</button></td></tr>`).join('');
+  return `<div class="hgrid"><div class="hcard wide"><h3>Free agents · ${L.coins||0} coins · roster ${R.length}/30</h3><p class="hsub">Sign free agents with the coins you earn from games. New free agents show up every offseason, and other teams sign them too.</p><div class="msg ${(hubMsg.startsWith('Signed')||hubMsg.startsWith('Released'))?'ok':'no'}">${esc(hubMsg)}</div>
+  <div class="scroll"><table class="st"><tr><th>Name</th><th>Pos</th><th>Age</th><th>OVR</th><th>Ratings</th><th></th></tr>${rows||'<tr><td colspan="6">No free agents left right now.</td></tr>'}</table></div></div>
+  <div class="hcard wide"><h3>Release a player</h3><p class="hsub">Your lowest-value players. Released players go to free agency.</p><div class="scroll"><table class="st"><tr><th>Name</th><th>Pos</th><th>Age</th><th>OVR</th><th></th></tr>${mine}</table></div></div></div>`;
+}
 function hubDraft(){
   if(L.phase!=='draft') return '<div class="hcard">The draft happens after the World Series.</div>';
   const D=L.draft, on=D.order[D.pick], mine=on===L.id;
@@ -1767,10 +1779,10 @@ function hubLog(){
 function renderHub(){
   const t=TEAMS[L.id], r=L.tbl[L.id], car=L.kind==='car', me=car?findMe():null;
   if(car&&L.phase==='draft') simDraft(L,true);
-  const tabs=car?[['home','Home'],['me','My player'],['roster','Team'],['stand','Standings'],['lead','Leaders'],['log','History']]:[['home','Home'],['ups','Upgrades'],['roster','Roster'],['stand','Standings'],['lead','Leaders'],['trade','Trades'],...(L.phase==='draft'?[['draft','Draft']]:[]),['log','History']];
+  const tabs=car?[['home','Home'],['me','My player'],['roster','Team'],['stand','Standings'],['lead','Leaders'],['log','History']]:[['home','Home'],['ups','Upgrades'],['roster','Roster'],['stand','Standings'],['lead','Leaders'],['trade','Trades'],['fa','Free agents'],...(L.phase==='draft'?[['draft','Draft']]:[]),['log','History']];
   let h=`<div class="hhead" style="--tc:${t.c1}"><img src="${t.logo}" alt=""><div><div class="hname">${esc(me?me.name:t.full)}</div><div class="hsub">${me?`${me.pos} · #${me.num} · ${esc(t.full)} · `:''}${L.season} · ${r.w}-${r.l} · ${phaseTxt()}</div></div><div class="coins">${me?`OVR ${me.ovr} · ${L.xp||0} XP`:`Team OVR ${teamOvr(ros(L,L.id))}`}</div></div>
   <div class="tabs">${tabs.map(([k,n])=>`<button data-a="tab" data-k="${k}" class="${hubTab===k?'on':''}${k==='draft'?' alert':''}">${n}</button>`).join('')}</div>`;
-  h+=({home:hubHome,ups:hubUps,me:hubMe,roster:hubRoster,stand:hubStand,lead:hubLead,trade:hubTrade,draft:hubDraft,log:hubLog}[hubTab]||hubHome)();
+  h+=({home:hubHome,ups:hubUps,me:hubMe,roster:hubRoster,stand:hubStand,lead:hubLead,trade:hubTrade,fa:hubFA,draft:hubDraft,log:hubLog}[hubTab]||hubHome)();
   h+=`<div class="hfoot"><span>Saved automatically in this browser.</span><button class="btn alt sm" data-a="menu">Main menu</button></div>`;
   hubEl.innerHTML=h;
 }
@@ -1788,6 +1800,8 @@ hubEl.addEventListener('click',e=>{
   else if(a==='poall'){ while(L.phase==='playoffs') poDay(L,null); }
   else if(a==='dpick'){ draftPick(L,b.dataset.id); simDraft(L,false); }
   else if(a==='dsim') simDraft(L,false);
+  else if(a==='fasign'){ const i=(L.fa||[]).findIndex(p=>p.id===b.dataset.id), p=L.fa[i], R=ros(L,L.id), c=p?faCost(p):0; if(p&&R.length<30&&(L.coins||0)>=c){ L.coins-=c; L.fa.splice(i,1); p.num=pickNum(new Set(R.map(q=>q.num))); R.push(p); hubMsg=`Signed ${p.name}!`; L.log.unshift(`Free agency: signed ${p.name} (${p.pos}, ${p.ovr}).`); } }
+  else if(a==='farel'){ const R=ros(L,L.id), p=R.find(q=>q.id===b.dataset.id); if(p&&R.length>23&&p.id!==CAREER_ID){ R.splice(R.indexOf(p),1); fillMins(R); (L.fa=L.fa||[]).push(p); L.fa.sort(byOvr); hubMsg=`Released ${p.name}.`; } else hubMsg='Your roster is too small to release anyone.'; }
   else if(a==='dall') simDraft(L,true);
   else if(a==='tgive'||a==='tget'){ const arr=trd[a==='tgive'?'give':'get'], i=arr.indexOf(b.dataset.id); if(i>=0) arr.splice(i,1); else arr.push(b.dataset.id); }
   else if(a==='tprop'){ const o=trd.o||FR_LIST.find(x=>x!==L.id), give=ros(L,L.id).filter(p=>trd.give.includes(p.id)), get=ros(L,o).filter(p=>trd.get.includes(p.id)), m=tradeCheck(L,give,get,o); if(m) hubMsg=m; else { doTrade(L,give,get,o); hubMsg='Trade done!'; trd.give=[]; trd.get=[]; } }
@@ -2182,7 +2196,7 @@ $('btnFs').addEventListener('click',toggleFs);
 $('btnSnd').addEventListener('click',()=>{ muted=!muted; $('btnSnd').textContent=muted?'Sound off':'Sound on'; if(!muted){ audio(); sfx.click(); } });
 $('result').addEventListener('click',()=>{ if(phase==='over'){ if(G&&G.inLeague) showHub(); else toMenu(); } });
 
-if(TEST) window.__bb={LOG,DEF,doSwing,setBm:m=>{bmode=m;},get P(){return P;},newCareer,carForm,findMe,playLeague,setSel:(i,id)=>{ sel[i]=listFor().indexOf(id); },setMenu:m=>{ menuMode=m; },get L(){return L;},newLeague,simGame,gameOpts,finishRound,poDay,simDraft,simUser,showHub,hubSet:t=>{hubTab=t;renderHub();},setFrLen:n=>{frLen=n;},get G(){return G;},get F(){return F;},get phase(){return phase;},step,startGame,setMode:m=>{menuMode=m;}};
+if(TEST) window.__bb={LOG,DEF,setL:x=>{L=x;},doSwing,setBm:m=>{bmode=m;},get P(){return P;},newCareer,carForm,findMe,playLeague,setSel:(i,id)=>{ sel[i]=listFor().indexOf(id); },setMenu:m=>{ menuMode=m; },get L(){return L;},newLeague,simGame,gameOpts,finishRound,poDay,simDraft,simUser,showHub,hubSet:t=>{hubTab=t;renderHub();},setFrLen:n=>{frLen=n;},get G(){return G;},get F(){return F;},get phase(){return phase;},step,startGame,setMode:m=>{menuMode=m;}};
 setView3(view3);
 renderMenu();
 requestAnimationFrame(frame);
