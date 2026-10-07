@@ -413,16 +413,27 @@ function newState(o){
 function bx(S,p,s){ return S.box[p.id]||(S.box[p.id]={p,s,pit:false,ab:0,h:0,d:0,t:0,hr:0,rbi:0,r:0,bb:0,k:0,outs:0,ph:0,pr:0,pbb:0,pk:0,phr:0,pc:0,gs:0,w:0,l:0,sv:0}); }
 function bxP(S,p,s){ const b=bx(S,p,s); b.pit=true; return b; }
 const batterS=(S,s)=>S.lu[s][S.ord[s]%S.lu[s].length].p;
-const pitchLimit=p=>p.pos==='SP'?55+p.a.sta*.55:14+p.a.sta*.45;
+const pitchLimit=p=>p.pos==='SP'?55+p.a.sta*.55:12+p.a.sta*.3;
 const fatigue=(S,s)=>{ const l=pitchLimit(S.pit[s]); return clamp((S.pc[s]-l*.75)/(l*.45),0,1); };
 const mphOf=(S,s)=>84+S.pit[s].a.vel*.165-fatigue(S,s)*3;
-function changePitcher(S,s,who){ const n=who||S.pen[s][0]; if(!n) return null; S.pen[s]=S.pen[s].filter(x=>x!==n); S.pit[s]=n; S.pc[s]=0; S.used[s].push(n); bxP(S,n,s); return n; }
+function pickReliever(S,s){
+  const pen=S.pen[s]; if(!pen.length) return null;
+  const fresh=pen.filter(p=>(p.tired||0)<22), pool=fresh.length?fresh:pen, rps=pool.filter(p=>p.pos==='RP'), lead=S.score[s]-S.score[1-s];
+  if(!rps.length) return pool[0];
+  const ord=rps.slice().sort(byOvr);
+  if(S.inn>=9&&lead>0&&lead<=3) return ord[0];
+  if(S.inn>=7&&Math.abs(lead)<=3) return ord[Math.min(ord.length-1,1+Math.floor(Math.random()*2))];
+  return ord[Math.min(ord.length-1,3+Math.floor(Math.random()*Math.max(1,ord.length-3)))];
+}
+function changePitcher(S,s,who){ const n=who||pickReliever(S,s); if(!n) return null; S.pen[s]=S.pen[s].filter(x=>x!==n); S.pit[s]=n; S.pc[s]=0; S.used[s].push(n); bxP(S,n,s); return n; }
 function pitcherCheck(S,s,human){
   if(S.kind==='derby') return null;
   const p=S.pit[s], l=pitchLimit(p), b=bxP(S,p,s);
   if(human) return S.pc[s]>l+30?changePitcher(S,s):null;
   if(S.pc[s]>l||(b.pr>=5&&S.pc[s]>35)||b.pr>=7) return changePitcher(S,s);
-  if(S.inn>=9&&S.outs===0&&p.pos==='SP'&&Math.abs(S.score[0]-S.score[1])<=3&&S.pc[s]>75) return changePitcher(S,s);
+  const lead=S.score[s]-S.score[1-s];
+  if(S.inn>=9&&S.outs<=1&&lead>=1&&lead<=3&&!(S.closed&&S.closed[s])){ const cl=S.pen[s].filter(q=>q.pos==='RP'&&(q.tired||0)<22).sort(byOvr)[0]; if(cl&&cl.ovr>=p.ovr-6&&!(p.pos==='SP'&&S.pc[s]<80&&b.pr===0)){ (S.closed=S.closed||[0,0])[s]=1; return changePitcher(S,s,cl); } }
+  if(S.inn>=8&&S.outs===0&&p.pos==='SP'&&Math.abs(S.score[0]-S.score[1])<=3&&S.pc[s]>85) return changePitcher(S,s);
   return null;
 }
 function recordOut(S){ S.outs++; bxP(S,S.pit[1-S.half],1-S.half).outs++; }
@@ -483,7 +494,7 @@ function finishGame(S){
 }
 function simGame(o){
   const S=newState(o); let guard=0;
-  while(guard++<600){ simPA(S); S.ord[S.half]++; pitcherCheck(S,1-S.half,false); if(walkOffS(S)) break; if(S.outs>=3&&advanceHalf(S)) break; }
+  while(guard++<600){ simPA(S); S.ord[S.half]++; pitcherCheck(S,1-S.half,false); if(walkOffS(S)) break; if(S.outs>=3){ if(advanceHalf(S)) break; pitcherCheck(S,1-S.half,false); } }
   if(S.score[0]===S.score[1]){ S.score[1]++; S.halfRuns++; }
   finishGame(S); return S;
 }
@@ -500,10 +511,10 @@ const allPlayers=L=>LEAGUE_IDS.flatMap(id=>ros(L,id).map(p=>[p,id]));
 const pctOf=r=>r.w+r.l?r.w/(r.w+r.l):0;
 function starterFor(L,id){ const R=rotation(ros(L,id)); return R[(L.rot[id]||0)%R.length]; }
 function gameOpts(L,away,home){ return {kind:'fr',t:[away,home],ros:[ros(L,away),ros(L,home)],sp:[starterFor(L,away),starterFor(L,home)],innings:9,league:true}; }
-function applyBox(S){ for(const k in S.box){ const e=S.box[k], st=e.p.st; if(!st) continue; if(e.pit){ st.gp++; st.gs+=e.gs; st.outs+=e.outs; st.ph+=e.ph; st.per+=e.pr; st.pbb+=e.pbb; st.pk+=e.pk; st.w+=e.w; st.l+=e.l; st.sv+=e.sv; } else { st.g++; for(const f of ['ab','h','d','t','hr','rbi','r','bb','k']) st[f]+=e[f]; } } }
+function applyBox(S){ for(const k in S.box){ const e=S.box[k]; if(e.pit&&e.p.pos==='RP') e.p.tired=(e.p.tired||0)+(e.pc||e.outs*5); } for(const k in S.box){ const e=S.box[k], st=e.p.st; if(!st) continue; if(e.pit){ st.gp++; st.gs+=e.gs; st.outs+=e.outs; st.ph+=e.ph; st.per+=e.pr; st.pbb+=e.pbb; st.pk+=e.pk; st.w+=e.w; st.l+=e.l; st.sv+=e.sv; } else { st.g++; for(const f of ['ab','h','d','t','hr','rbi','r','bb','k']) st[f]+=e[f]; } } }
 function recordGame(L,S){ const [a,h]=S.t, ta=L.tbl[a], th=L.tbl[h]; ta.rs+=S.score[0]; ta.ra+=S.score[1]; th.rs+=S.score[1]; th.ra+=S.score[0]; if(S.score[0]>S.score[1]){ ta.w++; th.l++; } else { th.w++; ta.l++; } applyBox(S); for(const id of S.t) L.rot[id]=(L.rot[id]||0)+1; }
 const myPair=L=>L.sched[L.round]&&L.sched[L.round].find(p=>p.includes(L.id));
-function finishRound(L,userS){ if(L.fa&&Math.random()<.08) aiFA(L);
+function finishRound(L,userS){ for(const id of LEAGUE_IDS) for(const p of ros(L,id)) if(p.tired) p.tired=Math.max(0,p.tired-18); if(L.fa&&Math.random()<.08) aiFA(L);
   for(const pr of L.sched[L.round]) recordGame(L,userS&&pr.includes(L.id)?userS:simGame(gameOpts(L,pr[0],pr[1])));
   L.round++; if(L.round>=L.len) startPlayoffs(L);
 }
@@ -549,6 +560,7 @@ function finishSeason(L,champ){
   L.log.unshift(`${L.season}: The ${TEAMS[champ].full} win the World Series!${champ===L.id?' That is your team!':''} MVP ${nm(mvp)}, Cy Young ${nm(cy)}, Rookie of the Year ${nm(roy)}.`);
   if(L.kind==='car') for(const [k,x] of [['MVP',mvp],['Cy Young',cy],['Rookie of the Year',roy]]) if(x&&x[0].id===L.pid){ L.xp=(L.xp||0)+250; (L.awardsMe=L.awardsMe||[]).push(`${L.season} ${k}`); L.log.unshift(`${L.season}: You won the ${k} award! (+250 XP)`); }
   for(const [p] of P){ p.car=p.car||blankSt(); for(const k in p.st) p.car[k]+=p.st[k]; }
+  updRecords(L,P,qAB,qO);
   startDraft(L);
   if(L.kind==='car') simDraft(L,true);
 }
@@ -1858,7 +1870,22 @@ function hubDraft(){
   return `<div class="hgrid"><div class="hcard wide"><h3>Pick ${D.pick+1} of ${D.order.length} · On the clock: ${esc(TEAMS[on].full)}</h3><div class="btns">${mine?'<span class="hsub">Your pick. Choose a prospect below.</span>':'<button class="btn" data-a="dsim">Sim to my pick</button>'}<button class="btn alt" data-a="dall">Auto-draft the rest</button></div></div>
   <div class="hcard wide"><div class="scroll"><table class="st"><tr><th>Prospect</th><th>Pos</th><th>Age</th><th>Nat</th><th>OVR</th><th>Potential</th><th></th></tr>${D.pool.slice(0,45).map(p=>`<tr><td>${esc(p.name)}</td><td>${p.pos}</td><td>${p.age}</td><td>${p.nat}</td><td>${ovrTag(p.ovr)}</td><td>${GRADE(p.pot)}</td><td>${mine?`<button class="btn sm" data-a="dpick" data-id="${p.id}">Draft</button>`:''}</td></tr>`).join('')}</table></div></div></div>`;
 }
+const RECS=[['hr','Home runs',p=>p.st.hr,0],['rbi','RBI',p=>p.st.rbi,0],['h','Hits',p=>p.st.h,0],['avg','Batting average',p=>p.st.ab?p.st.h/p.st.ab:0,1],['k','Strikeouts (pitcher)',p=>p.st.pk,0],['w','Wins',p=>p.st.w,0],['sv','Saves',p=>p.st.sv,0],['era','ERA',p=>p.st.outs?p.st.per*27/p.st.outs:99,2]];
+function updRecords(L,P,qAB,qO){
+  L.rec=L.rec||{};
+  for(const [k,n,f,fmt] of RECS){
+    const pool=P.filter(([p])=>k==='avg'?p.st.ab>=qAB:k==='era'?p.st.outs>=qO:true); if(!pool.length) continue;
+    const best=pool.slice().sort((a,b)=>k==='era'?f(a[0])-f(b[0]):f(b[0])-f(a[0]))[0], v=f(best[0]), old=L.rec[k];
+    if(!old||(k==='era'?v<old.v:v>old.v)){ L.rec[k]={v,name:best[0].name,team:best[1],season:L.season}; if(old) L.log.unshift(`${L.season}: New league record! ${best[0].name} sets the single-season ${n.toLowerCase()} mark (${fmtRec(v,fmt)}).`); }
+  }
+}
+const fmtRec=(v,fmt)=>fmt===1?v.toFixed(3).replace(/^0/,''):fmt===2?v.toFixed(2):String(v);
 function hubLog(){
+  const rec=L.rec||{}, rk=RECS.filter(r=>rec[r[0]]);
+  const recH=`<div class="hcard"><h3>League record book (single season)</h3>${rk.length?`<table class="st"><tr><th>Record</th><th>Player</th><th>Mark</th><th>Year</th></tr>${rk.map(([k,n,,fmt])=>`<tr><td class="l">${n}</td><td class="l">${esc(rec[k].name)} (${TEAMS[rec[k].team].abbr})</td><td>${fmtRec(rec[k].v,fmt)}</td><td>${rec[k].season}</td></tr>`).join('')}</table>`:'<p class="hsub">Records are set at the end of each season.</p>'}</div>`;
+  return hubLog0().replace('<div class="hgrid">','<div class="hgrid">'+recH);
+}
+function hubLog0(){
   return `<div class="hgrid"><div class="hcard"><h3>Champions and awards</h3><table class="st"><tr><th>Year</th><th>Champion</th><th>MVP</th><th>Cy Young</th><th>Rookie</th></tr>${L.awards.map(a=>`<tr><td>${a.season}</td><td>${esc(TEAMS[a.champ].name)}</td><td class="l">${esc(a.mvp)}</td><td class="l">${esc(a.cy)}</td><td class="l">${esc(a.roy)}</td></tr>`).join('')||'<tr><td>None yet</td></tr>'}</table></div><div class="hcard"><h3>History</h3><ul class="log">${L.log.slice(0,60).map(x=>`<li>${esc(x)}</li>`).join('')}</ul></div></div>`;
 }
 function renderHub(){
