@@ -596,15 +596,17 @@ function startAim(slot,key){
   const spd=15+qb.pl.a.thp*.09; let T=dist(qb,r)/spd; for(let i=0;i<3;i++){ T=Math.hypot(r.x+r.vx*T-qb.x,r.y+r.vy*T-qb.y)/spd; }
   PL.aim={slot,key,x:r.x+r.vx*T,y:r.y+r.vy*T,t:0};
 }
-function releaseAim(){ const A=PL&&PL.aim; if(!A) return; PL.aim=null; if(phase!=='live') return; if(A.t<.16) throwTo(A.slot); else throwAt(A.x,A.y,A.slot); }
+function releaseAim(){ const A=PL&&PL.aim; if(!A) return; PL.aim=null; if(phase!=='live') return; const n=nearRcv(A.x,A.y)||PL.E(A.slot); throwAt(A.x,A.y,n.slot,bulletHeld()); }
+const bulletHeld=()=>{ const t=offT(), s=sch(t); return !!(s&&held(s.spr)); };
+const passPeak=(dd,bullet)=>bullet?dd*.07+1:dd*.17+1.6;
 /* throw to a chosen spot; the named receiver runs to it */
-function throwAt(x,y,slot){
+function throwAt(x,y,slot,bullet){
   const qb=PL.E('QB'), r=PL.E(slot); if(!r||PL.ball.holder!==qb||qb.x>PL.los+.5||PL.thrown) return;
-  const spd=15+qb.pl.a.thp*.09, dd=Math.hypot(x-qb.x,y-qb.y), T=dd/spd;
-  const pressure=PL.ents.some(f=>f.side===1&&!f.eng&&dist(f,qb)<2.5)?.8:0, sig=(.3+dd*.03)*(1.35-qb.pl.a.tha/100)*(1+pressure);
+  const spd=(15+qb.pl.a.thp*.09)*(bullet?1.3:1), dd=Math.hypot(x-qb.x,y-qb.y), T=dd/spd;
+  const pressure=PL.ents.some(f=>f.side===1&&!f.eng&&dist(f,qb)<2.5)?.8:0, sig=(.3+dd*.03)*(1.35-qb.pl.a.tha/100)*(1+pressure)*(bullet?1.15:1);
   const lx=x+gauss()*sig, ly=y+gauss()*sig;
-  PL.ball.st='air'; PL.ball.holder=null; PL.ball.air={x0:qb.x,y0:qb.y,lx,ly:clamp(ly,-2,FH+2),T:Math.max(.25,T),t:0,to:r,peak:dd*.16+1}; PL.thrown=true;
-  bx(G,qb.pl,qb.team).pa++; sfx.throw();
+  PL.ball.st='air'; PL.ball.holder=null; PL.ball.air={x0:qb.x,y0:qb.y,lx,ly:clamp(ly,-2,FH+2),T:Math.max(.25,T),t:0,to:r,peak:passPeak(dd,bullet)}; PL.thrown=true;
+  bx(G,qb.pl,qb.team).pa++; sfx.throw(); if(!G.ffast) toast(bullet?'Bullet pass':'Touch pass','#ffd166');
 }
 const nearRcv=(x,y)=>['WR1','WR2','TE','RB'].map(k=>PL.E(k)).filter(r=>r.route).sort((a,b)=>Math.hypot(a.x-x,a.y-y)-Math.hypot(b.x-x,b.y-y))[0];
 function resolveCatch(){
@@ -647,7 +649,7 @@ function liveStep(dt){
     e.stun=Math.max(0,e.stun-dt); if(e.free) e.free=Math.max(0,e.free-dt); e.tkCd=Math.max(0,e.tkCd-dt); e.juke=Math.max(0,e.juke-dt); e.jukeCd=Math.max(0,e.jukeCd-dt); if(e.dive>0){ e.dive-=dt; if(e.dive<=0&&e.diveEnd){ e.diveEnd=false; e.stun=.5; } }
     const team=e.team, hum=humEnt(team)===e;
     let want;
-    if(hum&&PL.aim&&e.slot==='QB'){ const d=humanDir(team); PL.aim.t+=dt; PL.aim.x=clamp(PL.aim.x+d[0]*18*dt,e.x-5,e.x+60); PL.aim.y=clamp(PL.aim.y+d[1]*18*dt,.5,FH-.5); want=[0,0]; }
+    if(hum&&PL.aim&&e.slot==='QB'){ const d=PL.aim.ptr?[0,0]:humanDir(team); PL.aim.t+=dt; PL.aim.x=clamp(PL.aim.x+d[0]*18*dt,e.x-5,e.x+60); PL.aim.y=clamp(PL.aim.y+d[1]*18*dt,.5,FH-.5); want=[0,0]; }
     else if(hum&&e.stun<=0){ const d=humanDir(team), s=sch(team), spr=s&&held(s.spr); const m=e.max*(spr?1:.86)*(e.dive>0?1.25:1); want=[d[0]*m,d[1]*m]; }
     else want=aiMove(e);
     const k=Math.min(1,(e.juke>0?3:7)*dt); e.vx+=(want[0]-e.vx)*k; e.vy+=(want[1]-e.vy)*k;
@@ -698,7 +700,7 @@ function touchdown(c){
 }
 function dead(kind,txt){
   if(phase!=='live') return;
-  phase='dead'; phT=0; sfx.whistle();
+  phase='dead'; phT=0; sfx.whistle(); PL.aim=null;
   const o=offT(), c=carrierOf(), qb=PL.E('QB');
   let spot=PL.los, gain=0;
   if(kind==='inc'){ gain=0; G.clock=Math.max(0,G.clock); }
@@ -816,7 +818,7 @@ function renderKeysHelp(){
   const k=$('keysHelp');
   if(phase==='menu'){ k.innerHTML='<div><b>Move</b> WASD or arrows</div><div><b>Hike, juke, dive</b> Space</div><div><b>Throw</b> 1 2 3 4</div><div><b>Sprint</b> Shift</div><div><b>Switch defender</b> Q</div><div><b>3D view</b> V</div><div><b>Full screen</b> Z</div>'; return; }
   if(G&&G.kind==='2p') k.innerHTML='<div><b>Player 1</b> WASD · Space hike/juke/dive · 1-4 throw · Shift sprint · Q switch · plays 1-6</div><div><b>Player 2</b> arrows · Enter · 7 8 9 0 throw · right Shift · / switch · plays 7 8 9 0 - =</div>';
-  else k.innerHTML='<div><b>Move</b> WASD or arrows</div><div><b>Hike / juke / dive</b> Space</div><div><b>Throw</b> tap 1-4, or hold 1-4 to aim (or tap the field)</div><div><b>3D view</b> V</div><div><b>Sprint</b> Shift</div><div><b>Switch defender</b> Q</div><div><b>Sim rest</b> X</div><div><b>Pause</b> P</div>';
+  else k.innerHTML='<div><b>Move</b> WASD or arrows</div><div><b>Hike / juke / dive</b> Space</div><div><b>Pass</b> hold 1-4 (or hold the mouse on the field) to aim, let go to throw · Shift = bullet</div><div><b>3D view</b> V</div><div><b>Sprint</b> Shift</div><div><b>Switch defender</b> Q</div><div><b>Sim rest</b> X</div><div><b>Pause</b> P</div>';
 }
 function startGame(){
   audio();
@@ -884,13 +886,13 @@ cv.addEventListener('pointerdown',e=>{
   if(phase==='pre'){ if(t===offT()) snap(); return; }
   if(phase==='live'&&PL){
     const [wx,wy]=scr2w(x,y), he=humEnt(t);
-    if(he&&he.slot==='QB'&&t===offT()&&!PL.thrown){ const r=['WR1','WR2','TE','RB'].map(k=>PL.E(k)).find(r=>Math.hypot(r.x-wx,r.y-wy)<2.2); if(r){ throwTo(r.slot); return; } if(wx>PL.los+1){ const n=nearRcv(wx,wy); if(n){ throwAt(wx,wy,n.slot); return; } } }
+    if(he&&he.slot==='QB'&&t===offT()&&!PL.thrown&&PL.ball.holder===he&&he.x<=PL.los+.5&&PL.play.type==='pass'&&Math.hypot(he.x-wx,he.y-wy)>2.5){ const n=nearRcv(wx,wy); if(n){ PL.aim={slot:n.slot,key:'ptr',ptr:true,x:clamp(wx,he.x-5,he.x+60),y:clamp(wy,.5,FH-.5),t:0}; return; } }
     if(he&&Math.hypot(he.x-wx,he.y-wy)<1.6){ act(t); return; }
     ptr.on=true; ptr.x=x; ptr.y=y;
   }
 });
-cv.addEventListener('pointermove',e=>{ if(ptr.on){ const [x,y]=canvasXY(e); ptr.x=x; ptr.y=y; } });
-addEventListener('pointerup',()=>{ ptr.on=false; });
+cv.addEventListener('pointermove',e=>{ const [x,y]=canvasXY(e); if(PL&&PL.aim&&PL.aim.ptr){ const [wx,wy]=scr2w(x,y), qb=PL.E('QB'); PL.aim.x=clamp(wx,qb.x-5,qb.x+60); PL.aim.y=clamp(wy,.5,FH-.5); } if(ptr.on){ ptr.x=x; ptr.y=y; } });
+addEventListener('pointerup',()=>{ ptr.on=false; if(PL&&PL.aim&&PL.aim.ptr) releaseAim(); });
 
 /* ---------- update ---------- */
 function step(dt){
@@ -963,9 +965,9 @@ function draw(){
     if(!view3){ const ents=PL.ents.slice().sort((a,b)=>a.y-b.y); for(const e of ents) drawPlayer(e); drawBall(); }
     const he=PL.hum[0];
     if(he&&he.slot==='QB'&&PL.ball.holder===he&&!PL.thrown&&(phase==='live'||phase==='pre')&&PL.play.type==='pass'){ const s=sch(offT()); ['WR1','WR2','TE','RB'].forEach((k,i)=>{ const r=PL.E(k), [x,y]=iconPos(r), sep=Math.min(...PL.ents.filter(f=>f.side===1).map(f=>dist(f,r))); ctx.fillStyle=sep>3?'#34d399':'#ffd166'; ctx.beginPath(); ctx.arc(x,y,10,0,Math.PI*2); ctx.fill(); ctx.fillStyle='#08101f'; ctx.font="800 14px Arial"; ctx.textAlign='center'; ctx.fillText(s.thr[i].replace('Digit',''),x,y+5); }); }
-    if(PL.aim){ const qb=PL.E('QB'); if(!view3){ ctx.strokeStyle='rgba(255,209,102,.8)'; ctx.setLineDash([6,6]); ctx.lineWidth=2; ctx.beginPath(); ctx.moveTo(sx(qb.x),sy(qb.y)); ctx.lineTo(sx(PL.aim.x),sy(PL.aim.y)); ctx.stroke(); ctx.setLineDash([]); ctx.lineWidth=3; ctx.beginPath(); ctx.arc(sx(PL.aim.x),sy(PL.aim.y),Z*1.2,0,Math.PI*2); ctx.stroke(); } const dd=Math.hypot(PL.aim.x-qb.x,PL.aim.y-qb.y), pk=dd*.16+1; ctx.strokeStyle='#ffd166'; ctx.lineWidth=4; ctx.setLineDash([]); ctx.beginPath(); let st=false;
+    if(PL.aim){ const qb=PL.E('QB'); if(!view3){ ctx.strokeStyle='rgba(255,209,102,.8)'; ctx.setLineDash([6,6]); ctx.lineWidth=2; ctx.beginPath(); ctx.moveTo(sx(qb.x),sy(qb.y)); ctx.lineTo(sx(PL.aim.x),sy(PL.aim.y)); ctx.stroke(); ctx.setLineDash([]); ctx.lineWidth=3; ctx.beginPath(); ctx.arc(sx(PL.aim.x),sy(PL.aim.y),Z*1.2,0,Math.PI*2); ctx.stroke(); } const dd=Math.hypot(PL.aim.x-qb.x,PL.aim.y-qb.y), pk=passPeak(dd,bulletHeld()); ctx.strokeStyle='#ffd166'; ctx.lineWidth=4; ctx.setLineDash([]); ctx.beginPath(); let st=false;
       for(let i=0;i<=24;i++){ const t=i/24, X=lerp(qb.x,PL.aim.x,t), Y=lerp(qb.y,PL.aim.y,t), h=Math.sin(Math.PI*t)*pk; let px,py; if(view3&&R3.ok){ const q=R3.proj(X*K3,(h*.6+1.4)*K3,Y*K3); if(!q) continue; px=q[0]*W; py=q[1]*H; } else { px=sx(X); py=sy(Y)-h*Z*.6; } if(st) ctx.lineTo(px,py); else { ctx.moveTo(px,py); st=true; } }
-      ctx.stroke(); hudText('Aiming: move the target with WASD, let go to throw',W/2,H-24,20,'#ffd166','center'); }
+      ctx.stroke(); hudText(PL.aim.ptr?'Aiming: drag to where you want it, let go to throw · hold Shift for a bullet':'Aiming: move the target with WASD, let go to throw · hold Shift for a bullet',W/2,H-24,20,'#ffd166','center'); }
     hudText(`${TEAMS[G.t[offT()]].abbr} ball · ${ddTxt()} at the ${spotTxt(G.los)} · ${PL.play.n} vs ${DEF_PLAYS[PL.dp].n}`,20,34,20,'#fff');
     if(phase==='pre') hudText(G.ctrl[offT()]?`Press ${G.kind==='2p'?(G.ctrl[offT()]==='p1'?'Space':'Enter'):'Space'} (or tap) to hike`:'',W/2,H-24,22,'#ffd166','center');
   }
