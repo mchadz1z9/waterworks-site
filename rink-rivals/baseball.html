@@ -869,7 +869,7 @@ function beginGame(o,ctrl,league,career){
   renderKeysHelp(); updateBoard();
 }
 function startAim(){
-  phase='aim'; phT=0; P=null; F=null;
+  phase='aim'; phT=0; P=null; F=null; if(G) G.meter=null;
   if(!G.derby){ const fs=fieldSide(), ch=pitcherCheck(G,fs,!!ctrlOf(fs)); if(ch&&!G.ffast) toast(`Pitching change: ${ch.name}`,'#60a5fa'); }
   if(G.career){ const fs=fieldSide();
     if(fs===G.career.side){ const m=G.pen[fs].find(p=>p.id===G.career.pid); if(m&&m.pos==='RP'&&G.inn>=7&&!G.ffast){ changePitcher(G,fs,m); G.skip=false; banner('You are in!','Coming in from the bullpen','#ffd166',1.4); } }
@@ -899,10 +899,11 @@ function toMenu(){ phase='menu'; G=null; P=null; F=null; hideHub(); $('result').
 function throwPitch(target,type){
   const fs=fieldSide(), pit=pitcherOf(fs), human=!!ctrlOf(fs)&&!G.derby, fat=fatigue(G,fs);
   const ctl=pit.a.ctl/100-fat*.25, lvl=human?.6:G.lvl;
-  const sig=human?.1+fat*.08:(.25-.12*ctl-.06*lvl);
+  const acc=human&&G.pending&&G.pending.acc!=null?G.pending.acc:.7;
+  const sig=human?(.1+fat*.08)*(.3+1.5*(1-acc))*(1.3-.5*clamp(pit.a.ctl/100,0,1)):(.25-.12*ctl-.06*lvl);
   let fu=target.u+gauss()*sig, fv=target.v+gauss()*sig;
   const pt=PITCHES[type], bk=.7+pit.a.stf/100*.6;
-  let mph=mphOf(G,fs)+pt.mph+rnd(-1.5,1)+(human&&G.ast?G.ast.velo:0);
+  let mph=mphOf(G,fs)+pt.mph+rnd(-1.5,1)+(human&&G.ast?G.ast.velo:0)+(human?(acc-.6)*4:0);
   if(!!G.derby) mph=[72,80,88][diff]+(type?-8:0)+rnd(-1,1);
   else if(!human&&ctrlOf(batSide())) mph+=(G.lvl-.55)*4;
   const T=.47*(94/mph)*(ctrlOf(batSide())&&!human?[1.12,1,.95][diff]:1);
@@ -1315,8 +1316,14 @@ function actorPointer(){
 function act(scheme){
   if(!G||paused) return;
   const fs=fieldSide(), bs=batSide();
-  if(phase==='aim'&&ctrlOf(fs)&&!G.derby&&(scheme==='any'||ctrlOf(fs)===scheme||ctrlOf(fs)==='solo'&&scheme!=='p2')){ phase='wind'; phT=0; G.pending={u:cur.pit.u,v:cur.pit.v,type:arsenal(pitcherOf(fs))[ptype]||0}; return; }
+  if(phase==='aim'&&ctrlOf(fs)&&!G.derby&&(scheme==='any'||ctrlOf(fs)===scheme||ctrlOf(fs)==='solo'&&scheme!=='p2')){ if(!G.meter){ G.meter={t:0}; sfx.click(); return; } releaseMeter(); return; }
   if(phase==='pitch'&&ctrlOf(bs)&&(scheme==='any'||ctrlOf(bs)===scheme||ctrlOf(bs)==='solo'&&scheme!=='p2')) doSwing(cur.bat.u,cur.bat.v);
+}
+const MET_T=.95, meterN=()=>Math.min(1,G.meter.t/MET_T);
+function releaseMeter(auto){
+  const fs=fieldSide(), n=auto?1:meterN(), acc=auto?.15:clamp(1-Math.abs(n-.85)/.5,0,1);
+  G.meter=null; phase='wind'; phT=0; G.pending={u:cur.pit.u,v:cur.pit.v,type:arsenal(pitcherOf(fs))[ptype]||0,acc};
+  hud.pitchTxt=acc>.86?'Perfect release!':acc>.6?'Good release':acc>.3?'Missed spot':'Wild release'; hud.pitchT=0;
 }
 function schemeOfKey(code){
   if(!G) return null;
@@ -1403,6 +1410,7 @@ function step(dt){
   else if(phase==='aim'){
     const fs=fieldSide();
     if((!ctrlOf(fs)||!!G.derby)&&phT>(!!G.derby?.9:1.2)){ const t=cpuPitchTarget(); G.pending=t; phase='wind'; phT=0; }
+    else if(G.meter){ G.meter.t+=dt; if(G.meter.t>MET_T+.25) releaseMeter(true); }
   } else if(phase==='wind'){
     if(phT>.42){ const p=G.pending; throwPitch({u:p.u,v:p.v},p.type); }
   } else if(phase==='pitch'){
@@ -1476,6 +1484,11 @@ function drawZoneUI(){
     ctx.strokeStyle=G.kind==='2p'?'#f472b6':'#34d399'; if(G.kind==='2p'&&ctrlOf(fs)==='p1') ctx.strokeStyle='#34d399';
     ctx.lineWidth=3; ctx.beginPath(); ctx.arc(px,py,12,0,Math.PI*2); ctx.moveTo(px-20,py); ctx.lineTo(px+20,py); ctx.moveTo(px,py-20); ctx.lineTo(px,py+20); ctx.stroke();
   }
+  if(G.meter){ const mw=260, mx=ZX-mw/2, my=zy(1)-62, n=meterN();
+    ctx.fillStyle='rgba(5,8,18,.8)'; ctx.beginPath(); ctx.roundRect(mx-8,my-8,mw+16,30,8); ctx.fill();
+    const g=ctx.createLinearGradient(mx,0,mx+mw,0); g.addColorStop(0,'#475569'); g.addColorStop(.6,'#fbbf24'); g.addColorStop(.85,'#34d399'); g.addColorStop(1,'#ef4444'); ctx.fillStyle=g; ctx.fillRect(mx,my,mw,14);
+    ctx.strokeStyle='#fff'; ctx.lineWidth=2; ctx.strokeRect(mx+mw*.78,my-2,mw*.14,18);
+    ctx.fillStyle='#fff'; ctx.fillRect(mx+mw*n-2,my-6,4,26); hudText('Press again in the green zone',ZX,my-14,16,'#dbe3f5','center'); }
   /* batter contact cursor */
   if(ctrlOf(bs)){
     const b=batterOf(bs), R=batR(b,true), c=P&&P.sw?P.sw:cur.bat;
@@ -1557,7 +1570,7 @@ function drawBattingView(){
       ctx.font="800 18px 'Big Shoulders Display','Arial Narrow',sans-serif"; ctx.textAlign='center'; ctx.fillStyle=on?'#08101f':'#dbe3f5';
       ctx.fillText(`${bt2.i+1} ${PITCHES[arsenal(pitcherOf(fieldSide()))[bt2.i]].n}`,bt2.x+bt2.w/2,bt2.y+27);
     }
-    hudText(G.kind==='2p'?(ctrlOf(fs)==='p1'?'Player 1 pitching: aim WASD, Q pitch type, Space to throw':'Player 2 pitching: aim arrows, / pitch type, Enter to throw'):'Aim, pick a pitch, then Space or tap the zone to throw. B for the bullpen.',24,H-72,18,'#ffd166');
+    hudText(G.kind==='2p'?(ctrlOf(fs)==='p1'?'Player 1 pitching: aim WASD, Q pitch type, Space twice to throw':'Player 2 pitching: aim arrows, / pitch type, Enter twice to throw'):'Aim, pick a pitch, press Space to start the meter, then Space again in the green. B for the bullpen.',24,H-72,18,'#ffd166');
   } else if(ctrlOf(bs)&&(phase==='aim'||phase==='wind'||phase==='pitch')){
     if(G.kind!=='2p') for(const bt2 of PT_BTNS()){ if(G.derby&&bt2.i===3) continue;
       const on=bt2.i===bmode; ctx.fillStyle=on?'#ffd166':'rgba(5,8,18,.78)'; ctx.beginPath(); ctx.roundRect(bt2.x,bt2.y,bt2.w,bt2.h,20); ctx.fill();
