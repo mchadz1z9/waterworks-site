@@ -830,7 +830,7 @@ function startGame(){
   beginGame(o,auto?[null,null]:menuMode===2?['p1','p2']:['solo',null],false);
 }
 function beginGame(o,ctrl,league,career){
-  G=newState(o); G.ctrl=ctrl; G.career=career||null; G.lvl=DIFF_T[diff]; G.derby=o.kind==='derby'?{outs:0,hr:0,long:0}:null; G.over=false; G.inLeague=league; G.ffast=false;
+  G=newState(o); G.ctrl=ctrl; G.career=career||null; G.ast=assistsB(league); G.lvl=DIFF_T[diff]; G.derby=o.kind==='derby'?{outs:0,hr:0,long:0}:null; G.over=false; G.inLeague=league; G.ffast=false;
   hideHub(); $('menu').classList.add('hidden'); $('result').classList.add('hidden');
   P=null; F=null; paused=false; lastBoard=''; cur.bat={u:0,v:0}; cur.pit={u:.3,v:-.3}; ptype=0;
   startAim(); sfx.organ();
@@ -853,7 +853,7 @@ function throwPitch(target,type){
   const sig=human?.1+fat*.08:(.25-.12*ctl-.06*lvl);
   let fu=target.u+gauss()*sig, fv=target.v+gauss()*sig;
   const pt=PITCHES[type], bk=.7+pit.a.stf/100*.6;
-  let mph=mphOf(G,fs)+pt.mph+rnd(-1.5,1);
+  let mph=mphOf(G,fs)+pt.mph+rnd(-1.5,1)+(human&&G.ast?G.ast.velo:0);
   if(!!G.derby) mph=[72,80,88][diff]+(type?-8:0)+rnd(-1,1);
   else if(!human&&ctrlOf(batSide())) mph+=(G.lvl-.55)*4;
   const T=.47*(94/mph)*(ctrlOf(batSide())&&!human?[1.12,1,.95][diff]:1);
@@ -879,7 +879,7 @@ function cpuPitchTarget(){
   return {u,v,type};
 }
 function planCpuSwing(bs){
-  const b=batterOf(bs), s=clamp(G.lvl*.6+b.a.con/100*.4,0,1);
+  const b=batterOf(bs), s=clamp(G.lvl*.6+b.a.con/100*.4+(ctrlOf(fieldSide())&&G.ast?G.ast.cpuBat:0),0,1);
   const inZ=Math.abs(P.fu)<=1.08&&Math.abs(P.fv)<=1.08;
   let pSw=inZ?(.6+.25*s):(.36-.22*s-(b.a.eye-70)*.004);
   if(G.strikes===2) pSw+=inZ?.2:.12; if(G.balls===3&&G.strikes<2) pSw-=.2;
@@ -888,14 +888,21 @@ function planCpuSwing(bs){
     P.cpuSw={t:P.T-fool+gauss()*(.085-.04*s),u:P.fu+gauss()*(.36-.14*s),v:P.fv+gauss()*(.36-.14*s)};
   }
 }
-function batR(b,human){ return (human?.36:.29)+b.a.con/100*.12+(human?[.07,.02,0][G.kind==='2p'?1:diff]:0); }
+const BUPS=[['con','Contact','Bigger contact zone when you swing'],['pow','Power','Balls you hit fly farther'],['spd','Speed','Your runners and fielders are faster'],['pit','Pitching','More velocity, and CPU hitters miss more'],['fld','Fielding','Fielders react faster and throw harder']];
+const upCost=l=>120+60*l;
+function assistsB(league){
+  const ramp=league&&L&&L.kind!=='car'?(L.phase==='playoffs'?1:L.round/Math.max(1,L.len)):league&&L?(L.phase==='playoffs'?1:L.round/Math.max(1,L.len))*.7:0, U=(league&&L&&L.ups)||{};
+  return {ramp,pci:.1-.08*ramp+.018*(U.con||0),pow:1.08-.06*ramp+.03*(U.pow||0),spd:1+.025*(U.spd||0),cpuBat:-.28+.26*ramp-.04*(U.pit||0),velo:1.2*(U.pit||0),fld:.05*(U.fld||0)};
+}
+function batR(b,human){ return (human?.36:.29)+b.a.con/100*.12+(human?[.07,.02,0][G.kind==='2p'?1:diff]+(G.ast?G.ast.pci:0):0); }
 function doSwing(u,v){
   if(!P||P.swung||P.done) return;
   P.swung=true; P.sw={t:P.t,u,v}; swingAnim=0;
   const bs=batSide(), b=batterOf(bs), human=!!ctrlOf(bs);
   const win=human?[.13,.11,.1][G.kind==='2p'?1:diff]:.11;
   const dt=P.t-P.T;
-  const R=batR(b,human), pow=.82+b.a.pow/100*.32;
+  const R=batR(b,human), pow=(.82+b.a.pow/100*.32)*(human&&G.ast?G.ast.pow:1);
+  if(human&&!G.ffast){ const a=Math.abs(dt)/win; hud.timing=a<.22?'PERFECT!':a>1?(dt<0?'Way early':'Way late'):dt<0?'Early':'Late'; hud.timingT=0; }
   if(Math.abs(dt)>win){ P.res={miss:1}; return; }
   const d=Math.hypot(u-P.fu,(v-P.fv)*.85);
   if(d>R){ P.res={miss:1}; return; }
@@ -1011,12 +1018,12 @@ function startPlay(res){
   const side=batSide(), fs=fieldSide();
   const dir=res.spray*Math.PI/180, la=res.la*Math.PI/180, v=res.ev*1.467;
   F={t:0,side,ball:{x:0,y:2,z:3,vx:v*Math.cos(la)*Math.sin(dir),vy:v*Math.cos(la)*Math.cos(dir),vz:v*Math.sin(la),bounced:false,gone:false,held:null,thr:null},
-     fl:Object.entries(HOME_POS).map(([pos,[x,y]])=>{ const pl=pos==='P'?G.pit[fs]:((G.lu[fs].find(q=>q.pos===pos)||{}).p||{a:{}}); return {pos,x,y,pl,react:(pos==='C'?.4:isOF(pos)?.38:.24)-((pl.a.fld??55)-60)*.003,holdT:0}; }),
+     fl:Object.entries(HOME_POS).map(([pos,[x,y]])=>{ const pl=pos==='P'?G.pit[fs]:((G.lu[fs].find(q=>q.pos===pos)||{}).p||{a:{}}); return {pos,x,y,pl,react:(pos==='C'?.4:isOF(pos)?.38:.24)-((pl.a.fld??55)-60)*.003-(G.ctrl[fs]&&G.ast?G.ast.fld:0),holdT:0}; }),
      run:[],hr:false,hrDist:0,settle:0,throws:0,outs:0,runs:0,batOut:null,fly:false,foulBall:false,landed:false,done:false,res,doneT:0,orig:G.bases.slice(),chaser:null,cpt:null,cover:{}};
   F.fl.forEach(f=>{ f.x+=rnd(-4,4); f.y+=rnd(-4,4); });
   if(!G.derby){
-    for(let b=3;b>=1;b--) if(G.bases[b-1]){ const pl=G.bases[b-1]; F.run.push({pl,at:b,from:b,to:null,p:0,spd:runSpd(pl)+rnd(-1,1),delay:0}); }
-    const bt=batterOf(side); F.run.push({pl:bt,at:0,from:0,to:1,p:0,spd:runSpd(bt)-1+rnd(-1,1),delay:.35,bat:true});
+    for(let b=3;b>=1;b--) if(G.bases[b-1]){ const pl=G.bases[b-1]; F.run.push({pl,at:b,from:b,to:null,p:0,spd:(runSpd(pl)+rnd(-1,1))*(G.ctrl[side]&&G.ast?G.ast.spd:1),delay:0}); }
+    const bt=batterOf(side); F.run.push({pl:bt,at:0,from:0,to:1,p:0,spd:(runSpd(bt)-1+rnd(-1,1))*(ctrlOf(side)&&G.ast?G.ast.spd:1),delay:.35,bat:true});
     G.bases=[null,null,null];
   }
   planChase();
@@ -1120,7 +1127,7 @@ function fieldTick(dt){
     if(!F.hr) for(const f of F.fl){
       const reach=f===F.hum?(F.diveT>0?7.5:4.2):F.humSch&&f===F.chaser?2.5:f===F.chaser?4:2.5, d=Math.hypot(b.x-f.x,b.y-f.y);
       if(d<reach&&b.z<(b.bounced?4:7.5)&&F.t>f.react){
-        b.held=f; f.holdT=0; sfx.pop();
+        b.held=f; f.holdT=0; sfx.pop(); if(!b.bounced&&f===F.hum&&F.diveT>0) F.diveCatch=true;
         if(!b.bounced&&f===F.hum&&F.diveT>0) banner('Diving catch!','','#34d399',1.2);
         if(!b.bounced){
           F.fly=false; const bat=F.run.find(r=>r.bat);
@@ -1196,8 +1203,14 @@ function startHR(){
   if(G.derby){ G.derby.hr++; G.derby.long=Math.max(G.derby.long,F.hrDist); }
   sfx.hr(); banner('Home run!',`${F.hrDist} ft`,TEAMS[G.t[side]].c2,2.2);
 }
+function snapF(){ return {fl:F.fl.map(f=>[f.x,f.y]),run:F.run.map(r=>({...r})),b:[F.ball.x,F.ball.y,F.ball.z,F.ball.gone,F.ball.held]}; }
+function applyF(fr){ fr.fl.forEach((a,i)=>{ F.fl[i].x=a[0]; F.fl[i].y=a[1]; }); F.run=fr.run.map(r=>({...r})); [F.ball.x,F.ball.y,F.ball.z,F.ball.gone,F.ball.held]=fr.b; }
+function startReplayB(then){ if(!F.rec||F.rec.length<20||G.ffast){ then(); return; } F.rp={i:Math.max(0,F.rec.length-Math.round(F.hr?300:200)),acc:0,then,final:snapF()}; phase='replay'; phT=0; }
+function replayStepB(dt){ const R=F.rp; R.acc+=dt*60*.5; while(R.acc>=1&&R.i<F.rec.length-1){ R.i++; R.acc--; } applyF(F.rec[R.i]); if(R.i>=F.rec.length-1) endReplayB(); }
+function endReplayB(){ const R=F.rp; if(!R) return; applyF(R.final); F.rp=null; phase='play'; R.then(); }
 function finishPlay(){
   const res=F;
+  if((res.hr||res.diveCatch)&&!res.replayed&&!G.ffast&&!G.derby){ res.replayed=true; startReplayB(()=>finishPlay()); return; }
   if(res.foulBall){ for(let i=0;i<3;i++) G.bases[i]=res.orig[i]; phase='wait'; foul(); return; }
   if(G.derby){
     if(res.hr){ toast(`${res.hrDist} ft! That's ${G.derby.hr}`,'#ffd166'); after(1,()=>startAim()); }
@@ -1258,6 +1271,7 @@ addEventListener('keydown',e=>{
   if(e.code==='KeyV'){ setView3(!view3); return; }
   if(phase==='menu'){ menuKey(e.code); return; }
   if(phase==='hub') return;
+  if(phase==='replay'){ endReplayB(); return; }
   if(phase==='over'){ const lg=G&&G.inLeague; if(e.code==='KeyR'&&!lg){ startGame(); } else if(['Enter','NumpadEnter','Space','KeyM','Escape'].includes(e.code)){ if(lg) showHub(); else toMenu(); } return; }
   if(e.code==='KeyP'||e.code==='Escape'){ paused=!paused; if(paused) banner('Paused','P to resume · M for menu','#000',1e9); else { $('banner').classList.remove('on'); bannerT=0; } return; }
   if(e.code==='KeyM'){ if(G.inLeague){ if(confirm('Sim the rest of this game?')) G.ffast=true; } else if(confirm('Quit to the menu? This game will end.')) toMenu(); keys.clear(); return; }
@@ -1281,6 +1295,7 @@ cv.addEventListener('pointermove',e=>{
 cv.addEventListener('pointerdown',e=>{
   audio(); e.preventDefault();
   if(!G||paused) return;
+  if(phase==='replay'){ endReplayB(); return; }
   if(phase==='play'&&F&&F.humSch&&F.hum){ const [x,y]=canvasXY(e); if(F.ball.held===F.hum){ for(let n=1;n<=4;n++){ const [bx,by]=baseScr(n); if(Math.hypot(bx-x,by-y)<40){ humanThrow(n); return; } } } ptrF.on=true; ptrF.x=x; ptrF.y=y; return; }
   const [x,y]=canvasXY(e);
   if(phase==='aim'&&ctrlOf(fieldSide())&&!G.derby){
@@ -1326,8 +1341,10 @@ function step(dt){
       startPlay(P.res); return;
     }
     if(!P.done&&P.t>P.T+.12) callPitch();
+  } else if(phase==='replay'&&F&&F.rp){ replayStepB(dt);
   } else if(phase==='play'){
     const sub=4; for(let i=0;i<sub&&phase==='play';i++){ fieldTick(dt/sub); if(F&&F.done){ finishPlay(); break; } }
+    if(F&&phase==='play'){ (F.rec=F.rec||[]).push(snapF()); if(F.rec.length>700) F.rec.shift(); }
   } else if(phase==='wait'){
     waitT-=dt; if(P) P.t+=dt;
     if(waitT<=0&&waitFn){ const f=waitFn; waitFn=null; f(); }
@@ -1454,6 +1471,7 @@ function drawBattingView(){
     hudText(`${Math.round(mphOf(G,fs))} mph  ·  ${G.pc[fs]} pitches${fatigue(G,fs)>.3?'  ·  Tired':''}`,W-34,102,17,fatigue(G,fs)>.3?'#fca5a5':'#b7c2dd','right');
   }
   if(hud.pitchTxt&&hud.pitchT<1.6&&P) hudText(hud.pitchTxt,ZX,118,26,'#ffd166','center');
+  if(hud.timing&&hud.timingT<1.1){ hud.timingT+=frameDtG; hudText(hud.timing,ZX,ZY-ZH-26,hud.timing==='PERFECT!'?34:26,hud.timing==='PERFECT!'?'#34d399':'#fbbf24','center'); }
   /* pitch selector */
   if(ctrlOf(fs)&&!G.derby&&phase==='aim'){
     for(const bt2 of PT_BTNS()){
@@ -1484,7 +1502,8 @@ function drawBug(){
 }
 function drawFieldView(){
   if(!view3) drawFieldDots();
-  fieldHud();
+  if(phase==='replay'){ ctx.fillStyle='#dc2626'; ctx.beginPath(); ctx.roundRect(20,52,120,34,6); ctx.fill(); hudText('REPLAY',80,77,24,'#fff','center'); hudText('Press any key to skip',W/2,H-24,18,'#dbe3f5','center'); }
+  else fieldHud();
   hudText(`Exit velo ${Math.round(F.res.ev)} mph  ·  Launch ${Math.round(F.res.la)}°`,24,40,20,'#ffd166');
   drawBug();
 }
@@ -1506,7 +1525,7 @@ function draw(){
   if(view3) render3D(frameDtG);
   ctx.clearRect(0,0,W,H);
   if(!G){ if(!view3) ctx.drawImage(bvBg,0,0,W,H); return; }
-  if((phase==='play'||(phase==='wait'&&F))&&F) drawFieldView(); else drawBattingView();
+  if((phase==='play'||phase==='replay'||(phase==='wait'&&F))&&F) drawFieldView(); else drawBattingView();
 }
 
 /* ---------- career mode ---------- */
@@ -1584,7 +1603,7 @@ function showHub(){ phase='hub'; G=null; P=null; F=null; document.body.classList
 function newFranchise(){ CAREER_ID=null; L=newLeague(frLen,curTeam(0)); saveL(L); hubTab='home'; rosTeam=null; showHub(); }
 function continueFr(kind){ const s=readSave(kind==='car'?CKEY:FKEY); if(!s) return; L=s; CAREER_ID=L.kind==='car'?L.pid:null; hubTab='home'; rosTeam=null; showHub(); }
 const resultLine=S=>{ const me=S.t[0]===L.id?0:1, won=S.score[me]>S.score[1-me]; return `Last game: ${won?'won':'lost'} ${S.score[me]}-${S.score[1-me]} ${me?'vs':'at'} the ${TEAMS[S.t[1-me]].full}.`; };
-function userGame(S){ L.last=resultLine(S); if(L.kind==='car') careerAfter(S,S===G); if(L.phase==='season') finishRound(L,S); else if(L.phase==='playoffs') poDay(L,S); saveL(L); }
+function userGame(S){ L.last=resultLine(S); if(L.kind!=='car'){ const me=S.t[0]===L.id?0:1, won=S.score[me]>S.score[1-me], c=(won?100:40)+(S===G?40:0); L.coins=(L.coins||0)+c; L.last+=` +${c} coins.`; } if(L.kind==='car') careerAfter(S,S===G); if(L.phase==='season') finishRound(L,S); else if(L.phase==='playoffs') poDay(L,S); saveL(L); }
 function userPair(){ if(L.phase==='season') return myPair(L); const s=mySeries(L); return s?poPair(s):null; }
 function simUser(){ const pr=userPair(); if(!pr) return; userGame(simGame(gameOpts(L,pr[0],pr[1]))); }
 function playLeague(){ const pr=userPair(); if(!pr||L.retired) return; const side=pr[0]===L.id?0:1; if(L.kind==='car') beginGame(gameOpts(L,pr[0],pr[1]),[null,null],true,{pid:L.pid,side}); else beginGame(gameOpts(L,pr[0],pr[1]),side?[null,'solo']:['solo',null],true); }
@@ -1596,6 +1615,12 @@ function oppCard(aw,hm){
 function standTable(ids){
   const s=ids.slice().sort((a,b)=>pctOf(L.tbl[b])-pctOf(L.tbl[a])), top=L.tbl[s[0]];
   return `<table class="st"><tr><th>Team</th><th>W</th><th>L</th><th>PCT</th><th>GB</th><th>RS</th><th>RA</th></tr>${s.map(id=>{ const r=L.tbl[id], gb=((top.w-r.w)+(r.l-top.l))/2; return `<tr class="${id===L.id?'me':''}"><td><img src="${TEAMS[id].logo}" alt="">${esc(TEAMS[id].name)}</td><td>${r.w}</td><td>${r.l}</td><td>${pctOf(r).toFixed(3).replace(/^0/,'')}</td><td>${gb?gb.toFixed(1):'-'}</td><td>${r.rs}</td><td>${r.ra}</td></tr>`; }).join('')}</table>`;
+}
+function hubUps(){
+  const U=L.ups||{}, a=assistsB(true);
+  return `<div class="hgrid"><div class="hcard wide"><h3>Upgrades · ${L.coins||0} coins</h3><p class="hsub">Earn coins every game (100 for a win, 40 for a loss, +40 for playing it yourself). You start the season with an edge; the CPU gets tougher every week and is close to your level by the playoffs, so upgrades keep you ahead. Upgrades only affect games you play.</p>
+  ${BUPS.map(([k,n,d])=>{ const l=U[k]||0; return `<div class="up"><div><div class="n">${n}</div><div class="d">${d}</div></div><div class="pips">${[0,1,2,3,4].map(i=>`<i class="pip${i<l?' on':''}"></i>`).join('')}</div><button class="btn sm" data-a="up" data-k="${k}"${l>=5||(L.coins||0)<upCost(l)?' disabled':''}>${l>=5?'Max':upCost(l)+' coins'}</button></div>`; }).join('')}
+  <p class="hsub" style="margin-top:10px">CPU strength this week: ${Math.round(a.ramp*100)}% of full.</p></div></div>`;
 }
 function hubHome(){
   let m='';
@@ -1646,10 +1671,10 @@ function hubLog(){
 function renderHub(){
   const t=TEAMS[L.id], r=L.tbl[L.id], car=L.kind==='car', me=car?findMe():null;
   if(car&&L.phase==='draft') simDraft(L,true);
-  const tabs=car?[['home','Home'],['me','My player'],['roster','Team'],['stand','Standings'],['lead','Leaders'],['log','History']]:[['home','Home'],['roster','Roster'],['stand','Standings'],['lead','Leaders'],['trade','Trades'],...(L.phase==='draft'?[['draft','Draft']]:[]),['log','History']];
+  const tabs=car?[['home','Home'],['me','My player'],['roster','Team'],['stand','Standings'],['lead','Leaders'],['log','History']]:[['home','Home'],['ups','Upgrades'],['roster','Roster'],['stand','Standings'],['lead','Leaders'],['trade','Trades'],...(L.phase==='draft'?[['draft','Draft']]:[]),['log','History']];
   let h=`<div class="hhead" style="--tc:${t.c1}"><img src="${t.logo}" alt=""><div><div class="hname">${esc(me?me.name:t.full)}</div><div class="hsub">${me?`${me.pos} · #${me.num} · ${esc(t.full)} · `:''}${L.season} · ${r.w}-${r.l} · ${phaseTxt()}</div></div><div class="coins">${me?`OVR ${me.ovr} · ${L.xp||0} XP`:`Team OVR ${teamOvr(ros(L,L.id))}`}</div></div>
   <div class="tabs">${tabs.map(([k,n])=>`<button data-a="tab" data-k="${k}" class="${hubTab===k?'on':''}${k==='draft'?' alert':''}">${n}</button>`).join('')}</div>`;
-  h+=({home:hubHome,me:hubMe,roster:hubRoster,stand:hubStand,lead:hubLead,trade:hubTrade,draft:hubDraft,log:hubLog}[hubTab]||hubHome)();
+  h+=({home:hubHome,ups:hubUps,me:hubMe,roster:hubRoster,stand:hubStand,lead:hubLead,trade:hubTrade,draft:hubDraft,log:hubLog}[hubTab]||hubHome)();
   h+=`<div class="hfoot"><span>Saved automatically in this browser.</span><button class="btn alt sm" data-a="menu">Main menu</button></div>`;
   hubEl.innerHTML=h;
 }
@@ -1659,6 +1684,7 @@ hubEl.addEventListener('click',e=>{
   if(a==='play'){ playLeague(); return; }
   if(a==='tab'){ hubTab=b.dataset.k; hubMsg=''; }
   else if(a==='sim') simUser();
+  else if(a==='up'){ const k=b.dataset.k; L.ups=L.ups||{}; const l=L.ups[k]||0; if(l<5&&(L.coins||0)>=upCost(l)){ L.coins-=upCost(l); L.ups[k]=l+1; } }
   else if(a==='train'){ const p=findMe(), k=b.dataset.k, c=trainCost(p.a[k]); if((L.xp||0)>=c&&p.a[k]<99){ L.xp-=c; p.a[k]++; p.ovr=calcOvr(p); if(p.pot<p.ovr) p.pot=p.ovr; } }
   else if(a==='retire'){ if(confirm('Retire? This ends your career.')){ const p=findMe(); L.retired=true; L.log.unshift(`${L.season}: ${p.name} retires.`); } }
   else if(a==='simn'){ for(let i=0;i<+b.dataset.n&&L.phase==='season';i++) simUser(); }
@@ -2002,7 +2028,7 @@ const faceTo=(x,y,tx,ty)=>Math.atan2(-(ty-y),tx-x);
 let cam3=null;
 function render3D(dt){
   build3();
-  const inPlay=G&&F&&(phase==='play'||phase==='wait');
+  const inPlay=G&&F&&(phase==='play'||phase==='wait'||phase==='replay');
   let cam;
   if(!G){ const a=performance.now()/9000; cam={eye:[Math.sin(a)*260*K3,90*K3,-150*K3+Math.cos(a)*260*K3],center:[0,0,-150*K3],fov:50}; }
   else if(inPlay){
