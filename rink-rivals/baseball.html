@@ -1054,9 +1054,9 @@ function gameOver(){
   } else {
     const a=TEAMS[G.t[0]], h=TEAMS[G.t[1]], n=Math.max(G.innings,G.line[0].length,G.line[1].length);
     const w=G.score[0]===G.score[1]?null:G.score[0]>G.score[1]?a:h;
-    const row=(t,s)=>`<tr><td>${esc(t.abbr)}</td>${Array.from({length:n},(_,i)=>`<td>${G.line[s][i]??''}</td>`).join('')}<td class="tot">${G.score[s]}</td><td>${G.hits[s]}</td></tr>`;
+    const row=(t,s)=>`<tr><td>${esc(t.abbr)}</td>${Array.from({length:n},(_,i)=>`<td>${G.line[s][i]??''}</td>`).join('')}<td class="tot">${G.score[s]}</td><td>${G.hits[s]}</td><td>${(G.err||[0,0])[s]}</td></tr>`;
     ri.innerHTML=`<h2>${w?esc(w.full)+' win!':'Tie game'}</h2><div class="rs">${G.score[0]} - ${G.score[1]}</div>
-      <table class="ls"><tr><th></th>${Array.from({length:n},(_,i)=>`<th>${i+1}</th>`).join('')}<th>R</th><th>H</th></tr>${row(a,0)}${row(h,1)}</table>
+      <table class="ls"><tr><th></th>${Array.from({length:n},(_,i)=>`<th>${i+1}</th>`).join('')}<th>R</th><th>H</th><th>E</th></tr>${row(a,0)}${row(h,1)}</table>
       ${boxHTML(G)}<p>${G.inLeague?'Enter or click to go back to your franchise.':'Enter for the menu, R for a rematch.'}</p>`;
     if(w) banner('Ballgame!',`${w.full} win`,w.c1,2); if(w&&G.half===1&&G.score[1]>G.score[0]&&G.line[1][G.inn-1]!=='X') speak('Walk-off! They win it!',true); else if(w) speak(`And that's the ballgame. The ${w.name} win.`,true);
     if(G.inLeague) userGame(G);
@@ -1155,6 +1155,16 @@ function decide(r){
   }
   r.from=b; r.to=nb; r.p=0;
 }
+function fieldError(f,dx,dy,kind){
+  const b=F.ball, d=Math.hypot(dx,dy)||1, sp=kind==='throw'?rnd(28,45):rnd(10,18);
+  b.held=null; b.thr=null; b.x=f.x+dx/d*2; b.y=f.y+dy/d*2; b.z=1; b.vx=dx/d*sp+rnd(-6,6); b.vy=dy/d*sp+rnd(-6,6); b.vz=0; b.bounced=true;
+  F.errd=true; F.fly=false; const fs=F.side?0:1; G.err=G.err||[0,0]; G.err[fs]++;
+  const others=F.fl.filter(q=>q!==f), near=others.sort((p,q)=>Math.hypot(p.x-b.x-b.vx,p.y-b.y-b.vy)-Math.hypot(q.x-b.x-b.vx,q.y-b.y-b.vy))[0]||f;
+  F.chaser=kind==='throw'?near:f; F.cpt={t:0,x:b.x,y:b.y}; if(kind!=='throw') f.react=F.t+.35;
+  for(const r of F.run) if(r.to===null&&r.at>=1&&r.at<=3&&!F.run.some(o=>o!==r&&(o.at===r.at+1||o.to===r.at+1))&&kind==='throw'){ r.to=r.at+1; r.from=r.at; r.p=0; r.delay=0; }
+  toast(kind==='throw'?`Throwing error by ${shortNm(f.pl.name)}!`:`${shortNm(f.pl.name)} bobbles it! Error.`,'#fbbf24'); speak(kind==='throw'?'The throw gets away! Error!':'He boots it! Error on the play.'); sfx.whiff();
+  if(TEST) LOG.push({txt:'Error'});
+}
 function outRunner(r,kind){
   F.run.splice(F.run.indexOf(r),1); F.outs++; recordOut(G); sfx.out();
   if(TEST) LOG.push({txt:`out@${r.to}${r.bat?'B':''}${kind}${F.run.length}`});
@@ -1190,7 +1200,9 @@ function fieldTick(dt){
     const T=b.thr; T.t+=dt; const s=Math.min(1,T.t/T.T);
     b.x=lerp(T.x0,T.x1,s); b.y=lerp(T.y0,T.y1,s); b.z=5+Math.sin(Math.PI*s)*Math.min(25,T.T*12);
     if(s>=1){
-      const cov=T.to; cov.x=T.x1; cov.y=T.y1; b.thr=null; b.held=cov; cov.holdT=0; sfx.pop();
+      const cov=T.to; cov.x=T.x1; cov.y=T.y1; b.thr=null;
+      if(!G.derby&&!F.errd&&!G.ffast&&Math.random()<clamp(.016-((cov.pl.a.fld??60)-55)*.0003,.003,.02)*(cov===F.hum?.5:1)){ fieldError(cov,T.x1-T.x0,T.y1-T.y0,'throw'); return; }
+      b.held=cov; cov.holdT=0; sfx.pop();
       for(const r of F.run.slice()) if(r.to===T.n&&r.delay<=0){ outRunner(r,'ground'); if(G.outs>=3) break; }
     }
   } else {
@@ -1216,6 +1228,7 @@ function fieldTick(dt){
     if(!F.hr) for(const f of F.fl){
       const reach=f===F.hum?(F.diveT>0?7.5:4.2):F.humSch&&f===F.chaser?2.5:f===F.chaser?4:2.5, d=Math.hypot(b.x-f.x,b.y-f.y);
       if(d<reach&&b.z<(b.bounced?4:7.5)&&F.t>f.react){
+        if(b.bounced&&!F.errd&&!G.derby&&!G.ffast&&!isOF(f.pos)&&Math.random()<clamp(.022-((f.pl.a.fld??60)-55)*.0004,.004,.03)*(f===F.hum?.5:1)){ fieldError(f,b.vx||1,b.vy||1,'boot'); break; }
         b.held=f; f.holdT=0; sfx.pop(); if(!b.bounced&&f===F.hum&&F.diveT>0) F.diveCatch=true;
         if(!b.bounced&&f===F.hum&&F.diveT>0){ banner('Diving catch!','','#34d399',1.2); speak('What a diving catch!',true); }
         if(!b.bounced){
