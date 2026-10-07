@@ -816,7 +816,7 @@ function renderKeysHelp(){
   const k=$('keysHelp');
   if(phase==='menu'){ k.innerHTML='<div><b>Mouse or touch</b> aim and tap to swing or pitch</div><div><b>Full screen</b> Z</div><div><b>Pause</b> P</div><div><b>Menu</b> M</div>'; return; }
   if(G&&G.kind==='2p') k.innerHTML='<div><b>Player 1</b> aim WASD · swing/pitch Space · pitch type Q</div><div><b>Player 2</b> aim arrows · swing/pitch Enter · pitch type /</div><div><b>Bullpen</b> B · <b>Sim rest</b> X · <b>Pause</b> P</div>';
-  else k.innerHTML='<div><b>Aim</b> WASD or arrows (or the mouse)</div><div><b>Swing / pitch</b> Space or click</div><div><b>Pitch type</b> 1-4 or Q</div><div><b>Bullpen</b> B</div><div><b>Steal</b> R · <b>Extra base</b> G</div><div><b>Fielding</b> WASD run, Space dive, Q switch, 1-4 throw</div><div><b>Career: skip to my turn</b> N</div><div><b>3D view</b> V</div><div><b>Sim rest of game</b> X</div><div><b>Pause</b> P · <b>Menu</b> M</div>';
+  else k.innerHTML='<div><b>Aim</b> WASD or arrows (or the mouse)</div><div><b>Swing / pitch</b> Space or click</div><div><b>Pitch type</b> 1-4 or Q</div><div><b>Bullpen</b> B · <b>Pickoff</b> F</div><div><b>Steal</b> R · <b>Extra base</b> G</div><div><b>Fielding</b> WASD run, Space dive, Q switch, 1-4 throw</div><div><b>Career: skip to my turn</b> N</div><div><b>3D view</b> V</div><div><b>Sim rest of game</b> X</div><div><b>Pause</b> P · <b>Menu</b> M</div>';
 }
 
 /* ---------- scoreboard ---------- */
@@ -882,6 +882,15 @@ function startAim(){
     if(fs===G.career.side){ const m=G.pen[fs].find(p=>p.id===G.career.pid); if(m&&m.pos==='RP'&&G.inn>=7&&!G.ffast){ changePitcher(G,fs,m); G.skip=false; banner('You are in!','Coming in from the bullpen','#ffd166',1.4); } }
     if(G.skip&&(ctrlOf(batSide())||ctrlOf(fieldSide()))){ G.skip=false; toast(ctrlOf(batSide())?'You are up to bat!':'You are pitching!','#ffd166'); } }
   walkUp();
+  G.sIntent=false; G.pkTries=G.pkTries||0;
+  if(!G.derby&&ctrlOf(fieldSide())&&!ctrlOf(batSide())){ const B=G.bases, r=B[0]&&!B[1]?B[0]:B[1]&&!B[2]?B[1]:null; if(r&&(r.a.spd||0)>68&&Math.random()<.12+((r.a.spd||0)-68)*.008) G.sIntent=true; }
+}
+function pickoff(){
+  if(!G||G.derby||phase!=='aim'||!ctrlOf(fieldSide())||G.meter) return; const B=G.bases, from=B[0]&&!B[1]?0:B[1]&&!B[2]?1:-1; if(from<0){ toast('No runner to throw to'); return; }
+  const r=B[from], base=['first','second'][from]; sfx.throw(); G.pkTries++;
+  const p=G.sIntent?.5:.04/(1+G.pkTries*.5);
+  if(Math.random()<p){ B[from]=null; recordOut(G); cheer(.3); toast(`Picked off! ${shortNm(r.name)} is out at ${base}`,'#34d399'); speak('He picked him off!',true); sfx.out(); G.sIntent=false; if(G.outs>=3){ G.balls=G.strikes=0; after(1.2,()=>endHalf()); } return; }
+  toast(`${shortNm(r.name)} dives back safely`,'#dbe3f5'); if(G.sIntent&&Math.random()<.5) G.sIntent=false;
 }
 function walkUp(){
   if(!G||G.derby||G.ffast||G.skip) return; const bs=batSide(), b=batterOf(bs); if(G.lastB===b.id) return; G.lastB=b.id;
@@ -916,7 +925,8 @@ function throwPitch(target,type){
   const T=.47*(94/mph)*(ctrlOf(batSide())&&!human?[1.12,1,.95][diff]:1);
   P={t:0,T,type,mph:Math.round(mph),fu,fv,bu:pt.bu*bk,bv:pt.bv*bk,swung:false,sw:null,res:null,done:false,cpuSw:null};
   if(!G.derby) addPitches(G,1);
-  if(!G.derby&&!ctrlOf(batSide())&&!G.steal){ const r=G.bases[0]&&!G.bases[1]?G.bases[0]:G.bases[1]&&!G.bases[2]?G.bases[1]:null; if(r&&(r.a.spd||0)>76&&Math.random()<.07){ G.steal=true; if(ctrlOf(fieldSide())) toast('Runner going!','#f87171'); } }
+  if(G.sIntent&&!G.steal){ G.steal=true; G.sIntent=false; toast('Runner going!','#f87171'); }
+  else if(!G.derby&&!ctrlOf(batSide())&&!G.steal&&!ctrlOf(fieldSide())){ const r=G.bases[0]&&!G.bases[1]?G.bases[0]:G.bases[1]&&!G.bases[2]?G.bases[1]:null; if(r&&(r.a.spd||0)>76&&Math.random()<.07){ G.steal=true; if(ctrlOf(fieldSide())) toast('Runner going!','#f87171'); } }
   const bs=batSide();
   if(!ctrlOf(bs)) planCpuSwing(bs);
   hud.pitchTxt=`${P.mph} mph ${pt.n}`; hud.pitchT=0;
@@ -1390,6 +1400,7 @@ addEventListener('keydown',e=>{
   if(e.code==='KeyR'&&!G.derby&&(phase==='aim'||phase==='wind')&&ctrlOf(batSide())&&(G.bases[0]&&!G.bases[1]||G.bases[1]&&!G.bases[2])){ G.steal=true; toast('Runner going on the pitch!','#ffd166'); return; }
   if(e.code==='KeyG'&&phase==='play'&&F&&ctrlOf(F.side)){ F.aggr=true; toast('Runners: go for the extra base!','#ffd166'); return; }
   if(phase==='play'&&F&&F.humSch){ const sc=SCHEME[F.humSch], nums=F.humSch==='p2'?['Digit7','Digit8','Digit9','Digit0']:['Digit1','Digit2','Digit3','Digit4'], i=nums.indexOf(e.code.replace('Numpad','Digit')); if(i>=0){ humanThrow(i+1); return; } if(sc.act.includes(e.code)){ fieldDive(); return; } if(sc.cyc.includes(e.code)){ fieldSwitch(); return; } }
+  if(e.code==='KeyF'&&phase==='aim'&&ctrlOf(fieldSide())){ pickoff(); return; }
   if(e.code==='KeyB'&&!G.derby&&phase==='aim'&&ctrlOf(fieldSide())){ const n=changePitcher(G,fieldSide()); toast(n?`Now pitching: ${n.name}`:'Bullpen is empty','#60a5fa'); return; }
   if(G.kind!=='2p'&&ctrlOf(batSide())&&!ctrlOf(fieldSide())&&(phase==='aim'||phase==='wind')){ const i=['Digit1','Digit2','Digit3','Digit4'].indexOf(e.code.replace('Numpad','Digit')); if(i>=0&&!(G.derby&&i===3)){ bmode=i; sfx.click(); toast(`${BMODES[i][0]} swing`,'#ffd166'); return; } }
   cycleFor(e.code);
@@ -1594,6 +1605,7 @@ function drawBattingView(){
     hudText(`P  ${pt.name}`,W-34,78,22,'#fff','right');
     hudText(`${Math.round(mphOf(G,fs))} mph  ·  ${G.pc[fs]} pitches${fatigue(G,fs)>.3?'  ·  Tired':''}`,W-34,102,17,fatigue(G,fs)>.3?'#fca5a5':'#b7c2dd','right');
   }
+  if(G.sIntent&&phase==='aim'&&ctrlOf(fs)) hudText('Big lead off the bag! Press F to throw over',ZX,150,22,'#f87171','center');
   if(hud.pitchTxt&&hud.pitchT<1.6&&P) hudText(hud.pitchTxt,ZX,118,26,'#ffd166','center');
   if(!G.derby&&G.trk&&G.trk.length){ const bxX=W-128, bxY=128, bw=110, bh=130; ctx.fillStyle='rgba(5,8,18,.72)'; ctx.beginPath(); ctx.roundRect(bxX,bxY,bw,bh,8); ctx.fill(); ctx.strokeStyle='rgba(255,255,255,.6)'; ctx.lineWidth=1.5; const zx2=u=>bxX+bw/2+u*24, zy2=v=>bxY+bh/2-v*30; ctx.strokeRect(zx2(-1),zy2(1),48,60);
     G.trk.forEach((q,i)=>{ const col={s:'#ef4444',b:'#e2e8f0',f:'#fbbf24',x:'#34d399'}[q.r]; ctx.fillStyle=col; ctx.beginPath(); ctx.arc(zx2(clamp(q.u,-1.9,1.9)),zy2(clamp(q.v,-1.9,1.9)),7,0,Math.PI*2); ctx.fill(); ctx.fillStyle='#08101f'; ctx.font='800 10px Arial'; ctx.textAlign='center'; ctx.fillText(i+1,zx2(clamp(q.u,-1.9,1.9)),zy2(clamp(q.v,-1.9,1.9))+3.5); }); }
@@ -1606,7 +1618,7 @@ function drawBattingView(){
       ctx.font="800 18px 'Big Shoulders Display','Arial Narrow',sans-serif"; ctx.textAlign='center'; ctx.fillStyle=on?'#08101f':'#dbe3f5';
       ctx.fillText(`${bt2.i+1} ${PITCHES[arsenal(pitcherOf(fieldSide()))[bt2.i]].n}`,bt2.x+bt2.w/2,bt2.y+27);
     }
-    hudText(G.kind==='2p'?(ctrlOf(fs)==='p1'?'Player 1 pitching: aim WASD, Q pitch type, Space twice to throw':'Player 2 pitching: aim arrows, / pitch type, Enter twice to throw'):'Aim, pick a pitch, press Space to start the meter, then Space again in the green. B for the bullpen.',24,H-72,18,'#ffd166');
+    hudText(G.kind==='2p'?(ctrlOf(fs)==='p1'?'Player 1 pitching: aim WASD, Q pitch type, Space twice to throw':'Player 2 pitching: aim arrows, / pitch type, Enter twice to throw'):'Aim, pick a pitch, press Space to start the meter, then Space again in the green. B for the bullpen, F to throw over.',24,H-72,18,'#ffd166');
   } else if(ctrlOf(bs)&&(phase==='aim'||phase==='wind'||phase==='pitch')){
     if(G.kind!=='2p') for(const bt2 of PT_BTNS()){ if(G.derby&&bt2.i===3) continue;
       const on=bt2.i===bmode; ctx.fillStyle=on?'#ffd166':'rgba(5,8,18,.78)'; ctx.beginPath(); ctx.roundRect(bt2.x,bt2.y,bt2.w,bt2.h,20); ctx.fill();
