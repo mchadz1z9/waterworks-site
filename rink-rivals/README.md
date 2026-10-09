@@ -2,7 +2,8 @@
 
 A separate Cloudflare Pages site, apart from the WaterWorks site.
 
-- `index.html` is the hockey game.
+- `index.html` is the home page with every sport.
+- `hockey.html` is the hockey game.
 - `baseball.html` is the baseball mode (open it from the Baseball button on the hockey menu, or press B).
 
 ## Cloudflare Pages settings
