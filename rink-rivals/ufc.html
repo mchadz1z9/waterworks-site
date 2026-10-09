@@ -160,10 +160,8 @@ kbd{ display:inline-block; min-width:24px; padding:1px 7px; margin:0 2px; border
   <div class="top">
     <div class="brand">Rink Rivals <span>UFC</span></div>
     <div class="tools">
-      <a href="./">Home</a> <a href="hockey">Hockey</a>
-      <a href="football">Football</a>
-      <a href="basketball">Basketball</a>
-      <a href="soccer">Soccer</a>
+      <a href="./">Hockey</a>
+      <a href="baseball">Baseball</a>
       <button id="btnView" tabindex="-1">Broadcast 3D</button>
       <button id="btnFs" tabindex="-1">Full screen (Z)</button>
       <button id="btnSnd" tabindex="-1">Sound on</button>
@@ -292,9 +290,9 @@ const DIFF_T=[.3,.55,.85], DIFF_NAMES=['Amateur','Pro','Champion'];
 const RLEN=[[60,'1 min'],[120,'2 min'],[180,'3 min']];
 const keys=new Set(); const held=a=>a.some(k=>keys.has(k));
 const SCHEME={
- solo:{l:['KeyA','ArrowLeft'],r:['KeyD','ArrowRight'],blk:['KeyS','ArrowDown'],slip:['KeyW','ArrowUp'],jab:['KeyJ'],cross:['KeyK'],hook:['KeyL'],upper:['KeyU'],body:['KeyH'],lkick:['KeyI'],hkick:['KeyO'],bkick:['KeyP'],shoot:['KeyQ'],punch:['KeyR'],kick:['KeyE'],gstrike:['KeyF'],gadv:['KeyG'],sub:['KeyC'],taunt:['KeyT']},
- p1:{l:['KeyA'],r:['KeyD'],blk:['KeyS'],slip:['KeyW'],jab:['KeyJ'],cross:['KeyK'],hook:['KeyL'],upper:['KeyU'],body:['KeyH'],lkick:['KeyI'],hkick:['KeyO'],bkick:['KeyP'],shoot:['KeyQ'],punch:['KeyR'],kick:['KeyE'],gstrike:['KeyF'],gadv:['KeyG'],sub:['KeyC'],taunt:['KeyT']},
- p2:{l:['ArrowLeft'],r:['ArrowRight'],blk:['ArrowDown'],slip:['ArrowUp'],jab:['Numpad1','Comma'],cross:['Numpad2','Period'],hook:['Numpad3','Slash'],upper:['Numpad4','Semicolon'],body:['Numpad5','Quote'],lkick:['Numpad6','BracketLeft'],hkick:['Numpad7','BracketRight'],bkick:['Numpad8','Backslash'],shoot:['Enter','NumpadEnter'],sub:['Numpad0','Minus'],taunt:['Equal']}
+ solo:{l:['KeyA','ArrowLeft'],r:['KeyD','ArrowRight'],up:['KeyW','ArrowUp'],dn:['KeyS','ArrowDown'],blk:['Space'],slip:['ShiftLeft','ShiftRight'],jab:['KeyJ'],cross:['KeyK'],hook:['KeyL'],upper:['KeyU'],body:['KeyH'],lkick:['KeyI'],hkick:['KeyO'],bkick:['KeyP'],shoot:['KeyQ'],punch:['KeyR'],kick:['KeyE'],gstrike:['KeyF'],gadv:['KeyG'],sub:['KeyC'],taunt:['KeyT']},
+ p1:{l:['KeyA'],r:['KeyD'],up:['KeyW'],dn:['KeyS'],blk:['Space'],slip:['ShiftLeft'],jab:['KeyJ'],cross:['KeyK'],hook:['KeyL'],upper:['KeyU'],body:['KeyH'],lkick:['KeyI'],hkick:['KeyO'],bkick:['KeyP'],shoot:['KeyQ'],punch:['KeyR'],kick:['KeyE'],gstrike:['KeyF'],gadv:['KeyG'],sub:['KeyC'],taunt:['KeyT']},
+ p2:{l:['ArrowLeft'],r:['ArrowRight'],up:['ArrowUp'],dn:['ArrowDown'],blk:['ShiftRight','Numpad9'],slip:['ControlRight','NumpadDecimal'],jab:['Numpad1','Comma'],cross:['Numpad2','Period'],hook:['Numpad3','Slash'],upper:['Numpad4','Semicolon'],body:['Numpad5','Quote'],lkick:['Numpad6','BracketLeft'],hkick:['Numpad7','BracketRight'],bkick:['Numpad8','Backslash'],shoot:['Enter','NumpadEnter'],sub:['Numpad0','Minus'],taunt:['Equal']}
 };
 const DMG_K=.62;
 function mkFighter(p,side){
@@ -320,10 +318,11 @@ const isHuman=f=>!!F.ctrl[f.side];
 
 /* ---------- actions ---------- */
 function startMove(f,m){
-  if(F.ground||f.down>0||f.stun>0||f.act&&f.act.t<f.act.mv.dur*.75) return false;
+  if(F.ground||f.down>0||f.stun>0||f.act&&f.act.t<f.act.mv.dur*(MV[m].dmg>0?1:.75)||(MV[m].dmg>0&&(f.recT||0)>0)) return false;
   const mv=MV[m]; if(f.sta<mv.cost*.6&&mv.cost>0) return false;
+  const now=F.clock; if(mv.dmg>0){ f.spam=(f.lastM===m&&Math.abs((f.lastMT||0)-now)<1.3)?(f.spam||0)+1:0; f.lastM=m; f.lastMT=now; f.recT=isHuman(f)?.12:.18; }
   const sp=(.82+f.p.a.spd/500)*(.7+.3*staF(f));
-  f.act={m,mv,t:0,spd:sp,done:false}; f.sta=clamp(f.sta-mv.cost,0,100);
+  const spamMul=mv.dmg>0?Math.max(.45,1-.18*(f.spam||0)):1; f.act={m,mv,t:0,spd:sp,done:false,spamMul}; f.sta=clamp(f.sta-mv.cost*(1+.3*(mv.dmg>0?(f.spam||0):0)),0,100);
   if(mv.zone!=='none'){ f.st.thr++; if(mv.zone!=='td') {} }
   if(m==='taunt'){ cheer(.4); f.tauntT=1.1; }
   return true;
@@ -339,7 +338,7 @@ function resolveHit(f){
   if(Math.random()<miss){ sfx.whiff(); return; }
   const blocking=o.blkT>0&&!o.act&&o.stun<=0&&mv.zone!=='leg';
   const counter=(o.act&&o.act.t<o.act.mv.hit&&o.act.mv.dmg>0)||f.counter>0;
-  let dmg=mv.dmg*(.55+f.p.a.pow/220)*staF(f)*(counter?1.45:1)*(blocking?(mv.zone==='head'?.18:.35):1)*(F.ctrl[f.side]&&F.ast?F.ast.dmg:1)*(F.ctrl[o.side]&&F.ast?F.ast.taken:1)*DMG_K;
+  let dmg=mv.dmg*(.55+f.p.a.pow/220)*staF(f)*(counter?1.45:1)*(blocking?(mv.zone==='head'?.18:.35):1)*(F.ctrl[f.side]&&F.ast?F.ast.dmg:1)*(F.ctrl[o.side]&&F.ast?F.ast.taken:1)*DMG_K*(f.act.spamMul||1);
   o.hp[mv.zone]=clamp(o.hp[mv.zone]-dmg,0,100); o.sta=clamp(o.sta-(mv.zone==='body'?dmg*1.1:dmg*.25),0,100);
   if(blocking){ sfx.block(); o.sta=clamp(o.sta-1.5,0,100); spark(o,mv.zone,'#cbd5e1',4); return; }
   f.st.lnd++; f.st.sig++; f.st[mv.zone]++; F.rstat[f.side].sig++; F.rstat[f.side].dmg+=dmg; if(mv.zone==='head') F.rstat[f.side].head++;
@@ -404,7 +403,8 @@ const COMBOS={striker:[['jab'],['jab','cross'],['jab','cross','hook'],['cross','
 function aiStyle(f){ const a=f.p.a; return a.grp>=85&&a.grp>a.str?'grappler':a.pow>=88?'brawler':'striker'; }
 function aiStep(f,dt){
   const o=f.opp, a=f.p.a, lvl=F.lvl*(isHuman(o)&&F.ast?F.ast.cpu:1);
-  f.aiT-=dt; if(f.aiT>0) return; f.aiT=rnd(.07,.16)+(1-lvl)*.12;
+  f.aiT-=dt; if(f.aiT>0) return; f.aiT=rnd(.15,.28)+(1-lvl)*.14;
+  f.wzT=(f.wzT||0)-.2; if(f.wzT<=0){ f.wzT=rnd(1,2.6); f.wantZ=Math.random()<.45?pick([-1,1])*rnd(.5,1):0; } if(cageR(f)>3.3) f.wantZ=awayZ(f);
   if(F.ground){ const G=F.ground; if(F.sub) return; if(G.top===f){ const r=Math.random(); if(r<.45) groundAct(f,'strike'); else if(r<.62) groundAct(f,'adv'); else if(G.pos>=2&&Math.random()<a.sub/220) groundAct(f,'sub'); } else { const r=Math.random(); if(o.punchT>0&&Math.random()<.4+F.lvl*.3||r<.35) f.blkT=.6; else if(r<.7) groundAct(f,'adv'); else if(G.pos===0&&Math.random()<a.sub/400) groundAct(f,'sub'); } return; }
   if(f.down>0||f.stun>.2) return;
   if(o.down>0&&o.down<90){ if(dist()<1.6&&Math.random()<.35&&a.grp>70){ startGround(f,o,2); return; } f.want=0; return; }
@@ -422,7 +422,7 @@ function aiStep(f,dt){
   if(d>pref+.12){ f.want=1; }
   else if(d<.6){ f.want=-1; }
   else { f.want=Math.random()<.3?(Math.random()<.5?1:-1)*.5:0; }
-  const aggro=(.18+lvl*.25)*(hurt?.5:1)*(o.stun>0?2.5:1)*(o.hp.head<40?1.3:1);
+  const aggro=(.14+lvl*.2)*(hurt?.5:1)*(o.stun>0?2.5:1)*(o.hp.head<40?1.3:1);
   if(d<1.35&&Math.random()<aggro){
     if(style==='grappler'&&d<1.4&&Math.random()<.17*a.grp/90){ startMove(f,'shoot'); return; }
     if(Math.random()<.025*a.grp/90&&d<1.4){ startMove(f,'shoot'); return; }
@@ -433,6 +433,20 @@ function aiStep(f,dt){
 
 /* ---------- step ---------- */
 function humanDir(f){ const s=SCHEME[F.ctrl[f.side]]; let x=0; if(held(s.l)) x--; if(held(s.r)) x++; return x; }
+function humanZ(f){ const s=SCHEME[F.ctrl[f.side]]; let z=0; if(s.up&&held(s.up)) z--; if(s.dn&&held(s.dn)) z++; return z; }
+/* the fight line between the two fighters can turn and slide around the octagon: local x runs along it, F.ang/F.cx/F.cz place it in the cage */
+const CAGE=3.95;
+function worldOf(x){ return [F.cx+Math.cos(F.ang)*x,F.cz+Math.sin(F.ang)*x]; }
+function cageR(f){ const p=worldOf(f.x); return Math.hypot(p[0],p[1]); }
+function awayZ(f){ const p=worldOf(f.x), pz=[-Math.sin(F.ang),Math.cos(F.ang)]; return (p[0]*pz[0]+p[1]*pz[1])>0?-1:1; }
+function syncFrame(PA,PB){ const A=F.f[0], B=F.f[1]; let dx=PB[0]-PA[0], dz=PB[1]-PA[1], d=Math.hypot(dx,dz); if(d<.42){ const ux=d>1e-6?dx/d:Math.cos(F.ang), uz=d>1e-6?dz/d:Math.sin(F.ang); const c=[(PA[0]+PB[0])/2,(PA[1]+PB[1])/2]; PA=[c[0]-ux*.21,c[1]-uz*.21]; PB=[c[0]+ux*.21,c[1]+uz*.21]; dx=PB[0]-PA[0]; dz=PB[1]-PA[1]; d=.42; }
+  const old=(A.x+B.x)/2; F.ang=Math.atan2(dz,dx); F.cx=(PA[0]+PB[0])/2; F.cz=(PA[1]+PB[1])/2; A.x=-d/2; B.x=d/2; if(F.ref) F.ref.x+= -old; }
+function moveInCage(dt){ if(F.cx===undefined){ F.cx=0; F.cz=0; F.ang=0; }
+  const A=F.f[0], B=F.f[1]; let PA=worldOf(A.x), PB=worldOf(B.x); const pz=[-Math.sin(F.ang),Math.cos(F.ang)];
+  for(const [f,P] of [[A,PA],[B,PB]]){ if(f.down>0||F.result) continue; let z=isHuman(f)?humanZ(f):(f.wantZ||0); if(f.act&&!['slip','taunt'].includes(f.act.m)) z*=.25; if(f.stun>0) z*=.35; if(f.blkT>0) z*=.6;
+    f.vz=(f.vz||0)+(z*spd(f)*.85-(f.vz||0))*Math.min(1,10*dt); P[0]+=pz[0]*f.vz*dt; P[1]+=pz[1]*f.vz*dt; f.walk+=Math.abs(f.vz)*dt*3.2; }
+  for(const P of [PA,PB]){ const r=Math.hypot(P[0],P[1]); if(r>CAGE){ P[0]*=CAGE/r; P[1]*=CAGE/r; } }
+  syncFrame(PA,PB); }
 function fightStep(dt){
   F.clock-=dt; const [A,B]=F.f;
   for(const f of F.f){
@@ -454,10 +468,9 @@ function fightStep(dt){
       if(f.act&&!['slip','taunt'].includes(f.act.m)) want*=.25; if(f.stun>0) want*=.35; if(f.blkT>0) want*=.6;
       const tv=want*spd(f); f.vx+=(tv-f.vx)*Math.min(1,10*dt); f.x+=f.vx*dt; f.walk+=Math.abs(f.vx)*dt*3.2;
       if(f.act&&f.act.m==='shoot'&&f.act.t<f.act.mv.hit) f.x+=f.face*2.4*dt; }
-    /* spacing and cage */
-    for(const f of F.f) f.x=clamp(f.x,-3.7,3.7);
-    const d=B.x-A.x; if(d<.42){ const p=(.42-d)/2; A.x-=p; B.x+=p; }
-    if(A.x>B.x){ const t=A.x; A.x=B.x; B.x=t; }
+    /* moving around the octagon (circling, cage walls, spacing) */
+    for(const f of F.f) f.recT=Math.max(0,(f.recT||0)-dt);
+    moveInCage(dt);
     A.face=1; B.face=-1; F.ref.x=lerp(F.ref.x,(A.x+B.x)/2,dt*.8);
   }
   for(const f of F.f) if(!isHuman(f)) aiStep(f,dt);
@@ -477,7 +490,7 @@ function endRound(){
 }
 function nextRound(){
   F.round++; F.clock=F.rlen; F.rstat=[blankRS(),blankRS()]; F.ground=null; F.sub=null;
-  for(const f of F.f){ f.sta=clamp(f.sta+55*(.6+f.p.a.car/250),0,100); f.hp.head=clamp(f.hp.head+10,0,100); f.hp.body=clamp(f.hp.body+8,0,100); f.hp.leg=clamp(f.hp.leg+6,0,100); f.down=0; f.stun=0; f.act=null; f.x=f.side?1.4:-1.4; }
+  for(const f of F.f){ f.sta=clamp(f.sta+55*(.6+f.p.a.car/250),0,100); f.hp.head=clamp(f.hp.head+10,0,100); f.hp.body=clamp(f.hp.body+8,0,100); f.hp.leg=clamp(f.hp.leg+6,0,100); f.down=0; f.stun=0; f.act=null; f.x=f.side?1.4:-1.4; } F.cx=undefined;
   phase='fight'; phT=0; sfx.bell(); if(!F.fast){ banner(`Round ${F.round}`,F.round===F.rounds?'Final round':'','#000',1.4); }
 }
 function decision(){
@@ -579,10 +592,12 @@ function drawHUD(){
   hudText(`R${F.round}/${F.rounds}`,W/2,34,18,'#ffd166','center'); const c=Math.max(0,Math.ceil(F.clock)); hudText(`${Math.floor(c/60)}:${String(c%60).padStart(2,'0')}`,W/2,64,30,'#fff','center');
   ctx.restore();
   if(F.ground&&!F.result){ const G=F.ground; hudText(`${GPOS[G.pos].toUpperCase()} · ${shortNm(G.top.p.name)} on top`,W/2,126,22,'#fde68a','center');
-    const me=F.f.find(f=>isHuman(f)&&F.ctrl[f.side]==='solo'); if(me&&!F.sub) hudText(G.top===me?'F ground and pound · G improve position · C submission · S defend':'S block · G escape or stand up · C submission from guard',W/2,H-16,18,'#ffd166','center'); }
+    const me=F.f.find(f=>isHuman(f)&&F.ctrl[f.side]==='solo'); if(me&&!F.sub) hudText(G.top===me?'F ground and pound · G improve position · C submission · Space defend':'Space block · G escape or stand up · C submission from guard',W/2,H-16,18,'#ffd166','center'); }
   if(F.sub){ const S=F.sub; ctx.fillStyle='rgba(5,8,18,.88)'; ctx.beginPath(); ctx.roundRect(W/2-210,140,420,58,10); ctx.fill(); hudText(S.name,W/2,162,20,'#f59e0b','center'); bar(W/2-196,172,392,16,S.m/100,'#ef4444'); const me=F.f.find(f=>isHuman(f)); if(me) hudText(S.att===me?'Mash F (or R) to finish it!':S.def===me?'Alternate A and D to escape!':'',W/2,224,20,'#fff','center'); }
-  if(phase==='fight'&&!F.ground){ const me=F.f.find(f=>F.ctrl[f.side]==='solo'); if(me){ const o=me.opp; if(o.down>0&&o.down<90) hudText('He is down! Press F to jump on him, or let him up',W/2,H-16,18,'#ffd166','center'); else if(F.round===1&&F.clock>F.rlen-12) hudText('R punch · E kick (W+E head kick) · Q takedown · F/G ground · S block · W slip · J K L U H I O P more strikes',W/2,H-16,16,'#ffd166','center'); } }
+  if(phase==='fight'&&!F.ground){ const me=F.f.find(f=>F.ctrl[f.side]==='solo'); if(me){ const o=me.opp; if(o.down>0&&o.down<90) hudText('He is down! Press F to jump on him, or let him up',W/2,H-16,18,'#ffd166','center'); else if(F.round===1&&F.clock>F.rlen-12) hudText('W S circle · R punch · E kick (Shift+E head kick) · Q takedown · F/G ground · Space block · Shift slip · J K L U H I O P more strikes',W/2,H-16,16,'#ffd166','center'); } }
   if(flash.t>0){ const a=Math.min(1,flash.t*2), s=1+(1.1-flash.t)*.25; ctx.save(); ctx.globalAlpha=a; ctx.translate(W/2,250); ctx.scale(s,s); hudText(flash.txt,0,0,64,flash.col,'center'); ctx.restore(); }
+  if(!F.ground&&(phase==='fight'||phase==='intro')){ const cx=W-74, cy=H-74, sc=11; ctx.fillStyle='rgba(5,8,18,.7)'; ctx.beginPath(); for(let i=0;i<8;i++){ const a=i/8*Math.PI*2+Math.PI/8, r=4.76*sc; i?ctx.lineTo(cx+Math.cos(a)*r,cy+Math.sin(a)*r):ctx.moveTo(cx+Math.cos(a)*r,cy+Math.sin(a)*r); } ctx.closePath(); ctx.fill(); ctx.strokeStyle='#64748b'; ctx.lineWidth=2; ctx.stroke();
+    for(const f of F.f){ const p=worldOf(f.x); ctx.fillStyle=CORNER[f.side]; ctx.beginPath(); ctx.arc(cx+p[0]*sc,cy+p[1]*sc,6,0,Math.PI*2); ctx.fill(); } }
   if(phase==='replay'){ ctx.fillStyle='#dc2626'; ctx.beginPath(); ctx.roundRect(W/2-70,120,140,34,6); ctx.fill(); hudText('REPLAY',W/2,145,24,'#fff','center'); }
   if(phase==='corner'){ ctx.fillStyle='rgba(5,8,18,.85)'; ctx.beginPath(); ctx.roundRect(W/2-250,330,500,120,12); ctx.fill(); const r=F.rs[F.rs.length-1];
     hudText(`Round ${F.round} stats`,W/2,358,20,'#ffd166','center'); const row=(n,a,b,y)=>{ hudText(String(a),W/2-170,y,18,'#fca5a5','center'); hudText(n,W/2,y,16,'#cbd5e1','center'); hudText(String(b),W/2+170,y,18,'#93c5fd','center'); };
@@ -738,8 +753,8 @@ function menuKey(code){
 }
 function renderKeysHelp(){
   const k=$('keysHelp');
-  if(F&&F.ctrl[1]==='p2') k.innerHTML='<div><b>Player 1</b> A D move · S block · W slip · R punch · E kick (+W head, +S body) · J K L U H punches · I O P kicks · Q takedown · F ground strike · G position · C submission</div><div><b>Player 2</b> ← → move · ↓ block · ↑ slip · , . / ; \' strikes · [ ] \\ kicks · Enter takedown · - submission</div>';
-  else k.innerHTML='<div><b>Move</b> A D</div><div><b>Punch</b> R (jab, then cross)</div><div><b>Kick</b> E (hold W for head kick, S for body kick)</div><div><b>Takedown</b> Q</div><div><b>Ground</b> F strike · G improve position or escape · C submission</div><div><b>Block / sprawl</b> S</div><div><b>Slip</b> W</div><div><b>More strikes</b> J jab · K cross · L hook · U uppercut · H body · I leg · O head · P body kick</div><div><b>Taunt</b> T</div><div><b>3D view</b> V</div><div><b>Sim fight</b> X</div>';
+  if(F&&F.ctrl[1]==='p2') k.innerHTML='<div><b>Player 1</b> A D W S move · Space block · Shift slip · R punch · E kick (+Shift head, +Space body) · J K L U H punches · I O P kicks · Q takedown · F ground strike · G position · C submission</div><div><b>Player 2</b> arrows move · Right Shift block · Right Ctrl slip · , . / ; \' strikes · [ ] \\ kicks · Enter takedown · - submission</div>';
+  else k.innerHTML='<div><b>Move</b> A D in and out · W S circle around the cage</div><div><b>Punch</b> R (jab, then cross)</div><div><b>Kick</b> E (hold Shift for head kick, Space for body kick)</div><div><b>Takedown</b> Q</div><div><b>Ground</b> F strike · G improve position or escape · C submission</div><div><b>Block / sprawl</b> Space (hold)</div><div><b>Slip</b> Shift</div><div><b>More strikes</b> J jab · K cross · L hook · U uppercut · H body · I leg · O head · P body kick</div><div><b>Taunt</b> T</div><div><b>3D view</b> V</div><div><b>Sim fight</b> X</div>';
 }
 function startGame(){
   audio();
@@ -1142,10 +1157,11 @@ function build3(){
     R3.crowdRow(g,cr,w(8,-8),w(8,8),.4*K3,seat,12,seat);
   });
 }
+const toW=q=>{ if(!F||F.cx===undefined) return q; const c=Math.cos(F.ang), s=Math.sin(F.ang); return [F.cx*K3+c*q[0]-s*q[2],q[1],F.cz*K3+s*q[0]+c*q[2]]; };
 const wK=(x,face,p)=>[(x+p[0]*face)*K3,p[1]*K3,p[2]*face*K3];
 function drawFighter3D(x,face,d,p,side,hf,hpHead,ref,z0){
   const sk=ref?'#e7c19d':tint(skinOf(p),clamp((100-hpHead)/180+hf*2.5,0,.7)), sh=ref?'#111827':CORNER[side];
-  const J={}; for(const j of JN){ const q=wK(x,face,d[j]); q[2]+=(z0||0)*K3; J[j]=q; }
+  const J={}; for(const j of JN){ const q=wK(x,face,d[j]); q[2]+=(z0||0)*K3; J[j]=toW(q); }
   const mid=(a,b)=>[(a[0]+b[0])/2,(a[1]+b[1])/2,(a[2]+b[2])/2];
   const B=(a,b,th,tw,col)=>R3.part(R3.UB,R3.beam(a,b,th*K3,tw*K3),col);
   B(J.lhp,mid(J.lhp,J.lkn),.17,.17,sh); B(mid(J.lhp,J.lkn),J.lkn,.14,.14,sk); B(J.lkn,J.lft,.11,.11,sk);
@@ -1153,9 +1169,9 @@ function drawFighter3D(x,face,d,p,side,hf,hpHead,ref,z0){
   B(J.hip,J.chest,.22,.34,ref?'#111827':sk); B(J.hip,mid(J.hip,J.chest),.24,.36,sh);
   B(J.lsh,J.rsh,.12,.12,ref?'#111827':sk);
   B(J.lsh,J.lel,.1,.1,sk); B(J.lel,J.lha,.085,.085,sk); B(J.rsh,J.rel,.1,.1,sk); B(J.rel,J.rha,.085,.085,sk);
-  for(const f of ['lft','rft']) R3.part(R3.UB,R3.mm(R3.T(J[f][0]+face*.04*K3,J[f][1]+.02*K3,J[f][2]),R3.S(.24*K3,.06*K3,.1*K3)),sk);
+  for(const f of ['lft','rft']) R3.part(R3.UB,R3.mm(R3.T(J[f][0],J[f][1]+.02*K3,J[f][2]),R3.RY(-(F&&F.ang||0)-(face<0?Math.PI:0)),R3.S(.24*K3,.06*K3,.1*K3)),sk);
   const hd=J.head; R3.part(R3.US,R3.mm(R3.T(hd[0],hd[1],hd[2]),R3.S(.11*K3,.13*K3,.11*K3)),sk);
-  R3.part(R3.US,R3.mm(R3.T(hd[0]-face*.02*K3,hd[1]+.04*K3,hd[2]),R3.S(.105*K3,.1*K3,.105*K3)),'#1f140c');
+  R3.part(R3.US,R3.mm(R3.T(hd[0]-Math.cos(F?F.ang||0:0)*face*.02*K3,hd[1]+.04*K3,hd[2]-Math.sin(F?F.ang||0:0)*face*.02*K3),R3.S(.105*K3,.1*K3,.105*K3)),'#1f140c');
   for(const g of ['lha','rha']) R3.part(R3.US,R3.mm(R3.T(...J[g]),R3.S(.075*K3,.075*K3,.075*K3)),ref?sk:'#111111');
   R3.shadow(J.hip[0],J.hip[2],28);
 }
@@ -1163,16 +1179,19 @@ function render3D(dt){
   build3();
   let cam;
   if(!F){ const a=performance.now()/9000; cam={eye:[Math.sin(a)*6*K3,3.2*K3,Math.cos(a)*6*K3],center:[0,.8*K3,0],fov:50}; }
-  else { const mx=(F.f[0].x+F.f[1].x)/2, sep=Math.abs(F.f[1].x-F.f[0].x), gr=!!F.ground, fin=phase==='finish'||phase==='replay';
+  else { const mx=0*(F.f[0].x+F.f[1].x)/2, sep=Math.abs(F.f[1].x-F.f[0].x), gr=!!F.ground, fin=phase==='finish'||phase==='replay';
     const tgt={x:mx,d:gr?4.2:clamp(4.8+sep*.7,4.8,6.8),h:gr?1.6:1.65,c:gr?.45:.95}; if(fin){ tgt.d=4; tgt.h=1.3; }
     if(!cam3) cam3=Object.assign({},tgt); const k=1-Math.exp(-dt*3); for(const q in tgt) cam3[q]+=(tgt[q]-cam3[q])*k;
     const sh=F.shake>0?F.shake*.25:0, sw=Math.sin(performance.now()/4000)*.6;
-    cam={eye:[(cam3.x+sw+rnd(-sh,sh))*K3,(cam3.h+rnd(-sh,sh))*K3,cam3.d*K3],center:[cam3.x*K3,cam3.c*K3,0],fov:44}; }
+    const ca=F.cx===undefined?0:F.ang; if(cam3.a===undefined) cam3.a=ca; cam3.a+=Math.atan2(Math.sin(ca-cam3.a),Math.cos(ca-cam3.a))*Math.min(1,dt*2.5);
+    const ce=F.cx===undefined?[0,0]:[F.cx,F.cz], ux=Math.cos(cam3.a), uz=Math.sin(cam3.a), px=-uz, pz=ux; let dd=cam3.d; for(let k=0;k<20;k++){ const ex=ce[0]+ux*(cam3.x+sw)+px*dd, ez=ce[1]+uz*(cam3.x+sw)+pz*dd; if(Math.hypot(ex,ez)<4.25||dd<2.2) break; dd-=.15; }
+    const eye=[ce[0]+ux*(cam3.x+sw)+px*dd,ce[1]+uz*(cam3.x+sw)+pz*dd], cen=[ce[0]+ux*cam3.x,ce[1]+uz*cam3.x];
+    cam={eye:[(eye[0]+rnd(-sh,sh))*K3,(cam3.h+.35+rnd(-sh,sh))*K3,eye[1]*K3],center:[cen[0]*K3,cam3.c*K3,cen[1]*K3],fov:44}; }
   R3.frame({...cam,cheer:F&&(phase==='finish'||crowdSw>.5)?1:0},()=>{
     if(!F) return;
     drawFighter3D(F.ref.x,1,mixPose(PS.base,PS.block,.2),{name:'Ref'},0,0,100,true,-1.6);
     for(const f of F.f) drawFighter3D(f.x,f.face,f.disp,f.p,f.side,f.hitFlash,f.hp.head,false,0);
-    for(const p of F.parts) R3.part(R3.US,R3.mm(R3.T(p.x*K3,p.y*K3,p.z*K3),R3.S(2,2,2)),p.col);
+    for(const p of F.parts){ const q=toW([p.x*K3,p.y*K3,p.z*K3]); R3.part(R3.US,R3.mm(R3.T(q[0],q[1],q[2]),R3.S(2,2,2)),p.col); }
   },dt);
 }
 $('btnView').addEventListener('click',()=>setView3(!view3));
@@ -1192,7 +1211,7 @@ renderMenu();
 requestAnimationFrame(frame);
 })();
 </script>
-<script>window.RR_TOUCH={"stick": "wasd", "buttons": [["Punch", "KeyR"], ["Kick", "KeyE"], ["Take<br>down", "KeyQ"], ["Ground<br>strike", "KeyF"], ["Hook", "KeyL"], ["Upper", "KeyU"], ["Advance", "KeyG"], ["Sub", "KeyC"]]};</script>
+<script>window.RR_TOUCH={"stick": "wasd", "buttons": [["Punch", "KeyR"], ["Kick", "KeyE"], ["Block", "Space"], ["Slip", "ShiftLeft"], ["Take<br>down", "KeyQ"], ["Ground<br>strike", "KeyF"], ["Advance", "KeyG"], ["Sub", "KeyC"]]};</script>
 <script src="touch.js"></script>
 </body>
 </html>
