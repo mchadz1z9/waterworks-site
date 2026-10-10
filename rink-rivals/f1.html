@@ -188,6 +188,7 @@ kbd{ display:inline-block; min-width:24px; padding:1px 7px; margin:0 2px; border
   <footer class="keys" id="keysHelp"></footer>
   <section class="hub" id="hub" aria-label="Season hub"></section>
 </main>
+<script src="online.js"></script>
 <script>
 (() => {
 'use strict';
@@ -398,8 +399,9 @@ function newRace(trackIdx,laps,playerDrv,o){
   o=o||{}; const T=getTrack(trackIdx);
   let order=o.grid||DRIVERS.slice().sort((a,b)=>(TEAM[b.team].car*1.2+b.rat+rnd(-6,6))-(TEAM[a.team].car*1.2+a.rat+rnd(-6,6)));
   R={T,ti:trackIdx,laps,goDelay:rnd(.2,1.2),cars:[],t:0,lvl:DIFF_T[diff],leaderDone:false,results:[],champ:o.champ||false,fl:{t:1e9,code:''},radio:null,radioT:0,vsc:0,flags:[],quali:o.qres||null,cam:R&&R.cam||0,ptsT:[]};
-  order.forEach((d,gi)=>{ const c=mkCar(d,gi,T,d.i===playerDrv,{laps}); placeOnGrid(c,gi,T); R.cars.push(c); });
-  R.me=R.cars.find(c=>c.human)||R.cars[0];
+  const net=o.net, hum=new Map((o.humans||[]).map(h=>[h.drv,h.owner]));
+  order.forEach((d,gi)=>{ const owner=hum.get(d.i)||null, isMe=net?owner===net.me.id:d.i===playerDrv; const c=mkCar(d,gi,T,isMe,{laps}); c.owner=owner; c.remote=net?(owner?!isMe:!net.isHost()):false; placeOnGrid(c,gi,T); R.cars.push(c); });
+  R.net=net||null; R.me=R.cars.find(c=>c.human)||R.cars[0];
   if(!T.vc0){ const ref=mkCar(DRIVERS[0],0,T,false,{laps:1}); ref.fuel=20; T.vc0=lapSim(T,carPrm(ref,T,1),false).v; }
   for(const c of R.cars) if(!c.human&&raceStint(laps)){ c.strat={lap:Math.max(1,Math.round(laps*rnd(.35,.6))),comp:c.comp==='H'?'M':'H'}; }
   phase='lights'; phT=0; hideHub(); $('menu').classList.add('hidden'); $('result').classList.add('hidden'); paused=false; built3=false; cam3=null;
@@ -603,7 +605,7 @@ function progress(c,dt){
     if(R.qmode){ if(c.lap<0){ c.lap=0; c.lapStart=R.t; c.secT=R.t; c.lapBad=false; c.curSec=0; toast('Flying lap!','#a855f7'); return; } c.sec[2]=R.t-c.secT; secDone(c,2,c.sec[2]); finishQuali(c.lapBad?1e9:lt); return; }
     c.sec[2]=R.t-c.secT; secDone(c,2,c.sec[2]); c.last=lt; if(c.lap>=1&&!c.lapBad){ if(lt<c.best) c.best=lt; if(lt<R.fl.t){ R.fl={t:lt,code:c.d.code}; if(c.human&&!R.fast) radio(`Fastest lap! ${fmtT(lt)}`,'#a855f7'); } }
     c.lapBad=false; c.lap=lapNow; c.lapStart=R.t; c.secT=R.t;
-    if(c.lap>=R.laps&&!c.done){ c.done=true; c.time=R.t+c.pen; R.results.push(c); if(R.results.length===1&&!R.fast){ banner('Chequered flag',`${c.d.name} wins the ${R.T.gp}!`,c.team.c1,2.6); speak(`${c.d.name} wins the ${R.T.gp}!`,true); sfx.crowd(); } if(c.human&&!R.fast) setTimeout(()=>{ if(phase==='race') finishRest(); },2600); }
+    if(c.lap>=R.laps&&!c.done){ c.done=true; c.time=R.t+c.pen; R.results.push(c); if(R.results.length===1&&!R.fast){ banner('Chequered flag',`${c.d.name} wins the ${R.T.gp}!`,c.team.c1,2.6); speak(`${c.d.name} wins the ${R.T.gp}!`,true); sfx.crowd(); } if(R.net){ if(R.net.isHost()) R.endAt=R.endAt||R.t+30; } else if(c.human&&!R.fast) setTimeout(()=>{ if(phase==='race') finishRest(); },2600); }
     else if(c.human&&!R.fast){ toast(c.lap===R.laps-1?'Final lap!':`Lap ${c.lap+1} of ${R.laps} · last ${fmtT(c.last)}`,'#ffd166'); }
     /* AI strategy and reliability */
     if(!c.human&&c.strat&&c.lap>=c.strat.lap&&c.lap<R.laps) c.wantPit=true;
@@ -622,6 +624,7 @@ function raceStep(dt,aiOn=true){
   for(const c of R.cars){
     if(c.dnf){ continue; }
     if(c.done){ c.spd*=.995; if(c.human&&!c.pit){ c.u*=.995; c.v*=.9; c.x+=Math.cos(c.h)*c.u*dt; c.y+=Math.sin(c.h)*c.u*dt; } else { const T=R.T; c.s=(c.s+c.spd*dt)%T.L; c.dist+=c.spd*dt; const i=Math.floor(c.s/T.ds)%T.N; c.idx=i; c.x=T.x[i]-T.ty[i]*c.lat; c.y=T.y[i]+T.tx[i]*c.lat; c.h=Math.atan2(T.ty[i],T.tx[i]); } continue; }
+    if(c.remote) continue;
     if(c.human&&!c.pit) playerStep(c,dt); else if(aiOn) aiStep(c,dt*2); else continue;
     progress(c,dt);
   }
@@ -766,8 +769,8 @@ function step(dt){
   if(R&&R.me){ let oth=null, od=1e9, cl=0; for(const c of R.cars){ if(c===R.me||c.dnf) continue; const d=Math.hypot(c.x-R.me.x,c.y-R.me.y); if(d<od){ od=d; oth=c; } } if(oth){ const vx=Math.cos(oth.h)*oth.spd-Math.cos(R.me.h)*R.me.spd, vy=Math.sin(oth.h)*oth.spd-Math.sin(R.me.h)*R.me.spd; cl=-((oth.x-R.me.x)*vx+(oth.y-R.me.y)*vy)/Math.max(1,od); } engineTick(R.me,od<150?oth:null,od,cl); } else engineTick(null);
   if(!R||paused) return;
   phT+=dt; if(R.radioT>0) R.radioT-=dt; if(R.secShow) R.secShow[3]-=dt; shake=Math.max(0,shake-dt*2);
-  if(phase==='lights'){ const n=Math.floor(phT/.8); if(n!==R.ln&&n<=5&&n>=1){ R.ln=n; sfx.beep(); } for(const c of R.cars) if(c.human){ c.rpm=lerp(c.rpm,held(KEYS.up)?11000:4500,dt*6); } if(phT>4.6+R.goDelay){ phase='race'; phT=0; R.t=0; sfx.go(); toast('Lights out and away we go!','#22c55e'); speak('Lights out, and away we go!'); } }
-  else if(phase==='race'||phase==='quali'){ const sub=4; for(let i=0;i<sub;i++){ if(phase!=='race'&&phase!=='quali') break; raceStep(dt/sub,i%2===1); } if(phase==='race'&&R.cars.every(c=>c.done||c.dnf)) finishRest(); }
+  if(phase==='lights'){ const n=Math.floor(phT/.8); if(n!==R.ln&&n<=5&&n>=1){ R.ln=n; sfx.beep(); } for(const c of R.cars) if(c.human){ c.rpm=lerp(c.rpm,held(KEYS.up)?11000:4500,dt*6); } if(phT>4.6+R.goDelay&&(!R.net||R.net.isHost())){ if(R.net) R.net.send({t:'go'}); phase='race'; phT=0; R.t=0; sfx.go(); toast('Lights out and away we go!','#22c55e'); speak('Lights out, and away we go!'); } }
+  else if(phase==='race'||phase==='quali'){ const sub=4; for(let i=0;i<sub;i++){ if(phase!=='race'&&phase!=='quali') break; raceStep(dt/sub,i%2===1); } if(R.net) netTick(dt); if(phase==='race'&&(!R.net||R.net.isHost())&&(R.cars.every(c=>c.done||c.dnf)||(R.net&&R.endAt&&(R.t>R.endAt||R.cars.every(c=>!c.owner||c.done||c.dnf))))){ finishRest(); if(R.net) R.net.send({t:'res',list:R.results.map(c=>[c.d.i,c.time,c.best,c.dnf||0,c.pits,c.pen])}); } }
   else if(phase==='done'){ raceStep(dt); }
   updateBoard();
 }
@@ -827,7 +830,7 @@ addEventListener('keydown',e=>{
   if(KEYS.up1.includes(e.code)){ me.manual=true; if(me.gear<7){ me.gear++; me.cut=.035; } return; }
   if(KEYS.dn1.includes(e.code)){ me.manual=true; if(me.gear>0&&12000*me.u/GEARV[me.gear-1]<12300){ me.gear--; me.cut=.02; } return; }
   if(KEYS.tyre.includes(e.code)){ const o=['S','M','H']; me.nextComp=o[(o.indexOf(me.nextComp)+1)%3]; toast(`Next tyres: ${COMP[me.nextComp].name}`,COMP[me.nextComp].col); return; }
-  if(e.code==='KeyX'&&phase==='race'){ finishRest(); return; }
+  if(e.code==='KeyX'&&phase==='race'){ if(R.net&&!R.net.isHost()) return; finishRest(); if(R.net) R.net.send({t:'res',list:R.results.map(c=>[c.d.i,c.time,c.best,c.dnf||0,c.pits,c.pen])}); return; }
   if(phase==='race'){ if(KEYS.pit.includes(e.code)&&!me.pit&&!me.done){ me.boxReq=!me.boxReq; radio(me.boxReq?`Box, box. ${COMP[me.nextComp].name}s are ready.`:'Copy, staying out.',me.boxReq?'#38bdf8':'#93c5fd'); }
     if(KEYS.reset.includes(e.code)&&me.spd<12&&!me.pit) recover(me); }
   if(phase==='quali'&&KEYS.reset.includes(e.code)&&me.spd<12) recover(me);
@@ -848,7 +851,7 @@ function renderMenu(){
   h+=`<div class="pills"><span class="lbl">Laps</span>${[3,5,10,20].map(n=>pill('lp',n,lapsSel===n,String(n),'')).join('')}<span class="lbl">Qualifying</span>${pill('q',1,qualiSel,'On','Q')}${pill('q',0,!qualiSel,'Off','')}<span class="lbl">AI</span>${[0,1,2].map(i=>pill('d',i,diff===i,DIFF_NAMES[i],5+i)).join('')}</div>
   <div class="pills"><span class="lbl">Assists</span>${[0,1,2].map(i=>pill('as',i,assist===i,ASSIST_NAMES[i],'')).join('')}<span class="lbl">Racing line</span>${pill('rl',1,lineSel,'On','L')}${pill('rl',0,!lineSel,'Off','')}</div>
   <div class="pickers"><div class="pk p1"><button class="ar" data-dr="-1" tabindex="-1">‹</button><div class="mid"><div class="who">Your driver</div><img src="${badgeF(t)}" alt=""><div class="n">${FLAGF[d.nat]||''} ${esc(d.name)} #${d.num}</div><div class="meta">${esc(t.name)} · driver ${d.rat} · car ${t.car}</div></div><button class="ar" data-dr="1" tabindex="-1">›</button></div></div>
-  <div class="pills"><button class="gold" data-act="start" tabindex="-1">${menuMode===2?'New championship':qualiSel?'Go to qualifying':'Start race'} <kbd>Enter</kbd></button>${menuMode===2&&csv?`<button data-act="cont" tabindex="-1">Continue ${esc(DRIVERS[csv.me].name)}, round ${csv.round+1} <kbd>C</kbd></button>`:''}</div><div id="hint"></div>`;
+  <div class="pills"><button class="gold" data-act="start" tabindex="-1">${menuMode===2?'New championship':qualiSel?'Go to qualifying':'Start race'} <kbd>Enter</kbd></button>${menuMode===1?'<button data-act="online" tabindex="-1">🌐 Race online</button>':''}${menuMode===2&&csv?`<button data-act="cont" tabindex="-1">Continue ${esc(DRIVERS[csv.me].name)}, round ${csv.round+1} <kbd>C</kbd></button>`:''}</div><div id="hint"></div>`;
   $('menuIn').innerHTML=h;
   $('logoL').src=badgeF(t); setText('nameL',d.name); $('sideL').style.setProperty('--tc',t.c1); setText('scoreL',''); setText('tpL',t.name);
   $('logoR').src=badgeF(t); setText('nameR',menuMode===2?'Championship':TK.name); $('sideR').style.setProperty('--tc','#ffd166'); setText('scoreR',''); setText('tpR',menuMode===2?`${TRACKS.length} rounds`:`${(TK.len/1000).toFixed(3)} km`);
@@ -858,7 +861,7 @@ function renderMenu(){
 }
 $('menuIn').addEventListener('mousedown',e=>{ if(e.target.closest('button')) e.preventDefault(); });
 $('menuIn').addEventListener('click',e=>{ const b=e.target.closest('button'); if(!b) return; const d=b.dataset; audio(); sfx.click();
-  if(d.m){ menuMode=+d.m; } else if(d.tk!==undefined){ trackSel=+d.tk; } else if(d.lp){ lapsSel=+d.lp; } else if(d.q!==undefined){ qualiSel=d.q==='1'; } else if(d.as!==undefined){ assist=+d.as; } else if(d.rl!==undefined){ lineSel=d.rl==='1'; } else if(d.dr){ drvSel=(drvSel+ +d.dr+DRIVERS.length)%DRIVERS.length; } else if(d.d!==undefined){ diff=+d.d; } else if(d.act==='start'){ startGame(); return; } else if(d.act==='cont'){ continueChamp(); return; }
+  if(d.m){ menuMode=+d.m; } else if(d.tk!==undefined){ trackSel=+d.tk; } else if(d.lp){ lapsSel=+d.lp; } else if(d.q!==undefined){ qualiSel=d.q==='1'; } else if(d.as!==undefined){ assist=+d.as; } else if(d.rl!==undefined){ lineSel=d.rl==='1'; } else if(d.dr){ drvSel=(drvSel+ +d.dr+DRIVERS.length)%DRIVERS.length; } else if(d.d!==undefined){ diff=+d.d; } else if(d.act==='start'){ startGame(); return; } else if(d.act==='online'){ NET&&NET.open(); return; } else if(d.act==='cont'){ continueChamp(); return; }
   savePrefs(); renderMenu(); });
 function menuKey(code){ const dg=code.replace('Numpad','Digit'); if(dg==='Digit1'||dg==='Digit2'){ menuMode=+dg.slice(5); renderMenu(); return; } if(['Digit5','Digit6','Digit7'].includes(dg)){ diff=+dg.slice(5)-5; savePrefs(); renderMenu(); return; } if(code==='KeyQ'){ qualiSel=!qualiSel; savePrefs(); renderMenu(); return; } if(code==='KeyL'){ lineSel=!lineSel; savePrefs(); renderMenu(); return; } if(code==='KeyA'||code==='ArrowLeft'){ drvSel=(drvSel-1+DRIVERS.length)%DRIVERS.length; renderMenu(); } else if(code==='KeyD'||code==='ArrowRight'){ drvSel=(drvSel+1)%DRIVERS.length; renderMenu(); } else if(code==='KeyC'&&menuMode===2) continueChamp(); else if(['Enter','NumpadEnter','Space'].includes(code)) startGame(); }
 function renderKeysHelp(){ $('keysHelp').innerHTML='<div><b>Throttle</b> W ↑</div><div><b>Brake</b> S ↓</div><div><b>Steer</b> A D ← →</div><div><b>Overtake</b> Space (within 1 s)</div><div><b>Box</b> P</div><div><b>Tyres</b> T</div><div><b>Gears</b> Q E (auto by default)</div><div><b>Camera</b> C</div><div><b>Recover</b> R</div><div><b>3D/2D</b> V</div><div><b>Pause</b> Esc</div><div><b>Sim to end</b> X</div>'; }
@@ -866,7 +869,7 @@ function savePrefs(){ try{ localStorage.setItem('rinkRivalsF1Prefs',JSON.stringi
 try{ const p=JSON.parse(localStorage.getItem('rinkRivalsF1Prefs')||'null'); if(p){ ({diff,lapsSel,qualiSel,assist,drvSel,trackSel,lineSel}=Object.assign({diff,lapsSel,qualiSel,assist,drvSel,trackSel,lineSel},p)); if(trackSel>=TRACKS.length) trackSel=0; } }catch(e){}
 function startWeekend(ti,laps,drv,o){ if(qualiSel) newQuali(ti,laps,drv,o); else { newRace(ti,laps,drv,o); R.goDelay=rnd(.2,1.2); } }
 function startGame(){ audio(); savePrefs(); if(menuMode===2){ newChamp(); return; } startWeekend(trackSel,lapsSel,drvSel,{}); }
-function toMenu(){ phase='menu'; R=null; hideHub(); $('result').classList.add('hidden'); $('menu').classList.remove('hidden'); renderMenu(); }
+function toMenu(){ if(R&&R.net&&R.net.on) R.net.leave(); phase='menu'; R=null; hideHub(); $('result').classList.add('hidden'); $('menu').classList.remove('hidden'); renderMenu(); }
 
 /* ---------- championship ---------- */
 const CKEY='rinkRivalsF1ChampV2';
@@ -896,6 +899,26 @@ hubEl.addEventListener('click',e=>{ const b=e.target.closest('[data-a]'); if(!b)
   if(a==='sim'){ const res=simRace(C.round); champAfter(res.map(r=>r.d.i),res.filter(r=>!r.dnf)[rint(0,4)].d.code); }
   if(a==='new'){ C.round=0; C.season++; C.pts=Object.fromEntries(DRIVERS.map(d=>[d.i,0])); C.wins={}; C.podiums={}; C.results=[]; saveC(); }
   renderHub(); });
+
+/* ---------- online races: your car runs here, the host runs the AI, everyone shares positions ---------- */
+const NETDRV={};
+const packCar=c=>[+c.x.toFixed(2),+c.y.toFixed(2),+c.h.toFixed(3),+c.spd.toFixed(2),+c.dist.toFixed(1),c.lap,+c.lat.toFixed(2),c.idx,+(c.steer||0).toFixed(2),c.gear,Math.round(c.rpm),+(c.thr||0).toFixed(1),+(c.brk||0).toFixed(1),c.comp,c.pit?1:0,c.dnf?1:0,c.done?1:0,+(c.time||0).toFixed(3),c.best<1e8?+c.best.toFixed(3):0,+(c.aero||0).toFixed(2)];
+function unpackCar(c,a){ [c.x,c.y,c.h,c.spd,c.dist,c.lap,c.lat,c.idx,c.steer,c.gear,c.rpm,c.thr,c.brk,c.comp]=a; c.pit=a[14]?{stage:'in'}:null; c.dnf=a[15]?'Retired':c.dnf; if(a[16]&&!c.done){ c.done=true; c.time=a[17]; if(R.net.isHost()&&!R.results.includes(c)) R.results.push(c); } if(a[18]) c.best=a[18]; c.aero=a[19]; c.u=c.spd; c.v=0; }
+function netTick(dt){ R.netT=(R.netT||0)+dt; if(R.netT<.066) return; R.netT=0; const net=R.net;
+  net.send({t:'car',d:R.me.d.i,s:packCar(R.me)});
+  if(net.isHost()&&phase==='race') net.send({t:'world',vsc:R.vsc,cars:R.cars.filter(c=>!c.remote&&!c.human).map(c=>[c.d.i,packCar(c)])}); }
+function netMsg(m,net){ if(m.t==='drv'){ NETDRV[m.from]=m.drv; return; } if(!R||!R.net) return;
+  if(m.t==='go'&&phase==='lights'){ phase='race'; phT=0; R.t=0; sfx.go(); toast('Lights out and away we go!','#22c55e'); }
+  else if(m.t==='car'){ const c=R.cars.find(q=>q.d.i===m.d); if(c&&c.remote) unpackCar(c,m.s); }
+  else if(m.t==='world'){ R.vsc=m.vsc; for(const [di,a] of m.cars){ const c=R.cars.find(q=>q.d.i===di); if(c&&c.remote) unpackCar(c,a); } }
+  else if(m.t==='res'&&phase!=='done'){ R.results=[]; for(const [di,t,b,dnf,pits,pen] of m.list){ const c=R.cars.find(q=>q.d.i===di); if(!c) continue; c.time=t; c.best=b||1e9; c.dnf=dnf||null; c.pits=pits; c.pen=pen; c.done=!dnf; R.results.push(c); } phase='done'; phT=0; showResult(); } }
+function netPeers(net,kind,m){ if(!kind){ net.send({t:'drv',drv:drvSel}); return; } if(kind==='join') net.send({t:'drv',drv:drvSel}); if(kind==='leave'&&R&&R.net){ const c=R.cars.find(q=>q.owner===m.id); if(c){ c.owner=null; c.remote=!net.isHost(); toast(`${c.d.name} disconnected · AI takes the car`,'#f87171'); } } }
+function netOpts(){ const net=NET, all=net.all(), taken=new Set(), humans=[];
+  for(const p of all){ let d=p.id===net.me.id?drvSel:(NETDRV[p.id]!==undefined?NETDRV[p.id]:0); while(taken.has(d)) d=(d+1)%DRIVERS.length; taken.add(d); humans.push({owner:p.id,drv:d}); }
+  const ai=DRIVERS.filter(d=>!taken.has(d.i)).sort((a,b)=>(TEAM[b.team].car*1.2+b.rat+rnd(-6,6))-(TEAM[a.team].car*1.2+a.rat+rnd(-6,6))).map(d=>d.i);
+  const grid=ai.slice(); humans.forEach((h,k)=>grid.splice(Math.min(grid.length,8+k*2+Math.floor(Math.random()*3)),0,h.drv));
+  return {track:trackSel,laps:lapsSel,grid,humans}; }
+function netStart(msg,net){ const o=msg.opts; newRace(o.track,o.laps,null,{net,grid:o.grid.map(i=>DRIVERS[i]),humans:o.humans}); R.goDelay=.6; }
 
 /* ---------- 3D engine (shared with the other Rink Rivals sports) ---------- */
 function makeR3(glc,stage){
@@ -1416,6 +1439,7 @@ $('btnFs').addEventListener('click',toggleFs);
 $('btnSnd').addEventListener('click',()=>{ muted=!muted; $('btnSnd').textContent=muted?'Sound off':'Sound on'; if(!muted){ audio(); sfx.click(); } });
 $('result').addEventListener('click',()=>{ if(phase==='qres'){ goGrid(); return; } if(phase==='done'){ if(R&&R.champ) showHub(); else toMenu(); } });
 if(TEST) window.__f1={get R(){return R;},get C(){return C;},get phase(){return phase;},step,startGame,newRace,newQuali,goGrid,setMode:m=>{menuMode=m;},TRACKS,getTrack,finishRest,keys,lapSim,carPrm,set qualiSel(v){qualiSel=v;},set trackSel(v){trackSel=v;},set lapsSel(v){lapsSel=v;},set assist(v){assist=v;}};
+const NET=window.RRO?RRO.init({game:'f1',maxPlayers:4,minPlayers:1,blurb:'Race your friends on the same grid. The host picks the circuit and laps; the rest of the field is AI.',getOpts:netOpts,onStart:netStart,onMsg:netMsg,onPeers:netPeers,onEnd:why=>{ if(R&&R.net&&why!=='left') toast('Online race ended: '+why,'#f87171'); }}):null;
 setView3(view3);
 renderMenu();
 requestAnimationFrame(frame);

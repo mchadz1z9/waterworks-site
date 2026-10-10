@@ -188,6 +188,7 @@ kbd{ display:inline-block; min-width:24px; padding:1px 7px; margin:0 2px; border
   <footer class="keys" id="keysHelp"></footer>
   <section class="hub" id="hub" aria-label="Season hub"></section>
 </main>
+<script src="online.js"></script>
 <script>
 (() => {
 'use strict';
@@ -297,11 +298,29 @@ function startTurn(newRack){
   const p=curP(), st=frameState(p.rolls);
   if(newRack) GM.pins=newPins();
   GM.ball=null; GM.charge=0; GM.standBefore=GM.pins.map(q=>!q.gone&&q.up);
-  phase=p.cpu?'cpuaim':'aim'; phT=0;
+  phase=!mine(p)?'remote':p.cpu?'cpuaim':'aim'; phT=0;
   if(st.ball===0) banner(`${p.name}`,`Frame ${st.f+1}`,p.col,1.1);
   planCpu(p);
   updateBoard();
 }
+/* ---------- online play (turns, streamed rolls) ---------- */
+const mine=p=>!GM.net||p.owner===GM.net.me.id;
+function packState(){ const b=GM.ball; return {b:b?{x:+b.x.toFixed(3),z:+b.z.toFixed(3),roll:+b.roll.toFixed(2),gutter:b.gutter,done:b.done,col:b.col,spd:b.spd}:null,pins:GM.pins.map(q=>[+q.x.toFixed(3),+q.z.toFixed(3),q.up?1:0,q.gone?1:0,+q.tilt.toFixed(2),+q.tdx.toFixed(2),+q.tdz.toFixed(2)])}; }
+function applyState(m){ if(m.b) GM.ball=Object.assign(GM.ball||{},m.b); m.pins.forEach((a,i)=>{ const q=GM.pins[i]; [q.x,q.z]=a; q.up=!!a[2]; q.gone=!!a[3]; q.tilt=a[4]; q.tdx=a[5]; q.tdz=a[6]; q.vx=q.vz=0; }); }
+function startOnline(msg,net){
+  const all=net.all(); const pl=all.map((p,k)=>{ const pr=PROS[(msg.opts&&msg.opts.pros&&msg.opts.pros[p.id]!==undefined)?msg.opts.pros[p.id]:(p.id===net.me.id?proSel:(k*3)%PROS.length)]; const q=mkPlayer(pr,false,p.name,k); q.owner=p.id; return q; });
+  oilSel=(msg.opts&&msg.opts.oil)||0;
+  GM={players:pl,cur:0,oil:OILS[oilSel],pins:newPins(),ball:null,charge:0,msg:null,msgT:0,lvl:1,net};
+  $('menu').classList.add('hidden'); $('result').classList.add('hidden'); paused=false; built3=false; cam3=null;
+  net.send({t:'pro',pro:proSel}); startTurn(true); renderKeysHelp();
+}
+function onlineMsg(m,net){ if(!GM||!GM.net) return; const p=GM.players.find(q=>q.owner===m.from);
+  if(m.t==='pro'&&p){ p.pro=PROS[m.pro]||p.pro; p.col=BALLC[(p.pro.i+GM.players.indexOf(p))%BALLC.length]; updateBoard(); }
+  else if(m.t==='aim'&&p&&p===curP()){ p.x=m.x; p.ang=m.ang; p.hook=m.hook; }
+  else if(m.t==='snap'&&phase==='remote'){ applyState(m); }
+  else if(m.t==='final'&&(phase==='remote')){ applyState(m); if(GM.ball) GM.ball.done=true; finishBall(); } }
+function onlinePeers(net,kind,m){ if(!GM||!GM.net||kind!=='leave') return; const p=GM.players.find(q=>q.owner===m.id); if(!p) return; p.cpu=true; p.name+=' (CPU)'; const host=net.all()[0]; p.owner=host.id; toast(`${p.name} left · the CPU takes over`,'#f87171'); if(p===curP()&&mine(p)&&phase==='remote'){ startTurn(false); } }
+
 /* ---------- throwing ---------- */
 function throwBall(p,power,extraErr){
   const pr=p.pro, acc=pr.acc/100, lv=p.cpu?GM.lvl:1, dir=pr.lefty?1:-1;
@@ -347,7 +366,7 @@ function finishBall(){
 }
 function countRun(r){ let n=0; for(let i=r.length-1;i>=0&&r[i]===10;i--) n++; return n; }
 function endGame(){
-  phase='over'; const ord=GM.players.slice().sort((a,b)=>total(b.rolls)-total(a.rolls)), me=GM.players[0], sc=total(me.rolls);
+  phase='over'; const ord=GM.players.slice().sort((a,b)=>total(b.rolls)-total(a.rolls)), me=GM.net?GM.players.find(q=>q.owner===GM.net.me.id)||GM.players[0]:GM.players[0], sc=total(me.rolls);
   SV.games++; if(sc>SV.high) SV.high=sc; if(sc===300) SV.perfect++; saveSV();
   $('resultIn').innerHTML=`<h2>${sc===300?'PERFECT GAME!':ord[0]===me&&GM.players.length>1?'You win!':GM.players.length>1?`${esc(ord[0].name)} wins`:`You bowled ${sc}`}</h2><div class="rs">${sc}</div><p>${GM.oil.name} · best ever ${SV.high}</p>
   <table class="ls"><tr><th>Bowler</th>${[1,2,3,4,5,6,7,8,9,10].map(f=>`<th>${f}</th>`).join('')}<th>Total</th></tr>${GM.players.map(q=>{ const m=frameMarks(q.rolls), s=frameScores(q.rolls); return `<tr${q===me?' style="background:rgba(255,209,102,.18)"':''}><td>${esc(q.name)}</td>${m.map((mk,i)=>`<td>${mk.join(' ')}<br><b>${s[i]??''}</b></td>`).join('')}<td class="tot">${total(q.rolls)}</td></tr>`; }).join('')}</table><p>Enter for the menu, R to bowl again.</p>`;
@@ -360,6 +379,7 @@ function step(dt){
   if(toastT>0){ toastT-=dt; if(toastT<=0) $('toast').classList.remove('on'); }
   if(bannerT>0&&!paused){ bannerT-=dt; if(bannerT<=0) $('banner').classList.remove('on'); }
   if(!GM||paused){ rollSound(0); return; } phT+=dt; const p=curP();
+  if(phase==='aim'&&GM.net&&(GM.aimT=(GM.aimT||0)+dt)>.15){ GM.aimT=0; GM.net.send({t:'aim',x:p.x,ang:p.ang,hook:p.hook}); }
   if(phase==='aim'){ const mv=(held(['KeyD','ArrowRight'])?1:0)-(held(['KeyA','ArrowLeft'])?1:0); p.x=clamp(p.x+mv*dt*.5,-.47,.47); const am=(held(['KeyE'])?1:0)-(held(['KeyQ'])?1:0); p.ang=clamp(p.ang+am*dt*.025,-.07,.07);
     if(held(['Space'])&&phT>.2){ phase='charge'; GM.charge=0; } }
   else if(phase==='charge'){ GM.charge+=dt/1.1; if(GM.charge>1.25) GM.charge=1.25; if(!held(['Space'])) throwBall(p,GM.charge); }
@@ -370,8 +390,10 @@ function step(dt){
     rollSound(b&&!b.done?clamp(b.spd/9,0,1)*.12:0);
     if(b&&b.gutter&&!GM.gs){ GM.gs=true; sfx.gutter(); } if(b&&!b.gutter) GM.gs=false;
     if(phase==='roll'&&b.done){ phase='settle'; phT=0; }
-    if(phase==='settle'&&(phT>2.2||(phT>.8&&pinsSettled(GM.pins)))){ rollSound(0); finishBall(); }
+    if(GM.net&&b&&(GM.snapT=(GM.snapT||0)+dt)>.07){ GM.snapT=0; GM.net.send({t:'snap',...packState()}); }
+    if(phase==='settle'&&(phT>2.2||(phT>.8&&pinsSettled(GM.pins)))){ rollSound(0); if(GM.net) GM.net.send({t:'final',...packState()}); finishBall(); }
   }
+  else if(phase==='remote'){ if(GM.ball) rollSound(clamp(GM.ball.spd/9,0,1)*.1); }
   else if(phase==='show'){ GM.msgT-=dt; if(GM.msgT<=0&&GM.next){ const n=GM.next; GM.next=null; n(); } }
 }
 
@@ -448,17 +470,17 @@ function renderMenu(){
   ${menuMode===1?`<div class="pills"><span class="lbl">Opponents</span>${[1,2,3].map(n=>pill('o',n,oppN===n,String(n),'')).join('')}<span class="lbl">CPU</span>${[0,1,2].map(i=>pill('l',i,lvlSel===i,LVL_NAMES[i],5+i)).join('')}</div>`:''}
   <div class="pills"><span class="lbl">Oil</span>${OILS.map((o,i)=>pill('oil',i,oilSel===i,o.name,'')).join('')}</div>
   <div class="pickers"><div class="pk p1"><button class="ar" data-pr="-1" tabindex="-1">‹</button><div class="mid"><div class="who">Your bowler</div><img src="${badgeB(p)}" alt=""><div class="n">${FLAGB[p.nat]||''} ${esc(p.name)}</div><div class="meta">${p.lefty?'Left':'Right'}-handed${p.two?' · two-handed':''} · accuracy ${p.acc} · power ${p.pow} · revs ${p.rev}</div></div><button class="ar" data-pr="1" tabindex="-1">›</button></div></div>
-  <div class="pills"><button class="gold" data-act="start" tabindex="-1">Bowl <kbd>Enter</kbd></button></div><div id="hint">Best game ${SV.high} · ${SV.strikes} strikes · ${SV.perfect} perfect games</div>`;
+  <div class="pills"><button class="gold" data-act="start" tabindex="-1">Bowl <kbd>Enter</kbd></button><button data-act="online" tabindex="-1">🌐 Play online</button></div><div id="hint">Best game ${SV.high} · ${SV.strikes} strikes · ${SV.perfect} perfect games</div>`;
   $('menuIn').innerHTML=h; $('logoL').src=badgeB(p); setText('nameL',p.name); setText('tpL',`${p.lefty?'Lefty':'Righty'}`); setText('scoreL',''); $('logoR').src=badgeB(p); setText('nameR',menuMode===1?`${oppN} CPU`:menuMode===2?'Player 2':'Practice'); setText('tpR',OILS[oilSel].name); setText('scoreR',''); setText('cntT','Bowling'); setText('innT','10 frames'); setText('outsT','Lane 7'); setText('basesT',''); lastBoard='';
   renderKeysHelp();
 }
 $('menuIn').addEventListener('mousedown',e=>{ if(e.target.closest('button')) e.preventDefault(); });
 $('menuIn').addEventListener('click',e=>{ const b=e.target.closest('button'); if(!b) return; const d=b.dataset; audio(); sfx.click();
-  if(d.m) menuMode=+d.m; else if(d.o) oppN=+d.o; else if(d.l!==undefined) lvlSel=+d.l; else if(d.oil!==undefined) oilSel=+d.oil; else if(d.pr) proSel=(proSel+ +d.pr+PROS.length)%PROS.length; else if(d.act==='start'){ newGame(); return; }
+  if(d.m) menuMode=+d.m; else if(d.o) oppN=+d.o; else if(d.l!==undefined) lvlSel=+d.l; else if(d.oil!==undefined) oilSel=+d.oil; else if(d.pr) proSel=(proSel+ +d.pr+PROS.length)%PROS.length; else if(d.act==='start'){ newGame(); return; } else if(d.act==='online'){ NET&&NET.open(); return; }
   renderMenu(); });
 function menuKey(code){ const dg=code.replace('Numpad','Digit'); if(['Digit1','Digit2','Digit3'].includes(dg)){ menuMode=+dg.slice(5); renderMenu(); return; } if(['Digit5','Digit6','Digit7'].includes(dg)){ lvlSel=+dg.slice(5)-5; renderMenu(); return; } if(code==='KeyA'||code==='ArrowLeft'){ proSel=(proSel-1+PROS.length)%PROS.length; renderMenu(); } else if(code==='KeyD'||code==='ArrowRight'){ proSel=(proSel+1)%PROS.length; renderMenu(); } else if(['Enter','NumpadEnter','Space'].includes(code)) newGame(); }
 function renderKeysHelp(){ $('keysHelp').innerHTML='<div><b>Move</b> A D</div><div><b>Aim</b> Q E</div><div><b>Hook</b> W S</div><div><b>Bowl</b> hold Space, let go in the green zone (aim is set for the pocket; adjust it if you like)</div><div><b>Fast CPU</b> F</div><div><b>View</b> V</div><div><b>Pause</b> Esc</div>'; }
-function toMenu(){ phase='menu'; GM=null; $('result').classList.add('hidden'); $('menu').classList.remove('hidden'); rollSound(0); renderMenu(); }
+function toMenu(){ if(GM&&GM.net&&GM.net.on) GM.net.leave(); phase='menu'; GM=null; $('result').classList.add('hidden'); $('menu').classList.remove('hidden'); rollSound(0); renderMenu(); }
 
 /* ---------- 3D engine (shared with the other Rink Rivals sports) ---------- */
 function makeR3(glc,stage){
@@ -812,6 +834,7 @@ $('viewBtn2').addEventListener('pointerdown',e=>e.stopPropagation());
 $('btnSnd').addEventListener('click',()=>{ muted=!muted; $('btnSnd').textContent=muted?'Sound off':'Sound on'; if(!muted){ audio(); sfx.click(); } else rollSound(0); });
 $('result').addEventListener('click',()=>{ if(phase==='over') toMenu(); });
 if(TEST) window.__bw={get GM(){return GM;},get phase(){return phase;},step,newGame,throwBall,planCpu,curP,keys,frameScores,frameMarks,frameState,total,newPins,stepBall,collidePins,setMode:m=>{menuMode=m;},setOpp:n=>{oppN=n;}};
+const NET=window.RRO?RRO.init({game:'bowling',maxPlayers:4,minPlayers:1,blurb:'Bowl a game against friends. Everyone takes turns, frame by frame.',getOpts:()=>({oil:oilSel}),onStart:(m,net)=>startOnline(m,net),onMsg:onlineMsg,onPeers:onlinePeers,onEnd:why=>{ if(GM&&GM.net&&why!=='left'){ toast('Online game ended: '+why,'#f87171'); } }}):null;
 setView3(view3);
 renderMenu();
 requestAnimationFrame(frame);
