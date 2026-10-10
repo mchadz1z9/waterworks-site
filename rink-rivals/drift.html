@@ -278,10 +278,17 @@ function carStep(c,inp,dt,T){
   c.h+=c.r*dt; const ch=Math.cos(c.h), sh=Math.sin(c.h);
   c.x+=(c.u*ch-c.v*sh)*dt; c.y+=(c.u*sh+c.v*ch)*dt; c.ax=Fx/m; c.spd=Math.hypot(c.u,c.v);
   c.spin=spinR; c.beta=beta; c.slide=Math.max(0,Math.abs(ar)-.08)*4+(spinR?.5:0);
-  /* walls */
-  const lat=latOf(T,i,c.x,c.y), wl=T.w/2+1.2; c.lat=lat; c.off=Math.abs(lat)>T.w/2+.3; c.hit=0;
-  if(Math.abs(lat)>wl){ const nx=-T.ty[i]*Math.sign(lat), ny=T.tx[i]*Math.sign(lat), vx=c.u*ch-c.v*sh, vy=c.u*sh+c.v*ch, vn=vx*nx+vy*ny; c.x-=nx*(Math.abs(lat)-wl); c.y-=ny*(Math.abs(lat)-wl);
-    if(vn>0){ const nvx=vx-nx*vn*1.4, nvy=vy-ny*vn*1.4; c.u=(nvx*ch+nvy*sh)*.85; c.v=(-nvx*sh+nvy*ch)*.6; c.r*=.6; c.hit=vn; } }
+  /* walls: every corner of the car stays outside the barrier face, and hits bounce the car back off it */
+  const lat=latOf(T,i,c.x,c.y), face=T.w/2+1.35; c.lat=lat; c.off=Math.abs(lat)>T.w/2+.3; c.hit=0;
+  const sg=lat>=0?1:-1, nx=-T.ty[i]*sg, ny=T.tx[i]*sg; let worst=-1e9, cx=0, cy=0;
+  for(const [px,py] of [[2.15,.89],[2.15,-.89],[-2.15,.89],[-2.15,-.89]]){ const wx=px*ch-py*sh, wy=px*sh+py*ch, d=lat*sg+wx*nx+wy*ny; if(d>worst){ worst=d; cx=wx; cy=wy; } }
+  const wl=face-(worst-lat*sg);
+  if(worst>face){ const pen=worst-face; c.x-=nx*pen; c.y-=ny*pen;
+    const vx=c.u*ch-c.v*sh-c.r*cy, vy=c.u*sh+c.v*ch+c.r*cx, vn=vx*nx+vy*ny;
+    if(vn>0){ const e=vn>2?.65:.2, rn=cx*ny-cy*nx, Iz=m*1.35, J=(1+e)*vn/(1/m+rn*rn/Iz);
+      let wvx=c.u*ch-c.v*sh-nx*J/m, wvy=c.u*sh+c.v*ch-ny*J/m; const tx=-ny, ty=nx, vt=wvx*tx+wvy*ty, fr=Math.min(Math.abs(vt),.35*J/m)*Math.sign(vt); wvx-=tx*fr; wvy-=ty*fr;
+      { const out=-(wvx*nx+wvy*ny), want=vn>2?Math.min(.3*vn,5):0; if(out<want){ wvx-=nx*(want-out); wvy-=ny*(want-out); } }
+      c.r=clamp(c.r-rn*J/Iz,-4,4); c.u=wvx*ch+wvy*sh; c.v=-wvx*sh+wvy*ch; c.hit=vn; } }
   c.wallDist=wl-Math.abs(lat);
 }
 
