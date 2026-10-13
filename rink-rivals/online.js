@@ -60,9 +60,21 @@
       if(m.t==='match'&&cfg){ seeking=false; quick=true; quickN=m.n; connect(m.code,getName()||'Player'); return; } };
     lob.onclose=()=>{ lob=null; lobTry++; setTimeout(()=>lobby(),Math.min(30000,2000*lobTry)); }; lob.onerror=()=>{}; }
   setInterval(()=>{ if(lob&&lob.readyState===1) lob.send('{"t":"ping"}'); },45000);
+  /* an Online row in every game's menu: play anyone on the site, or friends with a room code */
+  function menuBar(){ if(!cfg) return; const m=document.getElementById('menuIn'); if(!m) return; let d=m.querySelector('.rroBar');
+    if(!d){ d=document.createElement('div'); d.className='pills rroBar'; d.style.cssText='background:rgba(34,197,94,.12);border:2px solid #22c55e;border-radius:14px;padding:6px 8px;margin:8px auto';
+      d.innerHTML=`<span class="lbl">🌐 Online</span><button class="gold" data-rro="any" tabindex="-1" style="background:#22c55e;border-color:#22c55e;color:#052e16">Play with anyone</button><button data-rro="friend" tabindex="-1">👥 Play with friends (room code)</button><span class="lbl rroCnt" style="text-transform:none"></span>`;
+      const first=m.querySelector('.pills'); m.insertBefore(d,first||null);
+      d.addEventListener('mousedown',e=>{ e.preventDefault(); e.stopPropagation(); });
+      d.addEventListener('click',e=>{ const b=e.target.closest('button'); e.stopPropagation(); if(!b) return; if(started||ws) return;
+        if(b.dataset.rro==='any'){ if(getName()) seek(getName()); else showStart(); }
+        else { showStart(); const c=panel&&panel.querySelector('#rroCode'); if(c) c.focus(); } }); }
+    const c=d.querySelector('.rroCnt'), n=Math.max(0,here()-1), so=seekOthers(), t=so?`${so} looking for a match now!`:n?`${n} other${n>1?'s':''} on this game now`:'';
+    if(c&&c.textContent!==t) c.textContent=t; }
+  function watchMenu(){ const m=document.getElementById('menuIn'); if(!m||watchMenu.on) return; watchMenu.on=true; new MutationObserver(()=>{ if(!m.querySelector('.rroBar')) menuBar(); }).observe(m,{childList:true}); menuBar(); }
   /* a button in the game's top bar that shows how many people are on this game */
   function topBtn(){ if(!cfg) return; let b=document.getElementById('rroT'); if(!b){ const fs=document.getElementById('btnFs'); if(!fs||!fs.parentNode) return; b=document.createElement('button'); b.id='rroT'; b.className=fs.className; fs.parentNode.insertBefore(b,fs); b.onclick=()=>{ if(started||ws) return; showStart(); }; }
-    const n=here(); const t=`<span class="dot"></span>Online${n>1?` · ${n-1} other${n>2?'s':''} here`:''}`; if(b.innerHTML!==t) b.innerHTML=t; }
+    const n=here(); const t=`<span class="dot"></span>Online${n>1?` · ${n-1} other${n>2?'s':''} here`:''}`; if(b.innerHTML!==t) b.innerHTML=t; menuBar(); }
   function showLobby(){ ui(); const link=`${location.origin}${location.pathname}?room=${code}`, host=api.isHost();
     if(quick){ const all=[me].concat(peers); panel.innerHTML=`<div class="box"><h2>Match found!</h2><ul>${all.sort((a,b)=>a.seat-b.seat).map(p=>`<li>${p.seat===0?'👑':'🎮'} ${esc(p.name)}${p.id===me.id?' (you)':''}</li>`).join('')}</ul><p>${all.length<quickN?'Connecting to your opponent…':'Starting…'}</p><button id="rroLeave">Leave</button></div>`;
       panel.querySelector('#rroLeave').onclick=()=>{ leave(); hideUI(); };
@@ -91,5 +103,5 @@
   function leave(){ closing=true; started=false; quick=false; try{ ws&&ws.close(); }catch(e){} ws=null; peers=[]; me=null; const b=document.getElementById('rroB'); if(b) b.remove(); cfg&&cfg.onEnd&&cfg.onEnd('left'); }
   const api={ send, leave, open:()=>showStart(), get me(){ return me; }, get peers(){ return peers; }, get code(){ return code; }, get on(){ return started; },
     isHost(){ return !!me&&[me].concat(peers).every(p=>p.seat>=me.seat); }, all(){ return me?[me].concat(peers).sort((a,b)=>a.seat-b.seat):[]; } };
-  window.RRO={ watch(f){ watchers.push(f); lobby('home'); if(counts) f(counts); }, counts:()=>counts, init(c){ cfg=c; lobby(c.game); setTimeout(topBtn,0); const r=(qs.get('room')||'').toUpperCase(); if(/^[A-Z0-9]{4,8}$/.test(r)) setTimeout(()=>connect(r,getName()||'Player'),300); return api; } };
+  window.RRO={ watch(f){ watchers.push(f); lobby('home'); if(counts) f(counts); }, counts:()=>counts, init(c){ cfg=c; lobby(c.game); setTimeout(()=>{ topBtn(); watchMenu(); },0); const r=(qs.get('room')||'').toUpperCase(); if(/^[A-Z0-9]{4,8}$/.test(r)) setTimeout(()=>connect(r,getName()||'Player'),300); return api; } };
 })();
