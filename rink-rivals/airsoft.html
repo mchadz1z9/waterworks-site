@@ -188,6 +188,8 @@ kbd{ display:inline-block; min-width:24px; padding:1px 7px; margin:0 2px; border
   <footer class="keys" id="keysHelp"></footer>
   <section class="hub" id="hub" aria-label="Season hub"></section>
 </main>
+<script src="online.js"></script>
+<script src="remote.js"></script>
 <script>
 (() => {
 'use strict';
@@ -371,7 +373,7 @@ if(!MAPDEF[mapSel]||!(PB?MAPDEF[mapSel].pb:MAPDEF[mapSel].as)) mapSel=PB?'speed'
 const savePrefs=()=>{ try{ localStorage.setItem(PKEY,JSON.stringify({mapSel,modeSel,priSel,secSel,teamSize,diff,medic,raceTo,att})); }catch(e){} };
 const MAPS={}; const getMap=id=>MAPS[id]||(MAPS[id]=buildMap(id));
 const eyeH=e=>1.62-.6*e.crouch;
-const ME=()=>A.ents[0];
+const ME=()=>A.ents[A.meI||0];
 const attOf=(e,slot)=>e.att&&ATT[slot].find(a=>a.id===e.att[slot])||ATT[slot][0];
 /* the effective gun: attachments change capacity, reload, spread and zoom */
 function gunOf(e,k){ const id=e.w[k===undefined?e.cur:k], w=WEAPONS[id]; if(!w.att||!e.att||k===1&&k!==undefined&&!w.att) return w; const mg=attOf(e,'mag'), gp=attOf(e,'grip'), op=attOf(e,'optic');
@@ -381,7 +383,7 @@ function mkEnt(i,team,name,bot,pri,sec,eatt){ const w=[pri,sec]; const e={i,team
   st:{hits:0,outs:0,shots:0,ff:0,caps:0,revives:0},ai:bot?{think:Math.random()*.3,path:null,pi:0,goal:null,target:null,seenT:0,burst:0,pause:0,cover:null,sup:0,mem:{},strafe:Math.random()<.5?1:-1,react:0,aimE:[0,0],stuckT:0,plan:0,role:Math.random()<.5?'att':'def'}:null};
   e.ammo=w.map((id,k)=>{ const g=gunOf(e,k); return {mag:g.mag,res:g.mag*(g.mags-1)}; }); e.auto=WEAPONS[pri].auto; return e; }
 function spawnPoint(team,k){ const M=A.M, [sx,sz]=M.spawn[team]; const n=A.ents.filter(e=>e.team===team).length; const z=sz+((k%n)-(n-1)/2)*(M.speed?2.2:1.6), x=sx+(team?-1:1)*Math.floor(k/7)*1.4; return [x,z]; }
-function resetEnt(e,x,z){ Object.assign(e,{x,z,y:0,vy:0,vx:0,vz:0,yaw:e.team?Math.PI:0,pitch:0,crouch:0,out:false,outT:0,down:false,downT:0,reloadT:0,cycT:0,nades:PB?0:2,smokes:PB?0:1,carry:null,splats:[]}); if(e.ai){ Object.assign(e.ai,{path:null,goal:null,target:null,cover:null,mem:{}}); } }
+function resetEnt(e,x,z){ e.spawnN=(e.spawnN||0)+1; Object.assign(e,{x,z,y:0,vy:0,vx:0,vz:0,yaw:e.team?Math.PI:0,pitch:0,crouch:0,out:false,outT:0,down:false,downT:0,reloadT:0,cycT:0,nades:PB?0:2,smokes:PB?0:1,carry:null,splats:[]}); if(e.ai){ Object.assign(e.ai,{path:null,goal:null,target:null,cover:null,mem:{}}); } }
 function placeAll(){ const per=[0,0]; for(const e of A.ents){ const k=per[e.team]++; const [x,z]=spawnPoint(e.team,k); resetEnt(e,x,z); e.ammo=e.w.map((id,k)=>{ const g=gunOf(e,k); return {mag:g.mag,res:g.mag*(g.mags-1)}; }); }
   A.nades=[]; SMOKES=A.smokes=[]; resetFlags(); }
 function resetFlags(){ const M=A.M; A.flags=[]; if(A.mode==='ctf'){ for(let t=0;t<2;t++){ const [sx,sz]=M.spawn[t]; const hx=sx+(t?-3:3); A.flags.push({team:t,home:[hx,sz],x:hx,z:sz,carrier:null,dropT:0}); } }
@@ -452,7 +454,7 @@ function stepBBs(dt){ const M=A.M, me=ME();
 const norm2=v=>{ const l=Math.hypot(v[0],v[1],v[2])||1; return [v[0]/l,v[1]/l,v[2]/l]; };
 function puff(b,col,s){ A.fx.push({x:b.x,y:b.y,z:b.z,t:0,col,s}); if(A.fx.length>160) A.fx.shift(); }
 /* honor system: a hit is a hit. The player calls it, raises a hand and walks back to respawn (or goes down for a medic) */
-function registerHit(v,b,head,bySrc){ const s=b?b.own:bySrc, ff=s.team===v.team, me=ME();
+function registerHit(v,b,head,bySrc){ if(NETG()) return; const s=b?b.own:bySrc, ff=s.team===v.team, me=ME();
   if(v.carry){ const f=v.carry; f.carrier=null; f.x=v.x; f.z=v.z; f.dropT=0; v.carry=null; A.feed.unshift({t:0,txt:`${v.name} dropped the flag`,col:'#fde047'}); }
   if(medic&&!PB&&A.mode!=='elim'){ v.down=true; v.downT=0; } else { v.out=true; v.outT=0; }
   if(b&&b.pb){ v.splats.push({y:clamp(b.y-v.y,.3,1.6),a:Math.atan2(b.z-v.z,b.x-v.x)-v.yaw,col:TEAMS[s.team].paint}); }
@@ -601,11 +603,12 @@ function step(dt){
   if(!A||paused||phase!=='play') return; A.t+=dt; A.marker=Math.max(0,A.marker-dt); for(const d of A.dmgDir) d.t+=dt; A.dmgDir=A.dmgDir.filter(d=>d.t<1.2); for(const f of A.feed) f.t+=dt; for(const f of A.fx) f.t+=dt; A.fx=A.fx.filter(f=>f.t<.5);
   A.later=(A.later||[]).filter(l=>{ if(A.t>=l.t){ l.f(); return false; } return true; });
   if(A.introT>0){ A.introT-=dt; playerStep(dt); return; }
+  if(A.roundOver>0&&NETG()){ A.roundOver-=dt; return; }
   if(A.roundOver>0){ A.roundOver-=dt; if(A.roundOver<=0&&!A.over){ if(A.score[0]>=A.limit||A.score[1]>=A.limit){ endGame(); return; } A.round++; A.bbs=[]; placeAll(); banner(A.mode==='race'?`Point ${A.round}`:`Round ${A.round}`,'Game on!','#000',1.4); sfx.whistle(); } return; }
-  if(A.mode==='tdm'||A.mode==='dom'||A.mode==='ctf'){ A.clock=Math.max(0,A.clock-dt); if(A.clock<=0||A.mode==='tdm'&&(A.score[0]>=A.limit||A.score[1]>=A.limit)){ endGame(); return; } }
+  if(!NETG()&&(A.mode==='tdm'||A.mode==='dom'||A.mode==='ctf')){ A.clock=Math.max(0,A.clock-dt); if(A.clock<=0||A.mode==='tdm'&&(A.score[0]>=A.limit||A.score[1]>=A.limit)){ endGame(); return; } }
   playerStep(dt);
-  for(const e of A.ents){ if(e.cycT>0) e.cycT-=dt; e.recoil=Math.max(0,e.recoil-dt*4); if(e.reloadT>0){ e.reloadT-=dt; if(e.reloadT<=0) finishReload(e); } if(e.bot&&!e.out&&!e.down) botStep(e,dt); }
-  stepOuts(dt); separate(); stepNades(dt); stepObjectives(dt);
+  for(const e of A.ents){ if(e.cycT>0) e.cycT-=dt; e.recoil=Math.max(0,e.recoil-dt*4); if(e.reloadT>0){ e.reloadT-=dt; if(e.reloadT<=0) finishReload(e); } if(e.bot&&!e.out&&!e.down&&!NETG()) botStep(e,dt); }
+  if(!NETG()){ stepOuts(dt); separate(); stepObjectives(dt); } stepNades(dt);
   const sub=4; for(let k=0;k<sub;k++) stepBBs(dt/sub);
   updateBoard(); }
 /* ---------- HUD (and the top-down 2D view) ---------- */
@@ -666,8 +669,9 @@ let toastT=0, bannerT=0, lastBoard='';
 const setText=(id,t)=>{ const e=$(id); if(e&&e.textContent!==String(t)) e.textContent=t; };
 const badgeA=col=>svg(`<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 100 100"><circle cx="50" cy="50" r="46" fill="#3f4a2b"/><rect x="18" y="44" width="56" height="12" rx="3" fill="#111827"/><rect x="60" y="54" width="9" height="20" rx="2" fill="#111827"/><rect x="72" y="47" width="14" height="5" fill="#111827"/><rect x="20" y="30" width="60" height="8" rx="3" fill="${col}"/></svg>`);
 function updateBoard(){ if(!A) return; const key=A.score.join('-')+Math.floor(A.clock)+A.round; if(key===lastBoard) return; lastBoard=key;
-  $('logoL').src=badgeA(TEAMS[0].arm); setText('nameL',TEAMS[0].name); setText('tpL','You + '+(teamSize-1)+' bots'); setText('scoreL',A.score[0]); $('sideL').style.setProperty('--tc',TEAMS[0].col);
-  $('logoR').src=badgeA(TEAMS[1].arm); setText('nameR',TEAMS[1].name); setText('tpR',teamSize+' bots'); setText('scoreR',A.score[1]); $('sideR').style.setProperty('--tc',TEAMS[1].col);
+const ro=tm=>{ const hs=A.ents.filter(e=>e.team===tm&&!e.bot), nb=A.ents.filter(e=>e.team===tm&&e.bot).length; return hs.map(e=>e===ME()?'You':e.name).join(', ')+(nb?(hs.length?' + ':'')+nb+' bot'+(nb>1?'s':''):''); };
+  $('logoL').src=badgeA(TEAMS[0].arm); setText('nameL',TEAMS[0].name); setText('tpL',ro(0)); setText('scoreL',A.score[0]); $('sideL').style.setProperty('--tc',TEAMS[0].col);
+  $('logoR').src=badgeA(TEAMS[1].arm); setText('nameR',TEAMS[1].name); setText('tpR',ro(1)); setText('scoreR',A.score[1]); $('sideR').style.setProperty('--tc',TEAMS[1].col);
   setText('cntT',A.mode==='tdm'||A.mode==='dom'||A.mode==='ctf'?fmtC(A.clock):`${A.mode==='race'?'Point':'Round'} ${A.round}`); setText('innT',A.M.name); setText('outsT',MODES[A.mode]); setText('basesT',''); }
 function toast(t,col='#34d399'){ const e=$('toast'); e.textContent=t; e.style.borderColor=col; e.classList.add('on'); toastT=2.2; }
 function banner(big,sub,glow='#000',dur=2){ const b=$('banner'); b.innerHTML=`<span class="big">${esc(big)}</span>${sub?`<span class="sub">${esc(sub)}</span>`:''}`; b.style.setProperty('--glow',glow); b.classList.add('on'); bannerT=dur; }
@@ -1125,6 +1129,55 @@ if(TEST) window.__as={throwNade,revive,gunOf,getAtt:()=>att,set medic(v){medic=v
 setView3(view3);
 renderMenu();
 requestAnimationFrame(frame);
+
+/* ---------- online: a friend or anyone on the site plays the other side ---------- */
+/* online: the host runs the bots, the hits and the objectives; every player moves and shoots as their own soldier */
+let NA=null;
+function NETG(){ return !!(NA&&!NA.host); }
+const q2=v=>Math.round(v*100)/100;
+function seatEnt(seat){ const team=seat%2, slot=Math.floor(seat/2), list=A.ents.filter(e=>e.team===team); return list[slot]; }
+function netAssign(){ NA.ids={}; for(const p of NA.api.all()){ const e=seatEnt(p.seat); if(!e) continue; e.bot=false; e.ai=null; e.name=p.name; e.netId=p.id; NA.ids[p.id]=e; }
+  const mine=NA.ids[NA.api.me.id]; A.meI=mine?A.ents.indexOf(mine):0;
+  if(mine&&mine!==A.ents[0]){ mine.w=[priSel,secSel]; mine.cur=0; mine.att=WEAPONS[priSel].att?Object.assign({},att):null; mine.ammo=mine.w.map((id,k)=>{ const g=gunOf(mine,k); return {mag:g.mag,res:g.mag*(g.mags-1)}; }); mine.auto=WEAPONS[priSel].auto; mine.nades=PB?0:2; mine.smokes=PB?0:1; }
+  if(A.ents[0].netId===undefined&&A.meI!==0){ /* seat 0 (the host) keeps ents[0] */ }
+  banner(A.M.name,`Online · you are on ${TEAMS[ME().team].name}`,TEAMS[ME().team].col,2.4); updateBoard(); }
+{ const _ng=newGame; newGame=function(){ if(NA&&!NA.host&&!NA.allow) return; const seed=NA&&NA.host&&!NA.allow?Math.floor(Math.random()*1e9):NA&&NA.seed; const R0=Math.random; if(NA) Math.random=mulberry32(seed||1); _ng(); Math.random=R0;
+    if(NA){ netAssign(); if(NA.host&&!NA.allow) NA.api.send({t:'re',seed,o:{mapSel,modeSel,teamSize,raceTo,medic,diff}}); } };
+  const _f=fire; fire=function(e){ const n0=A.bbs.length, ok=_f(e); if(ok&&NA&&(NA.host||e===ME())) for(const b of A.bbs.slice(n0)) NA.out.push([e.i,q2(b.x),q2(b.y),q2(b.z),q2(b.vx),q2(b.vy),q2(b.vz),b.k,b.hop,b.pb?1:0,b.fsr?1:0,b.tr?1:0]); return ok; };
+  const _tn=throwNade; throwNade=function(e,kind,tx,tz){ if(NETG()&&e===ME()){ NA.api.send({t:'nade',kind}); } return _tn(e,kind,tx,tz); };
+  const _eg=endGame; endGame=function(){ if(NA&&NA.host&&!A.over) NA.api.send({t:'end',s:A.score}); return _eg(); }; }
+function addBB(a,vis){ const e=A.ents[a[0]]; if(!e) return; A.bbs.push({x:a[1],y:a[2],z:a[3],px:a[1],py:a[2],pz:a[3],vx:a[4],vy:a[5],vz:a[6],t:0,k:a[7],hop:a[8],own:e,team:e.team,pb:!!a[9],fsr:!!a[10],kn:null,tr:!!a[11],vis}); }
+function snapOut(){ return {t:'snap',e:A.ents.map(e=>[q2(e.x),q2(e.y),q2(e.z),q2(e.yaw),q2(e.pitch),q2(e.crouch),e.out?1:0,e.down?1:0,e.cur,e.spawnN||0,e.w[e.cur]]),
+  s:A.score,k:q2(A.clock),r:A.round,ro:q2(A.roundOver||0),it:q2(A.introT||0),f:A.flags.map(f=>[q2(f.x),q2(f.z),f.carrier?f.carrier.i:-1]),p:A.points.map(p=>[p.own,q2(p.prog),p.by]),
+  sm:A.smokes.map(s=>[q2(s.x),q2(s.z),q2(s.r),q2(s.t)]),fd:A.feed.slice(0,5).map(f=>[f.txt,f.col,q2(f.t)]),b:NA.out.splice(0)}; }
+function snapIn(m){ if(!A) return; const me=ME();
+  m.e.forEach((a,i)=>{ const e=A.ents[i]; if(!e) return; const wasOut=e.out;
+    if(e===me){ if(a[9]!==(e.spawnN||0)){ e.spawnN=a[9]; e.x=a[0]; e.z=a[2]; e.y=a[1]; e.yaw=a[3]; e.pitch=0; e.vx=e.vz=0; Object.assign(e.ammo[0],{mag:gunOf(e,0).mag}); } e.out=!!a[6]; e.down=!!a[7]; if(e.out&&!wasOut){ sfx.hitme(); A.dmgDir.push({a:0,t:0}); } return; }
+    const k=Math.hypot(a[0]-e.x,a[2]-e.z)>4?1:.5; e.spd=Math.hypot(a[0]-e.x,a[2]-e.z)*20; e.x=lerp(e.x,a[0],k); e.z=lerp(e.z,a[2],k); e.y=a[1]; e.yaw=a[3]; e.pitch=a[4]; e.crouch=a[5]; e.out=!!a[6]; e.down=!!a[7]; if(a[10]&&WEAPONS[a[10]]){ e.cur=a[8]; e.w[e.cur]=a[10]; } });
+  A.score=m.s; A.clock=m.k; if(m.r!==A.round){ A.round=m.r; A.bbs=[]; } A.roundOver=m.ro; A.introT=m.it;
+  m.f.forEach((a,i)=>{ const f=A.flags[i]; if(!f) return; f.x=a[0]; f.z=a[1]; f.carrier=a[2]>=0?A.ents[a[2]]:null; for(const e of A.ents) if(e.carry===f&&f.carrier!==e) e.carry=null; if(f.carrier) f.carrier.carry=f; });
+  m.p.forEach((a,i)=>{ const p=A.points[i]; if(p){ p.own=a[0]; p.prog=a[1]; p.by=a[2]; } });
+  A.smokes.length=0; for(const s of m.sm) A.smokes.push({x:s[0],y:1.4,z:s[1],r:s[2],t:s[3]});
+  A.feed=m.fd.map(f=>({txt:f[0],col:f[1],t:f[2]}));
+  for(const b of m.b) if(b[0]!==A.meI) addBB(b,true); }
+const NETA=window.RRO?RRO.init({game:SPORT,maxPlayers:4,minPlayers:1,blurb:`Play anyone online: every player is a real ${PB?'player':'operator'} on the field (up to 2 v 2 humans), bots fill the teams.`,
+  getOpts:()=>({mapSel,modeSel,teamSize,raceTo,medic,diff}),
+  onStart(msg,api){ const o=msg.opts||{}; NA={host:api.isHost(),api,ids:{},out:[],allow:true,seed:msg.seed};
+    if(o.mapSel) mapSel=o.mapSel; if(o.modeSel) modeSel=o.modeSel; if(o.teamSize) teamSize=Math.max(o.teamSize,Math.ceil(api.all().length/2)); if(o.raceTo) raceTo=o.raceTo; if(o.medic!=null) medic=o.medic; if(o.diff!=null) diff=o.diff;
+    newGame(); NA.allow=false; },
+  onMsg(m){ if(!NA||!A) return;
+    if(m.t==='snap'&&!NA.host) snapIn(m);
+    else if(m.t==='me'&&NA.host){ const e=NA.ids[m.from]; if(!e||m.s[7]!==(e.spawnN||0)) return; const [x,y,z,yaw,pitch,cr,cur]=m.s; e.spd=Math.hypot(x-e.x,z-e.z)*20; e.x=x; e.y=y; e.z=z; e.yaw=yaw; e.pitch=pitch; e.crouch=cr; e.cur=cur; if(m.w&&WEAPONS[m.w]) e.w[cur]=m.w; if(m.st) e.sprint=!!m.st; }
+    else if(m.t==='bb'&&NA.host){ for(const b of m.l) addBB(b,false), NA.out.push(b); }
+    else if(m.t==='nade'&&NA.host){ const e=NA.ids[m.from]; if(e) throwNade(e,m.kind); }
+    else if(m.t==='re'&&!NA.host){ const o=m.o||{}; Object.assign(window,{}); if(o.mapSel) mapSel=o.mapSel; if(o.modeSel) modeSel=o.modeSel; if(o.teamSize) teamSize=o.teamSize; NA.seed=m.seed; NA.allow=true; newGame(); NA.allow=false; }
+    else if(m.t==='end'&&!NA.host){ A.score=m.s; endGame(); } },
+  onPeers(api,kind,m){ if(kind==='leave'&&NA&&A){ const e=NA.ids[m.id]; if(e&&NA.host){ e.bot=true; e.ai={think:0,path:null,pi:0,goal:null,target:null,seenT:0,burst:0,pause:0,cover:null,sup:0,mem:{},strafe:1,react:0,aimE:[0,0],stuckT:0,plan:0,role:'att'}; e.netId=null; delete NA.ids[m.id]; toast(`${e.name} left: a bot takes over`,'#fbbf24'); }
+      if(!NA.host&&api.isHost()){ toast('The host left: playing on against bots','#f87171'); NA=null; } } },
+  onEnd(){ NA=null; }}):null;
+setInterval(()=>{ if(!NA||!A||phase!=='play') return; if(NA.host){ NA.api.send(snapOut()); return; }
+  const e=ME(); NA.api.send({t:'me',s:[q2(e.x),q2(e.y),q2(e.z),q2(e.yaw),q2(e.pitch),q2(e.crouch),e.cur,e.spawnN||0],w:e.w[e.cur],st:e.sprint?1:0}); if(NA.out.length) NA.api.send({t:'bb',l:NA.out.splice(0)}); },50);
+
 })();
 </script>
 <script>window.RR_TOUCH={"stick": "wasd", "buttons": [["Fire", "KeyF"], ["Aim", "KeyX"], ["Reload", "KeyR"], ["Crouch", "KeyC"], ["Swap", "KeyQ"], ["Jump", "Space"], ["Sprint", "ShiftLeft"], ["Nade", "KeyG"], ["Smoke", "KeyH"], ["Revive", "KeyE"]], "sys": [["Enter", "Enter"], ["Pause", "Escape"], ["View", "KeyV"]]};</script>

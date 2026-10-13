@@ -188,6 +188,8 @@ kbd{ display:inline-block; min-width:24px; padding:1px 7px; margin:0 2px; border
   <footer class="keys" id="keysHelp"></footer>
   <section class="hub" id="hub" aria-label="Season hub"></section>
 </main>
+<script src="online.js"></script>
+<script src="remote.js"></script>
 <script>
 (() => {
 'use strict';
@@ -889,6 +891,43 @@ if(TEST) window.__rk={get G(){return G;},get phase(){return phase;},step,newMatc
 setView3(view3);
 renderMenu();
 requestAnimationFrame(frame);
+
+/* ---------- online: a friend or anyone on the site plays the other side ---------- */
+/* online: the host runs the match and sends snapshots; every player drives their own car with their own camera; bots fill the rest */
+let NR=null;
+const r2=v=>Math.round(v*100)/100, r3=v=>Math.round(v*1000)/1000;
+function seatCar(seat){ const team=seat%2, slot=Math.floor(seat/2); return G.cars.find(c=>c.team===team&&c.slot===slot); }
+function netAssign(){ if(!NR||!G) return; NR.ids={}; for(const p of NR.api.all()){ const c=seatCar(p.seat); if(!c) continue; c.bot=false; c.name=p.name; c.netId=p.id; NR.ids[p.id]=c; }
+  G.me=NR.ids[NR.api.me.id]||G.cars[0]; updateBoard(); }
+{ const _nm=newMatch; newMatch=function(){ if(NR&&!NR.host&&!NR.allow) return; _nm(); if(NR){ netAssign(); if(NR.host) NR.api.send({t:'re'}); } };
+  const _sg=scoreGoal; scoreGoal=function(side){ if(NR&&!NR.host) return; return _sg(side); };
+  const _em=endMatch; endMatch=function(){ if(NR&&!NR.host&&!NR.endOK) return; if(NR&&NR.host) NR.api.send({t:'end',s:G.score}); return _em(); }; }
+function snapOut(){ const B=G.ball; return {t:'snap',b:[...B.p.map(r2),...B.v.map(r2)],h:B.hidden?1:0,c:G.cars.map(c=>[...c.p.map(r2),...c.v.map(r2),...c.f.map(r3),...c.u.map(r3),Math.round(c.boost),r2(c.demoT),c.ground?1:0,c.boosting?1:0,c.goals,c.saves,c.score]),s:G.score,k:r2(G.clock),st:G.state,cd:r2(G.cd),ot:G.ot?1:0,g:r2(G.goalT)}; }
+function snapIn(m){ if(!G) return; const B=G.ball, k=.5;
+  for(let i=0;i<3;i++){ B.p[i]=lerp(B.p[i],m.b[i],k); B.v[i]=m.b[3+i]; } B.hidden=!!m.h;
+  G.cars.forEach((c,j)=>{ const a=m.c[j]; if(!a) return; const mine=c===G.me, e=Math.hypot(a[0]-c.p[0],a[1]-c.p[1],a[2]-c.p[2]), kk=mine?(e>4?1:.18):(e>6?1:.6);
+    for(let i=0;i<3;i++){ c.p[i]=lerp(c.p[i],a[i],kk); c.v[i]=mine?lerp(c.v[i],a[3+i],.3):a[3+i]; }
+    if(!mine||e>4){ c.f=norm([a[6],a[7],a[8]]); c.u=norm([a[9],a[10],a[11]]); }
+    c.boost=a[12]; c.demoT=a[13]; c.ground=!!a[14]; if(!mine) c.boosting=!!a[15]; c.goals=a[16]; c.saves=a[17]; c.score=a[18]; });
+  if(m.s[0]+m.s[1]>G.score[0]+G.score[1]){ G.score=m.s.slice(); banner('GOAL!',`${TEAMC[0].name} ${G.score[0]} – ${G.score[1]} ${TEAMC[1].name}`,m.s[0]>G.score[0]?TEAMC[0].col:TEAMC[1].col,2); sfx.goal&&sfx.goal(); }
+  G.score=m.s.slice(); G.clock=m.k; G.ot=!!m.ot;
+  if(m.st==='kickoff'&&G.state!=='kickoff'){ kickoff(); } if(m.st!==G.state){ G.state=m.st; } G.cd=m.cd; if(m.st==='goal') G.goalT=m.g; }
+const NETR=window.RRO?RRO.init({game:'rocket',maxPlayers:4,minPlayers:1,blurb:'Play anyone online: every player drives their own car (1v1 up to 2v2), bots fill the empty seats.',
+  getOpts:()=>({teamSize,minutes,botLvl}),
+  onStart(msg,api){ const o=msg.opts||{}; NR={host:api.isHost(),api,ids:{},jp:0,allow:true,last:0}; teamSize=Math.max(o.teamSize||teamSize,Math.ceil(api.all().length/2)); if(o.minutes) minutes=o.minutes; if(o.botLvl!=null) botLvl=o.botLvl;
+    const R0=Math.random; Math.random=mulberry32(msg.seed||1); newMatch(); Math.random=R0; NR.allow=false; const f=api.peers.map(p=>p.name).join(', '); banner('Online match',`with ${f}`,'#22c55e',2.2); },
+  onMsg(m){ if(TEST){ window.__nr=NR; } if(TEST) (window.__rx=window.__rx||{})[m.t]=((window.__rx||{})[m.t]||0)+1; if(!NR) return;
+    if(m.t==='in'&&NR.host&&G){ const c=NR.ids[m.from]; if(c){ Object.assign(c.in,m.i); if(m.jp!==c.jpN){ c.jpN=m.jp; c.in.jumpPressed=true; } } }
+    else if(m.t==='snap'&&!NR.host) snapIn(m);
+    else if(m.t==='re'&&!NR.host){ NR.allow=true; newMatch(); NR.allow=false; }
+    else if(m.t==='end'&&!NR.host&&G){ G.score=m.s; NR.endOK=true; endMatch(); NR.endOK=false; } },
+  onPeers(api,kind,m){ if(kind==='leave'&&NR&&G){ const c=NR.ids[m.id]; if(c){ c.bot=true; c.skill=botLvl; c.netId=null; delete NR.ids[m.id]; toast(`${c.name} left: a bot takes over`,'#fbbf24'); }
+      if(!NR.host&&api.isHost()){ toast('The host left the match','#f87171'); NR=null; } } },
+  onEnd(){ NR=null; if(G) for(const c of G.cars) if(c.netId&&c!==G.me){ c.bot=true; c.netId=null; } }}):null;
+/* every frame: the host streams snapshots, guests stream their controls */
+addEventListener('keydown',e=>{ if(NR&&!NR.host&&G&&(e.code==='Space'||e.code==='KeyJ')&&!e.repeat){ NR.jp++; NR.api.send({t:'in',i:G.me.in,jp:NR.jp}); } });
+setInterval(()=>{ if(!NR||!G||phase!=='play') return; if(NR.host) NR.api.send(snapOut()); else { const I=G.me.in; NR.api.send({t:'in',i:{thr:I.thr,steer:I.steer,pitch:I.pitch,yaw:I.yaw,roll:I.roll,slide:I.slide,boost:I.boost,jump:I.jump},jp:NR.jp}); } },50);
+
 })();
 </script>
 <script>window.RR_TOUCH={"pedals": true, "buttons": [["Gas", "KeyW"], ["Rev", "KeyS"], ["Jump", "Space"], ["Boost", "ShiftLeft"], ["Slide", "KeyE"], ["Roll", "KeyQ"], ["Cam", "KeyC"]], "sys": [["Enter", "Enter"], ["Pause", "Escape"], ["View", "KeyV"]]};</script>
