@@ -17,7 +17,7 @@
   /* the scoreboard, banners, toasts and result screens live in the page around the canvases: mirror them as text */
   const HDR=['nameL','nameR','scoreL','scoreR','tpL','tpR','cntT','innT','outsT','basesT','clockT','clockP'], BOX=['banner','toast','result','fightHud','rpTag'];
   function sendHeader(){ const h={}; let n=0; const put=(k,v)=>{ if(last[k]!==v){ last[k]=v; h[k]=v; n++; } };
-    for(const id of HDR){ const e=$(id); if(e) put(id,e.textContent); }
+    for(const id of HDR){ const e=$(id); if(e){ let v=e.textContent; if(v==='You'&&api&&api.me) v=api.me.name; put(id,v); } }
     for(const id of ['logoL','logoR']){ const e=$(id); if(e) put(id+'@src',e.getAttribute('src')||''); }
     for(const id of ['sideL','sideR']){ const e=$(id); if(e) put(id+'@tc',e.style.getPropertyValue('--tc')); }
     for(const id of BOX){ const e=$(id); if(e) put(id+'@box',JSON.stringify([e.innerHTML,e.className,e.style.cssText])); }

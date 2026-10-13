@@ -188,6 +188,8 @@ kbd{ display:inline-block; min-width:24px; padding:1px 7px; margin:0 2px; border
   <footer class="keys" id="keysHelp"></footer>
   <section class="hub" id="hub" aria-label="Season hub"></section>
 </main>
+<script src="online.js"></script>
+<script src="versus.js"></script>
 <script>
 (() => {
 'use strict';
@@ -289,6 +291,7 @@ function pathK(T,i,lat){ const k=T.k[i]; return k/Math.max(.4,1-k*lat); }
 function laneVc(T,i,lat,mu){ return cornerV(pathK(T,i,lat),T.bank[i]+(lat>0?.0:0),mu); }
 /* ---------- one car, one step ---------- */
 function stepCar(c,dt){
+  if(c.remote&&typeof remoteStep==='function'&&remoteStep(c,dt)) return;
   const T=R.T, N=T.N, P=carPerf(c,T), i=sIdx(T,c);
   if(c.dnf){ c.spd=Math.max(0,c.spd-12*dt); c.dist+=c.spd*dt; c.yaw+=dt*c.spd*.05; return; }
   if(c.wreck>0){ c.wreck-=dt; c.spd=Math.max(0,c.spd-(9+c.spd*.08)*dt); c.yaw+=dt*(2+c.spd*.05)*c.spinDir; c.lat=clamp(c.lat+c.spinDir*dt*2.5,-T.w/2+1,T.w/2-1); c.dist+=c.spd*dt; if(c.wreck<=0){ if(c.dmg>.92){ c.dnf=true; c.dnfWhy='Accident'; } else { c.yaw=0; } } return; }
@@ -882,6 +885,20 @@ if(TEST) window.__ns={get R(){return R;},get phase(){return phase;},step,newRace
 setView3(view3);
 renderMenu();
 requestAnimationFrame(frame);
+
+/* ---------- online score battle ---------- */
+/* online: the other players drive real cars in the field; everyone else is AI */
+const NETV=window.RRV?RRV.attach({game:'nascar',title:'race',blurb:'Race each other in a full NASCAR field. Every online player drives a real car on track, the rest of the field is AI.',
+  opts:()=>({trackSel,lapsSel,drvSel,lvlSel}),
+  start(o){ if(o.trackSel!=null) trackSel=o.trackSel; if(o.lapsSel) lapsSel=o.lapsSel; if(o.lvlSel!=null) lvlSel=o.lvlSel; menuMode=1; const hd=o.drvSel!=null?o.drvSel:drvSel; newRace(trackSel,lapsSel,hd);
+    const host=R.cars.find(c=>c.d.i===hd), others=R.cars.filter(c=>c!==host).sort((a,b)=>a.start-b.start), bySeat=s=>s===0?host:others[s-1], ms=RRV.mySeat(), my=bySeat(ms)||host;
+    for(const c of R.cars){ c.human=c===my; c.remote=false; c.netId=null; }
+    for(const p of RRV.players()) if(p.seat!==ms){ const c=bySeat(p.seat); if(c){ c.remote=true; c.netId=p.id; c.netName=p.name; } }
+    R.me=my; updateBoard(); },
+  state(){ if(!R||!R.me) return null; const c=R.me; return {v:-(c.dnf?99:c.pos),txt:c.dnf?'DNF':`P${c.pos}${phase==='done'?'':` · lap ${Math.min(c.lap+1,R.laps)}`}`,done:phase==='done'||c.done||c.dnf,pos:[+c.dist.toFixed(2),+c.lat.toFixed(2),+c.spd.toFixed(2),+(c.yaw||0).toFixed(3)]}; }}):null;
+function remoteStep(c,dt){ if(!window.RRV||!RRV.on){ c.remote=false; return false; } const g=RRV.ghosts().find(x=>x.id===c.netId); if(!g||g.age>4) return false;
+  const [d,lat,spd,yaw]=g.pos, tgt=d+spd*Math.min(.6,g.age); c.dist=lerp(c.dist+c.spd*dt,tgt,Math.min(1,dt*6)); c.lat=lerp(c.lat,lat,Math.min(1,dt*6)); c.spd=spd; c.yaw=yaw; c.thr=1; return true; }
+
 })();
 </script>
 <script>window.RR_TOUCH={"pedals": true, "buttons": [["Gas", "KeyW"], ["Brake", "KeyS"], ["Pit", "KeyP"], ["Cam", "KeyC"], ["Tires", "KeyT"]], "sys": [["Enter", "Enter"], ["Pause", "Escape"], ["View", "KeyV"]]};</script>

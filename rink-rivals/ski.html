@@ -188,6 +188,8 @@ kbd{ display:inline-block; min-width:24px; padding:1px 7px; margin:0 2px; border
   <footer class="keys" id="keysHelp"></footer>
   <section class="hub" id="hub" aria-label="Season hub"></section>
 </main>
+<script src="online.js"></script>
+<script src="versus.js"></script>
 <script>
 (() => {
 'use strict';
@@ -858,6 +860,7 @@ function render3D(dt){
   if(R.cd>0){ const s=spine(C,p.i+6); eye=[p.x+Math.cos(p.psi)*3.2+fwd[0]*4,p.y+1.6,p.z-Math.sin(p.psi)*3.2+fwd[2]*4]; center=[p.x,p.y+1.0,p.z]; fov=50; cam3=null; }
   R3.frame({eye:[eye[0]*K,eye[1]*K,eye[2]*K],center:[center[0]*K,center[1]*K,center[2]*K],fov,near:4,far:40000,sky:SKY},()=>{
     if(R.cam!==1||p.crashed) drawRider(C,p,pose);
+    if(typeof drawGhosts==='function') drawGhosts(C);
     /* a soft shadow on the snow */
     const sh=T0.h+.03; R3.part(R3.US,R3.mm(R3.T(p.x*K,sh*K,p.z*K),R3.RY(p.psi),R3.RX(slopeP),R3.S(.32*K,.012*K,(C.E.ski?.95:.8)*K)),p.air?[.78,.83,.92]:[.66,.71,.82]);
     for(const s of SPR){ const sz=(.035+s.t*.07)*K; (R3.partE||R3.part)(R3.UB,R3.mm(R3.T(s.x*K,s.y*K,s.z*K),R3.S(sz,sz,sz)),[.96,.97,1]); }
@@ -878,6 +881,18 @@ if(TEST) window.__sk={botInput,gateLine,mkRider,get R(){return R;},get phase(){r
 setView3(view3);
 renderMenu();
 requestAnimationFrame(frame);
+
+/* ---------- online score battle ---------- */
+const NETV=window.RRV?RRV.attach({game:'ski',title:'race',blurb:'Race everyone on the same course at the same time. You see the others as ghosts on the hill. Fastest time (or best slopestyle score) wins.',
+  opts:()=>({evSel,gSel}), start(o){ if(o.evSel&&EVENTS[o.evSel]) evSel=o.evSel; if(o.gSel) gSel=o.gSel; newRun(); },
+  state(){ if(!R) return null; const ski=R.C.E.ski, p=R.p, out=R.dnf||R.dq;
+    const v=ski?(R.done&&!out?-R.t:R.done?-1e6:-R.t):(R.done?parkScore():R.feats.reduce((a,f)=>a+(f.pts||0),0)/10);
+    return {v,txt:ski?(R.dnf?'DNF':R.dq?'DSQ':fmtT(R.t)):(R.done?parkScore().toFixed(1):'riding'),done:!!R.done,pos:[+p.x.toFixed(2),+p.y.toFixed(2),+p.z.toFixed(2),+p.psi.toFixed(3),+(p.tuck||0).toFixed(2)]}; }}):null;
+function drawGhosts(C){ if(!window.RRV||!RRV.on) return; const keep=SUIT[C.id];
+  for(const g of RRV.ghosts()){ if(g.age>3||!g.pos) continue; const [x,y,z,psi,tuck]=g.pos; SUIT[C.id]=[g.col,'#f8fafc'];
+    drawRider(C,{x,y,z,psi,tuck,air:false,crashed:false,flip:0,grab:null,grabT:0,steer:0,skid:0,landT:0,i:R.p.i,vx:0,vy:0,vz:0},{pitch:0,roll:0,flip:0,crouch:tuck*.8,tuck,grab:null}); }
+  SUIT[C.id]=keep; }
+
 })();
 </script>
 <script>window.RR_TOUCH={"stick": "wasd", "buttons": [["Jump", "Space"], ["Grab", "KeyK"], ["Cam", "KeyC"]], "sys": [["Enter", "Enter"], ["Pause", "Escape"], ["View", "KeyV"]]};</script>

@@ -188,6 +188,8 @@ kbd{ display:inline-block; min-width:24px; padding:1px 7px; margin:0 2px; border
   <footer class="keys" id="keysHelp"></footer>
   <section class="hub" id="hub" aria-label="Season hub"></section>
 </main>
+<script src="online.js"></script>
+<script src="remote.js"></script>
 <script>
 (() => {
 'use strict';
@@ -311,7 +313,7 @@ function strike(s,type,q,aim){ const b=M.b, Sd=SHOTS[type], os=s?-1:1, P=[b.x,b.
   M.hitter=s; M.nb=[0,0]; M.await=-1; M.plan=[null,null]; M.serving=false; M.netTouch=false; M.lastHitT=M.t; M.rally++; const Pl=M.P[s]; Pl.contactT=M.t; Pl.cShot=type; Pl.armT=-9; sfx.hit(Math.min(20,sW)); planFor(1-s); aiChoose(); }
 
 /* the computer chooses its stroke from the ball it will get */
-function aiChoose(){ const pl=M.plan[1]; if(!pl||M.hitter!==0){ M.ai=null; return; } const k=M.k, r=Math.random(), bounceTop=topIn(M.b);
+function aiChoose(){ if(h2()){ M.ai=null; return; } const pl=M.plan[1]; if(!pl||M.hitter!==0){ M.ai=null; return; } const k=M.k, r=Math.random(), bounceTop=topIn(M.b);
   let type='J'; if(pl.y>1.14&&r<.45+k*.45) type='L'; else if(bounceTop<-35&&pl.y<TB.H+.3&&Math.random()>.25+k*.5) type='K'; else if(Math.abs(pl.z)<HL-.15&&pl.y<TB.H+.2&&Math.random()<.5) type='K';
   const side=Math.random()<.5?-1:1, x=Math.random()<.35+k*.4?side*(.75+Math.random()*.25):side*Math.random()*.6;
   M.ai={type,aim:{x,z:type==='K'?(Math.random()<.5?-1:0):(Math.random()<.4+k*.3?1:0)},react:.24-.1*k+Math.random()*.06,q:clamp(.5+.42*k+gauss()*.1,.08,1)}; }
@@ -340,11 +342,11 @@ function movePlayers(dt){ for(const P of M.P){ const s=P.side, pl=M.plan[s]; let
     const sp=s===0?3.6:2.7+1.3*M.k, dx=tx-P.x, dz=tz-P.z, d=Math.hypot(dx,dz), st=Math.min(d,sp*dt); if(d>1e-4){ P.x+=dx/d*st; P.z+=dz/d*st; } P.moving=d>.05;
     P.z=s?Math.max(P.z,HL-.05):Math.min(P.z,-(HL-.05)); } }
 function contact(){ for(const s of [0,1]){ const pl=M.plan[s]; if(M.await!==s||!pl||M.t<pl.t) continue; const e=reachErr(s), P=M.P[s];
-    if(s===1){ const A=M.ai||{type:'J',aim:{x:0,z:0},q:.5}; if(e>.55){ if(TEST) dbg('ai out of reach e='+e.toFixed(2)); M.await=-1; M.plan[1]=null; continue; } strike(1,A.type,clamp(A.q-Math.max(0,e-.15)*.9,0,1),A.aim); continue; }
+    if(s===1&&!h2()){ const A=M.ai||{type:'J',aim:{x:0,z:0},q:.5}; if(e>.55){ if(TEST) dbg('ai out of reach e='+e.toFixed(2)); M.await=-1; M.plan[1]=null; continue; } strike(1,A.type,clamp(A.q-Math.max(0,e-.15)*.9,0,1),A.aim); continue; }
     const early=pl.t-P.armT; if(early>.6){ if(M.t>pl.t+.12){ M.await=-1; M.plan[0]=null; M.fb={t:early<2?'Too early':'Missed',col:'#f87171'}; M.fbT=1.2; } continue; }
     if(e>.6){ M.await=-1; M.plan[0]=null; M.fb={t:'Out of reach',col:'#f87171'}; M.fbT=1.2; continue; }
     const late=M.t-pl.t, qt=late>.01?clamp(.45-late*3,0,1):1-clamp(Math.abs(early-.2)/.35,0,1)*.8, qr=1-clamp((e-.15)/.4,0,1), q=clamp(qt*.7+qr*.3,0,1);
-    M.fb={t:late>.03?'Late':q>.85?'Perfect':early>.42?'Early':q>.6?'Good':'OK',col:q>.85?'#22c55e':q>.6?'#a3e635':'#fbbf24'}; M.fbT=1; strike(0,P.shot,q,aimKeys()); } }
+    M.fb={t:late>.03?'Late':q>.85?'Perfect':early>.42?'Early':q>.6?'Good':'OK',col:q>.85?'#22c55e':q>.6?'#a3e635':'#fbbf24'}; M.fbT=1; strike(s,P.shot,q,s?aimKeys2():aimKeys()); } }
 function step(dt){
   if(toastT>0){ toastT-=dt; if(toastT<=0) $('toast').classList.remove('on'); }
   if(bannerT>0&&!paused){ bannerT-=dt; if(bannerT<=0) $('banner').classList.remove('on'); }
@@ -352,7 +354,7 @@ function step(dt){
   if(M.state==='pre'){ M.t+=sdt; movePlayers(sdt); if(M.stT>2.2) setupServe(); return; }
   if(M.state==='dead'){ let n=Math.round(sdt/PDT); while(n-->0){ ballStep(M.b,PDT); } M.t+=sdt; movePlayers(sdt);
     if(M.stT>1.5){ if(M.matchEnd!==undefined) return endMatch(); if(M.gameEnd!==undefined){ banner(`Game ${M.gameEnd===0?'You':M.opp.name.split(' ').pop()}`,`Games ${M.games[0]}–${M.games[1]} · ${M.gameLog.map(g=>g.join('-')).join(', ')}`,M.gameEnd===0?'#22c55e':'#ef4444',2); M.pts=[0,0]; M.gameEnd=undefined; M.state='pre'; M.stT=0; updateBoard(); return; } M.letNext=false; setupServe(); } return; }
-  if(M.state==='serve'&&!M.toss){ M.t+=sdt; movePlayers(sdt); placeBallInHand(); if(M.server===1&&M.stT>M.aiServeAt){ tossServe(1,pick(['J','J','K','K','K','L'])); } return; }
+  if(M.state==='serve'&&!M.toss){ M.t+=sdt; movePlayers(sdt); placeBallInHand(); if(M.server===1&&M.stT>M.aiServeAt&&(!h2()||M.stT>12)){ tossServe(1,pick(['J','J','K','K','K','L'])); } return; }
   let n=Math.max(1,Math.round(sdt/PDT));
   while(n-->0){ M.t+=PDT; const e=ballStep(M.b,PDT); if(M.toss&&M.b.vy<0&&M.b.y<=TB.H+.2){ strikeServe(); continue; } if(e) onEvent(e); if(M.state!=='live'&&M.state!=='serve') break; contact(); movePlayers(PDT); }
   if(M.state==='live'&&M.t-M.lastHitT>5){ const r=1-M.hitter; point(M.nb[r]>=1?M.hitter:r,'Dead ball'); }
@@ -796,6 +798,17 @@ if(TEST) window.__tt={DBG,get M(){return M;},get phase(){return phase;},step,new
 setView3(view3);
 renderMenu();
 requestAnimationFrame(frame);
+
+/* ---------- online: a friend or anyone on the site plays the other side ---------- */
+function h2(){ return !!(window.RRS&&RRS.role==='host'&&NETP&&NETP.peers.length); }
+function aimKeys2(){ return {x:(held(['P2A'])?1:0)-(held(['P2D'])?1:0),z:(held(['P2W'])?1:0)-(held(['P2S'])?1:0)}; }
+addEventListener('keydown',e=>{ if(!h2()||!M||phase!=='play'||paused) return; const shot={P2J:'J',P2K:'K',P2L:'L'}[e.code]; if(!shot) return;
+  if(M.state==='serve'&&M.server===1&&!M.toss){ tossServe(1,shot); return; } const P=M.P[1]; P.armT=M.t; P.shot=shot; P.swingT=M.t; });
+const NETP=window.RRS?RRS.attach({game:'tabletennis',blurb:'Play anyone online: the host plays the near end, the other player plays the far end and watches the match live.',
+  map:{KeyJ:'P2J',Space:'P2J',KeyK:'P2K',KeyL:'P2L',KeyA:'P2A',ArrowLeft:'P2A',KeyD:'P2D',ArrowRight:'P2D',KeyW:'P2W',ArrowUp:'P2W',KeyS:'P2S',ArrowDown:'P2S'},
+  start:()=>{ newMatch(); const f=NETP&&NETP.peers[0]; if(f){ M.opp={name:f.name,nat:'GBR',rat:90}; updateBoard(); banner('Online match',`You vs ${f.name}`,'#0ea5e9',2.2); } },
+  onFriendLeft:()=>toast('Your opponent left: the AI takes over','#fbbf24'),onGuestEnd:()=>toMenu()}):null;
+
 })();
 </script>
 <script>window.RR_TOUCH={"stick": "wasd", "buttons": [["Drive", "KeyJ"], ["Push", "KeyK"], ["Smash", "KeyL"], ["Cam", "KeyC"]], "sys": [["Enter", "Enter"], ["Pause", "Escape"], ["View", "KeyV"]]};</script>
