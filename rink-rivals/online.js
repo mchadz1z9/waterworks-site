@@ -63,10 +63,11 @@
   /* an Online row in every game's menu: play anyone on the site, or friends with a room code */
   function menuBar(){ if(!cfg) return; const m=document.getElementById('menuIn'); if(!m) return; let d=m.querySelector('.rroBar');
     if(!d){ d=document.createElement('div'); d.className='pills rroBar'; d.style.cssText='background:rgba(34,197,94,.12);border:2px solid #22c55e;border-radius:14px;padding:6px 8px;margin:8px auto';
-      d.innerHTML=`<span class="lbl">🌐 Online</span><button class="gold" data-rro="any" tabindex="-1" style="background:#22c55e;border-color:#22c55e;color:#052e16">Play with anyone</button><button data-rro="friend" tabindex="-1">👥 Play with friends (room code)</button><span class="lbl rroCnt" style="text-transform:none"></span>`;
+      d.innerHTML=`<span class="lbl">🌐 Online</span><button class="gold" data-rro="any" tabindex="-1" style="background:#22c55e;border-color:#22c55e;color:#052e16">Play with anyone</button><button data-rro="friend" tabindex="-1">👥 Play with friends (room code)</button><button data-rro="lb" tabindex="-1" style="background:#fbbf24;border-color:#fbbf24;color:#111">🏆 Records</button><span class="lbl rroCnt" style="text-transform:none"></span>`;
       const first=m.querySelector('.pills'); m.insertBefore(d,first||null);
       d.addEventListener('mousedown',e=>{ e.preventDefault(); e.stopPropagation(); });
-      d.addEventListener('click',e=>{ const b=e.target.closest('button'); e.stopPropagation(); if(!b) return; if(started||ws) return;
+      d.addEventListener('click',e=>{ const b=e.target.closest('button'); e.stopPropagation(); if(!b) return; if(b.dataset.rro==='lb'){ window.RRL&&RRL.show(); return; } if(started||ws) return;
+        if(b.dataset.rro==='lb'){ window.RRL&&RRL.show(); return; }
         if(b.dataset.rro==='any'){ if(getName()) seek(getName()); else showStart(); }
         else { showStart(); const c=panel&&panel.querySelector('#rroCode'); if(c) c.focus(); } }); }
     const c=d.querySelector('.rroCnt'), n=Math.max(0,here()-1), so=seekOthers(), t=so?`${so} looking for a match now!`:n?`${n} other${n>1?'s':''} on this game now`:'';
@@ -104,4 +105,38 @@
   const api={ send, leave, open:()=>showStart(), get me(){ return me; }, get peers(){ return peers; }, get code(){ return code; }, get on(){ return started; },
     isHost(){ return !!me&&[me].concat(peers).every(p=>p.seat>=me.seat); }, all(){ return me?[me].concat(peers).sort((a,b)=>a.seat-b.seat):[]; } };
   window.RRO={ watch(f){ watchers.push(f); lobby('home'); if(counts) f(counts); }, counts:()=>counts, init(c){ cfg=c; lobby(c.game); setTimeout(()=>{ topBtn(); watchMenu(); },0); const r=(qs.get('room')||'').toUpperCase(); if(/^[A-Z0-9]{4,8}$/.test(r)) setTimeout(()=>connect(r,getName()||'Player'),300); return api; } };
+})();
+
+/* Rink Rivals leaderboards: every game keeps world records on the rooms server.
+   A game calls RRL.boards(game,[{id,name,mode:'max'|'min'|'sum'}]) and RRL.post(id,score,text) when a result is final. */
+(function(){
+  const qs=new URLSearchParams(location.search), API=(qs.get('server')||'wss://rink-rivals-rooms.mitchellchad2026.workers.dev').replace(/^ws/,'http')+'/lb/';
+  const esc=s=>String(s).replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
+  let game=null, defs=[], panel=null, tab=0, toastEl=null;
+  const pid=(()=>{ try{ let p=localStorage.getItem('rrPid'); if(!p){ p=(Math.random().toString(36).slice(2)+Math.random().toString(36).slice(2)).slice(0,20); localStorage.setItem('rrPid',p); } return p; }catch(e){ return 'anon'+Math.floor(Math.random()*1e9); } })();
+  const name=()=>{ try{ return localStorage.getItem('rrOnlineName')||''; }catch(e){ return ''; } };
+  const css=`#rrlP{position:fixed;inset:0;z-index:9550;display:flex;align-items:center;justify-content:center;background:rgba(5,8,18,.72);font-family:'Big Shoulders Display','Arial Narrow',sans-serif}
+#rrlP .box{background:#141c33;color:#eef2fb;border:2px solid #fbbf24;border-radius:16px;padding:16px 20px;width:min(560px,94vw);max-height:88vh;overflow:auto}
+#rrlP h2{margin:0 0 8px;font-size:30px} #rrlP .tabs{display:flex;flex-wrap:wrap;gap:6px;margin-bottom:8px} #rrlP button{font:inherit;font-size:15px;font-weight:800;padding:6px 12px;border-radius:999px;border:2px solid #27345a;background:#1e293b;color:#fff;cursor:pointer}
+#rrlP button.on{background:#fbbf24;color:#111;border-color:#fbbf24} #rrlP table{width:100%;border-collapse:collapse;font-size:18px} #rrlP td{padding:4px 6px;border-bottom:1px solid #27345a} #rrlP tr.me td{background:rgba(251,191,36,.18)} #rrlP .mute{color:#93a0bd;font-size:15px}
+#rrlP input{font:inherit;font-size:18px;padding:5px 9px;border-radius:9px;border:2px solid #27345a;background:#0b1120;color:#fff;width:180px}
+#rrlT{position:fixed;left:50%;top:70px;transform:translateX(-50%);z-index:9450;background:#141c33;color:#fde047;border:2px solid #fbbf24;border-radius:14px;padding:8px 16px;font:800 20px 'Big Shoulders Display','Arial Narrow',sans-serif;box-shadow:0 8px 30px rgba(0,0,0,.5);transition:opacity .4s}`;
+  function addCss(){ if(document.getElementById('rrlCss')) return; const st=document.createElement('style'); st.id='rrlCss'; st.textContent=css; document.head.appendChild(st); }
+  function note(t){ addCss(); if(!toastEl){ toastEl=document.createElement('div'); toastEl.id='rrlT'; document.body.appendChild(toastEl); } toastEl.textContent=t; toastEl.style.opacity=1; clearTimeout(note.t); note.t=setTimeout(()=>{ toastEl.style.opacity=0; },4200); }
+  async function load(d){ const r=await fetch(`${API}${game}?b=${encodeURIComponent(d.id)}&dir=${d.mode==='min'?'asc':'desc'}&n=20&pid=${pid}`); return r.json(); }
+  async function render(){ if(!panel) return; const d=defs[tab]; if(!d){ panel.innerHTML='<div class="box"><h2>🏆 Records</h2><p>No records for this game yet.</p><button id="rrlX">Close</button></div>'; panel.querySelector('#rrlX').onclick=hide; return; }
+    panel.innerHTML=`<div class="box"><h2>🏆 World records</h2><div class="tabs">${defs.map((x,i)=>`<button data-t="${i}" class="${i===tab?'on':''}">${esc(x.name)}</button>`).join('')}</div><div id="rrlB" class="mute">Loading…</div>
+      <p class="mute">Your name on the boards: <input id="rrlN" maxlength="20" value="${esc(name())}" placeholder="Your name"> <button id="rrlS">Save</button></p><button id="rrlX">Close</button></div>`;
+    panel.querySelectorAll('[data-t]').forEach(b=>b.onclick=()=>{ tab=+b.dataset.t; render(); });
+    panel.querySelector('#rrlX').onclick=hide; panel.querySelector('#rrlS').onclick=()=>{ const v=panel.querySelector('#rrlN').value.trim().slice(0,20); try{ localStorage.setItem('rrOnlineName',v); }catch(e){} note('Name saved'); };
+    try{ const j=await load(d), B=panel&&panel.querySelector('#rrlB'); if(!B) return;
+      B.innerHTML=j.rows.length?`<table>${j.rows.map((r,i)=>`<tr class="${r.me?'me':''}"><td>${i===0?'🥇':i===1?'🥈':i===2?'🥉':i+1}</td><td>${esc(r.name)}${r.me?' (you)':''}</td><td style="text-align:right">${esc(r.txt||String(r.score))}</td></tr>`).join('')}</table>
+        <p class="mute">${j.total} player${j.total===1?'':'s'} on this board.${j.me&&!j.rows.some(r=>r.me)?` You: #${j.me.rank} · ${esc(j.me.txt||j.me.score)}`:j.me?'':' Play to get on the board!'}</p>`:'<p>No records yet. Be the first!</p>'; }
+    catch(e){ const B=panel&&panel.querySelector('#rrlB'); if(B) B.textContent='Could not reach the leaderboard server.'; } }
+  function show(){ addCss(); if(panel) return; panel=document.createElement('div'); panel.id='rrlP'; document.body.appendChild(panel); panel.addEventListener('keydown',e=>e.stopPropagation()); panel.addEventListener('click',e=>{ if(e.target===panel) hide(); }); render(); }
+  function hide(){ if(panel){ panel.remove(); panel=null; } }
+  async function post(id,score,txt){ const d=defs.find(x=>x.id===id); if(!d||!game||!isFinite(score)) return;
+    try{ const r=await fetch(API+game,{method:'POST',headers:{'content-type':'application/json'},body:JSON.stringify({b:id,pid,name:name()||'Player',score,txt:txt||String(score),mode:d.mode})}); const j=await r.json(); if(!j.ok) return;
+      if(d.mode==='sum') note(`🏆 ${d.name}: ${j.score} · #${j.rank} in the world`); else if(j.improved) note(`🏆 New personal record! ${txt||score} · #${j.rank} on ${d.name}`); else if(j.rank<=10) note(`🏆 You're #${j.rank} on ${d.name}`); }catch(e){} }
+  window.RRL={ boards(g,list){ game=g; for(const x of list) if(!defs.some(d=>d.id===x.id)) defs.push(x); }, post, show, get game(){ return game; } };
 })();
