@@ -142,6 +142,7 @@ export class Chat {
       if(m.op==='list') return J({rows:this.sql.exec('SELECT * FROM m ORDER BY id DESC LIMIT 200').toArray()});
       if(m.op==='del'&&m.id){ this.sql.exec('UPDATE m SET hid=1 WHERE id=?',+m.id); this.all({t:'del',id:+m.id}); return J({ok:true}); }
       if(m.op==='mute'&&m.who){ this.sql.exec('INSERT OR REPLACE INTO mute(who,until) VALUES(?,?)',String(m.who),Date.now()+(+m.mins||1440)*60000); return J({ok:true}); }
+      if(m.op==='who') return J({who:this.socks().map(ws=>{ const a=ws.deserializeAttachment(); return {name:a.name,game:a.game}; })});
       if(m.op==='clear'){ this.sql.exec('UPDATE m SET hid=1'); this.all({t:'clear'}); return J({ok:true}); }
       return J({err:'op'},400); }
     if(req.headers.get('Upgrade')!=='websocket') return new Response('Expected a WebSocket',{status:426});
