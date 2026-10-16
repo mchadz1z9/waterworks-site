@@ -329,13 +329,15 @@ function coverLOS(a,b){ const dx=b[0]-a[0], dz=b[2]-a[2], L=Math.hypot(dx,dz)||1
   const mx=(a[0]+b[0])/2, mz=(a[2]+b[2])/2; for(const t of treesNear(mx,mz,L/2+2)){ const px=t.x-a[0], pz=t.z-a[2], u=(px*dx+pz*dz)/(L*L); if(u<=0||u>=1) continue; const ex=a[0]+dx*u-t.x, ez=a[2]+dz*u-t.z; if(Math.hypot(ex,ez)<t.r+.35) k*=.45; } return k; }
 
 /* ---------- state ---------- */
-let H=null, phase='menu', paused=false, resSel=0, gunSel=1, lenSel=20, diff=1, sens=1;
+let H=null, phase='menu', paused=false, resSel=0, gunSel=1, lenSel=20, diff=1, sens=1, bigSel=1;
+/* animal size: life size, or scaled up so long shots are fair on a small screen */
+const BIG=()=>bigSel?1.7:1;
 const DIFF=['Relaxed','Realistic','Expert'], DIFFK=[.6,1,1.35];
 const keys=new Set(); const held=a=>a.some(k=>keys.has(k));
 const SKEY='rinkRivalsHuntV1'; let SV=(()=>{ try{ return Object.assign({hunts:0,best:0,harv:0,trophies:{}},JSON.parse(localStorage.getItem(SKEY)||'null')||{}); }catch(e){ return {hunts:0,best:0,harv:0,trophies:{}}; } })();
 const saveSV=()=>{ try{ localStorage.setItem(SKEY,JSON.stringify(SV)); }catch(e){} };
-try{ const P=JSON.parse(localStorage.getItem('rinkRivalsHuntPrefs')||'null'); if(P){ resSel=P.resSel|0; gunSel=P.gunSel??1; lenSel=P.lenSel||20; diff=P.diff??1; sens=P.sens||1; } }catch(e){}
-const savePrefs=()=>{ try{ localStorage.setItem('rinkRivalsHuntPrefs',JSON.stringify({resSel,gunSel,lenSel,diff,sens})); }catch(e){} };
+try{ const P=JSON.parse(localStorage.getItem('rinkRivalsHuntPrefs')||'null'); if(P){ resSel=P.resSel|0; gunSel=P.gunSel??1; lenSel=P.lenSel||20; diff=P.diff??1; sens=P.sens||1; bigSel=P.bigSel??1; } }catch(e){}
+const savePrefs=()=>{ try{ localStorage.setItem('rinkRivalsHuntPrefs',JSON.stringify({resSel,gunSel,lenSel,diff,sens,bigSel})); }catch(e){} };
 const fmtT=s=>`${Math.floor(s/60)}:${String(Math.floor(s%60)).padStart(2,'0')}`;
 const compass=a=>['N','NE','E','SE','S','SW','W','NW'][((Math.round(a/(Math.PI/4))%8)+8)%8];
 /* yaw 0 looks along +z = north on the map; yaw grows to the west, so east is -x */
@@ -389,7 +391,7 @@ function feed(t,col,T){ H.feed.unshift({t,col:col||'#e5e7eb',T:T||5}); if(H.feed
 function windVec(){ const W=H.wind, g=1+.25*Math.sin(H.t*.7)*Math.sin(H.t*.31); return [Math.sin(W.a)*W.s*g,0,Math.cos(W.a)*W.s*g]; }
 
 /* ---------- the shot: a point-mass bullet with drag, gravity and wind, stepped through the trees and animals ---------- */
-function bodyOf(a){ const S=a.S, s=a.sc, h=S.h*s, L=S.L*s, bird=S.bird, cy=bird?h*1.0:h*.72, bh=bird?h*.42:S.bear?h*.36:h*.26, bw=bird?h*.36:S.bear?h*.3:h*.19, bl=bird?L*.32:L*.42;
+function bodyOf(a){ const S=a.S, s=a.sc*BIG(), h=S.h*s, L=S.L*s, bird=S.bird, cy=bird?h*1.0:h*.72, bh=bird?h*.42:S.bear?h*.36:h*.26, bw=bird?h*.36:S.bear?h*.3:h*.19, bl=bird?L*.32:L*.42;
   const hd=a.dead?0:a.head, head=bird?[0,lerp(h*1.9,h*1.2,hd),lerp(L*.33,L*.45,hd)]:[0,lerp(cy+h*.5,h*.38,hd),lerp(L*.55,L*.68,hd)];
   return {h,L,cy,bh,bw,bl,head,neck0:[0,cy+bh*.45,bl*.8],R:Math.max(L*.75,h*1.2)}; }
 function toLocal(a,p){ const dx=p[0]-a.x, dz=p[2]-a.z, c=Math.cos(a.yaw), s=Math.sin(a.yaw); if(a.dead) return [-1e3,-1e3,-1e3]; return [dx*c-dz*s,p[1]-a.y,dx*s+dz*c]; }
@@ -506,7 +508,7 @@ function stepAnimal(a,dt){ const S=a.S;
     a.yaw+=clamp(angD(ty-a.yaw),-dt*(sp>4?2.2:1.6),dt*(sp>4?2.2:1.6)); }
   a.v=lerp(a.v,sp,Math.min(1,dt*(sp>a.v?2.5:3))); const nx=a.x+Math.sin(a.yaw)*a.v*dt, nz=a.z+Math.cos(a.yaw)*a.v*dt;
   if(Math.abs(nx)<WD.half-10&&Math.abs(nz)<WD.half-10){ a.x=nx; a.z=nz; } a.y=terrainH(a.x,a.z); if(a.y<WL-.6) a.y=WL-.6;
-  a.ph+=a.v*dt/(S.h*a.sc*(a.v>4?1.9:1.1)); a.dist+=a.v*dt;
+  a.ph+=a.v*dt/(S.h*a.sc*BIG()*BIG()*(a.v>4?1.9:1.1)); a.dist+=a.v*dt;
   /* the lead animal leaves tracks */ if(a.herd.m[0]===a||!a.herd.m[0]||a.herd.m[0].dead){ a.herd.tk+=a.v*dt; if(a.herd.tk>10){ a.herd.tk=0; H.TK.push({x:a.x,z:a.z,y:a.y,yaw:a.yaw,t:H.t,sp:a.sp,h:a.herd.id,run:a.v>4}); if(H.TK.length>1600) H.TK.shift(); } } }
 function mauled(a){ const m=H.me, dmg=a.S.danger===2?62:a.sp==='hog'?24:38; m.hp-=dmg; m.hurtT=0; H.shake=.6; sfx.roar(); feed(`You were mauled by the ${a.S.n.toLowerCase()}! −${dmg} health`,'#f87171',5);
   if(m.hp<=0){ m.hp=0; endHunt('mauled'); } }
@@ -1064,7 +1066,7 @@ function drawAnimal(a,dist){ const K=K3, {T,S,RY,RZ,RX,mm,UB,US,UC}=R3, Sp=a.S, 
     else if(A==='elk'||A==='caribou'){ const sz=h*(A==='elk'?.55+q*.45:.6+q*.45); for(const s of [-1,1]){ const p0=add(top,[s*hl*.25,0,0]), p1=add(p0,[s*sz*.35,sz*.45,-sz*.35]), p2=add(p1,[s*sz*.12,sz*.45,-sz*.15]), p3=add(p2,[-s*sz*.15,sz*.25,sz*.3]);
         beam(p0,p1,h*.035,ac); beam(p1,p2,h*.03,ac); beam(p2,p3,h*.025,ac); for(let i=0;i<a.tines-1;i++){ const b0=i<2?lerp3(p0,p1,.25+i*.4):lerp3(p1,p2,(i-1)/(a.tines-1)); beam(b0,add(b0,[s*sz*.05,sz*.08,sz*.35]),h*.02,ac); }
         if(A==='caribou'&&s===1) beam(lerp3(p0,p1,.2),add(lerp3(p0,p1,.2),[-s*sz*.1,-sz*.05,sz*.4]),h*.06,ac); } }
-    else if(A==='moose'){ const spread=a.meas*.0254, wd=spread/2; for(const s of [-1,1]){ const p0=add(top,[s*hl*.2,-hl*.1,0]), p1=add(p0,[s*wd*.35,hl*.05,0]), p2=add(p1,[s*wd*.65,wd*.3,-wd*.1]); beam(p0,p1,h*.04,ac); R3.part(UB,R3.beam(W_(p1),W_(p2),wd*.55*K,h*.035*K),ac); for(let i=0;i<a.tines;i++) beam(lerp3(p1,p2,.2+i*.18),add(lerp3(p1,p2,.2+i*.18),[0,-wd*.05,wd*.22]),h*.015,ac); } }
+    else if(A==='moose'){ const spread=a.meas*.0254*BIG(), wd=spread/2; for(const s of [-1,1]){ const p0=add(top,[s*hl*.2,-hl*.1,0]), p1=add(p0,[s*wd*.35,hl*.05,0]), p2=add(p1,[s*wd*.65,wd*.3,-wd*.1]); beam(p0,p1,h*.04,ac); R3.part(UB,R3.beam(W_(p1),W_(p2),wd*.55*K,h*.035*K),ac); for(let i=0;i<a.tines;i++) beam(lerp3(p1,p2,.2+i*.18),add(lerp3(p1,p2,.2+i*.18),[0,-wd*.05,wd*.22]),h*.015,ac); } }
     else if(A==='prong'){ for(const s of [-1,1]){ const p0=add(top,[s*hl*.2,0,0]), p1=add(p0,[s*h*.03,h*.32,0]), p2=add(p1,[-s*h*.04,h*.06,-h*.07]); beam(p0,p1,h*.035,ac); beam(p1,p2,h*.025,ac); beam(lerp3(p0,p1,.55),add(lerp3(p0,p1,.55),[0,h*.03,h*.08]),h*.02,ac); } } } }
 
 /* ---------- board, toasts ---------- */
@@ -1112,12 +1114,13 @@ function renderMenu(){ const R=RES[resSel], G0=GUNS[gunSel]; let h=`<h1>Rink Riv
   <p class="sub2"><b>${R.where}</b> · ${R.season}<br>Game: ${Object.keys(R.sp).map(s=>SP[s].n).join(', ')}</p>
   <div class="pills"><span class="lbl">Rifle</span>${GUNS.slice(0,3).map((g,i)=>pill('g',i,gunSel===i,g.n,'')).join('')}</div><p class="sub2">${G0.d} · ${G0.table.slice(1,4).map(r=>`${r.d} m: ${(-r.drop*100).toFixed(0)} cm drop, ${Math.round(r.E)} J`).join(' · ')} · plus a 12 gauge for turkey and a compound bow</p>
   <div class="pills"><span class="lbl">Hunt</span>${[10,20,30].map(n=>pill('len',n,lenSel===n,`${n} min`,'')).join('')}<span class="lbl">Animals</span>${DIFF.map((d,i)=>pill('d',i,diff===i,d,'')).join('')}</div>
+  <div class="pills"><span class="lbl">Animal size</span>${pill('big',1,bigSel===1,'Big (easier long shots)','')}${pill('big',0,bigSel===0,'Life size','')}</div>
   <div class="pills"><span class="lbl">Mouse</span>${[.6,1,1.6].map((s,i)=>pill('s',s,sens===s,['Slow','Normal','Fast'][i],'')).join('')}</div>
   <div class="pills"><button class="gold" data-act="start" tabindex="-1">Start the hunt <kbd>Enter</kbd></button><a href="./" tabindex="-1">Home</a><a href="fishing" tabindex="-1">Fishing</a><a href="archery" tabindex="-1">Archery</a></div>
   <div id="hint">Your record: ${SV.hunts} hunts · ${SV.harv} animals tagged · best hunt ${SV.best} points${Object.keys(SV.trophies).length?' · best: '+Object.entries(SV.trophies).slice(0,4).map(([k,v])=>`${SP[k].n} ${SP[k].tr.u==='kg'?v.meas+' kg':v.meas+'"'}`).join(', '):''}</div>`;
   $('menuIn').innerHTML=h; $('logoL').src=badgeS('#65a30d'); setText('nameL','You'); setText('tpL','Hunting'); setText('scoreL',''); $('logoR').src=badgeS('#78350f'); setText('nameR',R.name); setText('tpR',R.where); setText('scoreR',''); setText('cntT','HUNT'); setText('innT',R.name); setText('outsT',DIFF[diff]); setText('basesT',''); renderKeysHelp(); }
 $('menuIn').addEventListener('mousedown',e=>{ if(e.target.closest('button')) e.preventDefault(); });
-$('menuIn').addEventListener('click',e=>{ const b=e.target.closest('button'); if(!b) return; const d=b.dataset; audio(); sfx.click(); if(d.r!==undefined){ resSel=+d.r; mkWorld(resSel); } else if(d.g!==undefined) gunSel=+d.g; else if(d.len) lenSel=+d.len; else if(d.d!==undefined) diff=+d.d; else if(d.s) sens=+d.s; else if(d.act==='start'){ startGame(); return; } savePrefs(); renderMenu(); });
+$('menuIn').addEventListener('click',e=>{ const b=e.target.closest('button'); if(!b) return; const d=b.dataset; audio(); sfx.click(); if(d.r!==undefined){ resSel=+d.r; mkWorld(resSel); } else if(d.g!==undefined) gunSel=+d.g; else if(d.len) lenSel=+d.len; else if(d.d!==undefined) diff=+d.d; else if(d.s) sens=+d.s; else if(d.big!==undefined) bigSel=+d.big; else if(d.act==='start'){ startGame(); return; } savePrefs(); renderMenu(); });
 function startGame(){ audio(); savePrefs(); newHunt(); }
 function renderKeysHelp(){ $('keysHelp').innerHTML='<div><b>Move</b> W A S D · <b>Run</b> Shift</div><div><b>Look</b> mouse (click the game) · arrows</div><div><b>Crouch</b> C · <b>Prone</b> Z</div><div><b>Aim / scope</b> right click · <b>Zoom</b> wheel · <b>Hold breath</b> Shift</div><div><b>Shoot</b> left click · <b>Reload</b> R</div><div><b>Binoculars</b> B · <b>Weapons</b> 1-3</div><div><b>Call</b> T · <b>Change call</b> Y</div><div><b>Tag / climb / follow tracks</b> E</div><div><b>Map</b> M · <b>Pause</b> P</div>'; }
 function toMenu(){ phase='menu'; H=null; $('result').classList.add('hidden'); $('menu').classList.remove('hidden'); if(document.pointerLockElement) document.exitPointerLock(); renderMenu(); }
