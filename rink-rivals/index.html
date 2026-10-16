@@ -134,7 +134,7 @@ a.card.hide{ display:none; }
   </main>
   <aside class="side">
     <div id="chatDock"></div>
-    <div class="box"><h3>🎮 Who's playing</h3><p id="hot">Checking who's online…</p></div>
+    <div class="box"><h3>🎮 Who's playing</h3><p id="hot" style="font-size:15px">Checking who's online…</p></div>
   </aside>
 </div>
 <script src="online.js"></script>
@@ -152,9 +152,16 @@ try{ const l=localStorage.getItem('rrLast'); if(l&&NAMES[l]){ const a=document.g
 /* live presence: how many people are on each game right now */
 if(window.RRO) RRO.watch(c=>{ const hot=[]; for(const a of cards){ const g=a.getAttribute('href'), n=(c.games&&c.games[g])||0, sk=(c.seeking&&c.seeking[g]||[]).length, e=a.querySelector('.on');
   e.style.display=n?'block':'none'; e.textContent=sk?`${sk} want a match`:`${n} playing`; if(n) hot.push([n,g,sk]); }
-  const t=document.getElementById('liveN'); t.textContent=`${c.total||1} online`;
+  if(window.__chatWho) return; const t=document.getElementById('liveN'); t.textContent=`${c.total||1} online`;
   hot.sort((x,y)=>y[0]-x[0]); document.getElementById('hot').innerHTML=hot.length?hot.slice(0,6).map(([n,g,sk])=>`<a href="${g}" style="text-decoration:none"><b style="color:#fff">${NAMES[g]||g}</b></a> · ${n} playing${sk?` · <span style="color:#fbbf24">${sk} looking for a match</span>`:''}`).join('<br>'):'Nobody in a game right now. Start one and others can join you!'; });
 else document.getElementById('liveN').textContent='offline';
+/* everyone on the site (from the chat): who's playing what */
+function hotFromChat(list){ window.__chatWho=true; const by={}; for(const p of list) (by[p.game]=by[p.game]||[]).push(p.name); const g=Object.keys(by).filter(k=>k!=='home').sort((a,b)=>by[b].length-by[a].length);
+  document.getElementById('liveN').textContent=`${list.length} online`;
+  document.getElementById('hot').innerHTML=(g.length?g.map(k=>`<a href="${k}" style="text-decoration:none;display:block;padding:3px 0"><b style="color:#fff">${NAMES[k]||k}</b> · ${by[k].map(n=>n.replace(/[<>&]/g,'')).join(', ')} <span style="color:#4ade80">→ play</span></a>`).join(''):'Nobody is in a game right now.')+(by.home?`<div style="margin-top:6px">🏠 Browsing: ${by.home.map(n=>n.replace(/[<>&]/g,'')).join(', ')}</div>`:''); }
+addEventListener('rrc-who',e=>hotFromChat(e.detail));
+document.getElementById('liveN').style.cursor='pointer'; document.getElementById('liveN').title="See who's online";
+document.getElementById('liveN').addEventListener('click',()=>{ if(window.RRC){ RRC.showWho(true); const d=document.getElementById('chatDock'); if(d&&getComputedStyle(d).display!=='none') d.scrollIntoView({behavior:'smooth',block:'nearest'}); } });
 /* card keys: never while typing */
 addEventListener('keydown',e=>{ const t=document.activeElement; if(t&&(t.tagName==='INPUT'||t.tagName==='TEXTAREA')) return; if(e.ctrlKey||e.metaKey||e.altKey) return; const n=e.code.replace('Numpad','Digit').replace('Digit',''); const a=document.querySelector(`a.card[data-k="${n}"]`); if(a) location.href=a.getAttribute('href'); });
 </script>

@@ -132,7 +132,10 @@ export class Chat {
   socks(){ return this.ctx.getWebSockets().filter(ws=>ws.deserializeAttachment()); }
   send(ws,o){ try{ ws.send(JSON.stringify(o)); }catch(e){} }
   all(o){ const s=JSON.stringify(o); for(const ws of this.ctx.getWebSockets()) try{ ws.send(s); }catch(e){} }
-  count(){ this.all({t:'n',n:this.socks().length}); }
+  count(){ this.all({t:'n',n:this.socks().length}); this.who(); }
+  /* who is on the site and which game each person is in (one entry per person, newest tab wins) */
+  who(){ const m=new Map(); for(const ws of this.socks()){ const a=ws.deserializeAttachment(); m.set(a.who,{name:a.name,game:a.game,me:a.who}); }
+    const list=[...m.values()]; for(const ws of this.socks()){ const a=ws.deserializeAttachment(); this.send(ws,{t:'who',list:list.map(x=>({name:x.name,game:x.game,me:x.me===a.who}))}); } }
   hist(){ return this.sql.exec('SELECT id,ts,name,text,game FROM m WHERE hid=0 ORDER BY id DESC LIMIT 60').toArray().reverse(); }
   async fetch(req){
     if(new URL(req.url).pathname==='/admin'){ let m={}; try{ m=await req.json(); }catch(e){}
@@ -149,8 +152,8 @@ export class Chat {
     let a=ws.deserializeAttachment();
     if(m.t==='hello'){ const who=String(m.pid||'').replace(/[^a-z0-9]/gi,'').slice(0,24)||crypto.randomUUID().slice(0,12); a={name:cleanName(m.name),game:String(m.game||'home').replace(/[^a-z0-9]/g,'').slice(0,16)||'home',who,ts:[],last:''}; ws.serializeAttachment(a); this.count(); return; }
     if(!a) return;
-    if(m.t==='where'){ a.game=String(m.game||'home').replace(/[^a-z0-9]/g,'').slice(0,16)||'home'; ws.serializeAttachment(a); return; }
-    if(m.t==='name'){ a.name=cleanName(m.name); ws.serializeAttachment(a); this.send(ws,{t:'you',name:a.name}); return; }
+    if(m.t==='where'){ a.game=String(m.game||'home').replace(/[^a-z0-9]/g,'').slice(0,16)||'home'; ws.serializeAttachment(a); this.who(); return; }
+    if(m.t==='name'){ a.name=cleanName(m.name); ws.serializeAttachment(a); this.send(ws,{t:'you',name:a.name}); this.who(); return; }
     if(m.t==='ping'){ this.send(ws,{t:'pong'}); return; }
     if(m.t==='report'){ const id=+m.id; if(!id) return; this.sql.exec('INSERT OR IGNORE INTO r(mid,who) VALUES(?,?)',id,a.who); const c=this.sql.exec('SELECT COUNT(*) AS c FROM r WHERE mid=?',id).toArray()[0].c;
       if(c>=3){ const row=this.sql.exec('SELECT who FROM m WHERE id=?',id).toArray()[0]; this.sql.exec('UPDATE m SET hid=1 WHERE id=?',id); this.all({t:'del',id}); if(row){ const n=this.sql.exec('SELECT COUNT(*) AS c FROM m WHERE who=? AND hid=1 AND ts>?',row.who,Date.now()-86400000).toArray()[0].c; if(n>=2) this.sql.exec('INSERT OR REPLACE INTO mute(who,until) VALUES(?,?)',row.who,Date.now()+3600000*(n>=4?24:1)); } }
