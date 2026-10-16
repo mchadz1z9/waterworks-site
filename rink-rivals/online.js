@@ -3,6 +3,8 @@
 (function(){
   const qs=new URLSearchParams(location.search);
   const SERVER=qs.get('server')||'wss://rink-rivals-rooms.mitchellchad2026.workers.dev';
+  /* automated test pages (opened from disk or with ?test) never show up in the lobby or post records */
+  const TESTPAGE=/[?&]test\b/.test(location.search)||location.protocol==='file:';
   const NAMEK='rrOnlineName';
   let ws=null, cfg=null, me=null, peers=[], code=null, panel=null, started=false, closing=false;
   let lob=null, lobGame='home', counts=null, seeking=false, seekT=0, quickN=0, quick=false, inviteEl=null, invDismiss=0, watchers=[], lobTry=0;
@@ -53,7 +55,7 @@
     inviteEl.querySelector('#rroIp').onclick=()=>{ hideInvite(); seek(getName()||'Player'); };
     inviteEl.querySelector('#rroIx').onclick=()=>{ invDismiss=performance.now()+60000; hideInvite(); }; }
   /* the site lobby: presence on every game page, and matchmaking */
-  function lobby(game){ lobGame=game||lobGame; if(lob&&lob.readyState<2) return; try{ lob=new WebSocket(`${SERVER}/lobby`); }catch(e){ return; }
+  function lobby(game){ if(TESTPAGE) return; lobGame=game||lobGame; if(lob&&lob.readyState<2) return; try{ lob=new WebSocket(`${SERVER}/lobby`); }catch(e){ return; }
     lob.onopen=()=>{ lobTry=0; lob.send(JSON.stringify({t:'here',game:lobGame,name:getName()||'Player'})); if(seeking) lob.send(JSON.stringify({t:'seek',name:getName()||'Player',want:cfg&&cfg.maxPlayers||2})); };
     lob.onmessage=e=>{ let m; try{ m=JSON.parse(e.data); }catch(er){ return; }
       if(m.t==='counts'){ counts=m; topBtn(); for(const f of watchers) try{ f(m); }catch(er){} if(cfg&&panel&&!ws&&!started){ if(seeking) showSeek(); else { const l=panel.querySelector('#rroLive'); if(l){ const nm=panel.querySelector('#rroName'), v=nm&&nm.value; showStart(); const n2=panel.querySelector('#rroName'); if(n2&&v!=null) n2.value=v; } } } if(cfg) invite(); return; }
@@ -135,7 +137,7 @@
     catch(e){ const B=panel&&panel.querySelector('#rrlB'); if(B) B.textContent='Could not reach the leaderboard server.'; } }
   function show(){ addCss(); if(panel) return; panel=document.createElement('div'); panel.id='rrlP'; document.body.appendChild(panel); panel.addEventListener('keydown',e=>e.stopPropagation()); panel.addEventListener('click',e=>{ if(e.target===panel) hide(); }); render(); }
   function hide(){ if(panel){ panel.remove(); panel=null; } }
-  async function post(id,score,txt){ const d=defs.find(x=>x.id===id); if(!d||!game||!isFinite(score)) return;
+  async function post(id,score,txt){ if(/[?&]test\b/.test(location.search)||location.protocol==='file:') return; const d=defs.find(x=>x.id===id); if(!d||!game||!isFinite(score)) return;
     try{ const r=await fetch(API+game,{method:'POST',headers:{'content-type':'application/json'},body:JSON.stringify({b:id,pid,name:name()||'Player',score,txt:txt||String(score),mode:d.mode})}); const j=await r.json(); if(!j.ok) return;
       if(d.mode==='sum') note(`🏆 ${d.name}: ${j.score} · #${j.rank} in the world`); else if(j.improved) note(`🏆 New personal record! ${txt||score} · #${j.rank} on ${d.name}`); else if(j.rank<=10) note(`🏆 You're #${j.rank} on ${d.name}`); }catch(e){} }
   window.RRL={ boards(g,list){ game=g; for(const x of list) if(!defs.some(d=>d.id===x.id)) defs.push(x); }, post, show, get game(){ return game; } };
