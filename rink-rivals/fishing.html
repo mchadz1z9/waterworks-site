@@ -385,7 +385,7 @@ function depthAt(x,z){ const v=FS&&FS.V; if(!v) return 5;
   /* the continental shelf: 30-60 m of reefs and wrecks in the west, then the ledge drops to the Gulf Stream's 600 m blue water */
   const s0=v.shelf||34, sh=s0*(1+.3*Math.sin(x/140+z/230)+.18*Math.sin(z/90)), L=v.ledge||[40,330], ledge=sstep(L[0],L[1],x), d=sh+((v.deep||600)-sh)*ledge;
   let lift=0; if(COVER&&ledge<.3){ for(const r of COVER.reefs){ const q=(x-r.x)**2+(z-r.z)**2; if(q<r.r*r.r*2.2) lift=Math.max(lift,r.h*Math.exp(-q/(r.r*r.r*.6))); } for(const w of COVER.wrecks){ const q=(x-w.x)**2+(z-w.z)**2; if(q<200) lift=Math.max(lift,w.h*Math.exp(-q/60)); } }
-  return d-lift; }
+  return FS&&FS.SZ?spearDepth(x,z,d-lift):d-lift; }
 const sstep=(a,b,x)=>{ const t=clamp((x-a)/(b-a),0,1); return t*t*(3-2*t); };
 /* weather: it changes how the fish feed, how far the boat drifts and how big the waves are */
 const WX={storm:{name:'Lightning storm',act:1.3,wind:15,sea:4.2,cloud:1,rain:2,storm:1,info:'Thunderstorms: lightning, squalls and steep 4-6 m seas.'},
@@ -461,7 +461,7 @@ let lastSay=0; function speak(t,pri){ if(muted||!window.speechSynthesis) return;
 let FS=null;
 
 /* ---------- state ---------- */
-let phase='menu', paused=false, venSel='lake', modeSel='free', todSel=1, assist=true, tourLen=4;
+let phase='menu', paused=false, venSel='lake', modeSel='free', todSel=1, assist=true, tourLen=4, rough=true;
 const TODS=[{name:'Dawn',h:5.75},{name:'Morning',h:9},{name:'Midday',h:12.5},{name:'Dusk',h:18.25},{name:'Night',h:22}];
 const keys=new Set(); const held=a=>a.some(k=>keys.has(k));
 const baseOf=k=>(VEN[k]||VEN.lake).kind;
@@ -505,26 +505,28 @@ for(const v in SV.eq) SV.eq[v].line='line_mono';
 for(const k of ['rspin','skirt','sjig']) if(!SV.own.includes(k)) SV.own.push(k);
 let shopTab=null, wxSel='random';
 const saveSV=()=>{ try{ localStorage.setItem(SKEY,JSON.stringify(SV)); }catch(e){} };
-try{ const p=JSON.parse(localStorage.getItem('rinkRivalsFishingPrefs')||'null'); if(p){ venSel=VEN[p.venSel]?p.venSel:venSel; modeSel=p.modeSel||modeSel; todSel=p.todSel??todSel; assist=p.assist??assist; tourLen=p.tourLen||tourLen; } }catch(e){}
-const savePrefs=()=>{ try{ localStorage.setItem('rinkRivalsFishingPrefs',JSON.stringify({venSel,modeSel,todSel,assist,tourLen,wxSel})); }catch(e){} };
+try{ const p=JSON.parse(localStorage.getItem('rinkRivalsFishingPrefs')||'null'); if(p){ venSel=VEN[p.venSel]?p.venSel:venSel; modeSel=p.modeSel||modeSel; todSel=p.todSel??todSel; assist=p.assist??assist; tourLen=p.tourLen||tourLen; rough=p.rough??rough; } }catch(e){}
+const savePrefs=()=>{ try{ localStorage.setItem('rinkRivalsFishingPrefs',JSON.stringify({venSel,modeSel,todSel,assist,tourLen,wxSel,rough})); }catch(e){} };
 try{ const p=JSON.parse(localStorage.getItem('rinkRivalsFishingPrefs')||'null'); if(p&&p.wxSel) wxSel=p.wxSel; }catch(e){}
 const fmt$=n=>'$'+Math.round(n).toLocaleString();
 const fmtKg=kg=>kg<1?`${Math.round(kg*1000)} g`:`${kg.toFixed(kg<10?2:1)} kg`, fmtLb=kg=>{ const lb=kg*KG2LB; return lb<1?`${Math.round(lb*16)} oz`:`${Math.floor(lb)} lb ${Math.round((lb%1)*16)} oz`; };
 const fmtClock=h=>{ h=((h%24)+24)%24; const hh=Math.floor(h), mm=Math.floor((h-hh)*60); return `${(hh%12)||12}:${String(mm).padStart(2,'0')} ${hh<12?'am':'pm'}`; };
 
 function newSession(){ const V=VEN[venSel], EQ=SV.eq[baseOf(venSel)], RD=GEAR[EQ.rod], LN=GEAR[EQ.line], BT=GEAR[EQ.boat], wk=wxSel==='random'||!WX[wxSel]||!wxOk(wxSel,venSel)?rollWx(venSel):wxSel; FS={V,vk:venSel,mode:modeSel,tod:TODS[todSel].h,t:0,boat:{x:0,z:0,h:0,v:0,tv:0},aim:0,st:'idle',lureK:V.lures[0],lure:null,trolls:[],castP:0,fish:[],hk:null,L:0,T:0,dragF:.3,lift:.35,side:0,slackT:0,catches:[],bag:[],msg:null,msgT:0,fx:[],sonar:[],sonT:0,lureCam:true,cam:0,knot:1,spoolCap:V.kind==='sea'?900:V.kind==='lake'?170:180,tourT:modeSel==='tour'?tourLen*60:0,score:0,trig:-9,stats:{casts:0,bites:0,lost:0},trollK:(V.troll||[]).filter(k=>owns(k)).concat(Array(4).fill((V.troll||['skirt'])[0])).slice(0,4)};
-  FS.rd=RD; FS.ln=LN; FS.bt=BT; FS.btK=EQ.boat; FS.wx=WX[wk]; FS.wk=wk; FS.son=GEAR[SV.son].lvl; FS.net=GEAR[SV.net].lvl; FS.fat=0; FS.anchor=false; FS.windA=rnd(0,6.28); FS.lb=RD.lb*LN.str;
+  FS.rd=RD; FS.ln=LN; FS.bt=BT; FS.btK=EQ.boat; FS.rough=rough; FS.water=0; FS.pumpOn=true; FS.rollV=0; FS.sunk=null; FS.wx=WX[wk]; FS.wk=wk; FS.son=GEAR[SV.son].lvl; FS.net=GEAR[SV.net].lvl; FS.fat=0; FS.anchor=false; FS.windA=rnd(0,6.28); FS.lb=RD.lb*LN.str;
   FS.Ls=FS.lb*N_PER_LB*(1+(RD.cush||0)*.4); FS.reel=RD.reel; FS.rodLen=RD.len; FS.lureK=V.lures.find(k=>owns(k))||V.lures[0]; if(V.kind==='sea') FS.trollK=FS.trollK.slice(0,BT.rods||2); const rng=Math.random;
   if(V.kind==='lake'){ FS.boat.x=-30; FS.boat.z=-20; FS.boat.h=.6; }
   if(V.kind==='river'){ FS.boat.x=-60; FS.boat.z=-6; FS.boat.h=Math.PI/2*.9; }
   if(V.kind==='sea'){ FS.boat.x=0; FS.boat.z=0; FS.boat.h=0; }
+  if(FS.mode==='spear'&&(V.kind!=='sea'||V.fresh)) FS.mode='free';
   buildCover(rng); spawnFish(rng);
   /* start within a long cast of some cover (lake) or just off the weed line (sea) */
   if(V.kind==='lake'){ const w=COVER.weeds[0], a=Math.atan2(w.z,w.x), R=Math.hypot(w.x,w.z)-w.r-24; FS.boat.x=Math.cos(a)*R; FS.boat.z=Math.sin(a)*R; FS.boat.h=Math.atan2(w.x-FS.boat.x,w.z-FS.boat.z); }
   if(V.kind==='sea'){ FS.boat.x=-20; FS.boat.z=40; FS.boat.h=Math.PI/2; }
   if(V.kind!=='sea'&&depthAt(FS.boat.x,FS.boat.z)<1.5){ const b=FS.boat; outer: for(let r=4;r<200;r+=4) for(let k=0;k<16;k++){ const a=k/16*6.283, x=b.x+Math.cos(a)*r, z=b.z+Math.sin(a)*r; if(depthAt(x,z)>2.2&&depthAt(x+Math.sin(b.h)*6,z+Math.cos(b.h)*6)>1.5){ b.x=x; b.z=z; break outer; } } }
   phase='play'; paused=false; $('menu').classList.add('hidden'); $('result').classList.add('hidden'); built3=false;
-  banner(V.name,(modeSel==='tour'?`${V.tour.name} · ${tourLen} hours · best ${V.tour.n} fish`:`${fmtClock(FS.tod)} · ${BT.name}`)+` · ${FS.wx.name}, wind ${Math.round(FS.wx.wind*2.237)} mph`,'#38bdf8',2.8); if(FS.wx.info&&FS.wx.storm) setTimeout(()=>{ if(FS) msg(FS.wx.info,'#fca5a5',6); },3000); renderKeysHelp(); updateBoard(); }
+  banner(V.name,(modeSel==='tour'?`${V.tour.name} · ${tourLen} hours · best ${V.tour.n} fish`:`${fmtClock(FS.tod)} · ${BT.name}`)+` · ${FS.wx.name}, wind ${Math.round(FS.wx.wind*2.237)} mph`,'#38bdf8',2.8); if(FS.wx.info&&FS.wx.storm) setTimeout(()=>{ if(FS) msg(FS.wx.info,'#fca5a5',6); },3000); if(FS.mode==='spear') spearSetup();
+  renderKeysHelp(); updateBoard(); }
 /* fish live where their habitat is: sample spots and keep the good ones */
 function spawnFish(rng){ const V=FS.V, out=[], dens=V.kind==='lake'?Math.min(2.2,Math.pow((V.R||150)/150,1.5)):1, N={}; for(const k in V.fish) N[k]=Math.round(V.fish[k]*dens);
   const LR=(V.R||150)*1.25, RW=(V.HW||22)*1.4, box=V.kind==='lake'?[-LR,LR,-LR,LR]:V.kind==='river'?[-340,340,-RW,RW]:[-700,700,-480,480];
@@ -749,6 +751,7 @@ function boatStep(dt){ const b=FS.boat, V=FS.V, BT=FS.bt, canDrive=FS.st==='idle
   /* ride the waves: heave, pitch and roll from the surface under the hull */
   const L=V.kind==='sea'?(BT.rods>2?14:8):5, fw=[Math.sin(b.h),Math.cos(b.h)], rt=[Math.cos(b.h),-Math.sin(b.h)], wy=t=>waveH(b.x+t[0],b.z+t[1],FS.t);
   const yC=waveH(b.x,b.z,FS.t), yF=wy([fw[0]*L/2,fw[1]*L/2]), yB=wy([-fw[0]*L/2,-fw[1]*L/2]), yR=wy([rt[0]*1.5,rt[1]*1.5]), yL=wy([-rt[0]*1.5,-rt[1]*1.5]);
+  if(FS.rough){ hullStep(dt,yC,yF,yB,yR,yL,L); return; }
   const stab=BT.rods>2?.6:1; b.y=lerp(b.y||0,(yC+yF+yB)/3,Math.min(1,dt*3)); b.pitch=lerp(b.pitch||0,Math.atan2(yF-yB,L)*stab,Math.min(1,dt*3)); b.roll=lerp(b.roll||0,Math.atan2(yR-yL,3)*stab*1.3,Math.min(1,dt*3)); FS.boatY=b.y; }
 
 /* ---------- loop ---------- */
@@ -766,6 +769,8 @@ function step(dt){
   if(FS.st!=='card') FS.tod+=dt*TS; FS.bT=(FS.bT||0)-dt; if(FS.bT<=0){ FS.bT=1; setText('cntT',fmtClock(FS.tod)); }
   if(FS.mode==='tour'&&FS.st!=='card'&&FS.st!=='fight'&&FS.st!=='bite'){ FS.tourT-=dt; if(FS.tourT<=0) return endSession(); }
   else if(FS.mode==='tour'&&FS.st==='fight'){ FS.tourT-=dt; if(FS.tourT<-90) return endSession(); }
+  if(FS.mode==='spear'){ spearStep(dt); for(const fx of FS.fx) fx.t+=dt; FS.fx=FS.fx.filter(fx=>fx.t<1.6); return; }
+  if(FS.sunk){ sunkStep(dt); return; }
   boatStep(dt);
   if(FS.st==='charge'){ FS.castP=Math.min(1.18,FS.castP+dt/1.05); }
   if(FS.st==='air'){ let n=6; while(n-->0&&FS.st==='air') stepAir(dt/6); }
@@ -795,7 +800,7 @@ function endSession(){ phase='over'; const T=FS.V.tour; let h;
     const place=1+field.filter(v=>v>FS.score).length, prize=FS.score>0?(T.prize[place-1]||0):0; FS.place=place; FS.prize=prize; SV.money+=prize; saveSV();
     h=`<h2>${T.name}: weigh-in</h2><div class="rs">${FS.bag.length?fmtKg(FS.score):'No fish'}</div><p>${FS.bag.length} fish · ${fmtLb(FS.score)}${best&&FS.score>0?' · your best ever!':''}</p><p style="font-size:22px">Finished ${FS.place}${['st','nd','rd'][FS.place-1]||'th'} of 30${FS.prize?` · prize ${fmt$(FS.prize)}`:''}</p>
     <table class="ls"><tr><th>#</th><th>Species</th><th>Weight</th><th>Length</th></tr>${FS.bag.map((c,i)=>`<tr><td>${i+1}</td><td>${SPEC[c.sp].name}</td><td>${fmtKg(c.w)}</td><td>${Math.round(c.len)} cm</td></tr>`).join('')}</table>`; }
-  else { const tot=FS.catches.reduce((a,c)=>a+c.w,0); const earned=FS.catches.reduce((a,c)=>a+(c.pay||0),0); h=`<h2>Day on the water</h2><div class="rs">${FS.catches.length} fish</div><p>${fmt$(earned)} earned · ${fmtKg(tot)} in total · ${FS.stats.casts} casts · ${FS.stats.bites} bites · ${FS.stats.lost} lost</p>
+  else { const tot=FS.catches.reduce((a,c)=>a+c.w,0); const earned=FS.catches.reduce((a,c)=>a+(c.pay||0),0), D=FS.D; h=`<h2>${D?'Day on the reef':'Day on the water'}</h2><div class="rs">${FS.catches.length} fish</div><p>${fmt$(earned)} earned · ${fmtKg(tot)} in total · ${D?`${D.dives} dives · deepest ${D.deep.toFixed(1)} m · longest breath-hold ${Math.round(Math.max(D.longest,D.diveT||0))} s`:`${FS.stats.casts} casts · ${FS.stats.bites} bites · ${FS.stats.lost} lost`}</p>
     <table class="ls"><tr><th>Species</th><th>Weight</th><th>Length</th></tr>${FS.catches.slice().sort((a,b)=>b.w-a.w).slice(0,10).map(c=>`<tr><td>${SPEC[c.sp].name}${c.pb?' ⭐':''}</td><td>${fmtKg(c.w)}</td><td>${Math.round(c.len)} cm</td></tr>`).join('')}</table>`; }
   $('resultIn').innerHTML=h+'<p>Enter for the menu, R to go again.</p>'; setTimeout(()=>{ if(phase==='over') $('result').classList.remove('hidden'); },500); }
 
@@ -880,13 +885,13 @@ function drawHUD(){ const V=FS.V, L=LURE[FS.lureK];
   if(FS.st==='card') drawCard();
   const hint=FS.st==='idle'?(V.kind==='sea'?(FS.boat.v>.8?`W/S throttle · A/D steer · troll at ${(V.trollSpd||[2.2,5.6]).map(v=>Math.round(v*1.944)).join('-')} knots · 1-4 change the rods in the spread`:'Stopped: SPACE drops a bait to the bottom · 5-7 bait · W to troll · N anchor'):`Hold SPACE to cast (Q/E aim) · W/S/A/D drive · Shift = outboard · 1-${V.lures.length} lures`):FS.st==='water'?(LURE[FS.lureK].still?'Leave it still · J reel · SPACE set the hook':'Hold J to reel · K twitch · pause to trigger strikes · SPACE set the hook'):FS.st==='bite'?'SPACE!':FS.st==='fight'?'J reel · S lift (pump) · W lower · A/D side pressure · Q/E drag':'';
   if(hint&&FS.st!=='card') hudText(hint,W/2,H-16,15,'#e2e8f0','center'); }
-function draw(){ ctx.clearRect(0,0,W,H); if(view3) render3D(frameDtG); if(!FS||phase==='menu'){ if(!view3){ ctx.fillStyle='#0b3a4a'; ctx.fillRect(0,0,W,H); } return; } if(!view3) draw2D(); drawHUD(); }
+function draw(){ ctx.clearRect(0,0,W,H); if(view3) render3D(frameDtG); if(!FS||phase==='menu'){ if(!view3){ ctx.fillStyle='#0b3a4a'; ctx.fillRect(0,0,W,H); } return; } if(FS.mode==='spear'){ drawSpearHUD(); return; } if(!view3) draw2D(); drawHUD(); if(FS.rough) drawHullHUD(); }
 
 /* ---------- board, toasts ---------- */
 let toastT=0, bannerT=0;
 const setText=(id,t)=>{ const e=$(id); if(e&&e.textContent!==String(t)) e.textContent=t; };
 const badgeF=col=>svg(`<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 100 100"><circle cx="50" cy="50" r="46" fill="${col}"/><ellipse cx="46" cy="52" rx="26" ry="13" fill="#f8fafc"/><path d="M70 52 L88 38 L88 66 Z" fill="#f8fafc"/><circle cx="32" cy="49" r="3" fill="${col}"/></svg>`);
-function updateBoard(){ if(!FS) return; const V=FS.V; $('logoL').src=badgeF('#0ea5e9'); setText('nameL','You'); setText('tpL',FS.mode==='tour'?V.tour.name:'Free fishing'); setText('scoreL',FS.mode==='tour'?fmtKg(FS.score):FS.catches.length); $('sideL').style.setProperty('--tc','#0ea5e9');
+function updateBoard(){ if(!FS) return; const V=FS.V; $('logoL').src=badgeF('#0ea5e9'); setText('nameL','You'); setText('tpL',FS.mode==='tour'?V.tour.name:FS.mode==='spear'?'Spearfishing':'Free fishing'); setText('scoreL',FS.mode==='tour'?fmtKg(FS.score):FS.catches.length); $('sideL').style.setProperty('--tc','#0ea5e9');
   const big=FS.catches.slice().sort((a,b)=>b.w-a.w)[0]; $('logoR').src=badgeF('#16a34a'); setText('nameR',big?SPEC[big.sp].name:'Biggest fish'); setText('tpR',big?fmtLb(big.w):'-'); setText('scoreR',big?fmtKg(big.w):''); $('sideR').style.setProperty('--tc','#16a34a');
   setText('cntT',fmtClock(FS.tod)); setText('innT',V.name); setText('outsT',`${V.lb} lb line`); setText('basesT',''); }
 function toast(t,col='#34d399'){ const e=$('toast'); e.textContent=t; e.style.borderColor=col; e.classList.add('on'); toastT=2.2; }
@@ -905,9 +910,11 @@ addEventListener('keydown',e=>{
   if(e.code==='Escape'||e.code==='KeyP'){ paused=!paused; if(paused) banner('Paused','Esc to resume · M for menu · X to end the day','#000',1e9); else { $('banner').classList.remove('on'); bannerT=0; } return; }
   if(e.code==='KeyM'){ if(confirm('Leave the water?')) toMenu(); keys.clear(); return; }
   if(e.code==='KeyX'&&paused){ paused=false; $('banner').classList.remove('on'); endSession(); return; }
+  if(FS.mode==='spear'){ spearKey(e.code); return; }
   if(e.code==='KeyC'){ FS.cam=(FS.cam+1)%3; toast(['Over the shoulder','High view','Boat view'][FS.cam],'#93c5fd'); return; }
   if(e.code==='Tab'){ FS.lureCam=!FS.lureCam; return; }
   if(FS.st==='card'){ if(['Space','Enter','KeyJ'].includes(e.code)){ FS.card=null; FS.st='idle'; } return; }
+  if(e.code==='KeyB'&&FS.rough&&HULL[FS.btK].pump){ FS.pumpOn=!FS.pumpOn; toast(FS.pumpOn?'Bilge pump on':'Bilge pump off','#93c5fd'); return; }
   if(e.code==='KeyN'){ FS.anchor=!FS.anchor; toast(FS.anchor?'Anchor down':'Anchor up: drifting','#93c5fd'); return; }
   const n=+e.code.replace(/^(Digit|Numpad)/,''); if(e.code.match(/^(Digit|Numpad)[1-9]$/)){ if(FS.st!=='idle') return;
     if(FS.V.kind==='sea'&&n<=4){ if(n>FS.trollK.length) return; const own=FS.V.troll.filter(owns); const i=n-1; FS.trollK[i]=own[(own.indexOf(FS.trollK[i])+1)%own.length]; toast(`Rod ${n}: ${LURE[FS.trollK[i]].name}`,'#93c5fd'); return; }
@@ -932,9 +939,9 @@ function renderMenu(){ const V=VEN[venSel], vo=venueOpen(venSel);
   ${['lake','river','sea'].map(kd=>`<div class="pills"><span class="lbl">${KINDN[kd]}</span>${Object.keys(VEN).filter(k=>VEN[k].kind===kd).map(k=>pill('v',k,venSel===k,VEN[k].name,'')).join('')}</div>`).join('')}
   <div class="pills"><button data-shop="boat" tabindex="-1">🛒 Tackle shop · ${fmt$(SV.money)}</button><span style="color:#93a0bd">${esc(V.where||'')}</span></div>
   ${V.kind==='sea'?`<div class="pills"><span class="lbl">Your boat</span>${Object.keys(GEAR).filter(k=>GEAR[k].cat==='boat'&&GEAR[k].ven[0]==='sea').map(k=>pill('bt',k,eq.boat===k,GEAR[k].name,'')).join('')}</div>`:''}
-  <div class="pills"><span class="lbl">Mode</span>${pill('m','free',modeSel==='free','Free fishing','')}${pill('m','tour',modeSel==='tour',V.tour.name,'')}${modeSel==='tour'?`<span class="lbl">Length</span>${[2,4,8].map(n=>pill('tl',n,tourLen===n,n+' hours','')).join('')}`:''}</div>
+  <div class="pills"><span class="lbl">Mode</span>${pill('m','free',modeSel==='free','Free fishing','')}${pill('m','tour',modeSel==='tour',V.tour.name,'')}${V.kind==='sea'&&!V.fresh?pill('m','spear',modeSel==='spear','🤿 Spearfishing',''):''}${modeSel==='tour'?`<span class="lbl">Length</span>${[2,4,8].map(n=>pill('tl',n,tourLen===n,n+' hours','')).join('')}`:''}</div>
   <div class="pills"><span class="lbl">Start</span>${TODS.map((t,i)=>pill('t',i,todSel===i,`${t.name}`,'')).join('')}<span class="lbl">Weather</span>${pill('w','random',wxSel==='random','Forecast','')}${Object.keys(WX).filter(k=>wxOk(k,venSel)).map(k=>pill('w',k,wxSel===k,(WX[k].big?'🌀 ':k==='storm'?'⛈ ':'')+WX[k].name,'')).join('')}</div>
-  <div class="pills"><span class="lbl">Help</span>${pill('as',1,assist,'Bite alerts','')}${pill('as',0,!assist,'Realistic','')}<span class="lbl">Boat</span><span style="color:#cbd5e1">${GEAR[eq.boat].name}</span><span class="lbl">Rod</span><span style="color:#cbd5e1">${GEAR[eq.rod].name} · ${GEAR[eq.line].name}</span></div>
+  <div class="pills"><span class="lbl">Help</span>${pill('as',1,assist,'Bite alerts','')}${pill('as',0,!assist,'Realistic','')}<span class="lbl">Boat physics</span>${pill('rough',1,rough,'On: water, pumping, capsizing','')}${pill('rough',0,!rough,'Off','')}<span class="lbl">Boat</span><span style="color:#cbd5e1">${GEAR[eq.boat].name}</span><span class="lbl">Rod</span><span style="color:#cbd5e1">${GEAR[eq.rod].name} · ${GEAR[eq.line].name}</span></div>
   <div class="pills">${vo.ok?`<button class="gold" data-act="start" tabindex="-1">Go fishing <kbd>Enter</kbd></button>`:`<button data-shop="lic" tabindex="-1">🔒 ${vo.why}: open the shop</button>`}<a href="./" tabindex="-1">Home</a><a href="surf" tabindex="-1">Surfing</a></div>
   <div id="hint">${V.sub}. ${SV.caught?`${SV.caught} fish landed · ${fmt$(SV.money)} in the bank.`:'Tip: dawn, dusk and overcast days are the best. Fish follow a lure: pause it or twitch it to make them bite.'}</div>`;
   $('menuIn').innerHTML=h; $('logoL').src=badgeF('#0ea5e9'); setText('nameL','You'); setText('tpL',V.name); setText('scoreL',fmt$(SV.money)); $('logoR').src=badgeF('#16a34a'); const bk=Object.keys(SV.best).filter(k=>SPEC[k]&&V.fish[k]).sort((a,b)=>SV.best[b]-SV.best[a])[0]; setText('nameR',bk?SPEC[bk].name:'Your best'); setText('tpR',bk?fmtLb(SV.best[bk]):'-'); setText('scoreR',bk?fmtKg(SV.best[bk]):'');
@@ -959,11 +966,140 @@ function equip(k){ const g=GEAR[k]; if(g.cat==='rod'||g.cat==='boat') SV.eq[g.ve
 $('menuIn').addEventListener('mousedown',e=>{ if(e.target.closest('button')) e.preventDefault(); });
 $('menuIn').addEventListener('click',e=>{ const b=e.target.closest('button'); if(!b) return; const d=b.dataset; audio(); sfx.click();
   if(d.shop){ shopTab=d.shop==='close'?null:d.shop; renderMenu(); return; } if(d.buy){ buy(d.buy); renderMenu(); return; } if(d.equip){ equip(d.equip); renderMenu(); return; }
-  if(d.v) venSel=d.v; else if(d.bt){ equip(d.bt); } else if(d.m) modeSel=d.m; else if(d.t!==undefined) todSel=+d.t; else if(d.as!==undefined) assist=d.as==='1'; else if(d.tl) tourLen=+d.tl; else if(d.w) wxSel=d.w; else if(d.act==='start'){ startGame(); return; } savePrefs(); renderMenu(); });
+  if(d.v) venSel=d.v; else if(d.bt){ equip(d.bt); } else if(d.m) modeSel=d.m; else if(d.t!==undefined) todSel=+d.t; else if(d.as!==undefined) assist=d.as==='1'; else if(d.rough!==undefined) rough=d.rough==='1'; else if(d.tl) tourLen=+d.tl; else if(d.w) wxSel=d.w; else if(d.act==='start'){ startGame(); return; } savePrefs(); renderMenu(); });
 function menuKey(code){ if(['Enter','NumpadEnter'].includes(code)&&!shopTab&&venueOpen(venSel).ok) startGame(); }
 function startGame(){ if(!venueOpen(venSel).ok) return; audio(); savePrefs(); newSession(); }
-function renderKeysHelp(){ $('keysHelp').innerHTML=baseOf(venSel)==='sea'?'<div><b>Throttle</b> W / S</div><div><b>Steer</b> A / D</div><div><b>Spread</b> 1-4</div><div><b>Drop bait</b> stop, Space</div><div><b>Bait</b> 5-7</div><div><b>Strike</b> Space</div><div><b>Jig</b> K</div><div><b>Anchor</b> N</div><div><b>Reel</b> J</div><div><b>Pump</b> S lift, W lower</div><div><b>Drag</b> Q / E</div><div><b>Lure cam</b> Tab</div><div><b>Camera</b> C</div><div><b>Pause</b> Esc</div>':'<div><b>Cast</b> hold Space</div><div><b>Aim</b> Q / E</div><div><b>Drive</b> WASD (+Shift)</div><div><b>Reel</b> J</div><div><b>Twitch</b> K</div><div><b>Set hook / net</b> Space</div><div><b>Pump</b> S lift, W lower</div><div><b>Side pressure</b> A / D</div><div><b>Drag</b> Q / E</div><div><b>Lures</b> 1-7</div><div><b>Anchor</b> N</div><div><b>Lure cam</b> Tab</div><div><b>Pause</b> Esc</div>'; }
+function renderKeysHelp(){ if(modeSel==='spear'&&baseOf(venSel)==='sea'){ $('keysHelp').innerHTML='<div><b>Swim</b> W / S · <b>Sprint</b> Shift</div><div><b>Turn</b> A / D · <b>Look</b> ↑ ↓</div><div><b>Dive</b> Space · <b>Up</b> C</div><div><b>Shoot</b> J · <b>Load</b> K · <b>Retrieve</b> R</div><div><b>Pull the line</b> hold L</div><div><b>Equalize</b> E</div><div><b>End the day</b> Esc, X</div>'; return; } $('keysHelp').innerHTML=baseOf(venSel)==='sea'?'<div><b>Throttle</b> W / S</div><div><b>Steer</b> A / D</div><div><b>Spread</b> 1-4</div><div><b>Drop bait</b> stop, Space</div><div><b>Bait</b> 5-7</div><div><b>Strike</b> Space</div><div><b>Jig</b> K</div><div><b>Anchor</b> N</div><div><b>Bail / pump</b> B</div><div><b>Reel</b> J</div><div><b>Pump</b> S lift, W lower</div><div><b>Drag</b> Q / E</div><div><b>Lure cam</b> Tab</div><div><b>Camera</b> C</div><div><b>Pause</b> Esc</div>':'<div><b>Cast</b> hold Space</div><div><b>Aim</b> Q / E</div><div><b>Drive</b> WASD (+Shift)</div><div><b>Reel</b> J</div><div><b>Twitch</b> K</div><div><b>Set hook / net</b> Space</div><div><b>Pump</b> S lift, W lower</div><div><b>Side pressure</b> A / D</div><div><b>Drag</b> Q / E</div><div><b>Lures</b> 1-7</div><div><b>Anchor</b> N</div><div><b>Lure cam</b> Tab</div><div><b>Pause</b> Esc</div>'; }
 function toMenu(){ phase='menu'; FS=null; $('result').classList.add('hidden'); $('menu').classList.remove('hidden'); renderMenu(); }
+
+/* ---------- boat physics: freeboard, water over the gunwale, the bilge pump, rolling and capsizing ----------
+   fb: freeboard (m) from the waterline to the gunwale, cap: litres of water the hull holds before it is swamped,
+   pump: bilge pump litres per second (0 = bail with a bucket), self: a self-bailing deck that drains through scuppers,
+   capA: the heel angle (rad) past which she will not come back, T: natural roll period (s) */
+const HULL={boat_jon:{fb:.32,cap:900,pump:0,capA:.5,T:2.2,kg:180},boat_alu:{fb:.45,cap:1200,pump:1.2,capA:.58,T:2.4,kg:300},boat_bass:{fb:.5,cap:1500,pump:2.4,capA:.62,T:2.6,kg:800},
+  boat_launch:{fb:.55,cap:2400,pump:2,capA:.62,T:3,kg:1200},boat_drift:{fb:.5,cap:1000,pump:0,capA:.55,T:2.4,kg:250},boat_jet:{fb:.5,cap:1400,pump:1.6,capA:.58,T:2.5,kg:650},
+  boat_cc:{fb:.75,cap:3500,pump:4,self:1,capA:.9,T:3.6,kg:2600},boat_walk:{fb:.95,cap:6000,pump:5,self:1,capA:1,T:4.4,kg:6500},boat_sport:{fb:1.25,cap:12000,pump:8,self:1,capA:1.15,T:5.5,kg:18000},boat_yacht:{fb:1.6,cap:25000,pump:12,self:1,capA:1.3,T:6.5,kg:40000}};
+function hullStep(dt,yC,yF,yB,yR,yL,L){ const b=FS.boat, BT=FS.bt, Hd=HULL[FS.btK]||HULL.boat_jon, Wd=BT.Wd||1.8;
+  /* water aboard makes her sit lower (less freeboard) and sloshes around (the free-surface effect kills her stability) */
+  const area=L*Wd*.7, sinkY=FS.water/1000/area, fill=clamp(FS.water/Hd.cap,0,1.4), stiff=Math.max(.15,1-fill*.75);
+  b.y=lerp(b.y||0,(yC+yF+yB)/3-sinkY,Math.min(1,dt*3)); b.pitch=lerp(b.pitch||0,Math.atan2(yF-yB,L)*(BT.rods>2?.6:1),Math.min(1,dt*3)); FS.boatY=b.y;
+  /* roll: a damped oscillator chasing the slope of the water under her, plus the heel from the wind on her side and the fish pulling on the rail */
+  const wv=[Math.sin(FS.windA)*FS.wx.wind,Math.cos(FS.windA)*FS.wx.wind], rt=[Math.cos(b.h),-Math.sin(b.h)], beamWind=wv[0]*rt[0]+wv[1]*rt[1], wa=Math.atan2(yR-yL,3); /* the water surface slope across the beam (sampled 3 m apart) */
+  /* wind pressure on her side times its lever, against her righting moment (displacement x g x GM) */ const disp=Hd.kg+FS.water+90, GM=Wd*.3;
+  let heel=-Math.sign(beamWind)*.5*1.2*beamWind*beamWind*(L*.5)*.5/(disp*G*GM);
+  if(FS.st==='fight'&&FS.hk){ const f=FS.hk, dx=f.x-b.x, dz=f.z-b.z, dl=Math.hypot(dx,dz)||1, lat=(dx*rt[0]+dz*rt[1])/dl; heel+=lat*FS.T*1.1/(disp*G*GM)*(f.y<0?.7:1); }
+  const turnIn=FS.st==='idle'?(held(['KeyA','ArrowLeft'])?1:0)-(held(['KeyD','ArrowRight'])?1:0):0; if(b.v>3&&turnIn) heel-=turnIn*b.v*.012;
+  const w=2*Math.PI/Hd.T*Math.sqrt(stiff), target=clamp(wa*.6+heel,-1.5,1.5), sl=fill>.3?Math.sin(FS.t*w*.9)*fill*.04:0;
+  FS.rollV+=(-(w*w)*((b.roll||0)-target-sl)-2*(Hd.T<3.2?.32:.2)*w*FS.rollV)*dt; /* flat-bottomed small boats are heavily damped in roll */ b.roll=(b.roll||0)+FS.rollV*dt;
+  /* past the point of no return she goes over, if she is half full of water or a breaking sea catches her on the beam; otherwise the low rail just scoops water */
+  const lim=Hd.capA*(1-fill*.25); if(Math.abs(b.roll)>lim){ if(fill>.35||Math.abs(wa)>.55&&Math.abs(beamWind)>12) return capsize(fill>.35?'Swamped and rolled over':'A breaking sea rolled her over'); b.roll=Math.sign(b.roll)*lim; FS.rollV*=-.3; }
+  /* water over the gunwale: a weir flow along each side and over the bow when the sea is higher than the rail */
+  const fwV=[Math.sin(b.h),Math.cos(b.h)], rails=[[0,L*.45,.8],[0,-L*.45,.8],[Wd*.5,0,L*.5],[-Wd*.5,0,L*.5]]; let inflow=0;
+  for(const [lx,lz,len] of rails){ const x=b.x+rt[0]*lx+fwV[0]*lz, z=b.z+rt[1]*lx+fwV[1]*lz, rail=Hd.fb-sinkY-Math.sin(b.roll)*lx+Math.sin(b.pitch||0)*lz, h=(waveH(x,z,FS.t)-b.y)*(FS.V.kind==='sea'?.5:.3)-rail; /* the hull rises with the water around it: only the part it cannot follow comes over the rail */ if(h>0) inflow+=1.7*len*Math.pow(h,1.5)*1000*.35; }
+  /* spray and green water over the bow when you run hard into a steep sea, and rain in an open boat */ const yb=yF-yC; if(b.v>5&&yb>.2) inflow+=(b.v-5)*yb*6; if(FS.wx.rain&&!Hd.self) inflow+=FS.wx.rain*.06*area;
+  let out=0; if(Hd.self&&fill<.95) out+=fill*Hd.cap*.06+(inflow>0?0:2); if(Hd.pump&&FS.pumpOn&&FS.water>15) out+=Hd.pump; if(!Hd.pump&&held(['KeyB'])) out+=1.1;
+  FS.water=Math.max(0,FS.water+(inflow-out)*dt); FS.inflow=inflow;
+  if(inflow>2&&!FS.wWarn){ FS.wWarn=1; msg(Hd.pump?'Taking water over the side! B: bilge pump · head into the waves':'Taking water over the side! Hold B to bail · head into the waves','#fbbf24',3.5); sfx.splash(1); }
+  if(inflow<.5) FS.wWarn=0;
+  if(FS.water>Hd.cap*1.3) return capsize('Swamped: she filled up and went down'); }
+function capsize(why){ const b=FS.boat; if(FS.sunk) return; FS.sunk={t:0,why,r0:b.roll||0,dir:Math.sign(b.roll||1)}; FS.hk=null; FS.lure=null; FS.st='idle'; FS.inflow=0; sfx.splash(2); banner('CAPSIZED!',why,'#ef4444',3); speak('Capsized!',true); }
+function sunkStep(dt){ const S=FS.sunk, b=FS.boat; S.t+=dt; b.roll=lerp(b.roll,S.dir*Math.PI*.95,Math.min(1,dt*1.6)); b.y=lerp(b.y,waveH(b.x,b.z,FS.t)-.6,Math.min(1,dt)); FS.boatY=b.y;
+  if(S.t>4.5&&!S.done){ S.done=1; const fee=Math.min(SV.money,FS.bt.rods?600:250); SV.money-=fee; saveSV();
+    if(FS.mode==='tour'){ msg(`Rescued. Disqualified from the ${FS.V.tour.name}.`,'#f87171',4); setTimeout(()=>{ if(FS) endSession(); },2500); return; }
+    msg(`Rescued by the ${FS.V.kind==='sea'?'coast guard':'marine patrol'}: ${fmt$(fee)} for the tow and lost tackle. Your catch went down with her.`,'#fca5a5',6); FS.catches=[]; updateBoard();
+    setTimeout(()=>{ if(!FS) return; FS.sunk=null; FS.water=0; FS.rollV=0; b.roll=0; b.v=b.tv=0; b.h+=Math.PI*.3; },2500); } }
+/* the gauges: water in the bilge and the heel */
+function drawHullHUD(){ const Hd=HULL[FS.btK]||HULL.boat_jon, x=W-250, y=14, fill=clamp(FS.water/Hd.cap,0,1.3), deg=Math.round((FS.boat.roll||0)*57.3), lim=Hd.capA*57.3;
+  rr(x,y,234,74,10,'rgba(5,10,24,.85)'); hudText(`Bilge ${Math.round(FS.water)} L`,x+12,y+22,15,fill>.6?'#f87171':fill>.25?'#fbbf24':'#93c5fd');
+  ctx.fillStyle='#1f2937'; ctx.fillRect(x+12,y+30,120,10); ctx.fillStyle=fill>.6?'#ef4444':fill>.25?'#f59e0b':'#38bdf8'; ctx.fillRect(x+12,y+30,120*Math.min(1,fill),10);
+  hudText(Hd.pump?`Pump ${FS.pumpOn?'ON':'off'} (B) · ${Hd.pump} L/s`:'No pump: hold B to bail',x+12,y+60,12,'#cbd5e1');
+  /* the inclinometer */ const cx=x+190, cy=y+40; ctx.strokeStyle='rgba(255,255,255,.4)'; ctx.lineWidth=2; ctx.beginPath(); ctx.arc(cx,cy,26,Math.PI*1.05,Math.PI*1.95); ctx.stroke();
+  for(const s of [-1,1]){ const a=-Math.PI/2+s*Hd.capA; ctx.strokeStyle='#ef4444'; ctx.beginPath(); ctx.moveTo(cx+Math.cos(a)*18,cy+Math.sin(a)*18); ctx.lineTo(cx+Math.cos(a)*30,cy+Math.sin(a)*30); ctx.stroke(); }
+  const a=-Math.PI/2+(FS.boat.roll||0); ctx.strokeStyle=Math.abs(deg)>lim*.7?'#f87171':'#fde047'; ctx.lineWidth=3; ctx.beginPath(); ctx.moveTo(cx,cy); ctx.lineTo(cx+Math.cos(a)*26,cy+Math.sin(a)*26); ctx.stroke(); hudText(`${Math.abs(deg)}°`,cx,cy+22,13,'#e5e7eb','center');
+  if(FS.inflow>2&&!FS.sunk) hudText('WATER COMING ABOARD',W/2,118,20,'#f87171','center'); }
+
+/* ---------- spearfishing: freedive a shallow reef on one breath with a band-powered speargun ---------- */
+const SPEAR_OK=['cuda','cobia','king','spanish','gt','mahi','amberjack','yellowtail','pollock','dogtooth','tuna','blackfin','rooster'];
+const CURIOUS=['snapper','cuda','amberjack','cobia','hogfish','trigger','gt','yellowtail','mutton','redemperor','coraltrout','mangjack'];
+if(!SPEC.reefshark) SPEC.reefshark={name:'Reef Shark',mean:40,s:.3,rec:70,F:9,vmax:6,end:1.4,jump:0,a:.006,dep:[2,20],hab:'reef',col:['#64748b','#e2e8f0'],shark:1,release:1,pay:0};
+function spearDepth(x,z,d0){ const S=FS.SZ, dist=Math.hypot(x-S.x,z-S.z); if(dist>S.r+70) return d0;
+  /* a reef flat 6-14 m deep: sand channels between coral heads that stand 1-3 m off the bottom */
+  let d=10+3.2*Math.sin(x/23)*Math.cos(z/19)+1.5*Math.sin(x/9+z/13); const c=Math.sin(x/4.3+Math.sin(z/7))*Math.sin(z/3.7+Math.cos(x/9)); if(c>.35) d-=(c-.35)*4.5;
+  return lerp(Math.max(3,d),d0,sstep(S.r,S.r+70,dist)); }
+function spearSetup(){ const V=FS.V, rf=COVER.reefs.slice().sort((a,b)=>a.x-b.x)[0]||{x:-300,z:0}; FS.SZ={x:rf.x,z:rf.z,r:110}; const b=FS.boat; b.x=rf.x; b.z=rf.z; b.v=b.tv=0; FS.anchor=true; FS.st='spear'; FS.rough=false;
+  const list=Object.keys(V.fish).filter(sp=>{ const S=SPEC[sp]; return S&&!S.bill&&!['tilefish','warsaw','snowygr','tuna','blackfin','skipjack','bigeye','albacore','sword','mahi','halibut','dogtooth'].includes(sp)&&(S.hab==='reef'||S.hab==='wreck'||S.bottom&&S.hab!=='shelf'||SPEAR_OK.includes(sp)); }), out=[];
+  for(let i=0;i<170&&list.length;i++){ const sp=list[Math.floor(Math.random()*list.length)], S=SPEC[sp], a=Math.random()*6.283, r=Math.sqrt(Math.random())*FS.SZ.r, x=FS.SZ.x+Math.cos(a)*r, z=FS.SZ.z+Math.sin(a)*r, d=depthAt(x,z), bot=S.bottom;
+    const w=rollWeight(sp,Math.random)*(.55+Math.random()*.5); out.push({sp,w,x,z,y:bot?-(d-rnd(.4,1.6)):-rnd(2,Math.max(2.5,d-1)),hx:x,hz:z,st:'idle',h:rnd(0,6.28),wt:rnd(0,4),tx:x,tz:z,ty:0,vx:0,vy:0,vz:0}); }
+  FS.fish=out; FS.D={x:b.x+2,y:0,z:b.z+2,yaw:b.h,pitch:-.2,v:[0,0,0],o2:1,ear:0,still:0,diveT:0,deep:0,longest:0,dives:0,loaded:true,rel:0,spear:null,warned:0,earHurt:false,black:0};
+  msg('Anchored over the reef. Breathe up at the surface, then SPACE to dive. J shoots, E equalizes your ears.','#93c5fd',6); }
+const dfw=(y,p)=>[Math.sin(y)*Math.cos(p),Math.sin(p),Math.cos(y)*Math.cos(p)];
+function spearKey(code){ const D=FS.D; if(!D||D.black) return;
+  if(code==='KeyJ') spearShoot(); else if(code==='KeyK') spearReload(); else if(code==='KeyR') spearRetrieve(); else if(code==='KeyE'){ if(D.y<-.5){ D.ear=0; sfx.click(); } } }
+function spearShoot(){ const D=FS.D; if(!D.loaded||D.spear) return; const f=dfw(D.yaw,D.pitch), wob=Math.hypot(...D.v)*.02, d=[f[0]+gauss()*wob,f[1]+gauss()*wob,f[2]+gauss()*wob], n=Math.hypot(...d);
+  D.spear={p:[D.x+f[0]*.9,D.y+f[1]*.9-.1,D.z+f[2]*.9],v:d.map(c=>c/n*21),st:'fly',t:0}; D.loaded=false; sfx.splash(.3); noise(.12,.15,600); }
+function spearReload(){ const D=FS.D; if(D.loaded||D.spear||D.rel>0) return; D.rel=D.y>-.5?2.2:3.2; msg('Loading the bands...','#93c5fd',1.4); }
+function spearRetrieve(){ const D=FS.D, s=D.spear; if(!s||s.st==='fish') return; s.st='back'; }
+function spearHit(f,s){ const S=SPEC[f.sp], L=Math.max(.25,lenCm(f.sp,f.w)/100), c=Math.cos(f.h), sn=Math.sin(f.h), dx=s.p[0]-f.x, dz=s.p[2]-f.z, lz=dx*sn+dz*c;
+  const part=lz>L*.22?'head':lz<-L*.15?'tail':'body'; f.st='speared'; f.part=part; f.stam=part==='head'?0:1; f.dead=part==='head'; f.hold=part==='tail'?.25:part==='body'?.04*Math.max(1,f.w/6):0; s.st='fish'; s.f=f; s.line=Math.hypot(s.p[0]-FS.D.x,s.p[1]-FS.D.y,s.p[2]-FS.D.z)+.5; FS.bleed=FS.t;
+  sfx.good(); msg(part==='head'?`Stone shot! ${S.name}`:part==='body'?`Speared a ${S.name}: it's fighting, hold L to pull it in`:`Tail shot on a ${S.name}: weak hold, pull it in fast!`,part==='head'?'#86efac':'#fde047',2.6); }
+function spearStep(dt){ const D=FS.D, b=FS.boat; if(!D) return; boatStep(dt); D.rel=Math.max(0,D.rel-dt); if(D.rel===0&&!D.loaded&&!D.spear&&D.wasRel){ D.loaded=true; msg('Gun loaded','#86efac',1); } D.wasRel=D.rel>0;
+  if(D.black){ D.black+=dt; D.v=[0,.4,0]; D.y=Math.min(0,D.y+dt*.6); if(D.black>5){ D.black=0; D.o2=.4; D.y=0; msg(assist?'Your dive buddy pulled you up and got you breathing. Rest before the next dive.':'Blackout. You were lucky to be found. The day is over.','#fca5a5',6); if(!assist) setTimeout(()=>{ if(FS) endSession(); },2500); } return; }
+  const depthHere=depthAt(D.x,D.z), under=D.y<-.5, turn=(held(['KeyA','ArrowLeft'])?1:0)-(held(['KeyD','ArrowRight'])?1:0), look=(held(['ArrowUp'])?1:0)-(held(['ArrowDown'])?1:0);
+  D.yaw-=turn*1.3*dt; D.pitch=clamp(D.pitch+look*1.1*dt,-1.35,1.25);
+  const fin=(held(['KeyW'])?1:0)-(held(['KeyS'])?.5:0), sprint=held(['ShiftLeft','ShiftRight'])&&fin>0, dn=held(['Space']), up=held(['KeyC']), f=dfw(D.yaw,under?D.pitch:Math.min(0,D.pitch)), spd=sprint?1.7:1.05;
+  const want=[f[0]*fin*spd,f[1]*fin*spd+(up?.9:0)-(dn?.9:0),f[2]*fin*spd];
+  /* buoyancy: a wetsuit floats you near the surface; deeper it is crushed and you sink (neutral around 9 m) */ const buoy=.16*(1+D.y/9);
+  for(let i=0;i<3;i++) D.v[i]+=(want[i]-D.v[i])*Math.min(1,dt*1.8); D.v[1]+=buoy*dt*(fin||dn||up?.4:1);
+  if(D.earHurt&&D.y<-3&&D.v[1]<0) D.v[1]=Math.max(D.v[1],.2);
+  /* a speared fish pulls you along the line */ const s=D.spear; if(s&&s.st==='fish'&&s.f&&!s.f.dead){ const ff=s.f, dx=ff.x-D.x, dy=ff.y-D.y, dz=ff.z-D.z, dl=Math.hypot(dx,dy,dz)||1; if(dl>s.line){ const k=Math.min(1,ff.w/30)*ff.stam; D.v[0]+=dx/dl*k*2*dt; D.v[1]+=dy/dl*k*2*dt; D.v[2]+=dz/dl*k*2*dt; } }
+  D.x+=D.v[0]*dt; D.y+=D.v[1]*dt; D.z+=D.v[2]*dt; const floor=-depthAt(D.x,D.z)+.45; if(D.y<floor){ D.y=floor; D.v[1]=Math.max(0,D.v[1]); } if(D.y>0){ D.y=0; D.v[1]=Math.min(0,D.v[1]); }
+  const kick=Math.abs(fin)+(dn||up?.6:0); D.still=kick===0&&Math.hypot(...D.v)<.2&&D.y<floor+1.6?D.still+dt:0;
+  /* breath: you burn oxygen faster kicking, faster still sprinting; on the surface you breathe it back */
+  if(D.y<-.5){ if(!D.inDive){ D.inDive=true; D.diveT=0; D.dives++; } D.diveT+=dt; D.o2-=dt*(.0085+.006*kick+(sprint?.007:0)+(s&&s.st==='fish'&&!s.f.dead?.006:0));
+    D.deep=Math.max(D.deep,-D.y); if(D.o2<.35&&D.warned<1){ D.warned=1; msg('Diaphragm contractions: start heading up','#fbbf24',2.5); } if(D.o2<.16&&D.warned<2){ D.warned=2; msg('GO UP NOW!','#f87171',2.5); speak('Go up now',true); }
+    /* ears: every couple of metres down you have to equalize */ if(D.v[1]<0) D.ear+=-D.v[1]*dt; if(assist&&D.ear>1.8) D.ear=0; if(D.ear>3&&!D.earPain){ D.earPain=1; msg('Ear pain! Press E to equalize','#fbbf24',2); } if(D.ear<2) D.earPain=0;
+    if(D.ear>5&&!D.earHurt){ D.earHurt=true; msg('Ruptured eardrum! You cannot go deeper than 3 m today.','#f87171',4); }
+    /* blackout: out of oxygen, or the classic shallow-water blackout as the pressure drops in the last metres of the ascent */
+    if(D.o2<=0||D.y>-6&&D.v[1]>.2&&D.o2<.08&&Math.random()<dt*1.5){ D.black=.01; msg(D.o2<=0?'BLACKOUT':'SHALLOW WATER BLACKOUT','#ef4444',3); speak('Blackout',true); if(s) D.spear=null; return; } }
+  else { if(D.inDive){ D.inDive=false; D.longest=Math.max(D.longest,D.diveT); D.surfT=0; } D.surfT=(D.surfT||0)+dt; D.o2=Math.min(1,D.o2+dt*.028); D.warned=0; D.ear=0; }
+  /* the spear: 21 m/s off the gun, slowed hard by the water, on a 7.5 m line */
+  if(s){ s.t+=dt; if(s.st==='fly'){ for(let k=0;k<4;k++){ const h=dt/4, sp=Math.hypot(...s.v); for(let i=0;i<3;i++){ s.v[i]-=s.v[i]*.2*sp*h; s.p[i]+=s.v[i]*h; } s.v[1]-=.4*h;
+      for(const ff of FS.fish){ if(ff.st==='gone'||ff.st==='speared') continue; const L=Math.max(.25,lenCm(ff.sp,ff.w)/100), c=Math.cos(ff.h), sn=Math.sin(ff.h), dx=s.p[0]-ff.x, dy=s.p[1]-ff.y, dz=s.p[2]-ff.z, lx=dx*c-dz*sn, lz=dx*sn+dz*c, bd=SPEC[ff.sp].bd||1;
+        if((lx/(L*.12))**2+(dy/(L*.18*bd))**2+(lz/(L*.5))**2<1){ spearHit(ff,s); break; } }
+      if(s.st!=='fly') break; const ln=Math.hypot(s.p[0]-D.x,s.p[1]-D.y,s.p[2]-D.z); if(ln>7.5||sp<1.5||s.p[1]<-depthAt(s.p[0],s.p[2])){ s.st='hang'; msg('Missed. R to pull the spear back, K to reload','#94a3b8',1.6); break; } } }
+    else if(s.st==='back'||s.st==='hang'&&held(['KeyR'])){ const dx=D.x-s.p[0], dy=D.y-s.p[1], dz=D.z-s.p[2], dl=Math.hypot(dx,dy,dz); if(dl<.8){ D.spear=null; msg('Spear back on the gun: K to load the bands','#93c5fd',1.4); } else { const st=Math.min(dl,2.5*dt); s.p[0]+=dx/dl*st; s.p[1]+=dy/dl*st; s.p[2]+=dz/dl*st; } }
+    else if(s.st==='fish'){ const ff=s.f; s.p=[ff.x,ff.y,ff.z]; if(held(['KeyL'])) s.line=Math.max(.8,s.line-(ff.dead?1.2:.7)*dt*(1.2-ff.stam*.6));
+      let dl=Math.hypot(ff.x-D.x,ff.y-D.y,ff.z-D.z); /* the line holds it */ if(dl>s.line){ const k=s.line/dl; ff.x=D.x+(ff.x-D.x)*k; ff.y=D.y+(ff.y-D.y)*k; ff.z=D.z+(ff.z-D.z)*k; dl=s.line; } if(dl<1.3){ return secureFish(ff); }
+      if(!ff.dead){ ff.stam=Math.max(0,ff.stam-dt/(6+ff.w*.8)); if(Math.random()<ff.hold*dt*(held(['KeyL'])?1.6:1)*(.4+ff.stam)){ msg(`The spear tore out: the ${SPEC[ff.sp].name.toLowerCase()} got away`,'#f87171',2.5); ff.st='idle'; ff.flee=8; D.spear=null; FS.bleed=0; return; } } } }
+  spearFishThink(dt); spearShark(dt); }
+function secureFish(f){ const S=SPEC[f.sp], D=FS.D; D.spear=null; f.st='gone'; FS.bleed=0; const len=lenCm(f.sp,f.w);
+  if(S.prot||S.release||S.shark){ const fine=500; SV.money=Math.max(0,SV.money-fine); saveSV(); msg(`${S.name}: protected / release-only. Fined ${fmt$(fine)}.`,'#f87171',4); sfx.bad(); updateBoard(); return; }
+  const pb=!SV.best[f.sp]||f.w>SV.best[f.sp]; if(pb) SV.best[f.sp]=f.w; SV.count[f.sp]=(SV.count[f.sp]||0)+1; SV.caught++; const c={sp:f.sp,w:f.w,len,pb,tod:FS.tod,spear:1,part:f.part}; c.pay=Math.round((S.pay||0)*f.w+(pb?25:0)+3); SV.money+=c.pay; saveSV(); FS.catches.push(c);
+  msg(`On the stringer: ${S.name} · ${fmtKg(f.w)}${pb?' · personal best!':''} · ${fmt$(c.pay)}`,'#86efac',3); sfx.good(); updateBoard(); }
+function spearFishThink(dt){ const D=FS.D, dv=Math.hypot(...D.v);
+  for(const f of FS.fish){ if(f.st==='gone') continue; const S=SPEC[f.sp]; if(Math.abs(f.x-D.x)>70||Math.abs(f.z-D.z)>70) continue; const dx=f.x-D.x, dy=f.y-D.y, dz=f.z-D.z, d=Math.hypot(dx,dy,dz)||1, bot=-depthAt(f.x,f.z)+.4;
+    let tx=f.hx+Math.sin(FS.t*.15+f.h*3)*6, tz=f.hz+Math.cos(FS.t*.13+f.h*5)*6, ty=S.bottom?bot+.6:clamp(f.y,bot+1,-1.5), sp=.45;
+    if(f.st==='speared'){ if(!f.dead){ /* a speared fish bolts away from you, down for cover */ tx=f.x+dx/d*6; tz=f.z+dz/d*6; ty=bot+.5; sp=S.vmax*.4*(.3+f.stam); } else { tx=f.x; tz=f.z; ty=Math.max(bot,f.y-.3); sp=.3; } }
+    else { const toward=(D.v[0]*dx+D.v[1]*dy+D.v[2]*dz)/d, fear=4+(dv>.8?4:0)+(toward>.4?3:0)+(S.shark?-3:0);
+      if(f.flee>0){ f.flee-=dt; tx=f.x+dx/d*8; tz=f.z+dz/d*8; ty=S.bottom?bot+.3:f.y; sp=Math.min(S.vmax,2.6); }
+      else if(D.still>3&&CURIOUS.includes(f.sp)&&d<28&&D.y<-1){ /* lie still on the bottom and the curious ones come in for a look */ const a=FS.t*.4+f.h; tx=D.x+Math.cos(a)*3.5; tz=D.z+Math.sin(a)*3.5; ty=D.y+.3; sp=.7; }
+      else if(d<fear&&D.y<-.5){ f.flee=rnd(2,5); } }
+    const ox=f.x, oz=f.z; moveFish(f,tx,tz,ty,sp,dt); const mvx=f.x-ox, mvz=f.z-oz; if(Math.hypot(mvx,mvz)>1e-4) f.h=lerp(f.h,f.h+angD(Math.atan2(mvx,mvz)-f.h),Math.min(1,dt*4)); } }
+/* blood in the water brings the sharks */
+function spearShark(dt){ const D=FS.D, s=D.spear; if(FS.bleed&&s&&s.st==='fish'&&FS.t-FS.bleed>6&&!FS.shark&&Math.random()<dt*.12){ const a=Math.random()*6.28; FS.shark={sp:'reefshark',w:rnd(30,70),x:D.x+Math.cos(a)*28,z:D.z+Math.sin(a)*28,y:D.y,h:0,st:'shark'}; FS.fish.push(FS.shark); msg('Reef shark coming in on the blood! Get the fish to the boat!','#f87171',3); speak('Shark!',true); }
+  const sh=FS.shark; if(!sh) return; const tgt=s&&s.st==='fish'?s.f:null; if(!tgt){ sh.flee=(sh.flee||0)+dt; moveFish(sh,sh.x+(sh.x-D.x),sh.z+(sh.z-D.z),sh.y,3,dt); if(sh.flee>8){ sh.st='gone'; FS.shark=null; } return; }
+  const ox=sh.x, oz=sh.z; moveFish(sh,tgt.x,tgt.z,tgt.y,4.5,dt); sh.h=Math.atan2(sh.x-ox,sh.z-oz)||sh.h; if(Math.hypot(sh.x-tgt.x,sh.z-tgt.z,sh.y-tgt.y)<1){ tgt.st='gone'; D.spear=null; FS.bleed=0; msg(`The shark took your ${SPEC[tgt.sp].name.toLowerCase()}!`,'#f87171',3); sfx.snap(); } }
+function drawSpearHUD(){ const D=FS.D; if(!D) return; const under=D.y<-.5, bot=depthAt(D.x,D.z);
+  rr(16,14,300,128,10,'rgba(5,10,24,.8)'); hudText(`${FS.V.name} · spearfishing`,28,38,18,'#fde047'); hudText(`Depth ${(-D.y).toFixed(1)} m · bottom ${bot.toFixed(1)} m`,28,60,15,'#e2e8f0'); hudText(under?`Dive ${D.diveT.toFixed(0)} s · deepest ${D.deep.toFixed(1)} m`:`Breathing up · ${(D.surfT||0).toFixed(0)} s on the surface`,28,80,14,'#93c5fd');
+  hudText('Breath',28,104,13,'#cbd5e1'); ctx.fillStyle='#1f2937'; ctx.fillRect(84,94,210,10); ctx.fillStyle=D.o2<.2?'#ef4444':D.o2<.4?'#f59e0b':'#38bdf8'; ctx.fillRect(84,94,210*clamp(D.o2,0,1),10);
+  hudText('Ears',28,126,13,'#cbd5e1'); ctx.fillStyle='#1f2937'; ctx.fillRect(84,116,210,10); ctx.fillStyle=D.earHurt?'#7f1d1d':D.ear>3?'#ef4444':'#a3e635'; ctx.fillRect(84,116,210*clamp(D.ear/5,0,1),10);
+  const s=D.spear; rr(W-276,14,260,58+FS.catches.length*18,10,'rgba(5,10,24,.8)'); hudText(D.loaded?'Speargun: LOADED':s?(s.st==='fish'?`Fish on the line · ${s.line.toFixed(1)} m · hold L`:'Spear out · R to pull it back'):D.rel>0?'Loading the bands...':'Empty · K to load',W-264,38,15,D.loaded?'#86efac':'#fbbf24');
+  hudText(`Stringer ${fmtKg(FS.catches.reduce((a,c)=>a+c.w,0))} · ${fmt$(SV.money)}`,W-264,60,13,'#e2e8f0'); FS.catches.slice(-8).forEach((c,i)=>hudText(`${SPEC[c.sp].name} ${fmtKg(c.w)}${c.part==='head'?' · stone shot':''}`,W-264,80+i*18,12,'#cbd5e1'));
+  if(under){ ctx.strokeStyle='rgba(255,255,255,.6)'; ctx.lineWidth=1.5; ctx.beginPath(); ctx.arc(W/2,H/2,8,0,6.28); ctx.moveTo(W/2-14,H/2); ctx.lineTo(W/2-4,H/2); ctx.moveTo(W/2+4,H/2); ctx.lineTo(W/2+14,H/2); ctx.stroke(); }
+  if(D.still>3&&under) hudText('Lying still: the curious fish are coming in for a look',W/2,H-44,15,'#86efac','center');
+  if(FS.msg&&FS.msgT>0){ ctx.globalAlpha=Math.min(1,FS.msgT*2); hudText(FS.msg.t,W/2,150,22,FS.msg.col,'center'); ctx.globalAlpha=1; }
+  if(D.black){ ctx.fillStyle=`rgba(0,0,0,${Math.min(.92,D.black/2)})`; ctx.fillRect(0,0,W,H); }
+  hudText(under?'W/S swim · A/D turn · ↑/↓ look · SPACE down · C up · Shift sprint · J shoot · E equalize · L pull line':'Breathe up, then SPACE (or look down + W) to dive · J shoot · K load · R retrieve · Esc then X to end the day',W/2,H-16,14,'#e2e8f0','center'); }
 
 /* ---------- 3D engine (shared with the other Rink Rivals sports) ---------- */
 function makeR3(glc,stage){
@@ -1365,10 +1501,11 @@ function drawAngler(){ const K=K3, A=anglerPos(), tip=rodTip(), sea=FS.V.kind===
   for(let i=0;i<pts.length-1;i++) seg(pts[i],pts[i+1],.045-i*.005,i<2?'#111827':'#1f2937');
   return pts[pts.length-1]; }
 function drawLine(from,to,slack){ const n=10; let prev=from; for(let i=1;i<=n;i++){ const t=i/n, sag=slack*Math.sin(t*Math.PI); const p=[from[0]+(to[0]-from[0])*t,from[1]+(to[1]-from[1])*t-sag,from[2]+(to[2]-from[2])*t]; if(p[1]<0&&to[1]>=-0.01) p[1]=Math.max(p[1],0); seg(prev,p,.012,[.95,.95,.85]); prev=p; } }
+let FOGK=0; const fogC=c=>FOGK?mixC(typeof c==='string'?hx3(c):c,UWC(),FOGK):c;
 function drawFish3(f,air){ const K=K3, S=SPEC[f.sp], L=Math.max(.25,lenCm(f.sp,f.w)/100), {T,S:Sc,RY,RX,mm,US,UB}=R3, pitch=air?clamp(-f.vy*.15,-1,1):0, M=mm(T(f.x*K,f.y*K,f.z*K),RY(f.h),RX(pitch));
-  const bd=S.bd||1; R3.part(US,mm(M,Sc(L*.16*K*(S.shark?1.1:1),L*(S.bill?.17:.22)*bd*K,L*.5*K)),S.col[0]); R3.part(US,mm(M,T(0,-L*.05*K,0),Sc(L*.13*K,L*.12*K,L*.42*K)),S.col[1]);
-  const wag=Math.sin(performance.now()/90)*.4; R3.part(UB,mm(M,T(0,0,-L*.55*K),RY(wag),Sc(.02*K,L*.3*K,L*.18*K)),S.fin||S.col[0]); R3.part(UB,mm(M,T(0,L*.2*bd*K,S.shark?L*.05*K:0),S.shark?RX(-.5):R3.I(),Sc(.02*K,L*(S.shark?.22:.14)*K,L*(S.shark?.14:.25)*K)),S.fin||S.col[0]); if(S.shark) for(const sd of [-1,1]) R3.part(UB,mm(M,T(sd*L*.12*K,-L*.06*K,L*.12*K),Sc(L*.18*K,.02*K,L*.1*K)),S.col[0]);
-  if(S.bill) R3.part(UB,mm(M,T(0,0,L*.62*K),Sc(.03*K,.03*K,L*.3*K)),'#1f2937'); }
+  const bd=S.bd||1; R3.part(US,mm(M,Sc(L*.16*K*(S.shark?1.1:1),L*(S.bill?.17:.22)*bd*K,L*.5*K)),fogC(S.col[0])); R3.part(US,mm(M,T(0,-L*.05*K,0),Sc(L*.13*K,L*.12*K,L*.42*K)),fogC(S.col[1]));
+  const wag=Math.sin(performance.now()/90)*.4; R3.part(UB,mm(M,T(0,0,-L*.55*K),RY(wag),Sc(.02*K,L*.3*K,L*.18*K)),S.fin||fogC(S.col[0])); R3.part(UB,mm(M,T(0,L*.2*bd*K,S.shark?L*.05*K:0),S.shark?RX(-.5):R3.I(),Sc(.02*K,L*(S.shark?.22:.14)*K,L*(S.shark?.14:.25)*K)),S.fin||fogC(S.col[0])); if(S.shark) for(const sd of [-1,1]) R3.part(UB,mm(M,T(sd*L*.12*K,-L*.06*K,L*.12*K),Sc(L*.18*K,.02*K,L*.1*K)),fogC(S.col[0]));
+  if(S.bill) R3.part(UB,mm(M,T(0,0,L*.62*K),Sc(.03*K,.03*K,L*.3*K)),fogC('#1f2937')); }
 /* the open ocean: a live mesh of the swell around the boat, darker in the troughs, white on the steep crests */
 let seaMesh=null, seaT=0;
 function drawSea(){ const K=K3, b=FS.boat, now=FS.t; if(!seaMesh||now-seaT>.033){ if(seaMesh&&R3.freeMesh) R3.freeMesh(seaMesh); seaT=now; const N=72, cs=9, ox=Math.round(b.x/cs)*cs-N*cs/2, oz=Math.round(b.z/cs)*cs-N*cs/2, amp=FS.wx.sea*(FS.wx.big?1:(FS.V.wv||1))+(FS.wx.long||0)*1.35+(FS.rogue?FS.rogue.A*.9:0);
@@ -1385,6 +1522,7 @@ function drawSea(){ const K=K3, b=FS.boat, now=FS.t; if(!seaMesh||now-seaT>.033)
 const FOAM=[]; function drawRiverFoam(){ const K=K3, b=FS.boat; while(FOAM.length<90) FOAM.push({x:b.x+rnd(-60,60),z:rnd(-25,25),s:rnd(.3,1)});
   for(const f of FOAM){ const c=currentAt(f.x,f.z); f.x+=c[0]*frameDtG; if(f.x>b.x+60||depthAt(f.x,f.z)<.2||riverPool(f.x)>.6){ f.x=b.x-60+Math.random()*30; f.z=rnd(-1,1)*riverHW(f.x)*.8; } if(riverPool(f.x)>.55) continue; R3.part(R3.UB,R3.mm(R3.T(f.x*K,.04*K,f.z*K),R3.S(f.s*1.4*K,.01*K,f.s*.35*K)),[.88,.95,.95]); } }
 function render3D(dt){ const K=K3, E=R3.partE||R3.part;
+  if(FS&&phase!=='menu'&&FS.mode==='spear'&&FS.D){ renderSpear(dt); return; }
   if(!FS||phase==='menu'){ const a=performance.now()/9000; R3.frame({eye:[Math.sin(a)*30*K,8*K,Math.cos(a)*30*K],center:[0,0,0],fov:50,near:5,far:200000,sky:[.55,.74,.92]},()=>{},dt); return; }
   build3(); const b=FS.boat, A=anglerPos(), sea=FS.V.kind==='sea', yaw=FS.st==='idle'||FS.st==='charge'?b.h+FS.aim:FS.rodYaw||b.h, fw=[Math.sin(yaw),Math.cos(yaw)];
   let tgt=FS.st==='fight'&&FS.hk?[FS.hk.x,Math.max(FS.hk.y,-1),FS.hk.z]:FS.lure&&FS.st!=='idle'?[FS.lure.x,Math.max(FS.lure.y,-.5),FS.lure.z]:[A[0]+fw[0]*25,0,A[2]+fw[1]*25];
@@ -1400,8 +1538,8 @@ function render3D(dt){ const K=K3, E=R3.partE||R3.part;
     if(sea) drawSea(); else if(FS.V.kind==='river') drawRiverFoam();
     /* the lightning bolt: a jagged white channel from the cloud base to the water */
     if(FS.bolt){ const B=FS.bolt, r2=mulberry32(B.seed|0); let p=[B.x,420,B.z]; for(let k=0;k<12;k++){ const q=[p[0]+(r2()-.5)*60,p[1]-35,p[2]+(r2()-.5)*60]; if(k===11) q[1]=0; E(R3.UB,R3.beam(p.map(v=>v*K),q.map(v=>v*K),3*K,3*K),[1,1,1]); if(r2()<.3){ const br=[q[0]+(r2()-.5)*80,q[1]-40,q[2]+(r2()-.5)*80]; E(R3.UB,R3.beam(q.map(v=>v*K),br.map(v=>v*K),1.5*K,1.5*K),[.85,.9,1]); } p=q; } }
-    drawBoat(b,sea?'#f8fafc':'#b91c1c'); if(typeof drawGhosts==='function') drawGhosts();
-    const tip=drawAngler();
+    const BM=drawBoat(b,sea?'#f8fafc':'#b91c1c'); if(FS.rough&&FS.water>5&&!FS.sunk){ const Hd=HULL[FS.btK]||HULL.boat_jon, g=GEAR[FS.btK], fl=clamp(FS.water/Hd.cap,0,1), dk=(g.deck||.5); E(R3.UB,R3.mm(BM,R3.T(0,(dk+.03+fl*.14)*K,-g.L*.08*K),R3.S(g.Wd*.86*K,(fl*.28+.02)*K,g.L*.74*K)),[.22,.42,.52]); } if(typeof drawGhosts==='function') drawGhosts();
+    let tip; if(FS.sunk){ /* in the water beside the hull in a life jacket */ const sx=b.x+Math.cos(b.h)*1.6, sz=b.z-Math.sin(b.h)*1.6, sy=waveH(sx,sz,FS.t); R3.part(R3.US,R3.mm(R3.T(sx*K,(sy+.12)*K,sz*K),R3.S(.13*K,.15*K,.13*K)),'#d8a27e'); R3.part(R3.UB,R3.mm(R3.T(sx*K,(sy-.05)*K,sz*K),R3.S(.5*K,.25*K,.35*K)),'#f97316'); tip=[sx,sy+.3,sz]; } else tip=drawAngler();
     /* the line: from the rod tip to the lure, or the fish */
     if(FS.st==='fight'&&FS.hk){ const f=FS.hk, ent=[f.x,Math.max(0,f.y),f.z]; drawLine(tip,ent,FS.T<.03*FS.Ls?1.2:.05); if(f.y<0) seg(ent,[f.x,f.y,f.z],.012,[.9,.9,.8]); if(f.y>-1.2||f.air) drawFish3(f,f.air); else E(R3.UB,R3.mm(R3.T(f.x*K,.02*K,f.z*K),R3.S(.4*K,.01*K,.4*K)),[.85,.9,.9]); }
     else if(FS.lure&&FS.st!=='idle'){ const l=FS.lure, L=LURE[FS.lureK]; drawLine(tip,[l.x,Math.max(0,l.y),l.z],FS.st==='air'?0:held(['KeyJ'])?.05:.5); if(l.y<0) seg([l.x,0,l.z],[l.x,l.y,l.z],.01,[.9,.9,.8]);
@@ -1426,6 +1564,35 @@ function render3D(dt){ const K=K3, E=R3.partE||R3.part;
   if(FS.flash>0){ ctx.fillStyle=`rgba(235,240,255,${FS.flash*.35})`; ctx.fillRect(0,0,W,H); }
   const h=((FS.tod%24)+24)%24, dark=h<4.5||h>21.5?.55:h<6?.55*(6-h)/1.5:h>19.5?.55*(h-19.5)/2:0; if(dark>0){ ctx.fillStyle=`rgba(4,8,30,${dark})`; ctx.fillRect(0,0,W,H); } }
 
+/* ---------- underwater: the reef, the fish, the spear ---------- */
+const cross=(a,b)=>[a[1]*b[2]-a[2]*b[1],a[2]*b[0]-a[0]*b[2],a[0]*b[1]-a[1]*b[0]], norm=a=>{ const l=Math.hypot(a[0],a[1],a[2])||1; return [a[0]/l,a[1]/l,a[2]/l]; };
+let bedMesh=null, bedAt=null; const UWC=()=>{ const D=FS&&FS.D; return mixC([.04,.33,.45],[.01,.1,.18],clamp(D?-D.y/25:0,0,1)); };
+const hsh=(i,j)=>{ let h=(Math.imul(i,374761393)+Math.imul(j,668265263))|0; h=Math.imul(h^(h>>>13),1274126177); return ((h^(h>>>16))>>>0)/4294967296; };
+function drawSeabed(cx,cz){ const K=K3, N=48, cs=2.2, ox=Math.round(cx/cs)*cs-N*cs/2, oz=Math.round(cz/cs)*cs-N*cs/2;
+  if(!bedMesh||!bedAt||Math.hypot(bedAt[0]-ox,bedAt[1]-oz)>4){ if(bedMesh&&R3.freeMesh) R3.freeMesh(bedMesh); bedAt=[ox,oz];
+    bedMesh=R3.mkMesh(g=>{ const Hh=[]; for(let i=0;i<=N;i++) for(let j=0;j<=N;j++) Hh.push(-depthAt(ox+i*cs,oz+j*cs)); const id=(i,j)=>i*(N+1)+j;
+      for(let i=0;i<N;i++) for(let j=0;j<N;j++){ const q=[[i,j],[i+1,j],[i+1,j+1],[i,j+1]], hm=(Hh[id(i,j)]+Hh[id(i+1,j+1)])/2, r=hsh(Math.round((ox+i*cs)/cs),Math.round((oz+j*cs)/cs)), rough=Math.abs(Hh[id(i,j)]-Hh[id(i+1,j+1)]);
+        const base=rough>.8?(r<.5?[.5,.46,.4]:[.58,.5,.44]):r<.08?[.45,.5,.36]:[.8,.74,.58], dist=Math.hypot(ox+i*cs-cx,oz+j*cs-cz), col=mixC(base,UWC(),clamp((dist-5)/26,0,1));
+        for(const tri of [[0,2,1],[0,3,2]]){ const P=tri.map(k=>{ const [ii,jj]=q[k]; return [(ox+ii*cs)*K,Hh[id(ii,jj)]*K,(oz+jj*cs)*K]; }), u=[P[1][0]-P[0][0],P[1][1]-P[0][1],P[1][2]-P[0][2]], v=[P[2][0]-P[0][0],P[2][1]-P[0][1],P[2][2]-P[0][2]], n=norm(cross(u,v)), nn=n[1]<0?n.map(c=>-c):n;
+          for(const p of P){ g.p.push(p[0],p[1],p[2]); g.n.push(nn[0],nn[1],nn[2]); g.c.push(col[0]*(.95+r*.06),col[1]*(.95+r*.06),col[2]); g.ph.push(0); } } } }); }
+  R3.part(bedMesh,R3.I(),[1,1,1]);
+  /* coral heads, sea fans and sponges */ for(let i=-14;i<=14;i++) for(let j=-14;j<=14;j++){ const gx=Math.floor(cx/3)+i, gz=Math.floor(cz/3)+j, r=hsh(gx*7+3,gz*13+1); if(r>.3) continue; const x=gx*3+hsh(gx,gz)*3, z=gz*3+hsh(gz,gx)*3, y=-depthAt(x,z), k=Math.floor(r*10)%4;
+    const fg=c=>mixC(c,UWC(),clamp((Math.hypot(x-cx,z-cz)-5)/26,0,1));
+    if(k===0) R3.part(R3.US,R3.mm(R3.T(x*K,(y+.4)*K,z*K),R3.S(.7*K,.55*K,.7*K)),fg([.7,.5,.35])); else if(k===1) R3.part(R3.UB,R3.mm(R3.T(x*K,(y+.6)*K,z*K),R3.RY(r*20),R3.S(.05*K,1.2*K,.9*K)),fg([.55,.3,.55]));
+    else if(k===2) R3.part(R3.UC,R3.mm(R3.T(x*K,(y+.5)*K,z*K),R3.S(.3*K,1*K,.3*K)),fg([.8,.68,.3])); else R3.part(R3.US,R3.mm(R3.T(x*K,(y+.25)*K,z*K),R3.S(1*K,.3*K,.8*K)),fg([.4,.5,.38])); } }
+function renderSpear(dt){ build3(); const K=K3, D=FS.D, b=FS.boat, surf=waveH(D.x,D.z,FS.t), eyeY=D.y>-.5?Math.max(D.y,surf)+.15:D.y, eye=[D.x,eyeY,D.z], f=dfw(D.yaw,D.pitch), under=eyeY<surf-.05;
+  const sky=under?mixC([.03,.32,.45],[.0,.07,.14],clamp(-eyeY/25,0,1)):skyCol();
+  R3.frame({eye:eye.map(v=>v*K),center:[eye[0]+f[0],eye[1]+f[1],eye[2]+f[2]].map(v=>v*K),fov:72,near:3,far:under?9000:260000,sky},()=>{
+    drawSeabed(D.x,D.z); drawSea(); drawBoat(b,'#f8fafc');
+    /* the anchor line */ seg([b.x,(FS.boatY||0)+.4,b.z],[b.x+3,-depthAt(b.x+3,b.z),b.z],.03,[.85,.8,.6]);
+    for(const fi of FS.fish){ if(fi.st==='gone') continue; const fd=Math.hypot(fi.x-D.x,fi.y-D.y,fi.z-D.z); if(fd>34) continue; FOGK=clamp((fd-5)/26,0,1); drawFish3(fi,false); } FOGK=0;
+    /* the speargun in your hands, and the spear on its line */ const r=norm(cross(f,[0,1,0])), u=cross(r,f), at=(a,bq,c)=>[eye[0]+f[0]*a+r[0]*bq+u[0]*c,eye[1]+f[1]*a+r[1]*bq+u[1]*c,eye[2]+f[2]*a+r[2]*bq+u[2]*c];
+    const gb=at(.25,.2,-.27), gt=at(1.05,.13,-.2); seg(gb,gt,.022,[.15,.15,.17]); seg(at(.3,.2,-.29),at(.34,.2,-.38),.025,[.2,.2,.2]);
+    const s=D.spear; if(!s&&D.loaded) seg(at(.2,.12,-.13),at(1.55,.12,-.13),.008,[.75,.75,.78]); if(s){ const tail=s.st==='fly'?s.p.map((v,i)=>v-s.v[i]/Math.max(1,Math.hypot(...s.v))*1.3):[s.p[0]-f[0]*1.2,s.p[1]-f[1]*1.2,s.p[2]-f[2]*1.2]; seg(tail,s.p,.01,[.8,.8,.82]); seg(gt,tail,.004,[.9,.9,.7]); }
+    /* marine snow drifting by */ for(let k=0;k<70;k++){ const x=D.x+((hsh(k,1)*24+FS.t*.2)%24)-12, y=D.y+((hsh(k,2)*12+FS.t*.05)%12)-6, z=D.z+((hsh(k,3)*24)%24)-12; if(y<surf) R3.part(R3.UB,R3.mm(R3.T(x*K,y*K,z*K),R3.S(.025*K,.025*K,.025*K)),[.8,.9,.95]); }
+  },dt);
+  if(under){ const g=ctx.createRadialGradient(W/2,H/2,H*.3,W/2,H/2,H*.85); g.addColorStop(0,'rgba(0,40,70,.05)'); g.addColorStop(1,'rgba(0,15,35,.55)'); ctx.fillStyle=g; ctx.fillRect(0,0,W,H); } }
+
 /* ---------- loop ---------- */
 let last=performance.now();
 function frame(now){ const dt=Math.min(.05,(now-last)/1000); last=now; frameDtG=dt||1/60; step(dt); draw(); requestAnimationFrame(frame); }
@@ -1436,7 +1603,7 @@ $('viewBtn2').addEventListener('click',e=>{ e.stopPropagation(); audio(); setVie
 $('viewBtn2').addEventListener('pointerdown',e=>e.stopPropagation());
 $('btnSnd').addEventListener('click',()=>{ muted=!muted; $('btnSnd').textContent=muted?'Sound off':'Sound on'; if(!muted){ audio(); sfx.click(); } });
 $('result').addEventListener('click',()=>{ if(phase==='over') toMenu(); });
-if(TEST) window.__fi={get FS(){return FS;},get phase(){return phase;},step,newSession,keys,startCharge,releaseCast,setHook,tryLand,twitch,depthAt,SPEC,LURE,VEN,get COVER(){return COVER;},set venSel(v){venSel=v;},set wxSel(v){wxSel=v;},set modeSel(v){modeSel=v;},set todSel(v){todSel=v;},set assist(v){assist=v;}};
+if(TEST) window.__fi={GEAR,HULL,spearKey,get D(){return FS&&FS.D;},get FS(){return FS;},get phase(){return phase;},step,newSession,keys,startCharge,releaseCast,setHook,tryLand,twitch,depthAt,SPEC,LURE,VEN,get COVER(){return COVER;},set venSel(v){venSel=v;},set wxSel(v){wxSel=v;},set modeSel(v){modeSel=v;},set todSel(v){todSel=v;},set assist(v){assist=v;}};
 setView3(view3);
 renderMenu();
 requestAnimationFrame(frame);
