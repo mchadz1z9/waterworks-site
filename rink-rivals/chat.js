@@ -95,5 +95,87 @@
     el.innerHTML=`<h4>👥 ${roster.length} on Rink Rivals right now</h4>`+(roster.length?games.map(g=>by[g].map(p=>`<div class="wr"><b style="color:hsl(${hue(p.name)},85%,70%)">${esc(p.name)}${p.me?' (you)':''}</b><span>${g==='home'?'🏠 browsing':esc(GN[g]||g)}</span>${g==='home'?'':g===GAME?'<a class="here">Here</a>':`<a href="${esc(g)}" title="Go play ${esc(GN[g]||g)} with them">Play →</a>`}</div>`).join('')).join(''):'<div class="empty">Nobody else yet.</div>')+'<div class="rules" style="border:0;padding:6px 2px">Tip: in a game press <b>Online → Play with anyone</b> to get matched with the people there.</div>'; }
   function start(){ build(); connect(); }
   if(document.readyState==='loading') document.addEventListener('DOMContentLoaded',start); else start();
+  addEventListener('rr-name',e=>{ const v=String(e.detail||'').trim(); if(!v||v===name) return; name=v; if(inp) inp.placeholder='Message everyone…'; tx({t:'name',name:v}); });
   window.RRC={ toggle:on=>toggle(on==null?!open:on), showWho, get online(){ return online; }, get roster(){ return roster; } };
+})();
+
+/* Rink Rivals player name: everyone picks a name once, before they play (it's the name on the chat, online games and the records) */
+(function(){
+  if(window.RRNAME) return; window.RRNAME=1;
+  const OFF=/[?&]test\b/.test(location.search)||location.protocol==='file:';
+  const get=()=>{ try{ return (localStorage.getItem('rrOnlineName')||'').trim(); }catch(e){ return ''; } };
+  if(OFF||get()) return;
+  const BAD=/(fuck|shit|cunt|nigg|fag|bitch|whore|slut|rape|nazi|hitler|dick|cock|pussy|penis|vagina|porn|sex)/i;
+  function check(v){ if(v.length<2) return 'At least 2 characters'; if(v.length>20) return 'At most 20 characters'; if(!/^[\p{L}\p{N} _.\-']+$/u.test(v)) return 'Letters, numbers, spaces and _ . - only'; if(BAD.test(v.replace(/[^a-z]/gi,''))) return 'Please pick a friendlier name'; if(/^(player|guest|admin|anonymous)\s*\d*$/i.test(v)) return 'Pick a name that\'s yours'; return ''; }
+  let ov=null, inp=null, msg=null;
+  function save(){ const v=inp.value.replace(/\s+/g,' ').trim(), e=check(v); if(e){ msg.textContent=e; inp.focus(); return; } try{ localStorage.setItem('rrOnlineName',v); }catch(_){} ov.remove(); ov=null; removeEventListener('keydown',block,true); removeEventListener('keyup',block,true); try{ dispatchEvent(new CustomEvent('rr-name',{detail:v})); }catch(_){} }
+  function block(e){ if(!ov) return; if(e.type==='keydown'&&(e.key==='Enter'||e.code==='Enter'||e.code==='NumpadEnter')){ e.preventDefault(); save(); } e.stopImmediatePropagation(); if(e.target!==inp) e.preventDefault(); if(e.target!==inp&&inp) inp.focus(); }
+  function show(){ if(get()) return; const st=document.createElement('style'); st.textContent=`#rrNm{position:fixed;inset:0;z-index:99999;background:rgba(3,7,18,.86);backdrop-filter:blur(4px);display:flex;align-items:center;justify-content:center;font-family:'Big Shoulders Display','Arial Narrow',sans-serif;padding:16px}
+#rrNm .bx{background:linear-gradient(160deg,#111a33,#0b1224);border:2px solid #334155;border-radius:18px;padding:26px 28px;max-width:420px;width:100%;color:#e2e8f0;text-align:center;box-shadow:0 20px 60px rgba(0,0,0,.6)}
+#rrNm h2{margin:0 0 6px;font-size:34px;color:#fff;letter-spacing:.02em} #rrNm p{margin:0 0 16px;color:#94a3b8;font:500 15px/1.4 system-ui,sans-serif}
+#rrNm input{width:100%;box-sizing:border-box;font:700 22px system-ui,sans-serif;padding:12px 14px;border-radius:10px;border:2px solid #475569;background:#020617;color:#fff;outline:none;text-align:center} #rrNm input:focus{border-color:#38bdf8}
+#rrNm button{margin-top:14px;width:100%;font:800 22px 'Big Shoulders Display','Arial Narrow',sans-serif;padding:11px;border:0;border-radius:10px;color:#111;background:linear-gradient(135deg,#fde047,#f59e0b);cursor:pointer} #rrNm .e{min-height:18px;margin-top:8px;color:#f87171;font:600 14px system-ui,sans-serif}`;
+    document.head.appendChild(st); ov=document.createElement('div'); ov.id='rrNm'; ov.innerHTML=`<div class="bx" role="dialog" aria-modal="true" aria-labelledby="rrNmT"><h2 id="rrNmT">Welcome to Rink Rivals</h2><p>Pick your player name first. It's shown in online games, on the world records and in the chat. Don't use your real full name.</p><input maxlength="20" autocomplete="off" spellcheck="false" placeholder="Your player name" aria-label="Player name"><div class="e"></div><button type="button">Let's play</button></div>`;
+    document.body.appendChild(ov); inp=ov.querySelector('input'); msg=ov.querySelector('.e'); ov.querySelector('button').addEventListener('click',save); inp.addEventListener('input',()=>{ msg.textContent=''; });
+    ['mousedown','pointerdown','touchstart','click','wheel'].forEach(t=>ov.addEventListener(t,e=>e.stopPropagation()));
+    addEventListener('keydown',block,true); addEventListener('keyup',block,true); setTimeout(()=>inp.focus(),50); }
+  if(document.readyState==='loading') document.addEventListener('DOMContentLoaded',show); else show();
+})();
+
+/* Rink Rivals key bindings: every game's controls can be moved to other keys (saved per game on this device).
+   A pressed key is swapped for the game's own key before the game sees it, so the games themselves don't change. */
+(function(){
+  if(window.RRKEYS) return;
+  const GAME=((location.pathname.split('/').pop()||'').replace(/\.html$/,'')||'home').toLowerCase().replace(/[^a-z0-9]/g,'')||'home';
+  if(GAME==='home'||GAME==='index') return;
+  const SK='rrKeys_'+GAME;
+  let map={}; try{ map=JSON.parse(localStorage.getItem(SK)||'{}')||{}; }catch(e){ map={}; }
+  const save=()=>{ try{ localStorage.setItem(SK,JSON.stringify(map)); }catch(e){} };
+  const KEEP=new Set(['Escape']); /* Escape always works, so you can't lock yourself out of a menu */
+  const keyOf=code=>code==='Space'?' ':code.startsWith('Key')?code.slice(3).toLowerCase():code.startsWith('Digit')?code.slice(5):/^Shift/.test(code)?'Shift':/^Control/.test(code)?'Control':/^Alt/.test(code)?'Alt':code==='NumpadEnter'?'Enter':code;
+  const nice=code=>{ if(!code) return '—'; if(code.startsWith('Key')) return code.slice(3); if(code.startsWith('Digit')) return code.slice(5); return {Space:'Space',ShiftLeft:'Shift',ShiftRight:'Right Shift',ControlLeft:'Ctrl',ControlRight:'Right Ctrl',AltLeft:'Alt',AltRight:'Right Alt',ArrowUp:'↑',ArrowDown:'↓',ArrowLeft:'←',ArrowRight:'→',Escape:'Esc',Enter:'Enter',Backspace:'Backspace',Tab:'Tab',Semicolon:';',Quote:"'",Comma:',',Period:'.',Slash:'/',Backslash:'\\',BracketLeft:'[',BracketRight:']',Minus:'-',Equal:'=',Backquote:'`'}[code]||code.replace(/^Numpad/,'Num ');};
+  const typing=t=>t&&(t.tagName==='INPUT'||t.tagName==='TEXTAREA'||t.tagName==='SELECT'||t.isContentEditable);
+  const held=new Map(); let capture=null;
+  function onKey(e){ if(!e.isTrusted) return; if(capture){ e.preventDefault(); e.stopImmediatePropagation(); if(e.type==='keydown') capture(e.code); return; }
+    if(typing(e.target)) return; let to;
+    if(e.type==='keyup'&&held.has(e.code)){ to=held.get(e.code); held.delete(e.code); }
+    else { if(!Object.prototype.hasOwnProperty.call(map,e.code)||KEEP.has(e.code)) return; to=map[e.code]; if(e.type==='keydown') held.set(e.code,to); }
+    e.stopImmediatePropagation(); e.preventDefault(); if(!to) return;
+    (e.target||window).dispatchEvent(new KeyboardEvent(e.type,{code:to,key:keyOf(to),repeat:e.repeat,shiftKey:e.shiftKey,ctrlKey:e.ctrlKey,altKey:e.altKey,metaKey:e.metaKey,bubbles:true,cancelable:true})); }
+  addEventListener('keydown',onKey,true); addEventListener('keyup',onKey,true);
+  addEventListener('blur',()=>{ for(const [k,to] of held){ if(to) window.dispatchEvent(new KeyboardEvent('keyup',{code:to,key:keyOf(to),bubbles:true})); } held.clear(); });
+  /* the game's actions, from its touch-screen layout */
+  function actions(){ const c=window.RR_TOUCH||{}, A=[], seen=new Set(); const add=(l,code)=>{ if(!code||seen.has(code)) return; seen.add(code); A.push([String(l).replace(/<br>/g,' ').replace(/<[^>]+>/g,''),code]); };
+    if(c.stick==='wasd'){ add('Forward / up','KeyW'); add('Left','KeyA'); add('Back / down','KeyS'); add('Right','KeyD'); } else if(c.stick==='ad'){ add('Left','KeyA'); add('Right','KeyD'); }
+    (c.buttons||[]).forEach(b=>add(b[0],b[1])); (c.sys||[['Start / confirm','Enter'],['Pause / menu','Escape']]).forEach(b=>add(b[0],b[1]));
+    for(const v of Object.values(map)) if(v&&!seen.has(v)) add('Game key '+nice(v),v); return A; }
+  const physFor=code=>{ const ks=Object.keys(map).filter(k=>map[k]===code&&k!==code); return ks.length?ks:(map[code]===undefined||map[code]===code?[code]:[]); };
+  function bind(phys,code){ const was=physFor(code)[0], other=Object.prototype.hasOwnProperty.call(map,phys)?map[phys]:phys, acts=actions().map(a=>a[1]);
+    bind1(phys,code); if(was&&was!==phys&&other&&other!==code&&acts.includes(other)&&!KEEP.has(other)) bind1(was,other); /* the action that had this key gets your old one: a swap */
+    save(); }
+  function bind1(phys,code){ for(const k of Object.keys(map)) if(map[k]===code&&k!==code) delete map[k]; /* one key per action */
+    if(phys===code){ delete map[code]; } else { map[phys]=code; if(map[code]===undefined&&!KEEP.has(code)&&code!=='Enter') map[code]=''; } /* the old key stops doing it */ }
+  let panel=null;
+  function render(){ if(!panel) return; const A=actions(); const used={}; for(const [l,c] of A) for(const p of physFor(c)) (used[p]=used[p]||[]).push(l);
+    panel.querySelector('.ls').innerHTML=A.map(([l,c])=>{ const ps=physFor(c), clash=ps.some(p=>used[p].length>1); return `<div class="r"><span>${l.replace(/[<>&]/g,'')}</span><button data-c="${c}" class="${clash?'cl':''}" title="Click, then press the new key">${ps.map(nice).join(' / ')||'none'}</button>${map[c]!==undefined||ps[0]!==c?`<i data-r="${c}" title="Back to ${nice(c)}">↺</i>`:''}</div>`; }).join('')+`<div class="r ad"><span>Remap any other key</span><button data-any="1">+ Add</button></div>`; }
+  function open(){ if(panel){ close(); return; } panel=document.createElement('div'); panel.id='rrKy'; panel.innerHTML=`<div class="bx"><h3>⌨ Key bindings <small>${GAME}</small></h3><p>Click a key, then press the key you want for it. Saved on this device. Esc always works.</p><div class="ls"></div><div class="ft"><button class="rs">Reset all</button><button class="dn">Done</button></div><div class="hint"></div></div>`;
+    document.body.appendChild(panel); ['mousedown','pointerdown','touchstart','click','wheel'].forEach(t=>panel.addEventListener(t,e=>e.stopPropagation()));
+    panel.addEventListener('click',e=>{ const b=e.target.closest('button,i'); if(!b){ if(e.target===panel) close(); return; } const hint=panel.querySelector('.hint');
+      if(b.classList.contains('dn')) return close(); if(b.classList.contains('rs')){ map={}; save(); render(); return; }
+      if(b.dataset.r){ const c=b.dataset.r; for(const k of Object.keys(map)) if(map[k]===c) delete map[k]; if(map[c]!==undefined) delete map[c]; save(); render(); return; }
+      if(b.dataset.any){ hint.textContent='Press the game key you want to move (the key the game uses)…'; capture=g=>{ if(g==='Escape'){ capture=null; hint.textContent=''; return; } hint.textContent=`Now press the new key for ${nice(g)}…`; capture=p=>{ capture=null; hint.textContent=''; if(p!=='Escape') bind(p,g); render(); }; }; return; }
+      if(b.dataset.c){ const c=b.dataset.c; b.textContent='press a key…'; b.classList.add('wt'); hint.textContent='Press the new key (Esc cancels)'; capture=p=>{ capture=null; hint.textContent=''; if(p!=='Escape') bind(p,c); render(); }; } });
+    render(); }
+  function close(){ capture=null; if(panel){ panel.remove(); panel=null; } }
+  const css=`#rrKy{position:fixed;inset:0;z-index:9800;background:rgba(3,7,18,.7);display:flex;align-items:center;justify-content:center;padding:16px;font-family:system-ui,sans-serif}
+#rrKy .bx{background:#0b1224;border:2px solid #334155;border-radius:16px;padding:18px 20px;max-width:440px;width:100%;max-height:86vh;overflow:auto;color:#e2e8f0}
+#rrKy h3{margin:0 0 4px;font:800 26px 'Big Shoulders Display','Arial Narrow',sans-serif;color:#fff} #rrKy h3 small{font-size:15px;color:#64748b;text-transform:uppercase;margin-left:6px} #rrKy p{margin:0 0 10px;color:#94a3b8;font-size:13px}
+#rrKy .r{display:flex;align-items:center;gap:8px;padding:5px 0;border-bottom:1px solid #1e293b;font-size:14px} #rrKy .r span{flex:1}
+#rrKy .r button{min-width:92px;font:700 14px system-ui;padding:6px 10px;border-radius:8px;border:1px solid #475569;background:#1e293b;color:#fff;cursor:pointer} #rrKy .r button.wt{background:#0369a1;border-color:#38bdf8} #rrKy .r button.cl{border-color:#f59e0b;color:#fde68a}
+#rrKy .r i{font-style:normal;cursor:pointer;color:#94a3b8;font-size:17px;width:18px} #rrKy .ft{display:flex;gap:8px;margin-top:12px} #rrKy .ft button{flex:1;font:800 17px 'Big Shoulders Display','Arial Narrow',sans-serif;padding:9px;border:0;border-radius:9px;cursor:pointer} #rrKy .rs{background:#334155;color:#fff} #rrKy .dn{background:#fbbf24;color:#111}
+#rrKy .hint{min-height:18px;margin-top:8px;color:#38bdf8;font-size:13px;text-align:center}`;
+  function mount(){ const st=document.createElement('style'); st.textContent=css; document.head.appendChild(st); const snd=document.getElementById('btnSnd'); const b=document.createElement('button'); b.id='btnKeys'; b.tabIndex=-1; b.textContent='⌨ Keys'; b.title='Change the key bindings'; b.addEventListener('click',e=>{ e.stopPropagation(); open(); });
+    if(snd&&snd.parentNode) snd.parentNode.insertBefore(b,snd.nextSibling); else { b.style.cssText='position:fixed;right:14px;bottom:112px;z-index:9400;border:0;border-radius:999px;padding:8px 14px;font:800 15px system-ui;color:#fff;background:#334155;cursor:pointer'; document.body.appendChild(b); } }
+  window.RRKEYS={open,close,get map(){ return map; }};
+  if(document.readyState==='loading') document.addEventListener('DOMContentLoaded',mount); else mount();
 })();
