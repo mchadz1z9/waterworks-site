@@ -213,9 +213,9 @@ function rot(v,k,a){ const c=Math.cos(a), s=Math.sin(a), kv=cross(k,v), d=dot(k,
 
 /* ---------- the aircraft: real masses, wing areas, thrust and drag ---------- */
 const PLANES={
- c172:{name:'Cessna 172 Skyhawk',short:'C172',m:1000,S:16.2,CLa:5.1,CL0:.25,CLmax:1.55,as:.27,CD0:.028,k:.055,T0:2900,vProp:85,ab:0,flapCL:[0,.22,.38,.5],flapCD:[0,.012,.03,.055],gearFixed:true,gearCD:0,maxRoll:1.4,maxPitch:.85,maxYaw:.5,nmax:3.8,col:'#f8fafc',col2:'#1d4ed8',span:11,lenB:8.3,prop:true,guns:0,vr:28,vapp:33,vs:24},
+ c172:{name:'Cessna 172 Skyhawk',short:'C172',m:1000,S:16.2,CLa:5.1,CL0:.25,CLmax:1.55,as:.27,CD0:.028,k:.055,T0:2900,vProp:85,ab:0,flapCL:[0,.22,.38,.5],flapCD:[0,.012,.03,.055],gearFixed:true,gearCD:0,maxRoll:.85,maxPitch:.55,maxYaw:.45,nmax:3.8,col:'#f8fafc',col2:'#1d4ed8',span:11,lenB:8.3,prop:true,guns:0,vr:28,vapp:33,vs:24},
  extra:{name:'Extra 330LX',short:'Extra',m:820,S:10.4,CLa:5.4,CL0:.05,CLmax:1.4,as:.3,CD0:.024,k:.06,T0:7200,vProp:125,ab:0,flapCL:[0,0,0,0],flapCD:[0,0,0,0],gearFixed:true,gearCD:0,maxRoll:6.2,maxPitch:2.0,maxYaw:1.3,nmax:10,col:'#ef4444',col2:'#f8fafc',span:8,lenB:7,prop:true,guns:0,vr:33,vapp:40,vs:30,aero:true},
- p51:{name:'P-51D Mustang',short:'P-51D',m:4300,S:21.8,CLa:5.0,CL0:.12,CLmax:1.45,as:.26,CD0:.0175,k:.05,T0:17000,vProp:205,ab:0,flapCL:[0,.18,.32,.45],flapCD:[0,.012,.028,.05],gearCD:.02,maxRoll:1.9,maxPitch:1.0,maxYaw:.45,nmax:8,col:'#cbd5e1',col2:'#facc15',span:11.3,lenB:9.8,prop:true,guns:6,vr:46,vapp:55,vs:42},
+ p51:{name:'P-51D Mustang',short:'P-51D',m:4300,S:21.8,CLa:5.0,CL0:.12,CLmax:1.45,as:.26,CD0:.0175,k:.05,T0:17000,vProp:205,ab:0,flapCL:[0,.18,.32,.45],flapCD:[0,.012,.028,.05],gearCD:.02,maxRoll:1.6,maxPitch:.9,maxYaw:.45,nmax:8,col:'#cbd5e1',col2:'#facc15',span:11.3,lenB:9.8,prop:true,guns:6,vr:46,vapp:55,vs:42},
  f16:{name:'F-16C Fighting Falcon',short:'F-16C',m:12000,S:27.9,CLa:3.6,CL0:.02,CLmax:1.35,as:.4,CD0:.02,k:.12,T0:76000,vProp:0,ab:127000,flapCL:[0,.15,.25,.3],flapCD:[0,.01,.02,.03],gearCD:.025,maxRoll:4.6,maxPitch:.9,maxYaw:.35,nmax:9,col:'#9ca3af',col2:'#4b5563',span:9.96,lenB:15,prop:false,guns:1,vr:72,vapp:75,vs:62,jet:true}};
 const PKEYS=Object.keys(PLANES);
 
@@ -258,7 +258,15 @@ function planeStep(A,I,dt,env){ const P=A.P;
   let pc=I.pitch*P.maxPitch*effS*(I.pitch>0?(pullOK?1:0):(pushOK?1:0)), rc=I.roll*P.maxRoll*effS, yc=I.yaw*P.maxYaw*effS;
   /* trim: let go of the stick and the aircraft holds the angle of attack you set (the F-16's fly-by-wire does this for you) */
   if(A.aTrim===undefined) A.aTrim=.04; if(I.pitch&&!A.ground) A.aTrim+=(clamp(A.alpha,-.1,P.as*.85)-A.aTrim)*Math.min(1,dt*(P.jet?3:1.2)); if(A.ground) A.aTrim=.04;
-  pc+=-(A.alpha-A.aTrim)*eff*3.2*(P.aero?.6:1)+(A.stall?-.6*Math.sign(A.alpha)*effS:0); yc+=A.beta*eff*3; if(A.stall) rc+=Math.sin(env.t*3.1+A.id)*.9*effS;
+  /* in a bank the pilot holds the nose up so the turn stays level (more lift to make up for the tilt), as long as there is stall margin */
+  /* hands off, the trim slowly settles on level flight (the angle of attack that carries the weight at this speed) */
+  if(!I.pitch&&!A.ground&&q>50&&!A.stall){ const a1=(P.m*G/(q*P.S)-P.CL0-fl)/P.CLa; A.aTrim+=(clamp(a1,-.05,P.as*.7)-A.aTrim)*Math.min(1,dt*.35); }
+  let aT=A.aTrim; if(!I.pitch&&!A.ground&&q>50){ const bk=Math.atan2(-A.r[1],A.u[1]), cb=Math.cos(bk); if(cb>.25){ const dCL=P.m*G*(1/cb-1)/(q*P.S); aT=Math.min(A.aTrim+dCL/P.CLa,P.as*.8); } }
+  /* the F-16's fly-by-wire will not let you pull past its angle-of-attack limit */
+  if(P.jet&&I.pitch>0&&A.alpha>P.as*.8) pc*=clamp(1-(A.alpha-P.as*.8)/(P.as*.15),0,1);
+  pc+=-(A.alpha-aT)*eff*3.2*(P.aero?.6:1)+(A.stall?-.6*Math.sign(A.alpha)*effS:0); yc+=A.beta*eff*3; if(A.stall) rc+=Math.sin(env.t*3.1+A.id)*.9*effS;
+  /* a stable airframe swings with its flight path: as lift curves the path, the nose follows it (no lag, no slip) */
+  if(!A.ground&&V>15){ const ap=sub(acc,mul(vh,dot(acc,vh))), om=cross(vh,mul(ap,1/V)); pc+=dot(om,A.r); yc-=dot(om,A.u); }
   if(A.ground){ pc=Math.max(pc,-.2); rc=0; yc=I.yaw*P.maxYaw*.4*effS; }
   const tc=Math.min(1,dt*(P.aero?14:6)); A.w[0]+=(rc-A.w[0])*tc; A.w[1]+=(pc-A.w[1])*tc; A.w[2]+=(yc-A.w[2])*tc;
   /* rotate the airframe: roll about forward, pitch about right, yaw about up */

@@ -340,12 +340,15 @@ function bikeStep(b,dt){ const B=b.B, I=b.in, f=fwdV(b), m=B.m; let Fh=0, Fv=-m*
     const Fx=N*nh+Ft*th, Fy=N*nv+Ft*tv, ch=A[3], cv=A[4]-B.r; Fh+=Fx; Fv+=Fy; tau+=ch*Fy-cv*Fx; }
   /* air: drag; the rider's body weight moves the pitch; a spinning rear wheel is a gyroscope (throttle lifts the nose, brake drops it) */
   const sp=len(b.v); Fh-=B.cda*.6*vf*Math.abs(vf);
-  tau+=I.lean*B.lean*(nOn?.6:1);
+  tau+=I.lean*B.lean*(nOn?.6:1.7);
   /* on the ground a rider keeps the bike level by moving their weight (unless they are pulling a wheelie with the lean keys) */
   if(nOn&&!I.lean){ const sl=Math.atan(groundSlope(b.p[0],b.p[2],b.hd)), e=b.th-sl; tau+=clamp(-e*B.lean*3.2-b.om*B.lean*.9,-B.lean*2.4,B.lean*2.4); }
   /* off a bump (a short hop) the rider's body and legs keep the bike level unless they are steering it with their weight */
   if(!nOn&&!I.lean&&(b.air||0)<.45){ const e=b.th-Math.atan(groundSlope(b.p[0],b.p[2],b.hd))*.5; tau+=clamp(-e*B.lean*1.4-b.om*B.lean*.9,-B.lean*1.1,B.lean*1.1); }
-  if(!nOn){ tau+=(I.thr-I.brk*1.2)*B.gyro*(b.veh==='mx'?1:0); b.om*=1-(I.lean?.25:1.1)*dt; }
+  /* on a big jump a rider keeps the bike pointed along its flight path (so it meets the downslope) unless they are throwing it with their weight */
+  else if(!nOn&&!I.lean&&!(b.trick&&b.trick.d&&!b.trick.d.spin)){ const e=b.th-Math.atan2(b.v[1],Math.max(1,Math.abs(vf))); tau+=clamp(-e*B.lean*.9-b.om*B.lean*.6,-B.lean*.7,B.lean*.7); }
+  /* the rear wheel is a gyroscope, but only while its speed changes: revving it lifts the nose a little, the brake stops it and drops the nose */
+  if(!nOn){ const r0=b.rev==null?.5:b.rev, r1=I.brk?Math.max(0,r0-dt*5):lerp(r0,I.thr?1:.4,Math.min(1,dt*2.5)); b.rev=r1; tau+=(r1-r0)/dt*B.gyro*1.1*(b.veh==='mx'?1:0); b.om*=1-(I.lean?.25:1.1)*dt; } else b.rev=.5;
   /* integrate the pitch plane */
   b.v[0]+=f[0]*Fh/m*dt; b.v[2]+=f[2]*Fh/m*dt; b.v[1]+=Fv/m*dt;
   b.om+=tau/B.I*dt; b.th+=b.om*dt;
@@ -356,7 +359,7 @@ function bikeStep(b,dt){ const B=b.B, I=b.in, f=fwdV(b), m=B.m; let Fh=0, Fv=-m*
     if(over){ yr=Math.sign(yr)*aMax*.97/Math.max(u,.1); if(I.brk>0&&Math.abs(I.steer)>.8&&u>8) b.slide=(b.slide||0)+dt; else b.slide=Math.max(0,(b.slide||0)-dt); } else b.slide=Math.max(0,(b.slide||0)-dt*2);
     b.hd+=yr*dt; b.lean=lerp(b.lean,-Math.atan(u*yr/G),Math.min(1,dt*8)); const nf=fwdV(b), lat=[-nf[2],0,nf[0]], vl=dot(b.v,lat); b.v[0]-=lat[0]*vl*Math.min(1,dt*12); b.v[2]-=lat[2]*vl*Math.min(1,dt*12);
     const hv=Math.hypot(b.v[0],b.v[2]), al=dot(b.v,nf); if(hv>.01){ const k2=al>=0?1:-1; b.v[0]=lerp(b.v[0],nf[0]*hv*k2,Math.min(1,dt*10)); b.v[2]=lerp(b.v[2],nf[2]*hv*k2,Math.min(1,dt*10)); } }
-  else { b.lean*=1-dt*2; b.whip+=I.steer*3.4*dt*clamp(((b.air||0)-.12)/.25,0,1); if(!I.steer) b.whip*=1-dt*3.5; }
+  else { b.lean*=1-dt*2; /* a whip is thrown on purpose (Shift + steer); otherwise the rider keeps the bike straight */ const wh=I.whip?I.steer:0; b.whip+=wh*3.4*dt*clamp(((b.air||0)-.12)/.25,0,1); if(!wh) b.whip*=1-dt*3.5; }
   madd(b.p,b.v,dt);
   /* bottoming out: past full travel the wheel is a solid stop. Push the bike up out of the dirt and kill the closing speed (no spring to store it) */
   { const ex=[0,0]; for(let i=0;i<2;i++){ const A=axle(b,i), g=groundH(A[0],A[2]), x=B.s0-(A[1]-B.r-g); ex[i]=Math.max(0,x-B.T); }
@@ -468,7 +471,7 @@ function playerTick(b,dt){ const B=b.B, I=b.in, T=MX.T;
   const n=Math.max(1,Math.round(dt*240)); let on=0; for(let i=0;i<n;i++) on=bikeStep(b,dt/n);
   if(MX.state==='gate'){ const s=nearT(b.p[0],b.p[2]); b.v=[0,b.v[1],0]; }
   /* the pop: compress on the face (Space) and release at the lip for extra height */
-  if(I.pop&&on) b.pre=Math.min(1,(b.pre||0)+dt*2.5); if(!I.pop&&b.pre>0){ if(on&&groundSlope(b.p[0],b.p[2],b.hd)>.25){ b.v[1]+=b.pre*(b.veh==='mx'?1.6:1.1); b.popT=.3; } b.pre=0; }
+  if(I.pop&&on) b.pre=Math.min(1,(b.pre||0)+dt*2.5); if(!I.pop&&b.pre>0){ if(on&&groundSlope(b.p[0],b.p[2],b.hd)>.25){ b.v[1]+=b.pre*(b.veh==='mx'?1.6:1.1); b.popT=.3; /* pulling back (or throwing forward) as you pop sets the flip going */ if(I.lean) b.om+=I.lean*b.pre*(b.veh==='mx'?2.2:3); } b.pre=0; }
   if(!on){ if(wasOn){ b.air=0; b.airMax=0; b.rot=0; b.whip=0; b.tricks=[]; b.y0=b.p[1]; MX.jump={t:0,tricks:[],h:0}; } b.air+=dt; b.rot+=b.om*dt; b.airMax=Math.max(b.airMax,b.p[1]-groundH(b.p[0],b.p[2])); if(MX.jump){ MX.jump.t=b.air; MX.jump.h=b.airMax; }
     trickTick(b,dt); }
   else if(!wasOn&&b.air>.28) land(b,vAir);
@@ -502,13 +505,15 @@ function land(b,vy){ const J=MX.jump, sl=(()=>{ let a=0; for(let i=0;i<2;i++){ c
   if(b.pose>.3) return crash(b,'Not back on the pegs!');
   if(Math.abs(w)>.62) return crash(b,'Landed sideways!');
   /* short of the landing: the wheels hit the up-face. Hard, slow, and only a crash if it is really big */
-  let caseUp=false; if(sl>.15){ caseUp=true; if(vy<-9.5||rel<-1.3) return crash(b,'Cased the landing and went over the bars!'); b.v=mul(b.v,.55); b.om*=.3; feed('Cased the landing!','#fb923c'); }
+  /* short of a gap jump's landing: the wheels hit the up-face (landing on the next whoop or roller is just riding) */
+  const qL=nearT(b.p[0],b.p[2]), fL=qL&&MX.T.F.find(f=>qL.s>=f.s0&&qL.s<f.s0+f.len), gapCase=fL&&fL.gap&&qL.s-fL.s0>fL.a&&qL.s-fL.s0<fL.a+fL.gap+.5;
+  let caseUp=false; if(sl>.15&&gapCase){ caseUp=true; if(vy<-9.5||rel<-1.3) return crash(b,'Cased the landing and went over the bars!'); b.v=mul(b.v,.55); b.om*=.3; feed('Cased the landing!','#fb923c'); }
   else { if(rel>.85) return crash(b,'Landed on the back wheel and looped out!'); if(rel<-.75) return crash(b,'Nose-dived the landing!'); }
   const flips=Math.round(b.rot/(2*Math.PI)), spins=Math.round(b.whip/(2*Math.PI));
   if(J){ if(flips) J.tricks.push({name:flips>0?(flips>1?'Double Backflip':'Backflip'):(flips<-1?'Double Front Flip':'Front Flip'),pts:Math.abs(flips)>1?1600*Math.abs(flips)-1600:flips>0?650:900});
     if(spins) J.tricks.push({name:Math.abs(spins)>1?'720':'360',pts:Math.abs(spins)>1?1400:520});
-    const clean=Math.abs(rel)<.3&&sl<-.04, cased=!caseUp&&sl>-.06&&vy<-7.5;
-    if(cased){ b.v=mul(b.v,.6); feed(vy<-10?'Flat landing! Bottomed out':'Cased it!','#fb923c'); if(vy<-12.5&&MX.veh==='bmx') return crash(b,'Flat-landed and went down!'); } else if(b.air>.8) feed(clean?'Smooth landing':'Landed','#86efac');
+    const clean=Math.abs(rel)<.3&&sl<-.04, cased=!caseUp&&sl>-.06&&sl<.15&&vy<-7.5;
+    if(cased){ b.v=mul(b.v,.6); feed(vy<-10?'Flat landing! Bottomed out':'Cased it!','#fb923c'); if(vy<-12.5&&MX.veh==='bmx') return crash(b,'Flat-landed and went down!'); } else if(b.air>.8&&J.h>1.2) feed(clean?'Smooth landing':'Landed','#86efac');
     if(J.tricks.length){ const names=J.tricks.map(t=>t.name), base=J.tricks.reduce((a,t)=>a+t.pts,0), combo=1+.25*(new Set(names).size-1), amp=Math.round(b.air*60+J.h*10), tot=Math.round((base*combo+amp)*(clean?1.15:cased?.6:1));
       MX.score+=tot; MX.lastJump={names,tot,clean,t:3.5}; if(tot>800) speak(names.slice(-2).join(' '),false); sfx.good(); }
     if(MX.T.kind==='free'&&!J.tricks.length&&b.air>1) MX.score+=Math.round(b.air*40); }
@@ -536,7 +541,7 @@ function step(dt){ if(toastT>0){ toastT-=dt; if(toastT<=0) $('toast').classList.
     MX.me.pos=standings().indexOf(MX.me)+1; if(MX.me.done&&MX.t>MX.endT||MX.t-MX.gateT>(MX.veh==='mx'?600:120)) endRun(); }
   if(!MX.race){ MX.clock-=dt; if(MX.clock<=0&&!(MX.jump)) endRun(); }
   updateBoard(); }
-function input(){ const b=MX.me, I=b.in; I.thr=held(['KeyW'])?1:0; I.brk=held(['KeyS'])?1:0; I.steer=(held(['KeyA','ArrowLeft'])?1:0)-(held(['KeyD','ArrowRight'])?1:0); I.lean=(held(['ArrowUp'])?-1:0)+(held(['ArrowDown'])?1:0); I.pop=held(['Space']); }
+function input(){ const b=MX.me, I=b.in; I.thr=held(['KeyW'])?1:0; I.brk=held(['KeyS'])?1:0; I.steer=(held(['KeyA','ArrowLeft'])?1:0)-(held(['KeyD','ArrowRight'])?1:0); I.lean=(held(['ArrowUp'])?-1:0)+(held(['ArrowDown'])?1:0); I.pop=held(['Space']); I.whip=held(['ShiftLeft','ShiftRight']); }
 function endRun(){ if(MX.over) return; MX.over=true; phase='over'; const T=MX.T, me=MX.me; let h;
   if(MX.race){ const tot=T.L*(T.closed?T.laps:1)-(T.closed?0:3), el=MX.t-MX.gateT; for(const r of MX.riders) if(!r.done&&r.ai&&r.crashT<=0&&r.prog>tot*.6) r.estT=el*tot/Math.max(1,r.prog-(T.closed?4:0)); const st=MX.finish.concat(standings().filter(r=>!r.done)); const pos=st.indexOf(me)+1; SV.races++; if(pos===1&&me.done) SV.wins++; if(me.done&&(!SV.best[T.key]||me.time<SV.best[T.key])) SV.best[T.key]=me.time; if(me.best&&(!SV.lap[T.key]||me.best<SV.lap[T.key])) SV.lap[T.key]=me.best; saveSV(); MX.place=pos;
     h=`<h2>${pos===1&&me.done?'Victory!':me.done?`P${pos}`:'DNF'}</h2><div class="rs">${me.done?fmtT(me.time):'-'}</div><p>${T.name} · ${T.closed?T.laps+' laps':'one lap'} · ${LVL[lvl]}${me.best?` · best lap ${fmtT(me.best)}`:''}${MX.holeshot?` · holeshot: ${esc(MX.holeshot.name)}`:''}</p>
@@ -569,7 +574,7 @@ function drawHUD(){ const b=MX.me, sp=Math.hypot(b.v[0],b.v[2])*3.6;
   /* in a trick and the ground is coming: tell them */
   if(b.crash<=0&&(b.trick&&!b.trick.d.spin&&b.trick.p>.3)&&!(b.on[0]||b.on[1])){ const h=b.p[1]-groundH(b.p[0],b.p[2]), vy=b.v[1], tg=(vy+Math.sqrt(Math.max(0,vy*vy+2*G*Math.max(0,h-.9))))/G; if(tg<.7&&Math.floor(MX.t*8)%2) hudText('LET GO - GET BACK ON!',W/2,H/2+30,30,'#f87171','center'); }
   if(view3) drawMap(W-170,H-250,150,150);
-  if(MX.t<10&&!b.crash) hudText(b.veh==='mx'?'W gas · S brake · A/D steer · ↑/↓ lean · Space pre-load the lip · in the air: J K L U tricks, ↓ backflip, A/D whip':'W pedal · S brake · A/D steer · ↑/↓ lean · Space pump the lip · in the air: J barspin, K tailwhip, L superman, U turndown',W/2,H-14,14,'#e2e8f0','center'); }
+  if(MX.t<10&&!b.crash) hudText(b.veh==='mx'?'W gas · S brake · A/D steer · ↑/↓ lean · Space pre-load the lip · in the air: J K L U tricks, ↓ backflip, Shift+A/D whip':'W pedal · S brake · A/D steer · ↑/↓ lean · Space pump the lip · in the air: J barspin, K tailwhip, L superman, U turndown',W/2,H-14,14,'#e2e8f0','center'); }
 function draw(){ ctx.clearRect(0,0,W,H); if(view3) render3D(frameDtG); if(!MX||phase==='menu'){ if(!view3){ ctx.fillStyle='#365314'; ctx.fillRect(0,0,W,H); } return; } if(!view3) draw2D(); drawHUD(); }
 
 /* ---------- board, toasts ---------- */
@@ -610,7 +615,7 @@ function renderMenu(){ const T=TRACKS[trackSel];
 $('menuIn').addEventListener('mousedown',e=>{ if(e.target.closest('button')) e.preventDefault(); });
 $('menuIn').addEventListener('click',e=>{ const b=e.target.closest('button'); if(!b) return; const d=b.dataset; audio(); sfx.click(); if(d.v){ vehSel=d.v; trackSel=VEH_TRACKS[vehSel][0]; } else if(d.t) trackSel=d.t; else if(d.l!==undefined) lvl=+d.l; else if(d.act==='start'){ startGame(); return; } savePrefs(); renderMenu(); });
 function startGame(){ audio(); savePrefs(); newRun(); }
-function renderKeysHelp(){ $('keysHelp').innerHTML=(vehSel==='mx'?'<div><b>Gas</b> W</div>':'<div><b>Pedal</b> W</div>')+'<div><b>Brake</b> S</div><div><b>Steer</b> A D</div><div><b>Lean fwd / back</b> ↑ ↓</div><div><b>Pre-load / pump</b> Space</div><div><b>Tricks (air)</b> J K L U</div><div><b>Flip</b> hold ↓ in the air</div><div><b>Whip / 360</b> A D in the air</div><div><b>Camera</b> C</div><div><b>Reset</b> R</div><div><b>Pause</b> Esc</div>'; }
+function renderKeysHelp(){ $('keysHelp').innerHTML=(vehSel==='mx'?'<div><b>Gas</b> W</div>':'<div><b>Pedal</b> W</div>')+'<div><b>Brake</b> S</div><div><b>Steer</b> A D</div><div><b>Lean fwd / back</b> ↑ ↓</div><div><b>Pre-load / pump</b> Space</div><div><b>Tricks (air)</b> J K L U</div><div><b>Flip</b> hold ↓ in the air</div><div><b>Whip / 360</b> Shift + A D in the air</div><div><b>Camera</b> C</div><div><b>Reset</b> R</div><div><b>Pause</b> Esc</div>'; }
 function toMenu(){ phase='menu'; MX=null; $('result').classList.add('hidden'); $('menu').classList.remove('hidden'); renderMenu(); }
 
 /* ---------- 3D engine (shared with the other Rink Rivals sports) ---------- */
