@@ -399,7 +399,7 @@ function kataStep(dt){ const K=KT.cur; if(paused||phase!=='play'||!K||K.done) re
   for(const m of K.seq){ if(!m.judged&&K.t>m.t+.28){ m.judged=true; m.err=.35; K.res.push(m); msg2('Miss','#f87171'); } }
   if(K.t>K.end){ K.done=true; kataScore(); } }
 function msg2(t,col){ KT.msg={t,col,T:.6}; }
-function kataKey(code){ const K=KT&&KT.cur; if(!K||K.done) return; const m=K.seq.find(q=>!q.judged&&Math.abs(K.t-q.t)<.28); if(!m){ msg2('Too early','#fbbf24'); K.extra=(K.extra||0)+1; return; }
+function kataKey(code){ const K=KT&&KT.cur; if(!K||K.done) return; const near=K.seq.filter(q=>!q.judged&&Math.abs(K.t-q.t)<.28), m=near.find(q=>q.k===code||(q.kiai&&code==='Space'))||near[0]; if(!m){ msg2('Too early','#fbbf24'); K.extra=(K.extra||0)+1; return; }
   if(m.k!==code&&!(m.kiai&&code==='Space')){ m.judged=true; m.err=.3; K.res.push(m); msg2('Wrong technique','#f87171'); return; }
   m.judged=true; m.err=Math.abs(K.t-m.t); K.res.push(m); K.pose=m.p; K.poseT=0; m.down=K.t; msg2(m.err<.05?'Perfect':m.err<.11?'Good':'OK',m.err<.05?'#86efac':m.err<.11?'#e2e8f0':'#fbbf24'); if(m.kiai){ sfx.kiai(); } else sfx.whoosh(m.p==='yoko'||m.p==='maegeri'); }
 function kataUp(code){ const K=KT&&KT.cur; if(!K) return; const m=K.res.find(q=>q.hold&&q.down&&!q.held&&q.k===code); if(m){ m.held=true; m.holdErr=Math.abs((K.t-m.down)-m.hold); } }
@@ -410,7 +410,7 @@ function kataScore(){ const K=KT.cur, n=K.seq.length, acc=K.res.reduce((a,m)=>a+
   if(total>SV.kataBest){ SV.kataBest=total; saveSV(); }
   phase='over'; const last=!won||KT.rounds.length>=3; const medal=last?(won?'gold':KT.rounds.length===3?'silver':KT.rounds.length===2?'bronze':null):null; if(medal){ SV.medals['kata-'+gSel+'-'+medal]=(SV.medals['kata-'+gSel+'-'+medal]||0)+1; saveSV(); }
   $('resultIn').innerHTML=`<h2>${won?(last?'🥇 Kata gold!':'You win the round!'):medal==='silver'?'🥈 Silver':medal==='bronze'?'🥉 Bronze':'Beaten in round '+KT.rounds.length}</h2><div class="rs">${total.toFixed(1)} - ${ot.toFixed(1)}</div><p>${K.kt.n} (${K.kt.sty}) · judges ${js.map(j=>j.toFixed(1)).join(' · ')} (the two highest and two lowest are dropped)<br>${esc(o[0])} (${o[1]}) scored ${ot.toFixed(1)}</p><p>${won&&!last?'Enter for the next round.':'Enter for the menu.'}</p>`;
-  KT.next=won&&!last; setTimeout(()=>{ if(phase==='over') $('result').classList.remove('hidden'); },700); }
+  KT.next=won&&!last; updateBoard(); setTimeout(()=>{ if(phase==='over') $('result').classList.remove('hidden'); },700); }
 
 /* ---------- HUD ---------- */
 const cv=$('cv'), ctx=cv.getContext('2d'); cv.width=W*DPR; cv.height=H*DPR; ctx.setTransform(DPR,0,0,DPR,0,0);
@@ -421,11 +421,11 @@ function drawHUD(){ if(KT) return kataHUD(); const left=Math.max(0,B.dur-B.t);
   for(const i of [0,1]){ const x=i?W/2+160:W/2-160, al=i?'left':'right', col=i?'#3b82f6':'#ef4444'; rr(i?W/2+152:W/2-412,12,260,60,12,'rgba(5,10,24,.85)'); hudText(`${B.f[i].name}${B.senshu===i?'  ◆':''}`,i?x:x,36,18,col,al); hudText(`${B.score[i]}`,i?W/2+400:W/2-400,56,30,'#fff',i?'right':'left');
     const P=B.pen[i]; hudText(`C1 ${PEN[Math.min(5,P.c1)]||'-'} · C2 ${PEN[Math.min(5,P.c2)]||'-'}`,x,62,12,'#94a3b8',al);
     /* stamina */ const bx=i?W/2+160:W/2-410; rr(bx,76,250,6,3,'rgba(255,255,255,.15)'); rr(bx,76,250*B.f[i].stam,6,3,col); }
-  if(B.phase==='yame'&&B.call){ const c=B.call; rr(W/2-220,96,440,c.pen?54:78,12,'rgba(5,10,24,.85)'); hudText(`${COLN(c.i)} · ${c.pen?c.tech:c.tech} · ${c.word}`,W/2,126,24,c.i?'#60a5fa':'#f87171','center');
-    if(c.flags){ c.flags.forEach((up,k)=>{ const x=W/2-90+k*60, y=160; ctx.fillStyle='#e5e7eb'; ctx.fillRect(x,y-22,3,26); if(up){ ctx.save(); ctx.translate(x+1,y-22); ctx.rotate(c.pts===3?0:c.pts===2?-Math.PI/2:-Math.PI/4); ctx.fillStyle=c.i?'#3b82f6':'#ef4444'; ctx.fillRect(0,-14,22,14); ctx.restore(); } }); } }
+  if(B.phase==='yame'&&B.call){ const c=B.call; rr(W/2-220,96,440,c.pen?54:88,12,'rgba(5,10,24,.85)'); hudText(`${COLN(c.i)} · ${c.pen?c.tech:c.tech} · ${c.word}`,W/2,126,24,c.i?'#60a5fa':'#f87171','center');
+    if(c.flags){ c.flags.forEach((up,k)=>{ const x=W/2-90+k*60, y=172; ctx.fillStyle='#e5e7eb'; ctx.fillRect(x,y-22,3,26); if(up){ ctx.save(); ctx.translate(x+1,y-22); ctx.rotate(c.pts===3?0:c.pts===2?-Math.PI/2:-Math.PI/4); ctx.fillStyle=c.i?'#3b82f6':'#ef4444'; ctx.fillRect(0,-14,22,14); ctx.restore(); } }); } }
   if(B.msg) hudText(B.msg.t,W/2,H-60,22,B.msg.col,'center');
   if(B.phase==='fight'&&!B.two&&B.t<6) hudText('A/D move · Q/E side-step · J jab · K reverse punch · L roundhouse (hold W for the head) · I front kick · U hook kick · H sweep · Space parry',W/2,H-24,13,'#cbd5e1','center'); }
-function kataHUD(){ const K=KT.cur; rr(16,14,330,60,12,'rgba(5,10,24,.85)'); hudText(`Kata: ${K.kt.n}`,28,40,22,'#fde047'); hudText(`${K.kt.sty} · round ${KT.rounds.length+1} of 3 · vs ${KT.opps[KT.rounds.length][0]}`,28,62,14,'#cbd5e1');
+function kataHUD(){ const K=KT.cur; rr(16,14,330,60,12,'rgba(5,10,24,.85)'); hudText(`Kata: ${K.kt.n}`,28,40,22,'#fde047'); const rn=Math.min(KT.rounds.length+(K.done?0:1),3); hudText(`${K.kt.sty} · round ${rn} of 3 · vs ${KT.opps[rn-1][0]}`,28,62,14,'#cbd5e1');
   /* the timeline: moves slide to the line */ const y=H-90, x0=W/2-60; rr(40,y-34,W-80,70,12,'rgba(5,10,24,.75)'); ctx.fillStyle='#fde047'; ctx.fillRect(x0,y-30,3,62);
   for(const m of K.seq){ const x=x0+(m.t-K.t)*190; if(x<50||x>W-50) continue; const done=m.judged, col=m.kiai?'#ef4444':done?'rgba(148,163,184,.4)':'#e2e8f0'; if(m.hold) rr(x,y-6,m.hold*190,12,6,'rgba(250,204,21,.35)'); rr(x-18,y-18,36,36,8,col); hudText(m.kiai?'␣':m.k.replace('Key',''),x,y+7,18,'#111','center'); if(!done) hudText(m.n,x,y-24,11,'#cbd5e1','center'); }
   if(KT.msg&&KT.msg.T>0){ KT.msg.T-=frameDtG; hudText(KT.msg.t,W/2,140,30,KT.msg.col,'center'); }
@@ -448,7 +448,7 @@ addEventListener('keydown',e=>{ const tag=document.activeElement&&document.activ
   if(['Space','ArrowUp','ArrowDown','ArrowLeft','ArrowRight','Quote','Slash'].includes(e.code)) e.preventDefault(); if(e.repeat) return; keys.add(e.code); audio();
   if(e.code==='KeyZ'){ toggleFs(); return; } if(e.code==='KeyV'){ setView3(!view3); return; }
   if(phase==='menu'){ if(['Enter','NumpadEnter'].includes(e.code)) startGame(); return; }
-  if(phase==='over'){ if(KT){ if(['Enter','NumpadEnter','Space'].includes(e.code)){ if(KT.next){ KT.cur=newKata(KT.rounds.length); phase='play'; $('result').classList.add('hidden'); banner(`Kata: ${KT.cur.kt.n}`,`round ${KT.rounds.length+1} vs ${KT.opps[KT.rounds.length][0]}`,'#f59e0b',2); updateBoard(); } else toMenu(); } return; }
+  if(phase==='over'){ if(KT){ if(['Escape','KeyM'].includes(e.code)){ toMenu(); return; } if(['Enter','NumpadEnter','Space'].includes(e.code)){ if(KT.next){ KT.cur=newKata(KT.rounds.length); phase='play'; $('result').classList.add('hidden'); banner(`Kata: ${KT.cur.kt.n}`,`round ${KT.rounds.length+1} vs ${KT.opps[KT.rounds.length][0]}`,'#f59e0b',2); updateBoard(); } else toMenu(); } return; }
     if(TOUR&&TOUR.next&&['Enter','NumpadEnter','Space'].includes(e.code)){ $('result').classList.add('hidden'); tourNext(); return; } if(e.code==='KeyR'&&!(B&&B.tour)&&!(window.RRS&&RRS.on)) startGame(); else if(['Enter','NumpadEnter','Escape','KeyM'].includes(e.code)) toMenu(); return; }
   if(e.code==='Escape'){ paused=!paused; if(paused) banner('Paused','Esc to resume · M for menu','#000',1e9); else { $('banner').classList.remove('on'); bannerT=0; } return; }
   if(e.code==='KeyM'){ if(confirm('Leave?')) toMenu(); keys.clear(); return; }

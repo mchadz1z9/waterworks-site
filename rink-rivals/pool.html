@@ -360,7 +360,8 @@ function resolve(){ const ev=P.ev, pl=P.turn, op=1-pl; P.evPlayed=0; let first=n
     for(const b of potted) if(b.kind!=='red'&&(redsLeft||foul||on==='color'||(on!=='red'&&b.kind!==on))) respot(b,P.S[b.kind]);
     /* what is on next */ if(foul||!keep){ P.on=redsLeft?'red':(on==='color'?'yellow':nextColor()); } else P.on=on==='red'?'color':redsLeft?'red':(on==='color'?'yellow':nextColor());
     if(!redsLeft&&P.on!=='red'&&P.on!=='color'){ const nb=P.balls.find(b=>b.kind===P.on); if(!nb||!nb.on) P.on=nextColor(); }
-    if(!P.balls.some(b=>b.on&&b.id!==0)){ win=P.pts[0]>P.pts[1]?0:P.pts[1]>P.pts[0]?1:null; if(win===null){ const bk=P.balls.find(b=>b.kind==='black'); respot(bk,P.S.black); P.on='black'; msg='Scores level: re-spotted black!'; } } }
+    if(!P.balls.some(b=>b.on&&b.id!==0)){ win=P.pts[0]>P.pts[1]?0:P.pts[1]>P.pts[0]?1:null; if(win===null){ const bk=P.balls.find(b=>b.kind==='black'); respot(bk,P.S.black); P.on='black'; msg='Scores level: re-spotted black!'; } }
+    /* on the last black, the first score or foul ends the frame (unless that leaves the scores level) */ else if(foul&&on==='black'&&!P.balls.some(b=>b.on&&b.id!==0&&b.kind!=='black')&&P.pts[0]!==P.pts[1]) win=P.pts[0]>P.pts[1]?0:1; }
   P.breakShot=false;
   if(keep&&!foul){ const n=P.game==='snooker'?0:potted.length; P.stats[pl].pots+=Math.max(n,potted.length); if(P.game!=='snooker') P.curBreak+=potted.length; }
   if(foul){ P.msg={t:msg||foul,col:'#f87171'}; P.msgT=2.4; sfx.foul(); P.foulStreak[pl]++; } else if(msg){ P.msg={t:msg,col:'#fde047'}; P.msgT=2.2; } else if(potted.length){ P.msg={t:P.game==='snooker'?`Break ${P.curBreak}`:`${potted.map(b=>b.id).join(', ')} down`,col:'#86efac'}; P.msgT=1.2; }
@@ -378,14 +379,14 @@ function nextColor(){ for(const c of COLORS){ const b=P.balls.find(x=>x.kind===c
 function respot(b,spot){ const R=P.TB.R, free=(x,z)=>P.balls.every(o=>o===b||!o.on||Math.hypot(o.x-x,o.z-z)>2*R+.001);
   let [x,z]=spot; if(P.game==='snooker'&&!free(x,z)){ for(const c of ['black','pink','blue','brown','green','yellow']){ const s=P.S[c]; if(free(s[0],s[1])){ [x,z]=s; break; } } }
   for(let k=0;k<200&&!free(x,z);k++) x+=R*.25; b.on=true; b.fall=0; b.x=x; b.z=z; b.vx=b.vz=b.wx=b.wy=b.wz=0; }
-function rackOver(w,why){ P.pl[w].frames++; if(P.game==='snooker'){ P.stats[w].hb=Math.max(P.stats[w].hb,P.curBreak); }
+function rackOver(w,why){ P.pl[w].frames++; if(P.game==='snooker'){ P.stats[P.turn].hb=Math.max(P.stats[P.turn].hb,P.curBreak); if(P.curBreak>=100&&!P.pl[P.turn].ai){ SV.cent++; saveSV(); } }
   const done=P.pl[w].frames>=P.race; P.stage='over'; P.overT=0; sfx.win(); banner(`${P.pl[w].name} ${P.game==='snooker'?'wins the frame':'wins the rack'}`,`${P.pl[0].frames}-${P.pl[1].frames}${why?' · '+why:''}`,w===P.me?'#22c55e':'#ef4444',2.6);
   if(P.game==='snooker'){ const hb=Math.max(...P.frameHB); if(hb>SV.hb&&P.frameHB[P.me]===hb){ SV.hb=hb; saveSV(); } }
   if(!P.pl[w].ai&&P.game!=='snooker'&&P.runout) { SV.runs++; saveSV(); }
   P.lastWinner=w; P.matchDone=done; updateBoard(); }
 function afterRack(){ if(P.matchDone) return matchOver(); newRack((P.firstBreaker+P.rack)%2); }
 function matchOver(){ phase='over'; const w=P.pl[0].frames>P.pl[1].frames?0:1, me=P.online?P.me:0, k=P.game+'_'+(P.online?'online':P.local?'local':'ai'+lvlSel); if(!P.local){ if(w===me) SV.w[k]=(SV.w[k]||0)+1; else SV.l[k]=(SV.l[k]||0)+1; saveSV(); }
-  $('resultIn').innerHTML=`<h2>${P.local?P.pl[w].name+' wins!':w===me?'🏆 You win the match!':`${esc(P.pl[w].name)} wins the match`}</h2><div class="rs">${P.pl[0].frames} - ${P.pl[1].frames}</div><p>${GAMES[P.game].n} · race to ${P.race}${P.game==='snooker'?` · highest break ${Math.max(P.stats[0].hb,P.stats[1].hb)}`:''}</p><p>Enter for the menu, R to play again.</p>`;
+  $('resultIn').innerHTML=`<h2>${P.local?P.pl[w].name+' wins!':w===me?'🏆 You win the match!':`${esc(P.pl[w].name)} wins the match`}</h2><div class="rs">${P.pl[0].frames} - ${P.pl[1].frames}</div><p>${GAMES[P.game].n} · ${P.game==='snooker'?'best of '+(P.race*2-1):'race to '+P.race}${P.game==='snooker'?` · highest break ${Math.max(P.stats[0].hb,P.stats[1].hb)}`:''}</p><p>Enter for the menu, R to play again.</p>`;
   setTimeout(()=>{ if(phase==='over') $('result').classList.remove('hidden'); },700); }
 
 /* ---------- the AI: ghost-ball geometry finds the pots, a quick simulation of each plays for position ---------- */
@@ -478,8 +479,8 @@ function drawHUD(){ const pl=P.pl[P.turn];
   if(P.stage==='place') hudText(`Ball in hand${P.inHand==='kitchen'?' (behind the head string)':P.inHand==='D'?' (in the D)':''}: move it with the mouse or WASD, click or Enter to place`,W/2,H-24,16,'#fde047','center');
   if(P.stage==='think'||P.stage==='aiwind') hudText(P.online&&!myTurn()?`${pl.name} is at the table...`:`${pl.name} is lining it up...`,W/2,H-24,16,'#e2e8f0','center');
   if(P.msg&&P.msgT>0){ ctx.globalAlpha=Math.min(1,P.msgT*2); hudText(P.msg.t,W/2,110,30,P.msg.col,'center'); ctx.globalAlpha=1; }
-  /* the balls still to pot */ if(P.game!=='snooker'){ const left=P.balls.filter(b=>b.on&&b.id>0).sort((a,b)=>a.id-b.id); left.forEach((b,i)=>{ const x=W-24-i*20, y=24; ctx.fillStyle=b.col; ctx.beginPath(); ctx.arc(x,y,8,0,7); ctx.fill(); if(b.kind==='stripe'){ ctx.strokeStyle='#fff'; ctx.lineWidth=3; ctx.beginPath(); ctx.arc(x,y,6.5,0,7); ctx.stroke(); } hudText(String(b.id),x,y+20,10,'#e2e8f0','center'); }); }
-  else hudText(`${P.pts[0]} - ${P.pts[1]}`,W-24,40,24,'#fde047','right'); }
+  /* the balls still to pot */ if(P.game!=='snooker'){ const left=P.balls.filter(b=>b.on&&b.id>0).sort((a,b)=>a.id-b.id); left.forEach((b,i)=>{ const x=W-24-i*20, y=60; ctx.fillStyle=b.col; ctx.beginPath(); ctx.arc(x,y,8,0,7); ctx.fill(); if(b.kind==='stripe'){ ctx.strokeStyle='#fff'; ctx.lineWidth=3; ctx.beginPath(); ctx.arc(x,y,6.5,0,7); ctx.stroke(); } hudText(String(b.id),x,y+20,10,'#e2e8f0','center'); }); }
+  else hudText(`${P.pts[0]} - ${P.pts[1]}`,W-24,76,24,'#fde047','right'); }
 function draw(){ ctx.clearRect(0,0,W,H); if(view3) render3D(frameDtG); if(!P||phase==='menu'){ if(!view3){ ctx.fillStyle='#0b1120'; ctx.fillRect(0,0,W,H); } return; } if(!view3) draw2D(); drawHUD(); }
 
 /* ---------- board, toasts ---------- */
@@ -489,7 +490,7 @@ const badgeP=(col,n)=>svg(`<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 
 function updateBoard(){ if(!P) return; const sn=P.game==='snooker';
   $('logoL').src=badgeP('#0ea5e9',P.game==='9ball'?9:8); setText('nameL',P.pl[0].name); setText('tpL',sn?`${P.pts[0]} pts`:P.group[0]||(P.turn===0?'At the table':'')); setText('scoreL',P.pl[0].frames); $('sideL').style.setProperty('--tc',P.turn===0?'#22c55e':'#0ea5e9');
   $('logoR').src=badgeP(NCOL2[P.pl[1].nat]||'#ef4444',P.game==='9ball'?9:8); setText('nameR',P.pl[1].name); setText('tpR',sn?`${P.pts[1]} pts`:P.group[1]||(P.turn===1?'At the table':'')); setText('scoreR',P.pl[1].frames); $('sideR').style.setProperty('--tc',P.turn===1?'#22c55e':'#ef4444');
-  setText('cntT',GAMES[P.game].n); setText('innT',`Race to ${P.race}`); setText('outsT',sn?`Frame ${P.rack}`:`Rack ${P.rack}`); setText('basesT',''); }
+  setText('cntT',GAMES[P.game].n); setText('innT',sn?`Best of ${P.race*2-1}`:`Race to ${P.race}`); setText('outsT',sn?`Frame ${P.rack}`:`Rack ${P.rack}`); setText('basesT',''); }
 function toast(t,col='#34d399'){ const e=$('toast'); e.textContent=t; e.style.borderColor=col; e.classList.add('on'); toastT=2.2; }
 function banner(big,sub,glow='#000',dur=2){ const b=$('banner'); b.innerHTML=`<span class="big">${esc(big)}</span>${sub?`<span class="sub">${esc(sub)}</span>`:''}`; b.style.setProperty('--glow',glow); b.classList.add('on'); bannerT=dur; }
 
@@ -504,7 +505,7 @@ addEventListener('keydown',e=>{ const tag=document.activeElement&&document.activ
   if(e.code==='KeyM'){ if(confirm('Leave this match?')) toMenu(); keys.clear(); return; }
   if(e.code==='KeyC'){ camMode=(camMode+1)%3; savePrefs(); toast(['Cue view','Overhead','Broadcast'][camMode],'#93c5fd'); return; }
   if(e.code==='KeyG'){ assist=assist==='full'?'ghost':assist==='ghost'?'off':'full'; savePrefs(); toast({full:'Aim guide: full',ghost:'Aim guide: ghost ball',off:'Aim guide: off'}[assist],'#93c5fd'); return; }
-  if(e.code==='KeyX'&&P.game==='snooker'&&myTurn()&&!P.online&&P.stage!=='roll'){ if(confirm('Concede this frame?')) rackOver(1-P.turn,'Conceded'); return; }
+  if(e.code==='KeyX'&&P.game==='snooker'&&myTurn()&&!P.online&&P.stage!=='roll'&&P.stage!=='over'){ if(confirm('Concede this frame?')) rackOver(1-P.turn,'Conceded'); return; }
   if(P.stage==='place'&&['Enter','NumpadEnter','Space'].includes(e.code)){ placeDone(); return; }
   if(P.stage==='aim'&&e.code==='KeyR'){ P.spin={s:0,h:0}; return; }
   if(P.stage==='aim'&&e.code==='Space'){ P.stage='charge'; P.power=0; P.pDir=1; } });

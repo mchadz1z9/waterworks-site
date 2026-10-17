@@ -263,14 +263,14 @@ function mortgage(G,pid,i){ if(!canMort(G,pid,i)) return false; G.mort[i]=true; 
 function unmortgage(G,pid,i){ const c=Math.ceil(SQ[i].p/2*1.1); if(G.own[i]!==pid||!G.mort[i]||G.pl[pid].cash<c) return false; G.mort[i]=false; G.pl[pid].cash-=c; logx(G,`${G.pl[pid].name} lifts the mortgage on ${SQ[i].n} (${c})`); return true; }
 /* ---------- the turn ---------- */
 function rollDice(G){ const p=curP(G); if(G.phase!=='roll'||G.debt) return false; const a=1+Math.floor(rnd01(G)*6), b=1+Math.floor(rnd01(G)*6); G.dice=[a,b]; G.rolled=true; const dbl=a===b; G.ver++;
-  if(p.lock){ if(dbl){ p.lock=0; logx(G,`${p.name} rolls doubles and walks out of the Lockup`); return moveBy(G,a+b,false); } p.lock++; if(p.lock>3){ p.lock=0; pay(G,p.id,-1,50,'bail after three tries'); if(G.debt) { G.phase='debt'; return true; } return moveBy(G,a+b,false); } logx(G,`${p.name} stays in the Lockup`); G.phase='done'; return true; }
+  if(p.lock){ if(dbl){ p.lock=0; logx(G,`${p.name} rolls doubles and walks out of the Lockup`); return moveBy(G,a+b,false); } p.lock++; if(p.lock>3){ p.lock=0; pay(G,p.id,-1,50,'bail after three tries'); if(G.debt) { G.phase='debt'; G.pendMove=a+b; return true; } return moveBy(G,a+b,false); } logx(G,`${p.name} stays in the Lockup`); G.phase='done'; return true; }
   if(dbl){ p.dbl++; if(p.dbl>=3){ logx(G,`${p.name} rolls three doubles: off to the Lockup`); return toLock(G); } } else p.dbl=0;
   return moveBy(G,a+b,dbl); }
 function toLock(G){ const p=curP(G); p.pos=10; p.lock=1; p.dbl=0; G.phase='done'; G.ver++; return true; }
 function moveBy(G,n,again){ const p=curP(G); let np=(p.pos+n+40)%40; if(n>0&&np<p.pos){ gain(G,p.id,200,'passing START'); } p.pos=np; G.again=again; return land(G); }
 function moveTo(G,to,collect){ const p=curP(G); if(collect&&to<p.pos) gain(G,p.id,200,'passing START'); p.pos=to; return land(G); }
-function land(G){ const p=curP(G), i=p.pos, s=SQ[i], sum=G.dice[0]+G.dice[1]; G.ver++;
-  if(OWNABLE(i)){ const o=G.own[i]; if(o<0){ G.phase='buy'; return true; } if(o!==p.id&&!G.mort[i]){ let r=rentOf(G,i,sum); if(G.mult) r*=G.mult; if(G.utilTen&&s.t==='util') r=10*sum; G.mult=0; G.utilTen=0; if(r>0) pay(G,p.id,o,r,`rent on ${s.n}`); } }
+function land(G){ const p=curP(G), i=p.pos, s=SQ[i], sum=G.dice[0]+G.dice[1], mult=G.mult, ten=G.utilTen; G.ver++; G.mult=0; G.utilTen=0; /* a card's double rent only counts on the square it sends you to */
+  if(OWNABLE(i)){ const o=G.own[i]; if(o<0){ G.phase='buy'; return true; } if(o!==p.id&&!G.mort[i]){ let r=rentOf(G,i,sum); if(mult) r*=mult; if(ten&&s.t==='util') r=10*sum; if(r>0) pay(G,p.id,o,r,`rent on ${s.n}`); } }
   else if(s.t==='tax') pay(G,p.id,-1,s.a,s.n); else if(s.t==='golock'){ logx(G,`${p.name} goes to the Lockup`); return toLock(G); }
   else if(s.t==='fort'||s.t==='hall') return drawCard(G,s.t);
   G.phase=G.debt?'debt':'done'; return true; }
@@ -291,9 +291,9 @@ function payBail(G){ const p=curP(G); if(!p.lock||G.phase!=='roll') return false
 function endTurn(G){ if(G.phase!=='done'||G.debt) return false; const p=curP(G); if(G.again&&!p.lock&&!p.out){ G.again=false; G.phase='roll'; G.card=null; G.ver++; return true; }
   G.again=false; let n=G.turn; do{ n=(n+1)%G.pl.length; }while(G.pl[n].out); if(n<=G.turn) G.rounds++; G.turn=n; G.phase='roll'; G.card=null; G.pl[n].dbl=0; G.ver++; checkEnd(G); return true; }
 /* can't pay: mortgage and sell until square, or declare bankruptcy (assets to the creditor, or back to the bank) */
-function settleDebt(G){ const d=G.debt; if(!d) return true; const p=G.pl[d.pid]; if(p.cash>=0){ G.debt=null; if(G.phase==='debt') G.phase='done'; G.ver++; return true; } return false; }
-function bankrupt(G,pid){ const p=G.pl[pid], cred=G.debt?G.debt.to:-1; for(let i=0;i<40;i++) if(G.own[i]===pid){ if(G.houses[i]){ if(G.houses[i]===5){ G.bank.hotels++; } else G.bank.houses+=G.houses[i]; G.houses[i]=0; } if(cred>=0){ G.own[i]=cred; } else { G.own[i]=-1; G.mort[i]=false; } }
-  if(cred>=0) G.pl[cred].cash+=Math.max(0,p.cash+(G.debt?G.debt.amt:0)); p.cash=0; p.out=true; G.debt=null; logx(G,`${p.name} is bankrupt!`); if(G.turn===pid){ G.phase='done'; G.again=false; endTurn(G); } checkEnd(G); G.ver++; }
+function settleDebt(G){ const d=G.debt; if(!d) return true; const p=G.pl[d.pid]; if(p.cash>=0){ G.debt=null; if(G.phase==='debt'){ G.phase='done'; if(G.pendMove){ const n=G.pendMove; G.pendMove=0; moveBy(G,n,false); } } G.ver++; return true; } return false; }
+function bankrupt(G,pid){ const p=G.pl[pid], cred=G.debt?G.debt.to:-1; G.pendMove=0; for(let i=0;i<40;i++) if(G.own[i]===pid){ if(G.houses[i]){ p.cash+=G.houses[i]*houseCost(i)/2; /* buildings go back to the bank at half price */ if(G.houses[i]===5){ G.bank.hotels++; } else G.bank.houses+=G.houses[i]; G.houses[i]=0; } if(cred>=0){ G.own[i]=cred; } else { G.own[i]=-1; G.mort[i]=false; } }
+  if(cred>=0) G.pl[cred].cash+=p.cash; /* the creditor was paid in full: take back what the bankrupt never had */ p.cash=0; p.out=true; G.debt=null; logx(G,`${p.name} is bankrupt!`); if(G.turn===pid){ G.phase='done'; G.again=false; endTurn(G); } else if(G.phase==='debt') G.phase='done'; checkEnd(G); G.ver++; }
 function checkEnd(G){ const alive=G.pl.filter(p=>!p.out); if(alive.length===1){ G.winner=alive[0].id; G.phase='over'; } else if(G.maxRounds&&G.rounds>=G.maxRounds){ let b=null; for(const p of alive) if(!b||netWorth(G,p.id)>netWorth(G,b.id)) b=p; G.winner=b.id; G.phase='over'; logx(G,`Time! ${b.name} has the biggest fortune`); } }
 /* trading: properties (no buildings on them) and cash, both ways; get-out cards too */
 function tradeValid(G,t){ const okSide=(pid,props)=>props.every(i=>G.own[i]===pid&&!(SQ[i].t==='prop'&&GROUP_SQ[SQ[i].g].some(j=>G.houses[j]>0))); return okSide(t.from,t.give)&&okSide(t.to,t.get)&&t.cashGive<=G.pl[t.from].cash&&t.cashGet<=G.pl[t.to].cash&&(t.give.length+t.get.length+t.cashGive+t.cashGet>0); }
@@ -306,7 +306,7 @@ function aiWantsBuy(G,pid,i){ const p=G.pl[pid], s=SQ[i]; if(p.cash<s.p) return 
 function aiAuctionMax(G,pid,i){ const s=SQ[i], p=G.pl[pid]; const blocks=G.pl.some(q=>q.id!==pid&&!q.out&&s.t==='prop'&&GROUP_SQ[s.g].filter(j=>G.own[j]===q.id).length===GROUP_SQ[s.g].length-1); return Math.min(p.cash-60,Math.round(s.p*(.8+.25*(G.pl[pid].lvl||1))+(blocks?s.p*.4:0)+(propValue(G,pid,i,true)>s.p*1.8?s.p*.6:0))); }
 function aiManage(G,pid){ const p=G.pl[pid]; let acted=false;
   /* in debt: sell houses, then mortgage the least useful */ if(G.debt&&G.debt.pid===pid){ const mine=[...Array(40).keys()].filter(i=>G.own[i]===pid);
-    for(const i of mine.sort((a,b)=>SQ[a].p-SQ[b].p)) while(p.cash<0&&canSell(G,pid,i)) sellHouse(G,pid,i); for(const i of mine.sort((a,b)=>propValue(G,pid,a)-propValue(G,pid,b))) if(p.cash<0&&canMort(G,pid,i)) mortgage(G,pid,i);
+    for(let k=0,did=1;k<40&&did&&p.cash<0;k++){ did=0; for(const i of mine.sort((a,b)=>SQ[a].p-SQ[b].p)) if(p.cash<0&&canSell(G,pid,i)){ sellHouse(G,pid,i); did=1; } } for(const i of mine.sort((a,b)=>propValue(G,pid,a)-propValue(G,pid,b))) if(p.cash<0&&canMort(G,pid,i)) mortgage(G,pid,i);
     if(!settleDebt(G)) bankrupt(G,pid); return true; }
   /* lift mortgages on sets, then build, cheapest-to-house-up first, keeping a reserve */ for(let i=0;i<40;i++) if(G.own[i]===pid&&G.mort[i]&&p.cash-Math.ceil(SQ[i].p*.55)>aiReserve(G)*1.5&&(SQ[i].t!=='prop'||ownsSet(G,pid,SQ[i].g))) acted=unmortgage(G,pid,i)||acted;
   for(let guard=0;guard<20;guard++){ let best=null; for(let i=0;i<40;i++) if(canBuild(G,pid,i)&&p.cash-houseCost(i)>aiReserve(G)){ const gain=SQ[i].r[Math.min(5,G.houses[i]+1)]-SQ[i].r[G.houses[i]]; const sc=gain/houseCost(i); if(!best||sc>best.sc) best={i,sc}; } if(!best) break; build(G,pid,best.i); acted=true; }
@@ -377,7 +377,7 @@ function broadcast(){ if(net&&net.on&&net.isHost()) net.send({t:'G',G}); }
 /* ---------- the loop: AI moves on a beat, tokens walk their squares ---------- */
 function step(dt){ if(toastT>0){ toastT-=dt; if(toastT<=0) $('toast').classList.remove('on'); } if(bannerT>0&&!paused){ bannerT-=dt; if(bannerT<=0) $('banner').classList.remove('on'); }
   if(!G||phase!=='play'||paused) return; if(diceT>0) diceT-=dt;
-  /* walk tokens one square at a time; a trip to the Lockup is a jump */ let moving=false; G.pl.forEach((p,i)=>{ const d=disp[i]; if(d===p.pos) return; moving=true; const fw=(p.pos-d+40)%40; if(p.pos===10&&p.lock&&fw>12){ disp[i]=10; return; } disp[i]=(d+1)%40; sfx.step(); });
+  /* walk tokens one square at a time; a trip to the Lockup is a jump */ let moving=false; G.pl.forEach((p,i)=>{ const d=disp[i]; if(d===p.pos) return; moving=true; const fw=(p.pos-d+40)%40; if(p.pos===10&&p.lock&&fw>12){ disp[i]=10; return; } disp[i]=fw>=37?(d+39)%40:(d+1)%40; /* 'go back three' walks backwards */ sfx.step(); });
   if(moving){ aiT=-.12; } if(G.ver!==lastVer){ lastVer=G.ver; if(G.card&&G.card!==lastCard){ lastCard=G.card; cardShow=3; sfx.card(); } if(G.phase==='over') return gameOver(); updateBoard(); }
   if(cardShow>0) cardShow-=dt;
   if(!isHostOrLocal()) return; aiT+=dt; if(aiT>.7&&diceT<=0&&!moving){ aiT=0; if(G.trade&&G.trade.state!=='offer'){ G.trade=null; G.ver++; } if(aiStep(G)){ if(G.dice&&G.rolled&&G.phase!=='roll'&&!diceT&&G._lastRollVer!==G.ver) { } broadcast(); } } }
@@ -394,9 +394,9 @@ function rr(x,y,w,h,r,col){ ctx.fillStyle=col; ctx.beginPath(); ctx.roundRect(x,
 let BTN=[]; function button(id,label,x,y,w,h,col,arg,dis){ BTN.push({id,x,y,w,h,arg,dis}); rr(x,y,w,h,8,dis?'rgba(100,116,139,.5)':col||'#2563eb'); hudText(label,x+w/2,y+h/2+6,15,dis?'#cbd5e1':'#fff','center'); }
 const PX=774, PW=334;
 function drawHUD(){ BTN=[]; if(!G) return;
-  /* players */ G.pl.forEach((p,i)=>{ const y=12+i*40, cur=G.turn===i&&G.phase!=='over'; rr(PX,y,PW,36,9,cur?'rgba(250,204,21,.25)':'rgba(5,10,24,.78)'); rr(PX,y,6,36,3,PCOL[i]); hudText(TOKENS[p.tok].e,PX+22,y+26,20,'#fff','center');
-    hudText(`${p.name}${iAm(i)&&!p.ai&&myPids.length>1?' ●':''}`,PX+40,y+16,15,p.out?'#64748b':'#fff'); hudText(p.out?'bankrupt':`${p.lock?'in the Lockup · ':''}${[...Array(40).keys()].filter(k=>G.own[k]===i).length} properties${p.free?' · free card':''}`,PX+40,y+31,12,'#94a3b8'); hudText(`${p.cash}`,PX+PW-12,y+25,20,p.cash<0?'#f87171':'#86efac','right'); });
-  let y=12+G.pl.length*40+6; const cur=G.pl[G.turn], mine=myTurn(); rr(PX,y,PW,150,10,'rgba(5,10,24,.85)');
+  /* players */ G.pl.forEach((p,i)=>{ const y=46+i*34, cur=G.turn===i&&G.phase!=='over'; rr(PX,y,PW,31,9,cur?'rgba(250,204,21,.25)':'rgba(5,10,24,.78)'); rr(PX,y,6,31,3,PCOL[i]); hudText(TOKENS[p.tok].e,PX+22,y+23,18,'#fff','center');
+    hudText(`${p.name}${iAm(i)&&!p.ai&&myPids.length>1?' ●':''}`,PX+40,y+14,15,p.out?'#64748b':'#fff'); hudText(p.out?'bankrupt':`${p.lock?'in the Lockup · ':''}${[...Array(40).keys()].filter(k=>G.own[k]===i).length} properties${p.free?' · free card':''}`,PX+40,y+28,12,'#94a3b8'); hudText(`${p.cash}`,PX+PW-12,y+23,20,p.cash<0?'#f87171':'#86efac','right'); });
+  let y=46+G.pl.length*34+6; const cur=G.pl[G.turn], mine=myTurn(); rr(PX,y,PW,142,10,'rgba(5,10,24,.85)');
   const dueBy=G.debt?G.pl[G.debt.pid]:null;
   if(G.trade&&G.trade.state==='offer'&&iAm(G.trade.to)&&!G.pl[G.trade.to].ai){ const t=G.trade; hudText(`${G.pl[t.from].name} offers you:`,PX+12,y+22,15,'#fde047'); hudText(`${t.give.map(i=>SQ[i].n).join(', ')||'nothing'}${t.cashGive?` + ${t.cashGive} cash`:''}`,PX+12,y+44,13,'#e2e8f0'); hudText(`for ${t.get.map(i=>SQ[i].n).join(', ')||'nothing'}${t.cashGet?` + ${t.cashGet} cash`:''}`,PX+12,y+64,13,'#e2e8f0'); button('tAcc','Accept',PX+12,y+100,150,36,'#16a34a'); button('tDec','Decline',PX+172,y+100,150,36,'#dc2626'); }
   else if(G.phase==='auction'){ const A=G.auction, me=A.active.find(id=>iAm(id)&&!G.pl[id].ai&&id!==A.lead); hudText(`Auction: ${SQ[A.sq].n}`,PX+12,y+22,16,'#fde047'); hudText(`Top bid ${A.bid}${A.lead>=0?' · '+G.pl[A.lead].name:''} · still in: ${A.active.length}`,PX+12,y+44,13,'#e2e8f0');
@@ -408,7 +408,7 @@ function drawHUD(){ BTN=[]; if(!G) return;
     else if(G.phase==='done'){ button('end',G.again&&!cur.lock?'Roll again (Space)':'End turn (Space)',PX+12,y+40,310,40,'#2563eb'); button('trade','Propose a trade',PX+12,y+90,150,36,'#7c3aed',null,!!(G.trade&&G.trade.state==='offer')); hudText('Click a property to build or mortgage',PX+172,y+112,11,'#94a3b8'); } }
   else hudText(G.phase==='over'?'Game over':`${cur.name} is playing...`,PX+12,y+30,15,'#cbd5e1');
   if(G.dice&&G.rolled) hudText(`🎲 ${G.dice[0]} + ${G.dice[1]} = ${G.dice[0]+G.dice[1]}`,PX+PW-12,y+22,14,'#e2e8f0','right');
-  y+=158; /* the deed of the selected square */ if(sel>=0) drawDeed(sel,PX,y); else { rr(PX,y,PW,40,10,'rgba(5,10,24,.7)'); hudText('Click any square on the board for its deed',PX+12,y+25,13,'#94a3b8'); y-=0; }
+  y+=150; /* the deed of the selected square */ if(sel>=0) drawDeed(sel,PX,y); else { rr(PX,y,PW,40,10,'rgba(5,10,24,.7)'); hudText('Click any square on the board for its deed',PX+12,y+25,13,'#94a3b8'); y-=0; }
   /* the log */ const ly=H-118; rr(PX,ly,PW,108,10,'rgba(5,10,24,.78)'); G.log.slice(0,6).forEach((l,i)=>hudText(l.length>58?l.slice(0,56)+'…':l,PX+10,ly+20+i*16,12,i?'#94a3b8':'#e2e8f0','left',600));
   /* a drawn card */ if(cardShow>0&&G.card){ ctx.globalAlpha=Math.min(1,cardShow*2); rr(170,220,420,150,14,G.card.deck==='fort'?'#fde68a':'#bfdbfe'); hudText(G.card.deck==='fort'?'FORTUNE':'TOWN HALL',380,256,22,'#111','center'); wrapText(G.card.x,380,292,380,18,'#111'); ctx.globalAlpha=1; }
   if(tradeUI) drawTradeUI();
@@ -416,11 +416,11 @@ function drawHUD(){ BTN=[]; if(!G) return;
 function wrapText(t,x,y,w,size,col){ ctx.font=`700 ${size}px 'Big Shoulders Display','Arial Narrow',sans-serif`; const words=t.split(' '); let line='', yy=y; for(const wd of words){ const tst=line?line+' '+wd:wd; if(ctx.measureText(tst).width>w){ ctx.textAlign='center'; ctx.fillStyle=col; ctx.fillText(line,x,yy); line=wd; yy+=size+4; } else line=tst; } ctx.textAlign='center'; ctx.fillStyle=col; ctx.fillText(line,x,yy); }
 function drawDeed(i,x,y){ const s=SQ[i], o=G.own[i], h=G.houses[i]; rr(x,y,PW,H-118-y-8,10,'rgba(248,250,252,.95)'); if(s.t==='prop') rr(x+8,y+8,PW-16,30,6,GROUPS[s.g].c);
   hudText(s.n,x+PW/2,y+30,18,s.t==='prop'&&['navy','green','brown','red'].includes(s.g)?'#fff':'#111','center');
-  let yy=y+56; const line=(t,c)=>{ ctx.font="700 13px 'Big Shoulders Display','Arial Narrow',sans-serif"; ctx.textAlign='left'; ctx.fillStyle=c||'#1f2937'; ctx.fillText(t,x+14,yy); yy+=17; };
+  let yy=y+54; const line=(t,c)=>{ ctx.font="700 13px 'Big Shoulders Display','Arial Narrow',sans-serif"; ctx.textAlign='left'; ctx.fillStyle=c||'#1f2937'; ctx.fillText(t,x+14,yy); yy+=15; };
   if(s.t==='prop'){ line(`Rent ${s.r[0]} (${s.r[0]*2} with the set)`); line(`1 house ${s.r[1]} · 2 houses ${s.r[2]} · 3 houses ${s.r[3]}`); line(`4 houses ${s.r[4]} · hotel ${s.r[5]}`); line(`Price ${s.p} · houses ${houseCost(i)} each · mortgage ${s.p/2}`); }
   else if(s.t==='stn') { line('Rent 25, 50, 100 or 200 with 1-4 stations'); line(`Price ${s.p} · mortgage ${s.p/2}`); } else if(s.t==='util'){ line('Rent 4x the dice (10x with both utilities)'); line(`Price ${s.p} · mortgage ${s.p/2}`); } else { line({start:'Collect 200 as you pass',lock:'Just visiting... or locked up',park:'A free rest in the square',golock:'Straight to the Lockup',tax:`Pay ${s.a||''}`,fort:'Draw a Fortune card',hall:'Draw a Town Hall card'}[s.t]||''); return; }
   line(o<0?'For sale':`Owner: ${G.pl[o].name}${G.mort[i]?' (mortgaged)':''}${h?` · ${h===5?'hotel':h+' house'+(h>1?'s':'')}`:''}`,o<0?'#16a34a':PCOL[o]);
-  const me=o; if(o>=0&&iAm(o)&&!G.pl[o].ai&&(G.turn===o||G.debt&&G.debt.pid===o)){ const bx=x+12, by=Math.min(yy+4,H-118-48), bw=74; button('build','Build',bx,by,bw,30,'#16a34a',i,!canBuild(G,me,i)||!!G.debt); button('sell','Sell',bx+80,by,bw,30,'#b45309',i,!canSell(G,me,i)); button(G.mort[i]?'unmort':'mort',G.mort[i]?'Unmort.':'Mortgage',bx+160,by,bw+6,30,'#64748b',i,G.mort[i]?G.pl[me].cash<Math.ceil(s.p*.55):!canMort(G,me,i)); } }
+  const me=o; if(o>=0&&iAm(o)&&!G.pl[o].ai&&(G.turn===o||G.debt&&G.debt.pid===o)){ const bx=x+12, by=Math.min(yy-6,H-118-40), bw=74; button('build','Build',bx,by,bw,30,'#16a34a',i,!canBuild(G,me,i)||!!G.debt); button('sell','Sell',bx+80,by,bw,30,'#b45309',i,!canSell(G,me,i)); button(G.mort[i]?'unmort':'mort',G.mort[i]?'Unmort.':'Mortgage',bx+160,by,bw+6,30,'#64748b',i,G.mort[i]?G.pl[me].cash<Math.ceil(s.p*.55):!canMort(G,me,i)); } }
 /* the trade builder: pick what you give and what you get, add cash either way */
 function drawTradeUI(){ const T=tradeUI, x=60, y=60, w=650, h=480; rr(x,y,w,h,14,'rgba(5,10,24,.95)'); hudText('Propose a trade',x+w/2,y+32,22,'#fde047','center');
   const others=G.pl.filter(p=>!p.out&&p.id!==T.from); others.forEach((p,k)=>button('tWho',p.name,x+20+k*150,y+48,140,30,T.to===p.id?'#7c3aed':'#334155',p.id));
@@ -438,7 +438,7 @@ const badgeL=(col,e)=>svg(`<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 
 function updateBoard(){ if(!G){ $('logoL').src=badgeL('#16a34a','🏠'); setText('nameL','You'); setText('tpL','Landlord'); setText('scoreL',''); $('logoR').src=badgeL('#7c3aed','🏨'); setText('nameR','The town'); setText('tpR','40 squares'); setText('scoreR',''); setText('cntT','Landlord'); setText('innT',''); setText('outsT',''); setText('basesT',''); return; }
   const me=G.pl[myPids[0]]||G.pl[0], lead=G.pl.filter(p=>!p.out).sort((a,b)=>netWorth(G,b.id)-netWorth(G,a.id))[0];
   $('logoL').src=badgeL(PCOL[me.id],TOKENS[me.tok].e); setText('nameL',me.name); setText('tpL','Cash'); setText('scoreL',me.cash); $('logoR').src=badgeL(PCOL[lead.id],TOKENS[lead.tok].e); setText('nameR',lead.name); setText('tpR','Richest'); setText('scoreR',netWorth(G,lead.id));
-  setText('cntT','Landlord'); setText('innT',`Round ${G.rounds+1}${G.maxRounds&&G.maxRounds<150?' of '+G.maxRounds:''}`); setText('outsT',`${G.pl[G.turn].name}'s turn`); setText('basesT',''); }
+  setText('cntT','Landlord'); setText('innT',`Round ${G.rounds+1}${G.maxRounds&&G.maxRounds<150?' of '+G.maxRounds:''}`); setText('outsT',G.pl[G.turn].name==='You'?'Your turn':`${G.pl[G.turn].name}'s turn`); setText('basesT',''); }
 function toast(t,col='#34d399'){ const e=$('toast'); e.textContent=t; e.style.borderColor=col; e.classList.add('on'); toastT=2.2; }
 function banner(big,sub,glow='#000',dur=2){ const b=$('banner'); b.innerHTML=`<span class="big">${esc(big)}</span>${sub?`<span class="sub">${esc(sub)}</span>`:''}`; b.style.setProperty('--glow',glow); b.classList.add('on'); bannerT=dur; }
 

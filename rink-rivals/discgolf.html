@@ -528,7 +528,7 @@ function afterMove(f,prev){ const C=R.C, h=R.holes[R.hole], b=h.basket;
       if(inC&&Math.random()<t.dens*(1+v3len(f.v)*.03)){ const s=v3len(f.v)*rnd(.15,.45), a=rnd(0,6.28); f.v=[Math.sin(a)*s,-Math.abs(s)*.4,Math.cos(a)*s]; f.roll=rnd(-1,1); hitTree(f,s*3); } } }
   for(const rk of C.rocks){ const dx=f.p[0]-rk.x, dz=f.p[2]-rk.z, y=f.p[1]-terrH(rk.x,rk.z); if(Math.abs(dx)>rk.r+.5||Math.abs(dz)>rk.r+.5) continue; const r=Math.hypot(dx,y*1.4,dz);
     if(r<rk.r){ const nn=v3norm([dx,y*1.4,dz]), vn=v3dot(f.v,nn); if(vn<0){ f.v=v3add(f.v,v3mul(nn,-1.6*vn)); f.v=v3mul(f.v,.7); sfx.metal(); if(f.state!=='fly'){ f.state='fly'; f.p[1]+=.1; } } } } }
-function hitTree(f,sp){ if(!f.hitT||f.t-f.hitT>.25){ sfx.tree(); f.hitT=f.t; f.trees++; if(R.mode!=='putt'){ const id=f.id; SV.wear[id]=Math.min(1,(SV.wear[id]||0)+clamp(sp/220,.004,.06)); } } }
+function hitTree(f,sp){ if(!f.hitT||f.t-f.hitT>.25){ sfx.tree(); f.hitT=f.t; f.trees++; if(R.mode!=='putt'){ const id=f.id; SV.wear[id]=Math.min(1,(SV.wear[id]||0)+clamp(sp/700,.0015,.02)); /* plastic takes many rounds of tree hits to beat in */ } } }
 /* touching down: water, a skip, an edge (roller), or a flat slide */
 function land(f){ const C=R.C; if(C.water(f.p[0],f.p[2])){ f.state='water'; sfx.splash(); return finishFlight('rest'); }
   const surf=surfAt(f.p[0],f.p[2]), s=SURF[surf], vh=Math.hypot(f.v[0],f.v[2]), vy=-f.v[1], lean=f.roll*f.fh; sfx.land();
@@ -630,7 +630,7 @@ function drawHUD(){ const C=R.C, h=R.holes[Math.min(R.hole,R.holes.length-1)], d
     const n=R.scores.length, tot=R.scores.reduce((a,b)=>a+b,0), par=R.holes.slice(0,n).reduce((a,x)=>a+x.par,0), rel=tot-par; let pos='';
     if(R.mode==='tour'&&n){ const me=standings().find(r=>r.me); pos=` · ${me.tie?'T':''}${ord(me.pos)} of ${R.field.length+1}`; } if(R.mode==='match') pos=` · ${R.up===0?'AS':R.up>0?R.up+' UP':Math.abs(R.up)+' DN'}`;
     hudText(`${esc(C.D.name)} · ${fr(rel)}${pos}`,28,88,16,rel<0?'#fde047':rel>0?'#fca5a5':'#86efac'); }
-  miniMap(W-176,22,150,150); windDial(W-232,64);
+  miniMap(W-176,52,150,150); windDial(W-232,94); /* below the view button */
   if(aiming){ const li=lieInfo(), putt=isPutt();
     rr(16,H-176,340,160,12,'rgba(5,10,24,.82)'); hudText(`${d.brand} ${d.name}`,28,H-150,20,DBY[R.bag[R.disc]].col); hudText(`${DTYPE[d.t]} · ${d.sp} | ${d.gl} | ${(+d.tu.toFixed(1))} | ${(+d.fa.toFixed(1))}${(SV.wear[R.bag[R.disc]]||0)>.08?' · beat-in '+Math.round(SV.wear[R.bag[R.disc]]*100)+'%':''}`,28,H-130,14,'#cbd5e1');
     hudText(putt?`PUTT${R.jump&&!inC1()?' · jump putt':inC1()?' · circle 1 (no jumping)':' · T to jump'}`:`${STYLES.find(s=>s[0]===R.style)[1]} · ${R.xstep&&!li.tight&&!li.tall?'run-up':'standstill'}${li.tight?' · tight lie':''}${li.tall?' · tall grass':''}`,28,H-108,16,putt?'#86efac':'#e2e8f0');
@@ -644,8 +644,8 @@ function drawHUD(){ const C=R.C, h=R.holes[Math.min(R.hole,R.holes.length-1)], d
   /* the card, or the whole leaderboard */
   if(R.mode==='tour'||R.mode==='match'){ const n=R.scores.length, par=R.holes.slice(0,n).reduce((a,x)=>a+x.par,0);
     if(R.board&&R.mode==='tour'){ const rows=standings(); rr(W/2-200,60,400,Math.min(26,rows.length)*19+40,12,'rgba(5,10,24,.9)'); hudText(`Leaderboard · thru ${n}`,W/2,84,18,'#fde047','center');
-      rows.slice(0,26).forEach((r,i)=>{ const y=104+i*19; hudText(`${r.tie?'T':''}${r.pos}`,W/2-180,y,14,r.me?'#fde047':'#cbd5e1'); hudText(`${FLAG[r.nat]||''} ${r.name}`,W/2-140,y,14,r.me?'#fde047':'#e2e8f0'); hudText(fr(r.rel),W/2+180,y,14,r.rel<0?'#fca5a5':'#e2e8f0','right'); }); }
-    else { rr(W-176,186,150,24+R.card.length*19,10,'rgba(5,10,24,.78)'); hudText('Your card',W-164,204,13,'#94a3b8'); R.card.forEach((p,i)=>{ const t=p.scores.slice(0,n).reduce((a,b)=>a+b,0), rel=t-par; hudText(p.name.split(' ').pop(),W-164,223+i*19,14,'#e2e8f0'); hudText(n?fr(rel):'E',W-34,223+i*19,14,rel<0?'#fde047':'#e2e8f0','right'); }); } } }
+      (rows.slice(0,26).some(r=>r.me)?rows.slice(0,26):rows.slice(0,25).concat(rows.filter(r=>r.me))).forEach((r,i)=>{ const y=104+i*19; hudText(`${r.tie?'T':''}${r.pos}`,W/2-180,y,14,r.me?'#fde047':'#cbd5e1'); hudText(`${FLAG[r.nat]||''} ${r.name}`,W/2-140,y,14,r.me?'#fde047':'#e2e8f0'); hudText(fr(r.rel),W/2+180,y,14,r.rel<0?'#fca5a5':'#e2e8f0','right'); }); }
+    else { rr(W-176,212,150,24+R.card.length*19,10,'rgba(5,10,24,.78)'); hudText('Your card',W-164,230,13,'#94a3b8'); R.card.forEach((p,i)=>{ const t=p.scores.slice(0,n).reduce((a,b)=>a+b,0), rel=t-par; hudText(p.name.split(' ').pop(),W-164,249+i*19,14,'#e2e8f0'); hudText(n?fr(rel):'E',W-34,249+i*19,14,rel<0?'#fde047':'#e2e8f0','right'); }); } } }
 function draw(){ ctx.clearRect(0,0,W,H); if(view3) render3D(frameDtG); if(!R||phase==='menu'){ if(!view3){ ctx.fillStyle='#14532d'; ctx.fillRect(0,0,W,H); } return; } if(!view3){ ctx.fillStyle='#14532d'; ctx.fillRect(0,0,W,H); miniMap(W/2-260,40,520,520); } drawHUD(); }
 
 /* ---------- board, toasts ---------- */
@@ -672,7 +672,7 @@ addEventListener('keydown',e=>{
   if(e.code==='KeyZ'){ toggleFs(); return; }
   if(e.code==='KeyV'){ setView3(!view3); return; }
   if(phase==='menu'){ menuKey(e.code); return; }
-  if(phase==='over'){ if(e.code==='KeyR') newGame(); else if(['Enter','NumpadEnter','Escape','KeyM'].includes(e.code)) toMenu(); return; }
+  if(phase==='over'){ if(e.code==='KeyR'&&!(window.RRV&&RRV.on)) newGame(); else if(['Enter','NumpadEnter','Escape','KeyM'].includes(e.code)) toMenu(); return; }
   if(!R) return;
   if(e.code==='Escape'){ paused=!paused; if(paused) banner('Paused','Esc to resume · M for menu','#000',1e9); else { $('banner').classList.remove('on'); bannerT=0; } return; }
   if(e.code==='KeyM'){ if(confirm('Leave this round?')) toMenu(); keys.clear(); return; }

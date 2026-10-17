@@ -264,7 +264,7 @@ function fieldGo(){ const e=EV.ev, r=EV.rng, out=[];
   void out; }
 
 /* ---------- a ride: eight seconds, balance against what the animal does ---------- */
-function newRide(ev,stock){ const rng=mulberry32(Math.floor(Math.random()*1e9)), len=10; RD={kind:'ride',ev,stock,script:ev==='bull'?bullScript(stock.style,stock.rat,rng,len):broncScript(stock.rat,rng,len),t:-1.6,o:[0,0],v:[0,0],yaw:0,out:false,done:false,dq:null,mark:ev==='bronc'?null:true,spurs:0,spurGood:0,jumps:0,ctrl:0,ctrlN:0,fat:0,arm:.8,cue:null,bx:0,bz:0,score:null,msg:null,msgT:0,lean:[0,0],tilt:[0,0]}; sfx.snort(); }
+function newRide(ev,stock){ const rng=mulberry32(Math.floor((EV&&EV.rng?EV.rng():Math.random())*1e9)), len=10; /* from the event's seed, so everyone in an online battle gets the same trip */ RD={kind:'ride',ev,stock,script:ev==='bull'?bullScript(stock.style,stock.rat,rng,len):broncScript(stock.rat,rng,len),t:-1.6,o:[0,0],v:[0,0],yaw:0,out:false,done:false,dq:null,mark:ev==='bronc'?null:true,spurs:0,spurGood:0,jumps:0,ctrl:0,ctrlN:0,fat:0,arm:.8,cue:null,bx:0,bz:0,score:null,msg:null,msgT:0,lean:[0,0],tilt:[0,0]}; sfx.snort(); }
 function curMove(t){ const s=RD.script; for(let i=s.length-1;i>=0;i--) if(s[i].t<=t) return s[i]; return null; }
 function rideStep(dt){ const r=RD; r.t+=dt; if(r.msgT>0) r.msgT-=dt; if(r.t<0) return; if(r.out||r.done){ r.after=(r.after||0)+dt; if(r.after>3.2) rideOver(); return; }
   if(r.t<dt*1.5){ sfx.gate(); sfx.crowd(.2); }
@@ -278,7 +278,7 @@ function rideStep(dt){ const r=RD; r.t+=dt; if(r.msgT>0) r.msgT-=dt; if(r.t<0) r
   /* the free hand: if you get thrown sideways with it down, it slaps the animal */ if(Math.abs(r.o[1])>.78&&Math.abs(r.v[1])>1.4&&!r.dq&&Math.random()<dt*3){ r.dq='touched the bull with his free hand'; msg('Free hand touched: no score','#f87171',2); }
   const off=Math.hypot(r.o[0],r.o[1]); r.ctrl+=off; r.ctrlN++; r.tilt=[r.o[0],r.o[1]];
   if(off>1){ r.out=true; r.after=0; sfx.fall(); SV.falls++; saveSV(); msg(r.t<8?`Bucked off at ${r.t.toFixed(2)} s`:'Off after the whistle','#f87171',2.4); speak('He\'s down!',true); return; }
-  /* broncs: mark him out on the first jump, then spur in rhythm */ if(r.ev==='bronc'){ if(m&&m.k==='jump'){ const ph=(r.t-m.t)/m.d; if(ph<.05&&!m.counted){ m.counted=1; r.jumps++; } } if(r.mark===null&&r.t>.75){ r.mark=false; msg('Missed him out: no score','#f87171',2); } }
+  /* broncs: mark him out on the first jump, then spur in rhythm */ if(r.ev==='bronc'){ if(m){ const ph=(r.t-m.t)/m.d; if(ph<.05&&!m.counted){ m.counted=1; r.jumps++; } } if(r.mark===null&&r.t>.75){ r.mark=false; msg('Missed him out: no score','#f87171',2); } }
   if(r.t>=8){ r.done=true; r.after=0; sfx.buzzer(); sfx.cheer(); speak('Eight seconds!',true); } }
 function spur(){ const r=RD; if(!r||r.kind!=='ride'||r.out||r.done||r.t<0) return; sfx.spur(); r.spurs++;
   if(r.ev==='bronc'&&r.mark===null){ if(r.t<.75){ r.mark=true; msg('Marked out!','#86efac',1); } return; }
@@ -325,14 +325,14 @@ function hudText(t,x,y,size=18,col='#fff',align='left'){ ctx.font=`800 ${size}px
 function rr(x,y,w,h,r,col){ ctx.fillStyle=col; ctx.beginPath(); ctx.roundRect(x,y,w,h,r); ctx.fill(); }
 function drawHUD(){ const r=RD;
   if(r.kind==='ride'){ rr(16,14,300,70,12,'rgba(5,10,24,.82)'); hudText(r.t<0?'In the chute...':`${Math.min(8,Math.max(0,r.t)).toFixed(2)} s`,28,50,32,r.t>=8?'#86efac':'#fff'); hudText(`${r.stock.name} · ${r.ev==='bull'?'bull':'bronc'} ${r.stock.rat}`,28,74,14,'#cbd5e1');
-    /* the balance ring: keep the dot in the middle */ const cx=W-110, cy=120, R0=80; rr(cx-R0-12,cy-R0-12,(R0+12)*2,(R0+12)*2+26,14,'rgba(5,10,24,.8)'); ctx.strokeStyle='#ef4444'; ctx.lineWidth=3; ctx.beginPath(); ctx.arc(cx,cy,R0,0,7); ctx.stroke(); ctx.strokeStyle='rgba(255,255,255,.25)'; ctx.beginPath(); ctx.arc(cx,cy,R0*.5,0,7); ctx.stroke();
+    /* the balance ring: keep the dot in the middle */ const cx=W-110, cy=152, R0=80; rr(cx-R0-12,cy-R0-12,(R0+12)*2,(R0+12)*2+50,14,'rgba(5,10,24,.8)'); ctx.strokeStyle='#ef4444'; ctx.lineWidth=3; ctx.beginPath(); ctx.arc(cx,cy,R0,0,7); ctx.stroke(); ctx.strokeStyle='rgba(255,255,255,.25)'; ctx.beginPath(); ctx.arc(cx,cy,R0*.5,0,7); ctx.stroke();
     const off=Math.hypot(r.o[0],r.o[1]); ctx.fillStyle=off<.5?'#22c55e':off<.8?'#fde047':'#ef4444'; ctx.beginPath(); ctx.arc(cx+r.o[1]*R0,cy-r.o[0]*R0,9,0,7); ctx.fill(); hudText('Balance',cx,cy+R0+22,13,'#cbd5e1','center');
-    rr(W-212,232,190,10,5,'rgba(255,255,255,.15)'); rr(W-212,232,190*(1-r.fat),10,5,'#38bdf8'); hudText('Grip',W-212,228,12,'#cbd5e1');
+    rr(W-162,cy+R0+34,136,10,5,'rgba(255,255,255,.15)'); rr(W-162,cy+R0+34,136*(1-r.fat),10,5,'#38bdf8'); hudText('Grip',W-192,cy+R0+44,12,'#cbd5e1');
     if(assist&&r.cue&&r.cue!=='jump'&&!r.out&&!r.done){ const t={kick:'KICK: lean back (S)',drop:'DROP: lean back (S)',rear:'REAR: lean forward (W)',spinL:'SPIN LEFT: lean in (A)',spinR:'SPIN RIGHT: lean in (D)',belly:'BELLY ROLL: ride it out',jump:'Jump'}[r.cue]; hudText(t,W/2,H-60,26,'#fde047','center'); }
     if(r.ev==='bronc'&&r.mark===null&&r.t>-.4) hudText('Mark him out: SPACE now!',W/2,150,28,'#fde047','center');
     if(r.ev==='bronc'&&r.t>.8&&!r.done&&!r.out) hudText(`Spurs in rhythm: SPACE at the top of each jump (${r.spurGood}/${r.jumps})`,W/2,H-24,15,'#cbd5e1','center'); }
   else { rr(16,14,300,70,12,'rgba(5,10,24,.82)'); hudText(r.started?`${(r.t+r.pen).toFixed(2)} s`:'Ready...',28,50,32,'#fff'); hudText(`${(r.v*3.6).toFixed(0)} km/h · barrel ${Math.min(3,r.b+1)}${r.pen?` · +${r.pen}`:''}`,28,74,14,'#cbd5e1');
-    const mx=W-190, my=20, sc=3.6; rr(mx-10,my-6,170,250,10,'rgba(5,10,24,.8)'); const P=(x,z)=>[mx+75+x*sc,my+230-(z+14)*sc]; BARRELS.forEach((B,i)=>{ const q=P(...B); ctx.fillStyle=r.tipped[i]?'#ef4444':i<r.b?'#64748b':'#facc15'; ctx.beginPath(); ctx.arc(q[0],q[1],5,0,7); ctx.fill(); }); ctx.strokeStyle='#fff'; ctx.beginPath(); ctx.moveTo(...P(-6,0)); ctx.lineTo(...P(6,0)); ctx.stroke(); const q=P(r.x,r.z); ctx.fillStyle='#38bdf8'; ctx.beginPath(); ctx.arc(q[0],q[1],5,0,7); ctx.fill();
+    const mx=W-190, my=52, sc=3.6; rr(mx-10,my-6,170,250,10,'rgba(5,10,24,.8)'); const P=(x,z)=>[mx+75+x*sc,my+230-(z+14)*sc]; BARRELS.forEach((B,i)=>{ const q=P(...B); ctx.fillStyle=r.tipped[i]?'#ef4444':i<r.b?'#64748b':'#facc15'; ctx.beginPath(); ctx.arc(q[0],q[1],5,0,7); ctx.fill(); }); ctx.strokeStyle='#fff'; ctx.beginPath(); ctx.moveTo(...P(-6,0)); ctx.lineTo(...P(6,0)); ctx.stroke(); const q=P(r.x,r.z); ctx.fillStyle='#38bdf8'; ctx.beginPath(); ctx.arc(q[0],q[1],5,0,7); ctx.fill();
     if(r.tm<5) hudText('W gallop · S whoa · A / D steer · round each barrel, right first or left first, then home',W/2,H-24,15,'#cbd5e1','center'); }
   if(r.msg&&r.msgT>0) hudText(r.msg.t,W/2,120,30,r.msg.col,'center'); }
 function draw(){ ctx.clearRect(0,0,W,H); if(view3) render3D(frameDtG); if(!RD||phase==='menu'){ if(!view3){ ctx.fillStyle='#3b2a1a'; ctx.fillRect(0,0,W,H); } return; } if(!view3){ ctx.fillStyle='#5b4329'; ctx.fillRect(0,0,W,H); } drawHUD(); }
