@@ -346,12 +346,16 @@ function bikeStep(b,dt){ const B=b.B, I=b.in, f=fwdV(b), m=B.m; let Fh=0, Fv=-m*
   /* off a bump (a short hop) the rider's body and legs keep the bike level unless they are steering it with their weight */
   if(!nOn&&!I.lean&&(b.air||0)<.45){ const e=b.th-Math.atan(groundSlope(b.p[0],b.p[2],b.hd))*.5; tau+=clamp(-e*B.lean*1.4-b.om*B.lean*.9,-B.lean*1.1,B.lean*1.1); }
   /* on a big jump a rider keeps the bike pointed along its flight path (so it meets the downslope) unless they are throwing it with their weight */
-  else if(!nOn&&!I.lean&&!(b.trick&&b.trick.d&&!b.trick.d.spin)){ const e=b.th-Math.atan2(b.v[1],Math.max(1,Math.abs(vf))); tau+=clamp(-e*B.lean*.9-b.om*B.lean*.6,-B.lean*.7,B.lean*.7); }
+  else if(!nOn&&!I.lean&&!(b.trick&&b.trick.d&&!b.trick.d.spin)){ const path=Math.atan2(b.v[1],Math.max(1,Math.abs(vf))), fr=b.rot||0, cm=Math.abs(fr)>1.4; let e=angD(b.th-path);
+    /* once a flip is thrown the rider rides it round to the wheels (the nearest whole turn, a quarter turn past counts as going for the next one), never back the way it came */
+    if(cm){ const x=((b.thU??b.th)-path)/(2*Math.PI); e=(x-Math.round(x+.25*Math.sign(fr)))*2*Math.PI; }
+    /* in a flip: tuck to keep it turning, then open up to stop it with the wheels under you */
+    tau+=cm?clamp((clamp(-e*2.6,-6.5,6.5)-b.om)*B.I*5,-B.lean*2,B.lean*2):clamp(-e*B.lean*.9-b.om*B.lean*.6,-B.lean*.7,B.lean*.7); }
   /* the rear wheel is a gyroscope, but only while its speed changes: revving it lifts the nose a little, the brake stops it and drops the nose */
-  if(!nOn){ const r0=b.rev==null?.5:b.rev, r1=I.brk?Math.max(0,r0-dt*5):lerp(r0,I.thr?1:.4,Math.min(1,dt*2.5)); b.rev=r1; tau+=(r1-r0)/dt*B.gyro*1.1*(b.veh==='mx'?1:0); b.om*=1-(I.lean?.25:1.1)*dt; } else b.rev=.5;
+  if(!nOn){ const r0=b.rev==null?.5:b.rev, r1=I.brk?Math.max(0,r0-dt*5):lerp(r0,I.thr?1:.4,Math.min(1,dt*2.5)); b.rev=r1; tau+=(r1-r0)/dt*B.gyro*1.1*(b.veh==='mx'?1:0); b.om*=1-(I.lean||Math.abs(b.rot||0)>1.4?.25:1.1)*dt; } else b.rev=.5;
   /* integrate the pitch plane */
   b.v[0]+=f[0]*Fh/m*dt; b.v[2]+=f[2]*Fh/m*dt; b.v[1]+=Fv/m*dt;
-  b.om+=tau/B.I*dt; b.th+=b.om*dt;
+  b.om+=tau/B.I*dt; b.th+=b.om*dt; b.thU=nOn?b.th:(b.thU??b.th)+b.om*dt; /* the pitch counted right round, for flips */
   /* steering on the ground: a bicycle model, lean = atan(v^2 k / g), limited by grip (more on a berm) */
   if(nOn){ const u=Math.max(0,vf), q=nearT(b.p[0],b.p[2]), bankS=q?Math.abs(sampleAt(q.s).bank)*.35:0, aMax=G*(B.mu*.95+bankS), dMax=clamp(.55/(1+u*.09),.06,.55);
     let yr=u*Math.tan(I.steer*dMax)/B.wb; const over=Math.abs(yr*u)>aMax;
@@ -449,7 +453,7 @@ function aiPlace(r,dt){ const T=MX.T, sp0=sampleAt(r.s);
   if(!r.air){ const vyG=dt>0?(g-r.y)/dt:0; const next=sampleAt(r.s+r.u*.05), gn=groundH(next.x+lx*r.w,next.z+lz*r.w), vyN=(gn-g)/.05;
     if(dt>0&&vyN<vyG-G*.06&&vyG>.5&&r.u>3){ r.air=true; r.vy=vyG; r.airT=0; } else { r.y=g; r.vy=vyG; } }
   if(r.air){ r.airT+=dt; r.vy-=G*dt; r.y+=r.vy*dt; if(r.y<=g){ const imp=r.vy-((g-r.y)/Math.max(dt,1e-3)); r.y=g; r.air=false; if(r.airT>.35){ const sl=groundSlope(x,z,sp.hd); if(sl>-.05&&r.vy<-6.5){ r.u*=.72; if(Math.random()<.18*(1.05-r.sk)*4){ aiCrash(r); } } } } }
-  r.p=[x,r.y,z]; r.hd=sp.hd; const pitchT=r.air?Math.atan2(r.vy,r.u)*.8:Math.atan(groundSlope(x,z,sp.hd)); r.th=lerp(r.th,pitchT,Math.min(1,dt*8)); r.lean=lerp(r.lean,-Math.atan(r.u*r.u*sp.k/G)*.9,Math.min(1,dt*5));
+  r.p=[x,r.y+(r.crashT>0?.35:r.B.hc),z]; r.hd=sp.hd; const pitchT=r.air?Math.atan2(r.vy,r.u)*.8:Math.atan(groundSlope(x,z,sp.hd)); r.th=lerp(r.th,pitchT,Math.min(1,dt*8)); r.lean=lerp(r.lean,-Math.atan(r.u*r.u*sp.k/G)*.9,Math.min(1,dt*5));
   r.wheelA[0]+=r.u/r.B.r*dt; r.wheelA[1]+=r.u/r.B.r*dt; }
 function aiCrash(r){ r.crashT=3.2; r.u*=.2; feed(`${r.name} goes down!`,'#f87171'); }
 
@@ -462,13 +466,13 @@ function respawn(b){ const q=nearT(b.p[0],b.p[2])||{s:0}, T=MX.T; let s=q.s-(T.k
   /* never put the rider back on a jump or just before a lip: back to the flat before it */ const wr=x=>T.closed?(x+T.L)%T.L:Math.max(2,x); for(let n=0;n<60;n++){ if(!featAt(s)&&!featAt(wr(s+5))&&!featAt(wr(s+10))) break; s=wr(s-2); }
   const nb=mkBike(b.veh,s,0); for(const k of ['p','v','hd','th','om','x','xd','on']) b[k]=nb[k]; b.crash=0; b.ragdoll=null; b.whip=0; b.air=0; b.pose=0; b.trick=null; b.slide=0; b.lastS=s; }
 function playerTick(b,dt){ const B=b.B, I=b.in, T=MX.T;
-  if(b.crash>0){ b.crash-=dt; const R=b.ragdoll; if(R){ R.v[1]-=G*dt; madd(R.p,R.v,dt); const g=groundH(R.p[0],R.p[2]); if(R.p[1]<g+.25){ R.p[1]=g+.25; R.v=mul(R.v,.55); R.v[1]=Math.abs(R.v[1])*.3; } R.a+=R.w*dt; R.w*=1-dt*.8; }
+  if(b.crash>0){ b.crash-=dt; const R=b.ragdoll; if(R){ R.v[1]-=G*dt; madd(R.p,R.v,dt); const g=groundH(R.p[0],R.p[2]); const grd=R.p[1]<g+.26; if(R.p[1]<g+.25){ R.p[1]=g+.25; R.v=mul(R.v,.55); R.v[1]=Math.abs(R.v[1])*.3; } R.a+=R.w*dt; R.w*=1-dt*(grd?7:.8); if(grd){ const at=Math.round((R.a-Math.PI/2)/Math.PI)*Math.PI+Math.PI/2; R.a=lerp(R.a,at,Math.min(1,dt*7)); } }
     b.v=mul(b.v,1-dt*2.2); b.v[1]-=G*dt; madd(b.p,b.v,dt); const g=groundH(b.p[0],b.p[2]); if(b.p[1]<g+.35){ b.p[1]=g+.35; b.v[1]=0; } b.th+=(-.4-b.th)*dt*3; b.lean=lerp(b.lean,1.3,dt*4);
     if(b.crash<=0) respawn(b); return; }
   if(MX.state==='gate'||b.done&&MX.race){ I.thr=MX.state==='gate'?0:I.thr; }
   const wasOn=b.on[0]||b.on[1], vAir=b.v[1];
   /* sub-steps for the suspension */
-  const n=Math.max(1,Math.round(dt*240)); let on=0; for(let i=0;i<n;i++) on=bikeStep(b,dt/n);
+  const n=Math.max(1,Math.round(dt*240)); let on=0; for(let i=0;i<n;i++){ on=bikeStep(b,dt/n); if(b.th>Math.PI||b.th<-Math.PI) b.th=angD(b.th); }
   if(MX.state==='gate'){ const s=nearT(b.p[0],b.p[2]); b.v=[0,b.v[1],0]; }
   /* the pop: compress on the face (Space) and release at the lip for extra height */
   if(I.pop&&on) b.pre=Math.min(1,(b.pre||0)+dt*2.5); if(!I.pop&&b.pre>0){ if(on&&groundSlope(b.p[0],b.p[2],b.hd)>.25){ b.v[1]+=b.pre*(b.veh==='mx'?1.6:1.1); b.popT=.3; /* pulling back (or throwing forward) as you pop sets the flip going */ if(I.lean) b.om+=I.lean*b.pre*(b.veh==='mx'?2.2:3); } b.pre=0; }
@@ -1112,7 +1116,7 @@ function render3D(dt){ if(!TRK||(phase==='menu'&&TRK.key!==trackSel)){ buildTrac
   if(TEST&&window.__camO){ e=window.__camO.e; c=window.__camO.c; }
   R3.frame(cam(e,c,fov),()=>{
     drawGate();
-    for(const r of MX.riders){ const v=riderView(r); if(r!==me&&Math.hypot(r.p[0]-e[0],r.p[1]+.5-e[1],r.p[2]-e[2])<2.6) continue; const hide=r===me&&MX.cam===2&&me.crash<=0; drawRider(v,{noRider:hide}); if(!hide) drawShadow(v); if(r===me&&me.ragdoll) drawRag(me.ragdoll,v); else if(r.ai&&r.crashT>0) drawRag({p:add(r.p,[Math.cos(r.hd)*1.2,.2,-Math.sin(r.hd)*1.2]),a:-1.5},v); emitFx(v,dt); }
+    for(const r of MX.riders){ const v=riderView(r); if(r!==me&&Math.hypot(r.p[0]-e[0],r.p[1]+.5-e[1],r.p[2]-e[2])<2.6) continue; const hide=r===me&&MX.cam===2&&me.crash<=0; drawRider(v,{noRider:hide}); if(!hide) drawShadow(v); if(r===me&&me.ragdoll) drawRag(me.ragdoll,v); else if(r.ai&&r.crashT>0) drawRag({p:add(r.p,[Math.cos(r.hd)*1.2,-.1,-Math.sin(r.hd)*1.2]),a:-Math.PI/2},v); emitFx(v,dt); }
     if(typeof drawGhosts==='function') drawGhosts();
     drawFx(dt);
   },dt); }
