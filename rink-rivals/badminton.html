@@ -266,6 +266,8 @@ const SKEY='rinkRivalsBadmintonV1'; let SV=(()=>{ try{ return Object.assign({win
 const saveSV=()=>{ try{ localStorage.setItem(SKEY,JSON.stringify(SV)); }catch(e){} };
 try{ const P=JSON.parse(localStorage.getItem('rinkRivalsBadmintonPrefs')||'null'); if(P){ evtSel=EVT[P.evtSel]?P.evtSel:'ms'; p0Sel=P.p0Sel|0; p1Sel=P.p1Sel??1; lvl=P.lvl??1; gamesSel=P.gamesSel||3; assist=P.assist??true; camMode=P.camMode||0; } }catch(e){}
 const savePrefs=()=>{ try{ localStorage.setItem('rinkRivalsBadmintonPrefs',JSON.stringify({evtSel,p0Sel,p1Sel,lvl,gamesSel,assist,camMode})); }catch(e){} };
+/* family name: Chinese, Korean and Taiwanese names (and some Malaysian ones) put it first */
+const FAMF=new Set(['Soh Wooi Yik','Goh Soon Huat']), sur=(n,c)=>/^(CHN|KOR|TPE)$/.test(c)||FAMF.has(n)?n.split(' ')[0]:n.split(' ').slice(-1)[0];
 const isDbl=e=>e==='md'||e==='wd'||e==='xd';
 const KS=[{up:['KeyW','ArrowUp'],dn:['KeyS','ArrowDown'],lt:['KeyA','ArrowLeft'],rt:['KeyD','ArrowRight'],hi:['KeyJ'],soft:['KeyK'],hard:['KeyL'],auto:['Space']},{up:['P2W'],dn:['P2S'],lt:['P2A'],rt:['P2D'],hi:['P2J'],soft:['P2K'],hard:['P2L'],auto:['P2B']}];
 const isHuman=t=>!(TEST&&window.__ai0)&&(t===0||twoP&&t===1);
@@ -275,7 +277,7 @@ const rightX=t=>t===0?-1:1;         /* a player's right-hand court, facing the n
 
 /* ---------- a match ---------- */
 function mkPlayer(team,i,name,code,rt,o){ const k=team===1&&!twoP?LVLK[lvl]:1; return {team,i,name,code,sk:clamp(rt/100*k,.5,1),smash:o.smash||.85,net:o.net||.85,def:o.def||.85,sp:(5.4+rt/100)*(.85+.15*k),x:0,z:0,vx:0,vz:0,y:0,vy:0,face:0,pose:'ready',poseT:9,run:0,q:null,h:o.h||1.8}; }
-function newMatch(){ const dbl=isDbl(evtSel), L=PROS[evtSel], mk=(t,e)=>{ if(dbl){ const [names,code,rt]=e; return {code,name:names.map(n=>n.split(' ').slice(-1)[0]).join(' / '),players:names.map((n,i)=>mkPlayer(t,i,n,code,rt,{h:evtSel==='wd'||evtSel==='xd'&&i===1?1.7:1.84})),score:0,games:0,right:0}; }
+function newMatch(){ const dbl=isDbl(evtSel), L=PROS[evtSel], mk=(t,e)=>{ if(dbl){ const [names,code,rt]=e; return {code,name:names.map(n=>sur(n,code)).join(' / '),players:names.map((n,i)=>mkPlayer(t,i,n,code,rt,{h:evtSel==='wd'||evtSel==='xd'&&i===1?1.7:1.84})),score:0,games:0,right:0}; }
     const [n,code,rt,sm,nt,df]=e; return {code,name:n,players:[mkPlayer(t,0,n,code,rt,{smash:sm,net:nt,def:df,h:evtSel==='ws'?1.7:1.86})],score:0,games:0,right:0}; };
   if(p1Sel===p0Sel) p1Sel=(p0Sel+1)%L.length;
   M={evt:evtSel,dbl,teams:[mk(0,L[p0Sel]),mk(1,L[p1Sel])],sh:{x:0,y:1,z:0,vx:0,vy:0,vz:0},state:'serve',serveT:0,serving:Math.random()<.5?0:1,rally:0,t:0,feed:[],game:1,last:null,maxRally:0,mySmash:0,trail:[]};
@@ -316,7 +318,7 @@ function hit(p,kind,aim){ const s=M.sh, T=p.T, t=p.team, oz=-sideZ(t), hw=HW(), 
   /* nothing clears the tape from down there: lift it instead */ if(S.r.clr<.03&&kind!=='sserve'&&kind!=='net'){ kind='lift'; S=solveShot(P,[tx,oz*(HL-1)],{mode:'arc',th:.95}); if(!S) return; } const sp=S.s*(1+gauss()*err*.03), th=S.th+gauss()*err*.025, yaw=S.yaw+gauss()*err*.03;
   const L=launchS(P,yaw,th,sp); Object.assign(s,L); M.lastTeam=t; M.lastP=p; M.rally++; M.state='rally'; M.lastKind=kind; M.lastSpeed=sp*3.6; M.trail=[];
   p.pose=kind==='smash'||kind==='clear'||kind==='drop'&&s.y>1.9?'over':kind==='net'||kind==='lift'?'low':'side'; p.poseT=0; p.q=null; p.lunge=false;
-  if(kind==='smash'){ sfx.smash(); if(sp*3.6>280) feed(`${p.name.split(' ').slice(-1)[0]}: smash ${Math.round(sp*3.6)} km/h`,'#fde047'); if(isHuman(t)&&!twoP){ M.mySmash=Math.max(M.mySmash,sp*3.6); } } else if(kind==='net'||kind==='drop'||kind==='sserve') sfx.soft(); else sfx.hit(sp);
+  if(kind==='smash'){ sfx.smash(); if(sp*3.6>280) feed(`${sur(p.name,p.code)}: smash ${Math.round(sp*3.6)} km/h`,'#fde047'); if(isHuman(t)&&!twoP){ M.mySmash=Math.max(M.mySmash,sp*3.6); } } else if(kind==='net'||kind==='drop'||kind==='sserve') sfx.soft(); else sfx.hit(sp);
   for(const T2 of M.teams) for(const pp of T2.players) pp.plan=null; }
 /* the AI's choice of shot from where it meets the shuttle */
 function aiShot(p){ const s=M.sh, h=s.y, az=Math.abs(s.z), O=M.teams[1-p.team].players, r=Math.random(), att=.35+.4*p.smash;
@@ -357,7 +359,7 @@ function tick(dt){ M.t+=dt; const s=M.sh, all=M.teams[0].players.concat(M.teams[
     /* the AI serves after a breath; you serve with SPACE (short) or J (a high serve) */ if(!isHuman(srv.team)&&M.serveT>1.4){ const lng=!M.dbl&&Math.random()<(M.evt==='ws'?.4:.18); srv.qual=.9+.1*Math.random(); hit(srv,lng?'lserve':'sserve',{lx:Math.random()*2-1,dz:1}); M.serveHit=true; }
     if(isHuman(srv.team)&&M.serveT>8&&assist){ srv.qual=1; hit(srv,'sserve',{lx:0,dz:1}); }
     for(const p of all) stepBody(p,dt); return; }
-  if(M.state==='dead'){ M.deadT+=dt; for(const p of all){ moveTo(p,p.x,p.z,0,dt); stepBody(p,dt); } if(M.deadT>2.2){ if(M.over) return; setupServe(); } return; }
+  if(M.state==='dead'){ M.deadT+=dt; for(const p of all){ moveTo(p,p.x,p.z,0,dt); stepBody(p,dt); } if(M.over){ if(M.deadT>2.6&&phase==='play') endMatch(); return; } if(M.deadT>2.2) setupServe(); return; }
   /* the shuttle in flight */ const pz=s.z, py=s.y; shStep(s,dt); if(M.trail.length===0||Math.hypot(s.x-M.trail[M.trail.length-1][0],s.z-M.trail[M.trail.length-1][2])>.4) { M.trail.push([s.x,s.y,s.z]); if(M.trail.length>14) M.trail.shift(); }
   /* the net: a shuttle that crosses below the tape is caught in it */ if(Math.sign(s.z)!==Math.sign(pz)&&pz!==0){ const ny=lerp(py,s.y,Math.abs(pz)/(Math.abs(pz)+Math.abs(s.z))); if(ny<netH(s.x)&&Math.abs(s.x)<HWD+.1){ sfx.net(); return point(1-M.lastTeam,'Into the net'); } }
   if(s.y<=0){ s.y=0; sfx.floor(); return landed(); }
@@ -385,11 +387,11 @@ function landed(){ const s=M.sh, lt=M.lastTeam, side=s.z<0?0:1, hw=HW(); let inC
   if(inC) return point(lt,M.lastKind==='smash'?'Smash winner!':M.lastKind==='net'?'Net kill':M.lastKind==='drop'?'Drop shot winner':'Point');
   return point(1-lt,'Out'); }
 function point(t,why){ if(M.state==='dead') return; const T=M.teams[t], O=M.teams[1-t]; M.state='dead'; M.deadT=0; T.score++; M.maxRally=Math.max(M.maxRally,M.rally); sfx.point(); if(M.rally>14) sfx.crowd(.25);
-  feed(`${why} · ${T.name.split(' / ')[0].split(' ').slice(-1)[0]}${M.dbl?' pair':''} ${M.rally>8?`(${M.rally} shots)`:''}`,t===0?'#86efac':'#fca5a5');
+  feed(`${why} · ${M.dbl?T.name.split(' / ')[0]:sur(T.name,T.code)}${M.dbl?' pair':''} ${M.rally>8?`(${M.rally} shots)`:''}`,t===0?'#86efac':'#fca5a5');
   /* doubles rotation: the serving side that wins swaps courts; the receiving side that wins takes the serve */ if(M.dbl&&M.serving===t) T.right=1-T.right; M.serving=t;
   const pts=21, cap=30, won=T.score>=pts&&T.score-O.score>=2||T.score>=cap;
   if(won){ T.games++; const need=gamesSel===1?1:2; banner(T.games>=need?`${T.name} win!`:`Game ${M.game} to ${T.name}`,`${M.teams[0].score}-${M.teams[1].score}`,t===0?'#22c55e':'#ef4444',2.6); speak(`Game, ${T.name}`,true);
-    if(T.games>=need){ M.over=true; setTimeout(endMatch,2600); } else { M.game++; for(const X of M.teams){ X.score=0; X.right=0; } M.deadT=-1.5; } }
+    if(T.games>=need){ M.over=true; } else { M.game++; for(const X of M.teams){ X.score=0; X.right=0; } M.deadT=-1.5; } }
   else if(T.score>=pts-1&&T.score>O.score) speak(T.score===pts-1?'Game point':'',false);
   updateBoard(); }
 function endMatch(){ phase='over'; const A=M.teams[0], B=M.teams[1], won=A.games>B.games; SV.games++; if(won) SV.wins++; SV.smash=Math.max(SV.smash,Math.round(M.mySmash)); SV.rally=Math.max(SV.rally,M.maxRally); saveSV(); sfx.crowd(.3);

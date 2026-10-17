@@ -381,8 +381,9 @@ function stepBullets(dt){ const all=[FL.A].concat(FL.ai);
     if(b.p[1]<groundAt(b.p[0],b.p[2])) b.t=9; }
   FL.bul=FL.bul.filter(b=>b.t<2.2); }
 function kill(P,by){ if(P.dead) return; P.dead=true; P.hp=0; P.smoke=1; P.w=[rnd(-2,2),rnd(-.5,.5),rnd(-1,1)]; FL.fx.push({k:'boom',p:P.p.slice(),t:0}); sfx.boom();
-  if(P===FL.A){ msg('You were shot down','#f87171'); setTimeout(()=>{ if(FL&&!FL.over) finish('dog'); },2500); }
-  else if(by===0){ FL.kills++; SV.kills++; saveSV(); msg(`Splash one! ${P.name} down (${FL.kills})`,'#22c55e'); speak('Splash one!',true); if(FL.ai.every(q=>q.dead)) setTimeout(()=>{ if(FL&&!FL.over&&!FL.A.dead){ FL.ai=FL.ai.filter(q=>!q.wreck&&!q.dead); nextWave(); } },3000); } }
+  const F=FL; if(P===FL.A){ msg('You were shot down','#f87171'); setTimeout(()=>{ if(FL===F&&!FL.over) finish('dog'); },2500); return; }
+  if(by===0){ FL.kills++; SV.kills++; saveSV(); msg(`Splash one! ${P.name} down (${FL.kills})`,'#22c55e'); speak('Splash one!',true); } else if(by<0) msg(`${P.name} flew into the ground`,'#86efac');
+  /* the wave is over however they went down (shot, or flown into the ground) */ if(FL.ai.every(q=>q.dead)&&!FL.waveT){ FL.waveT=1; setTimeout(()=>{ if(FL===F&&!FL.over&&!FL.A.dead){ FL.waveT=0; FL.ai=FL.ai.filter(q=>!q.wreck&&!q.dead); nextWave(); } },3000); } }
 
 /* ---------- the flying ---------- */
 /* the stick moves smoothly: a key press eases the controls in over a fraction of a second instead of slamming them over */
@@ -416,12 +417,12 @@ function step(dt){
 function checkTouch(A){ const T=A.touch; if(!T) return; A.touch=null; if(A.dead) return;
   const fpm=T.vs*196.85, rollD=Math.abs(T.roll)*180/Math.PI, slow=T.spd<A.P.vs*1.2;
   const crash=T.belly||T.vs>3.6||rollD>15||T.pitch<-.06||(!T.rwy&&(A.P.jet||T.vs>2.2||!slow&&T.spd>A.P.vapp*1.25))||(groundAt(A.p[0],A.p[2])<=WATER+.01&&terrainH(A.p[0],A.p[2])<WATER);
-  if(crash){ A.dead=true; A.wreck=true; A.v=[0,0,0]; FL.fx.push({k:'boom',p:A.p.slice(),t:0}); sfx.boom(); msg(T.belly&&!T.rwy&&T.spd>A.P.vapp*1.4?'You flew into the ground':T.belly?'Gear up landing: you crashed':T.vs>3.6?`Crashed: ${Math.round(fpm)} ft/min is far too hard`:'Crashed','#f87171'); setTimeout(()=>{ if(FL&&!FL.over) finish('crash'); },2200); return; }
+  if(crash){ A.dead=true; A.wreck=true; A.v=[0,0,0]; FL.fx.push({k:'boom',p:A.p.slice(),t:0}); sfx.boom(); msg(T.belly&&!T.rwy&&T.spd>A.P.vapp*1.4?'You flew into the ground':T.belly?'Gear up landing: you crashed':T.vs>3.6?`Crashed: ${Math.round(fpm)} ft/min is far too hard`:'Crashed','#f87171'); const F=FL; setTimeout(()=>{ if(FL===F&&!FL.over) finish('crash'); },2200); return; }
   sfx.touch(T.vs); const c=Math.abs(T.x), tdz=T.z-(-RWY.len/2+300);
   const sc=Math.max(0,Math.round(100-fpm/6-c*2.5-Math.max(0,Math.abs(tdz)-60)*.12-rollD*1.5)), grade=sc>=90?'Butter!':sc>=75?'Great landing':sc>=55?'Good landing':sc>=30?'Firm landing':'Arrival';
   FL.touched={fpm:Math.round(fpm),c:+c.toFixed(1),tdz:Math.round(tdz),roll:+rollD.toFixed(1),sc,grade,rwy:T.rwy}; SV.landings++; saveSV();
   msg(`${grade}: ${Math.round(fpm)} fpm · ${c.toFixed(1)} m off centre${T.rwy?` · ${tdz>0?'+':''}${Math.round(tdz)} m from the aim point`:' · off runway'}`,sc>=75?'#22c55e':'#fde047');
-  if(FL.mode==='land') setTimeout(()=>{ if(FL&&!FL.over) finish('land'); },3500); }
+  if(FL.mode==='land'){ const F=FL; setTimeout(()=>{ if(FL===F&&!FL.over) finish('land'); },3500); } }
 function finish(why){ if(FL.over) return; FL.over=true; phase='over'; SV.flights++; const M=FL.mode, P=FL.A.P; let h='', rec='';
   if(M==='race'&&why==='race'){ const tot=FL.raceT+FL.pen; FL.score=tot; const k='race_'+planeSel; if(!SV.best[k]||tot<SV.best[k]) SV.best[k]=tot; rec=fmtS(SV.best[k]);
     h=`<h2>Course complete</h2><div class="rs">${fmtS(tot)}</div><p>Flying time ${fmtS(FL.raceT)} + ${FL.pen} s penalties · ${P.name}</p><table class="ls"><tr>${FL.gates.map((g,i)=>`<th>${i+1}</th>`).join('')}</tr><tr>${FL.gates.map(g=>`<td>${g.pen?'+'+g.pen:'✓'}</td>`).join('')}</tr></table><p>Personal best ${rec}</p>`; }
@@ -498,7 +499,7 @@ function draw2D(){ const A=FL.A, sc=.06, X=x=>W/2-(x-A.p[0])*sc, Y=z=>H/2-(z-A.p
 let toastT=0, bannerT=0, lastBoard='';
 const setText=(id,t)=>{ const e=$(id); if(e&&e.textContent!==String(t)) e.textContent=t; };
 const badgeF=col=>svg(`<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 100 100"><circle cx="50" cy="50" r="46" fill="${col}"/><path d="M50 16 L56 44 L86 54 L86 60 L56 56 L54 76 L64 82 L64 86 L50 82 L36 86 L36 82 L46 76 L44 56 L14 60 L14 54 L44 44 Z" fill="#f8fafc"/></svg>`);
-function updateBoard(){ if(!FL) return; const A=FL.A, key=`${Math.round(A.ias)}${Math.round(A.p[1]/30)}${FL.kills}${FL.gi}${FL.mode}`; if(key===lastBoard) return; lastBoard=key;
+function updateBoard(){ if(!FL) return; const A=FL.A, key=`${Math.round(A.ias)}${Math.round(A.p[1]/30)}${FL.kills}${FL.gi}${FL.mode}${FL.ai.filter(b=>!b.dead).length}`; if(key===lastBoard) return; lastBoard=key;
   $('logoL').src=badgeF(A.P.col2); setText('nameL',A.P.short); setText('tpL',MODES[FL.mode].name); setText('scoreL',FL.mode==='dog'?String(FL.kills):''); $('sideL').style.setProperty('--tc',A.P.col2);
   $('logoR').src=badgeF('#0ea5e9'); setText('nameR',FL.mode==='race'?'Personal best':FL.mode==='dog'?'Enemies':'Rink Field'); setText('tpR',FL.mode==='race'?(SV.best['race_'+planeSel]?fmtS(SV.best['race_'+planeSel]):'-'):FL.mode==='dog'?`${FL.ai.filter(b=>!b.dead).length} airborne`:'Runway 36'); setText('scoreR',''); $('sideR').style.setProperty('--tc','#0ea5e9');
   setText('cntT',`${Math.round(A.ias*KT)} kt`); setText('innT',`${Math.round(A.p[1]*FT)} ft`); setText('outsT',PLANES[planeSel].name); setText('basesT',''); }
