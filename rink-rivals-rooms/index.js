@@ -122,6 +122,17 @@ export class Board {
    personal details, and community reports: three different people reporting a message hides it for everyone. */
 const CHAT_BAD=[/f+[\W_]*[u\*v]+[\W_]*c+[\W_]*k+/gi,/\bsh+[i1!\*]+[\W_]*t+(?!\w*(ake|e))/gi,/\bc+[\W_]*u+[\W_]*n+[\W_]*t+/gi,/\bn+[\W_]*[i1!]+[\W_]*g+[\W_]*g+/gi,/\bf+[a@4]+g+/gi,/b+[i1!]+t+c+h+/gi,/wh+o+r+e+/gi,/\bsluts?\b/gi,/\br+[a@4]+p+e+/gi,/h+[i1]+t+l+e+r+/gi,/n+[a@4]+z+[i1]+/gi,/\bd+[i1!]+c+k+\b/gi,/p+u+s+s+y+/gi,/\bc+o+c+k+s?\b/gi,/\ba+s+s+h+o+l+e+/gi,/\bkys\b/gi,/kill\s*your\s*self/gi,/\bretard/gi,/\bporn/gi,/\bsexy?\b/gi,/\bbastard/gi];
 const LINK=/(https?:\/\/|www\.|\b[a-z0-9-]+\.(com|net|org|gg|io|xyz|ly|me|tv|co|app|link|ru|info)\b|discord|snapchat|insta(gram)?|tiktok|@[a-z0-9_]{3,})/i;
+/* keyboard mashing: random letters ("asdfjkl", "fjdkslajf") read as spam. Words, numbers and links are fine */
+const URLRE=/(https?:\/\/\S+|www\.\S+|\b[a-z0-9-]+(\.[a-z0-9-]+)*\.(com|net|org|gg|io|xyz|ly|me|tv|co|app|link|ca|uk|dev|info|edu|gov)(\/\S*)?)/gi;
+const ROWS=['qwertyuiop','asdfghjkl','zxcvbnm','1234567890'], ROWR=ROWS.map(r=>r.split('').reverse().join(''));
+function gibberish(text){ const t=text.toLowerCase().replace(URLRE,' '); const words=t.split(/[^a-z]+/).filter(Boolean); let bad=0, letters=0;
+  for(const w of words){ letters+=w.length; if(w.length<5) continue; let junk=false;
+    for(const run of w.match(/[bcdfghjklmnpqrstvwxz]{6,}/g)||[]) if(new Set(run).size>=4) junk=true; /* no real word has six different consonants in a row ("hmmmmm" is fine) */
+    const v=(w.match(/[aeiouy]/g)||[]).length; if(w.length>=10&&v/w.length<.15) junk=true;
+    for(const r of ROWS.concat(ROWR)) for(let i=0;i+5<=r.length;i++) if(w.includes(r.slice(i,i+5))&&r!=='1234567890'&&r!=='0987654321') junk=true; /* a run along the keyboard: asdfg, hjkl;, qwert */
+    if(w.length>=14&&!/(.{2,})\1/.test(w)&&new Set(w).size>=w.length*.6&&v/w.length<.3) junk=true;
+    if(junk) bad+=w.length; }
+  return letters>=5&&bad/letters>.34; }
 const PERSONAL=/(\b\d{3}[\s.-]?\d{3}[\s.-]?\d{4}\b|[a-z0-9._%+-]+@[a-z0-9.-]+\.[a-z]{2,}|\b\d{1,5}\s+\w+\s+(street|st|avenue|ave|road|rd|drive|dr|lane|ln|crescent|cres|court|ct)\b|\bmy\s+address\b|\bwhere\s+do\s+you\s+live\b|\bhow\s+old\s+are\s+you\b)/i;
 const cleanName=n=>{ let s=String(n||'').replace(/[\u0000-\u001f<>]/g,'').replace(/\s+/g,' ').trim().slice(0,20); if(!s) s='Player'; for(const r of CHAT_BAD){ r.lastIndex=0; if(r.test(s)) return 'Player'; } if(LINK.test(s)||PERSONAL.test(s)) return 'Player'; return s; };
 export class Chat {
@@ -162,9 +173,9 @@ export class Chat {
     if(m.t==='say'){ const now=Date.now();
       const mu=this.sql.exec('SELECT until FROM mute WHERE who=?',a.who).toArray()[0]; if(mu&&mu.until>now){ this.send(ws,{t:'sys',text:`You are muted for ${Math.ceil((mu.until-now)/60000)} more minutes.`}); return; }
       let text=String(m.text||'').replace(/[\u0000-\u001f​-‏‪-‮]/g,'').replace(/\s+/g,' ').trim().slice(0,200); if(!text) return;
-      a.ts=(a.ts||[]).filter(t=>now-t<20000); if(a.ts.length&&now-a.ts[a.ts.length-1]<1200||a.ts.length>=6){ this.send(ws,{t:'sys',text:'Slow down a little.'}); return; }
+      a.ts=(a.ts||[]).filter(t=>now-t<10000); if(a.ts.length>=8){ this.send(ws,{t:'sys',text:'That is a lot of messages at once, give it a few seconds.'}); return; }
       if(text.toLowerCase()===a.last){ this.send(ws,{t:'sys',text:'You just said that.'}); return; }
-      if(LINK.test(text)){ this.send(ws,{t:'sys',text:'Links and social media handles are not allowed in chat.'}); return; }
+      if(gibberish(text)){ this.send(ws,{t:'sys',text:'That looks like keyboard mashing, so it was not sent.'}); return; }
       if(PERSONAL.test(text)){ this.send(ws,{t:'sys',text:'For your safety, don\'t share or ask for phone numbers, emails, addresses or ages.'}); return; }
       for(const r of CHAT_BAD){ r.lastIndex=0; text=text.replace(r,w=>'*'.repeat(w.length)); }
       if(/(.)\1{9,}/.test(text)) text=text.replace(/(.)\1{9,}/g,(x,c)=>c.repeat(5));

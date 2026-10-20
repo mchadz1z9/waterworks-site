@@ -11,6 +11,9 @@
   let pid=ls.get('rrPid'); if(!pid||pid.length<8){ pid=Array.from({length:12},()=>'abcdefghijklmnopqrstuvwxyz0123456789'[Math.floor(Math.random()*36)]).join(''); ls.set('rrPid',pid); }
   let name=(ls.get('rrOnlineName')||'').trim();
   const esc=s=>String(s).replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
+  /* links in messages are clickable (opened in a new tab, never followed by search engines) */
+  const URLX=/(https?:\/\/[^\s<>"']+|www\.[^\s<>"']+|\b[a-z0-9-]+(?:\.[a-z0-9-]+)*\.(?:com|net|org|gg|io|xyz|ly|me|tv|co|app|link|ca|uk|dev|info|edu|gov)(?:\/[^\s<>"']*)?)/gi;
+  const linkify=t=>{ let out='', last=0; String(t).replace(URLX,(u,_,i)=>{ let tail=''; while(/[.,!?)\]]$/.test(u)){ tail=u.slice(-1)+tail; u=u.slice(0,-1); } const href=/^https?:\/\//i.test(u)?u:'https://'+u; out+=esc(String(t).slice(last,i))+`<a href="${esc(href)}" target="_blank" rel="noopener noreferrer nofollow ugc">${esc(u.length>48?u.slice(0,46)+'…':u)}</a>`+esc(tail); last=i+u.length+tail.length; return u; }); return out+esc(String(t).slice(last)); };
   const hue=s=>{ let h=0; for(const c of String(s)) h=(h*31+c.charCodeAt(0))>>>0; return h%360; };
 
   const css=`
@@ -27,7 +30,7 @@
 .rrc .wr{display:flex;align-items:center;gap:8px;padding:7px 9px;border-radius:10px;background:rgba(255,255,255,.05)} .rrc .wr b{flex:1;min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap} .rrc .wr span{color:#94a3b8;font-size:13px;white-space:nowrap} .rrc .wr a{background:#22c55e;color:#04210f;text-decoration:none;font:800 14px 'Big Shoulders Display','Arial Narrow',sans-serif;border-radius:8px;padding:3px 10px;white-space:nowrap} .rrc .wr a.here{background:#334155;color:#cbd5e1} .rrc header small::before{content:'';display:inline-block;width:8px;height:8px;border-radius:50%;background:#4ade80;margin-right:5px}
 .rrc header button{background:rgba(255,255,255,.12);border:0;color:#fff;border-radius:8px;padding:3px 8px;cursor:pointer;font:700 13px system-ui,sans-serif}
 .rrc .log{flex:1;overflow-y:auto;padding:8px 10px;display:flex;flex-direction:column;gap:6px;scrollbar-width:thin}
-.rrc .m{line-height:1.3;word-wrap:break-word;position:relative;padding:5px 8px;border-radius:10px;background:rgba(255,255,255,.04)}
+.rrc .m a{color:#7dd3fc;text-decoration:underline;word-break:break-all} .rrc .m{line-height:1.3;word-wrap:break-word;position:relative;padding:5px 8px;border-radius:10px;background:rgba(255,255,255,.04)}
 .rrc .m.me{background:rgba(99,102,241,.18)}
 .rrc .m .n{font-weight:800} .rrc .m .g{font-size:11px;color:#94a3b8;margin-left:6px;font-weight:700} .rrc .m .t{float:right;font-size:11px;color:#64748b;margin-left:6px}
 .rrc .m .x{display:none;position:absolute;right:4px;top:18px;background:#1e293b;border:0;color:#fca5a5;border-radius:6px;font-size:11px;cursor:pointer;padding:1px 6px}
@@ -66,7 +69,7 @@
   function badge(){ if(!fab) return; const i=fab.querySelector('i'); i.textContent=unread>9?'9+':unread; i.classList.toggle('on',unread>0); }
   function askName(){ const n=prompt('Your chat name (shown to everyone; don\'t use your real full name):',name||''); if(n==null) return; const v=n.replace(/[<>]/g,'').trim().slice(0,20); if(!v) return; name=v; ls.set('rrOnlineName',v); inp.placeholder='Message everyone…'; tx({t:'name',name:v}); inp.focus(); }
   function line(m){ const el=document.createElement('div'); el.className='m'+(m.name===name?' me':''); el.dataset.id=m.id; const d=new Date(m.ts), hh=d.getHours(), mm=String(d.getMinutes()).padStart(2,'0');
-    el.innerHTML=`<span class="t">${hh}:${mm}</span><span class="n" style="color:hsl(${hue(m.name)},85%,70%)">${esc(m.name)}</span><span class="g">${esc(GN[m.game]||m.game)}</span><br>${esc(m.text)}${m.name===name?'':`<button class="x" data-id="${m.id}" title="Report">⚑</button>`}`; return el; }
+    el.innerHTML=`<span class="t">${hh}:${mm}</span><span class="n" style="color:hsl(${hue(m.name)},85%,70%)">${esc(m.name)}</span><span class="g">${esc(GN[m.game]||m.game)}</span><br>${linkify(m.text)}${m.name===name?'':`<button class="x" data-id="${m.id}" title="Report">⚑</button>`}`; return el; }
   function add(m,quiet){ if(msgs.has(m.id)) return; const e=log.querySelector('.empty'); if(e) e.remove(); const atBottom=log.scrollHeight-log.scrollTop-log.clientHeight<60, el=line(m); msgs.set(m.id,el); log.appendChild(el);
     while(log.children.length>150) log.removeChild(log.firstChild); if(atBottom||m.name===name) log.scrollTop=log.scrollHeight; if(!quiet&&!open&&m.name!==name){ unread++; badge(); } }
   function sys(t){ const el=document.createElement('div'); el.className='sys'; el.textContent=t; log.appendChild(el); log.scrollTop=log.scrollHeight; }
