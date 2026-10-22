@@ -247,8 +247,10 @@ for(const id in WEAPONS){ const w=WEAPONS[id], k=bbK(w), hop=w.hop||0, drop=new 
 const maxRange=id=>{ const ft=FT[id]; let d=1; while(d<89&&ft.drop[d]>-1.4) d++; return d; };
 
 /* ---------- maps (metres; x east, z north): boxes are walls (y0..h), crates, containers; trees and cylinders are round ---------- */
-const MAPDEF={wood:{name:'Woodland',pb:true,as:true},cqb:{name:'CQB Warehouse',as:true},village:{name:'Village',as:true,pb:true},desert:{name:'Desert Compound',as:true},speed:{name:'NXL Speedball',pb:true}};
-function buildMap(id){ const rng=mulberry32({wood:11,cqb:23,village:37,desert:41,speed:53}[id]||7), B=[], T=[], BU=[], C=[], srnd=(a,b)=>a+(b-a)*rng();
+const MAPDEF={wood:{name:'Woodland',pb:true,as:true},cqb:{name:'CQB Warehouse',as:true},village:{name:'Village',as:true,pb:true},desert:{name:'Desert Compound',as:true},speed:{name:'NXL Speedball',pb:true},
+  forest:{name:'Blackwood Forest',as:true,pb:true,big:true,size:'260 x 180 m'},town:{name:'Ashford Town',as:true,pb:true,big:true,size:'200 x 150 m'},factory:{name:'Kessler Works',as:true,pb:true,big:true,size:'230 x 160 m'},
+  airfield:{name:'Fort Harlan Airfield',as:true,big:true,size:'280 x 190 m'},outpost:{name:'Outpost Zafar',as:true,big:true,size:'250 x 180 m'}};
+function buildMap(id){ if(MAPDEF[id]&&MAPDEF[id].big) return buildBig(id); const rng=mulberry32({wood:11,cqb:23,village:37,desert:41,speed:53}[id]||7), B=[], T=[], BU=[], C=[], srnd=(a,b)=>a+(b-a)*rng();
   const box=(x0,z0,x1,z1,h,kind,y0)=>B.push({x0:Math.min(x0,x1),z0:Math.min(z0,z1),x1:Math.max(x0,x1),z1:Math.max(z0,z1),h,kind,y0:y0||0});
   const cyl=(x,z,r,h,shape,col)=>C.push({x,z,r,h,shape,col});
   const free=(x,z,r,list)=>!B.some(b=>x>b.x0-r&&x<b.x1+r&&z>b.z0-r&&z<b.z1+r)&&!T.some(t=>Math.hypot(t.x-x,t.z-z)<t.r+r)&&!C.some(t=>Math.hypot(t.x-x,t.z-z)<t.r+r)&&!(list||[]).some(q=>Math.hypot(q.x-x,q.z-z)<q.r+r);
@@ -306,40 +308,511 @@ function buildMap(id){ const rng=mulberry32({wood:11,cqb:23,village:37,desert:41
     M.points=[[0,0]]; }
   /* outer fence (walls you cannot cross) */
   const w=M.w, d=M.d, f=M.cqb?4:M.net?3:1.8; box(-w/2-.4,-d/2-.4,w/2+.4,-d/2,f,'fence'); box(-w/2-.4,d/2,w/2+.4,d/2+.4,f,'fence'); box(-w/2-.4,-d/2,-w/2,d/2,f,'fence'); box(w/2,-d/2,w/2+.4,d/2,f,'fence');
-  M.boxes=B; M.trees=T; M.bush=BU; M.cyl=C; buildNav(M); return M; }
+  M.boxes=B; M.trees=T; M.bush=BU; M.cyl=C; buildGrid(M); buildNav(M); return M; }
 
-/* ---------- navigation: a 0.5 m walkable grid, A* and path smoothing ---------- */
-function buildNav(M){ const cs=.5, nx=Math.ceil(M.w/cs), nz=Math.ceil(M.d/cs), g=new Uint8Array(nx*nz), r=.42;
-  for(let i=0;i<nx;i++) for(let j=0;j<nz;j++){ const x=-M.w/2+(i+.5)*cs, z=-M.d/2+(j+.5)*cs; g[j*nx+i]=blockedAt(M,x,z,r)?1:0; }
-  M.nav={cs,nx,nz,g}; }
-function blockedAt(M,x,z,r){ for(const b of M.boxes) if(b.h>.45&&b.y0<1.6&&x>b.x0-r&&x<b.x1+r&&z>b.z0-r&&z<b.z1+r) return true; for(const t of M.trees) if(Math.hypot(t.x-x,t.z-z)<t.r+r) return true; for(const c of M.cyl) if(Math.hypot(c.x-x,c.z-z)<c.r+r) return true; return false; }
-const cellOf=(M,x,z)=>{ const N=M.nav; return [clamp(Math.floor((x+M.w/2)/N.cs),0,N.nx-1),clamp(Math.floor((z+M.d/2)/N.cs),0,N.nz-1)]; };
-function walkLine(M,ax,az,bx,bz){ const N=M.nav, L=Math.hypot(bx-ax,bz-az), n=Math.ceil(L/(N.cs*.5)); for(let k=0;k<=n;k++){ const [i,j]=cellOf(M,lerp(ax,bx,k/n),lerp(az,bz,k/n)); if(N.g[j*N.nx+i]) return false; } return true; }
-function findPath(M,ax,az,bx,bz){ const N=M.nav, nx=N.nx, nz=N.nz, [si,sj]=cellOf(M,ax,az); let [ti,tj]=cellOf(M,bx,bz);
-  if(N.g[tj*nx+ti]){ let best=null, bd=1e9; for(let di=-6;di<=6;di++) for(let dj=-6;dj<=6;dj++){ const i=ti+di, j=tj+dj; if(i<0||j<0||i>=nx||j>=nz||N.g[j*nx+i]) continue; const dd=di*di+dj*dj; if(dd<bd){ bd=dd; best=[i,j]; } } if(!best) return null; [ti,tj]=best; }
-  const start=sj*nx+si, goal=tj*nx+ti, n=nx*nz, gS=new Float32Array(n).fill(1e9), came=new Int32Array(n).fill(-1), closed=new Uint8Array(n);
-  const hf=c=>{ const i=c%nx, j=(c/nx)|0, dx=Math.abs(i-ti), dz=Math.abs(j-tj); return Math.max(dx,dz)+.414*Math.min(dx,dz); };
-  const hp=[], push=(f,c)=>{ hp.push([f,c]); let i=hp.length-1; while(i>0){ const p=(i-1)>>1; if(hp[p][0]<=hp[i][0]) break; [hp[p],hp[i]]=[hp[i],hp[p]]; i=p; } },
-    pop=()=>{ const top=hp[0], end=hp.pop(); if(hp.length){ hp[0]=end; let i=0; for(;;){ const l=2*i+1, r=l+1; let m=i; if(l<hp.length&&hp[l][0]<hp[m][0]) m=l; if(r<hp.length&&hp[r][0]<hp[m][0]) m=r; if(m===i) break; [hp[m],hp[i]]=[hp[i],hp[m]]; i=m; } } return top; };
-  gS[start]=0; push(hf(start),start);
-  while(hp.length){ const [,c]=pop(); if(closed[c]) continue; closed[c]=1; if(c===goal) break; const ci=c%nx, cj=(c/nx)|0;
-    for(let di=-1;di<=1;di++) for(let dj=-1;dj<=1;dj++){ if(!di&&!dj) continue; const i=ci+di, j=cj+dj; if(i<0||j<0||i>=nx||j>=nz) continue; const m=j*nx+i; if(N.g[m]||closed[m]) continue; if(di&&dj&&(N.g[cj*nx+i]||N.g[j*nx+ci])) continue;
-      const ng=gS[c]+(di&&dj?1.414:1); if(ng<gS[m]){ gS[m]=ng; came[m]=c; push(ng+hf(m),m); } } }
-  if(came[goal]<0&&goal!==start) return null;
-  const pts=[]; for(let c=goal;c>=0&&c!==start;c=came[c]) pts.push([-M.w/2+((c%nx)+.5)*N.cs,-M.d/2+(((c/nx)|0)+.5)*N.cs]); pts.reverse();
-  const out=[]; let ax2=ax, az2=az, k=0; while(k<pts.length){ let far=k; for(let q=pts.length-1;q>k;q--) if(walkLine(M,ax2,az2,pts[q][0],pts[q][1])){ far=q; break; } out.push(pts[far]); [ax2,az2]=pts[far]; k=far+1; }
+/* ---------- big fields: a kit of real field structures (multi-storey buildings with stairs, watch towers, log bunkers, trench lines, HESCO, containers, vehicles) ---------- */
+function bigKit(M,rng){ const B=[], T=[], C=[], BU=[], D=[], V=[], keep=[];
+  const srnd=(a,b)=>a+(b-a)*rng(), ri=(a,b)=>Math.floor(a+(b-a+1)*rng()), rpick=a=>a[Math.floor(rng()*a.length)];
+  const box=(x0,z0,x1,z1,h,kind,y0,o)=>{ const b={x0:Math.min(x0,x1),z0:Math.min(z0,z1),x1:Math.max(x0,x1),z1:Math.max(z0,z1),h,kind,y0:y0||0}; if(o) Object.assign(b,o); if(b.x1-b.x0<.01||b.z1-b.z0<.01||b.h-b.y0<.01) return b; B.push(b); return b; };
+  const bc=(cx,cz,lx,lz,h,kind,y0,o)=>box(cx-lx/2,cz-lz/2,cx+lx/2,cz+lz/2,h,kind,y0,o);
+  /* render-only details (window frames, trims, wheels, markings): never collide or block sight */
+  const vis=(x0,z0,x1,z1,y0,y1,col,sh)=>V.push({x0:Math.min(x0,x1),z0:Math.min(z0,z1),x1:Math.max(x0,x1),z1:Math.max(z0,z1),y0,y1,col,sh});
+  const deco=(x0,z0,x1,z1,col,y)=>D.push({x0:Math.min(x0,x1),z0:Math.min(z0,z1),x1:Math.max(x0,x1),z1:Math.max(z0,z1),col,y:y||.012});
+  const cyl=(x,z,r,h,shape,col)=>{ const c={x,z,r,h,shape,col}; C.push(c); return c; };
+  const tree=(x,z,r,h,kind)=>T.push({x,z,r,h,kind:kind||'pine',palm:kind==='palm'});
+  const bush=(x,z,r,hh)=>BU.push({x,z,r,hh});
+  const kout=(x0,z0,x1,z1)=>keep.push([Math.min(x0,x1),Math.min(z0,z1),Math.max(x0,x1),Math.max(z0,z1)]);
+  /* point symmetry through the centre keeps the two halves fair: f(s) is run with s=1 and s=-1 */
+  const sym=f=>{ f(1); f(-1); };
+  const FL={s:'n',n:'s',w:'e',e:'w'};
+  /* a strip of wall along one side with openings: [a,b,'d'] door (lintel above), [a,b,'w'] window (sill and header), [a,b,'g'] full-height gap, [a,b,'s'] firing slit */
+  const wallRun=(horiz,c0,c1,a0,a1,base,top,cuts,kind,o)=>{ cuts=(cuts||[]).filter(g=>g[1]>a0&&g[0]<a1).map(g=>[Math.max(a0,g[0]),Math.min(a1,g[1]),g[2]||'d',g[3],g[4]]).sort((p,q)=>p[0]-q[0]); let s=a0;
+    const piece=(u0,u1,y0,y1)=>{ if(u1-u0<.02||y1-y0<.02) return; horiz?box(u0,c0,u1,c1,y1,kind,y0,o):box(c0,u0,c1,u1,y1,kind,y0,o); };
+    for(const [g0,g1,k,lo,hi] of cuts.concat([[a1,a1,'e']])){ if(g0>s) piece(s,g0,base,top); if(k==='w'){ piece(g0,g1,base,base+(lo||.95)); piece(g0,g1,base+(hi||2.05),top); } else if(k==='d') piece(g0,g1,base+(hi||2.15),top); else if(k==='s'){ piece(g0,g1,base,base+(lo||1.1)); piece(g0,g1,base+(hi||1.45),top); } s=Math.max(s,g1); } };
+  /* subtract holes from a rectangle */
+  const rectSub=(r,holes)=>{ let rs=[r]; for(const h of holes){ const nx=[]; for(const q of rs){ if(h[2]<=q[0]||h[0]>=q[2]||h[3]<=q[1]||h[1]>=q[3]){ nx.push(q); continue; }
+        if(h[0]>q[0]) nx.push([q[0],q[1],h[0],q[3]]); if(h[2]<q[2]) nx.push([h[2],q[1],q[2],q[3]]); const x0=Math.max(q[0],h[0]), x1=Math.min(q[2],h[2]); if(h[1]>q[1]) nx.push([x0,q[1],x1,h[1]]); if(h[3]<q[3]) nx.push([x0,h[3],x1,q[3]]); } rs=nx; } return rs; };
+  /* a flight of stairs: 0.2 m rise, 0.3 m run, from (x,z) (centre of the bottom edge) along dir, up `rise` metres from `base` */
+  const flight=(x,z,dir,w,base,rise,kind)=>{ const n=Math.round(rise/.2), dx=dir==='+x'?1:dir==='-x'?-1:0, dz=dir==='+z'?1:dir==='-z'?-1:0, L=n*.3;
+    for(let k=1;k<=n;k++){ const a=(k-1)*.3, b=k*.3; if(dx) box(x+dx*a,z-w/2,x+dx*b,z+w/2,base+k*.2,kind||'step',base,{walk:true}); else box(x-w/2,z+dz*a,x+w/2,z+dz*b,base+k*.2,kind||'step',base,{walk:true}); }
+    /* side stringers from the third step up, so nobody (and no path) climbs on from the side */
+    for(let k=3;k<=n;k+=3){ const a=(k-1)*.3, b=Math.min(n,k+2)*.3, top=base+Math.min(n,k+2)*.2+.9;
+      for(const sd of [-1,1]){ if(dx) box(x+dx*a,z+sd*w/2,x+dx*b,z+sd*(w/2+.07),top,'rail',base); else box(x+sd*w/2,z+dz*a,x+sd*(w/2+.07),z+dz*b,top,'rail',base); } }
+    return {x0:dx?Math.min(x,x+dx*L):x-w/2,x1:dx?Math.max(x,x+dx*L):x+w/2,z0:dz?Math.min(z,z+dz*L):z-w/2,z1:dz?Math.max(z,z+dz*L):z+w/2,L,dx,dz}; };
+
+  /* a building of 3 m storeys. Local frame: u runs along the front, v from the front to the back.
+     The front gets a door in the middle; windows all round; a wall splits front and back rooms when deep enough;
+     the stairs climb along the back wall (and the front wall on the next floor), the roof is flat and, with roof:true, walkable behind a parapet */
+  const bldg=(xa,za,xb,zb,o)=>{ o=o||{}; const x0=Math.min(xa,xb), x1=Math.max(xa,xb), z0=Math.min(za,zb), z1=Math.max(za,zb); const front=o.front||'s', FH=3, t=.25, mat=o.mat||'plaster';
+    const Wd=front==='s'||front==='n'?x1-x0:z1-z0, Dp=front==='s'||front==='n'?z1-z0:x1-x0;
+    let fl=o.fl||1; const canStair=Wd>=7.4&&Dp>=5.2; if(!canStair) fl=1; const roofA=!!o.roof&&canStair;
+    const P=(u,v)=>front==='s'?[x0+u,z0+v]:front==='n'?[x1-u,z1-v]:front==='w'?[x0+v,z0+u]:[x1-v,z1-u];
+    const R=(u0,v0,u1,v1)=>{ const a=P(u0,v0), b=P(u1,v1); return [Math.min(a[0],b[0]),Math.min(a[1],b[1]),Math.max(a[0],b[0]),Math.max(a[1],b[1])]; };
+    const bx2=(u0,v0,u1,v1,h,kind,y0,oo)=>{ const r=R(u0,v0,u1,v1); return box(r[0],r[1],r[2],r[3],h,kind,y0,oo); };
+    const W=Object.assign({mat,bid:o.bid},o.wo||{});
+    /* walls along u (front v=0, back v=Dp) and along v (left u=0, right u=Wd), in local coords */
+    const runU=(v0,v1,base,top,cuts)=>{ const cs=cuts.map(c=>c.slice()); let s=0; cs.sort((p,q)=>p[0]-q[0]); const all=cs.concat([[Wd,Wd,'e']]);
+      for(const [g0,g1,k,lo,hi] of all){ if(g0>s) bx2(s,v0,g0,v1,top,'wall',base,W); if(k==='w'){ bx2(g0,v0,g1,v1,base+.95,'wall',base,W); bx2(g0,v0,g1,v1,top,'wall',base+2.05,W); winF(g0,v0,g1,v1,base); } else if(k==='d'){ bx2(g0,v0,g1,v1,top,'wall',base+2.15,W); } s=Math.max(s,g1); } };
+    const runV=(u0,u1,base,top,cuts)=>{ const cs=cuts.map(c=>c.slice()); let s=0; cs.sort((p,q)=>p[0]-q[0]); const all=cs.concat([[Dp,Dp,'e']]);
+      for(const [g0,g1,k] of all){ if(g0>s) bx2(u0,s,u1,g0,top,'wall',base,W); if(k==='w'){ bx2(u0,g0,u1,g1,base+.95,'wall',base,W); bx2(u0,g0,u1,g1,top,'wall',base+2.05,W); winF(u0,g0,u1,g1,base); } else if(k==='d'){ bx2(u0,g0,u1,g1,top,'wall',base+2.15,W); } s=Math.max(s,g1); } };
+    const winF=(u0,v0,u1,v1,base)=>{ const r=R(u0,v0,u1,v1), e=.04; vis(r[0]-e,r[1]-e,r[2]+e,r[3]+e,base+.93,base+1.0,o.trim||'#e7e5e4'); };
+    const vp=Dp>=8?Dp-4.1:null; /* partition (inner face of the back room) */
+    const frontDoor=[Wd/2-.8,Wd/2+.8,'d'];
+    const backDoor=Wd>=9.5?[Wd-2.7,Wd-1.1,'d']:null;
+    const sideDoor=!backDoor&&Dp>=6.5?[Dp-2.6,Dp-1.0,'d']:null;
+    const wins=(len,avoid)=>{ const out=[], n=Math.max(0,Math.floor((len-1.4)/3.1)); for(let k=0;k<n;k++){ const c=(k+.5)*len/n, g=[c-.6,c+.6,'w']; if(g[0]<.7||g[1]>len-.7) continue; if(avoid.some(a=>g[1]>a[0]-.35&&g[0]<a[1]+.35)) continue; out.push(g); } return out; };
+    const flights=[]; /* per level: where the flight from this level starts */
+    for(let k=0;k<fl;k++){ const base=k*FH, top=base+FH, last=k===fl-1;
+      const fDoors=k===0?[frontDoor].concat(o.doors2||[]):[], bDoors=k===0&&backDoor?[backDoor]:[], sDoors=k===0&&sideDoor?[sideDoor]:[];
+      const pj=vp!=null?[[vp-.2,vp+.2]]:[];
+      runU(0,t,base,top,fDoors.concat(o.blind&&k===0?[]:wins(Wd,fDoors)));
+      runU(Dp-t,Dp,base,top,bDoors.concat(wins(Wd,bDoors)));
+      runV(0,t,base,top,(o.blindSide?[]:wins(Dp,pj)));
+      runV(Wd-t,Wd,base,top,sDoors.concat(o.blindSide?[]:wins(Dp,sDoors.concat(pj))));
+      if(vp!=null){ const pd=[Wd/2-.8,Wd/2+.8,'d']; runU(vp-.2,vp,base,top,[pd]); }
+      /* the flight up from this level */
+      if(!last||roofA){ const back=k%2===0, w=1.6; let f;
+        if(back){ const v=Dp-t-w/2, u=t+.9; const p=P(u,v), dir=front==='s'?'+x':front==='n'?'-x':front==='w'?'+z':'-z'; f=flight(p[0],p[1],dir,w,base,FH); f.hole=R(u-.1,Dp-t-w-.35,u+4.5,Dp-t); f.rail=[[u-.1,Dp-t-w-.35,u+4.5,Dp-t-w-.27],[u-.18,Dp-t-w-.35,u-.1,Dp-t]]; }
+        else { const v=t+w/2, u=Wd-t-.9; const p=P(u,v), dir=front==='s'?'-x':front==='n'?'+x':front==='w'?'-z':'+z'; f=flight(p[0],p[1],dir,w,base,FH); f.hole=R(u-4.5,t,u+.1,t+w+.35); f.rail=[[u-4.5,t+w+.27,u+.1,t+w+.35],[u+.1,t,u+.18,t+w+.35]]; }
+        flights[k]=f; } }
+    /* floors and the roof */
+    for(let k=1;k<=fl;k++){ const y=k*FH, f=flights[k-1], roof=k===fl;
+      if(roof&&!roofA){ const r=R(-.15,-.15,Wd+.15,Dp+.15); box(r[0],r[1],r[2],r[3],y+.25,'roof',y,{mat:o.roofc||'roof',bid:o.bid}); continue; }
+      const inner=R(t,t,Wd-t,Dp-t), holes=f?[f.hole]:[]; for(const q of rectSub(inner,holes)) box(q[0],q[1],q[2],q[3],y,roof?'roofw':'floor',y-.2,{walk:true,bid:o.bid,mat:roof?'roofw':o.floorc||'floor'});
+      if(f) for(const rl of f.rail){ const r=R(...rl); box(r[0],r[1],r[2],r[3],y+1.0,'rail',y); }
+      if(roof){ const pt=Object.assign({},W); runU(0,t,y,y+1.0,[]); runU(Dp-t,Dp,y,y+1.0,[]); runV(0,t,y,y+1.0,[]); runV(Wd-t,Wd,y,y+1.0,[]); }
+      else { const r=R(-.06,-.06,Wd+.06,Dp+.06); vis(r[0],r[1],r[2],r[3],y-.22,y-.05,o.trim||'#d6d3d1',.9); } }
+    if(!roofA){ const r=R(-.25,-.25,Wd+.25,Dp+.25); vis(r[0],r[1],r[2],r[3],fl*FH+.25,fl*FH+.33,o.trim||'#57534e'); }
+    /* a little furniture as cover in big front rooms */
+    if(o.furn!==false&&vp!=null&&Wd>=8){ const fv=(t+vp-.2)/2; if(vp-.2-t>=4.2){ const u=Wd*(rng()<.5?.28:.72); bx2(u-.7,fv-.4,u+.7,fv+.4,.78,'furn',0); } }
+    const r=R(0,0,Wd,Dp); kout(r[0]-1.2,r[1]-1.2,r[2]+1.2,r[3]+1.2);
+    const door=P(Wd/2,-1.2); return {fl,door,rect:r,front}; };
+
+  /* a watch tower: a deck at 3.6 m on four legs, plywood parapet, tin roof, and a stair running up to it along dir */
+  const tower=(cx,cz,dir,o)=>{ o=o||{}; const Hh=o.h||3.6, s=(o.size||3.2)/2, w=1.4, kind=o.kind||'ply';
+    for(const [ax,az] of [[-1,-1],[1,-1],[-1,1],[1,1]]) bc(cx+ax*(s-.2),cz+az*(s-.2),.26,.26,Hh-.2,'post',0);
+    box(cx-s,cz-s,cx+s,cz+s,Hh,'deck',Hh-.2,{walk:true});
+    const dx=dir==='+x'?1:dir==='-x'?-1:0, dz=dir==='+z'?1:dir==='-z'?-1:0, L=Hh/.2*.3;
+    /* stair arrives at the edge facing -dir, so it starts L away */
+    const ex=cx-dx*s, ez=cz-dz*s; flight(ex-dx*L,ez-dz*L,dir,w,0,Hh,'wstep');
+    const gap=dx?[cz-w/2-.05,cz+w/2+.05]:[cx-w/2-.05,cx+w/2+.05];
+    const sides=[['s',cz-s,cz-s+.1,true],['n',cz+s-.1,cz+s,true],['w',cx-s,cx-s+.1,false],['e',cx+s-.1,cx+s,false]];
+    for(const [nm,c0,c1,hz] of sides){ const isStair=(dx===1&&nm==='w')||(dx===-1&&nm==='e')||(dz===1&&nm==='s')||(dz===-1&&nm==='n'); const cuts=isStair?[[gap[0],gap[1],'g']]:[];
+      if(hz) wallRun(true,c0,c1,cx-s,cx+s,Hh,Hh+1.1,cuts,kind); else wallRun(false,c0,c1,cz-s,cz+s,Hh,Hh+1.1,cuts,kind); }
+    if(o.roof!==false){ for(const [ax,az] of [[-1,-1],[1,-1],[-1,1],[1,1]]) bc(cx+ax*(s-.06),cz+az*(s-.06),.1,.1,Hh+2.3,'post',Hh+1.1); box(cx-s-.3,cz-s-.3,cx+s+.3,cz+s+.3,Hh+2.45,'tin',Hh+2.3); }
+    kout(cx-s-1,cz-s-1,cx+s+1,cz+s+1); const sx0=Math.min(ex,ex-dx*L), sx1=Math.max(ex,ex-dx*L), sz0=Math.min(ez,ez-dz*L), sz1=Math.max(ez,ez-dz*L); kout(sx0-1.5-(dz?w/2:0),sz0-1.5-(dx?w/2:0),sx1+1.5+(dz?w/2:0),sz1+1.5+(dx?w/2:0)); };
+  /* a log bunker with firing slits on three sides and a way in at the back */
+  const bunker=(cx,cz,face)=>{ const hw=2.6, hd=2.1, t=.4, Hh=2.1; /* face: the side the slits look out of */
+    const L=[cx-hw,cz-hd,cx+hw,cz+hd], sl=(a,b)=>[[a,b,'s']];
+    const S=face==='s', N=face==='n', Wf=face==='w', E=face==='e';
+    const doorH=[cx-.8,cx+.8,'g'], doorV=[cz-.8,cz+.8,'g'];
+    wallRun(true,L[1],L[1]+t,L[0],L[2],0,Hh,N?[doorH]:S?[[cx-1.8,cx-.4,'s'],[cx+.4,cx+1.8,'s']]:[[cx-1.4,cx+1.4,'s']],'log');
+    wallRun(true,L[3]-t,L[3],L[0],L[2],0,Hh,S?[doorH]:N?[[cx-1.8,cx-.4,'s'],[cx+.4,cx+1.8,'s']]:[[cx-1.4,cx+1.4,'s']],'log');
+    wallRun(false,L[0],L[0]+t,L[1]+t,L[3]-t,0,Hh,E?[doorV]:Wf?[[cz-1.4,cz+1.4,'s']]:[[cz-1,cz+1,'s']],'log');
+    wallRun(false,L[2]-t,L[2],L[1]+t,L[3]-t,0,Hh,Wf?[doorV]:E?[[cz-1.4,cz+1.4,'s']]:[[cz-1,cz+1,'s']],'log');
+    box(L[0]-.35,L[1]-.35,L[2]+.35,L[3]+.35,Hh+.35,'logroof',Hh);
+    kout(L[0]-2,L[1]-2,L[2]+2,L[3]+2); };
+  /* a trench line between two earth berms; pts are its corners (legs run along x or z). Berms are cut wherever a walkway passes, so corners stay open inside;
+     gaps:[leg index] opens a way out through the berm on side gapSide (+1/-1) at the middle of that leg */
+  const trench=(pts,o)=>{ o=o||{}; const w=o.w||1.8, bt=1.1, h=o.h||1.25, walks=[], strips=[], cuts=[], last=pts.length-2;
+    for(let k=0;k<=last;k++){ const [ax,az]=pts[k], [bx,bz]=pts[k+1], horiz=Math.abs(bz-az)<.01, j0=k>0, j1=k<last;
+      if(horiz){ const lo=ax<bx, x0=Math.min(ax,bx)-((lo?j0:j1)?w/2:0), x1=Math.max(ax,bx)+((lo?j1:j0)?w/2:0), b0=x0-((lo?j0:j1)?bt:0), b1=x1+((lo?j1:j0)?bt:0);
+        walks.push([x0,az-w/2,x1,az+w/2]); strips.push([b0,az+w/2,b1,az+w/2+bt],[b0,az-w/2-bt,b1,az-w/2]);
+        if((o.gaps||[]).includes(k)){ const m=(ax+bx)/2, sd=o.gapSide||1; cuts.push([m-.95,Math.min(az+sd*w/2,az+sd*(w/2+bt+.2)),m+.95,Math.max(az+sd*w/2,az+sd*(w/2+bt+.2))]); } }
+      else { const lo=az<bz, z0=Math.min(az,bz)-((lo?j0:j1)?w/2:0), z1=Math.max(az,bz)+((lo?j1:j0)?w/2:0), b0=z0-((lo?j0:j1)?bt:0), b1=z1+((lo?j1:j0)?bt:0);
+        walks.push([ax-w/2,z0,ax+w/2,z1]); strips.push([ax+w/2,b0,ax+w/2+bt,b1],[ax-w/2-bt,b0,ax-w/2,b1]);
+        if((o.gaps||[]).includes(k)){ const m=(az+bz)/2, sd=o.gapSide||1; cuts.push([Math.min(ax+sd*w/2,ax+sd*(w/2+bt+.2)),m-.95,Math.max(ax+sd*w/2,ax+sd*(w/2+bt+.2)),m+.95]); } } }
+    for(const st of strips) for(const q of rectSub(st,walks.concat(cuts))) if(q[2]-q[0]>.3&&q[3]-q[1]>.3) box(q[0],q[1],q[2],q[3],h,'berm');
+    for(const wk of walks){ deco(wk[0],wk[1],wk[2],wk[3],'#5f4a30'); kout(wk[0]-bt-1,wk[1]-bt-1,wk[2]+bt+1,wk[3]+bt+1); } };
+  const hesco=(x0,z0,x1,z1,h)=>{ box(x0,z0,x1,z1,h||1.4,'hesco'); kout(x0-.8,z0-.8,x1+.8,z1+.8); };
+  const sand=(x0,z0,x1,z1,h)=>{ box(x0,z0,x1,z1,h||1.05,'sand'); kout(x0-.6,z0-.6,x1+.6,z1+.6); };
+  const cont=(cx,cz,alongX,stack,col)=>{ const lx=alongX?6.06:2.44, lz=alongX?2.44:6.06; bc(cx,cz,lx,lz,2.59,'cont',0,{col}); if(stack>1) bc(cx,cz,lx,lz,5.18,'cont',2.59,{col:col2(col)}); kout(cx-lx/2-.6,cz-lz/2-.6,cx+lx/2+.6,cz+lz/2+.6); };
+  const col2=c=>c==='#365a7a'?'#7a3b2e':c==='#7a3b2e'?'#44633a':c==='#44633a'?'#8a6d2a':'#365a7a';
+  const CONTC=['#365a7a','#7a3b2e','#44633a','#8a6d2a','#5b6470'];
+  /* vehicles: a body box and a cab box, so BBs can't pass through the cab */
+  const car=(cx,cz,alongX,col,wreck)=>{ const lx=alongX?4.4:1.85, lz=alongX?1.85:4.4; bc(cx,cz,lx,lz,1.0,'car',.18,{col:col||rpick(['#1e3a8a','#7f1d1d','#d6d3d1','#365314','#374151','#a16207']),wreck}); bc(cx+(alongX?-.2:0),cz+(alongX?0:-.2),alongX?2.2:1.6,alongX?1.6:2.2,1.48,'cab',1.0,{col:wreck?'#3f3f46':'#1f2937'}); kout(cx-lx/2-.5,cz-lz/2-.5,cx+lx/2+.5,cz+lz/2+.5); };
+  const truck=(cx,cz,alongX,col)=>{ const lx=alongX?7.6:2.45, lz=alongX?2.45:7.6; const c=col||'#5b6b3a'; bc(cx,cz,lx,lz,1.35,'truck',.35,{col:c});
+    if(alongX){ bc(cx+2.7,cz,2.1,2.35,3.0,'cab',1.35,{col:c}); bc(cx-1.2,cz,5.0,2.4,3.1,'tarp',1.35); } else { bc(cx,cz+2.7,2.35,2.1,3.0,'cab',1.35,{col:c}); bc(cx,cz-1.2,2.4,5.0,3.1,'tarp',1.35); } kout(cx-lx/2-.6,cz-lz/2-.6,cx+lx/2+.6,cz+lz/2+.6); };
+  const humvee=(cx,cz,alongX)=>{ const lx=alongX?4.8:2.2, lz=alongX?2.2:4.8; bc(cx,cz,lx,lz,1.25,'car',.3,{col:'#a08a5c'}); bc(cx,cz,alongX?2.2:2.0,alongX?2.0:2.2,1.9,'cab',1.25,{col:'#8d7a52'}); kout(cx-lx/2-.5,cz-lz/2-.5,cx+lx/2+.5,cz+lz/2+.5); };
+  const barrels=(cx,cz,n,col)=>{ for(let k=0;k<n;k++){ const a=k*2.4, r=k?.68:0; cyl(cx+Math.cos(a)*r,cz+Math.sin(a)*r,.3,.9,'drum',col||'#1e3a8a'); } kout(cx-1.3,cz-1.3,cx+1.3,cz+1.3); };
+  const pallets=(cx,cz,h)=>{ bc(cx,cz,1.2,1.0,h||1.1,'pallet'); kout(cx-1,cz-1,cx+1,cz+1); };
+  const crates=(cx,cz,h)=>{ bc(cx,cz,1.3,1.3,h||1.2,'crate'); kout(cx-1.1,cz-1.1,cx+1.1,cz+1.1); };
+  const jersey=(x0,z0,x1,z1)=>{ box(x0,z0,x1,z1,.85,'jersey'); kout(x0-.6,z0-.6,x1+.6,z1+.6); };
+  /* free-space test for scattering (trees, bushes, props): a 1 m occupancy raster */
+  let occ=null; const OC=1, ox=-M.w/2, oz=-M.d/2, onx=Math.ceil(M.w/OC), onz=Math.ceil(M.d/OC);
+  const occMark=(x0,z0,x1,z1)=>{ const i0=Math.max(0,Math.floor((x0-ox)/OC)), i1=Math.min(onx-1,Math.floor((x1-ox)/OC)), j0=Math.max(0,Math.floor((z0-oz)/OC)), j1=Math.min(onz-1,Math.floor((z1-oz)/OC)); for(let j=j0;j<=j1;j++) for(let i=i0;i<=i1;i++) occ[j*onx+i]=1; };
+  const occBuild=()=>{ occ=new Uint8Array(onx*onz); for(const b of B) occMark(b.x0-.5,b.z0-.5,b.x1+.5,b.z1+.5); for(const k of keep) occMark(k[0],k[1],k[2],k[3]); for(const c of C) occMark(c.x-c.r-.5,c.z-c.r-.5,c.x+c.r+.5,c.z+c.r+.5); };
+  const occFree=(x,z,r)=>{ if(!occ) occBuild(); if(x-r<ox+1||x+r>-ox-1||z-r<oz+1||z+r>-oz-1) return false; const i0=Math.floor((x-r-ox)/OC), i1=Math.floor((x+r-ox)/OC), j0=Math.floor((z-r-oz)/OC), j1=Math.floor((z+r-oz)/OC); for(let j=j0;j<=j1;j++) for(let i=i0;i<=i1;i++) if(occ[j*onx+i]) return false; return true; };
+  const occTake=(x,z,r)=>occMark(x-r,z-r,x+r,z+r);
+  return {B,T,C,BU,D,V,keep,box,bc,vis,deco,cyl,tree,bush,kout,sym,FL,wallRun,rectSub,flight,bldg,tower,bunker,trench,hesco,sand,cont,CONTC,car,truck,humvee,barrels,pallets,crates,jersey,occFree,occTake,occBuild:()=>{occ=null;},srnd,ri,rpick}; }
+
+/* ---------- the big fields ---------- */
+const BIGSPEC={
+  forest:{w:260,d:180,ground:'#41602c',sky:[.66,.75,.83],fence:'#6b4f2a',fog:[70,250,.82],spawn:[[-121,0],[121,0]]},
+  town:{w:200,d:150,ground:'#77735f',sky:[.7,.74,.78],fence:'#57534e',fog:[60,210,.8],spawn:[[-93,0],[93,0]]},
+  factory:{w:230,d:160,ground:'#7d7b74',sky:[.62,.66,.72],fence:'#4b5563',fog:[60,220,.82],spawn:[[-107,0],[107,0]]},
+  airfield:{w:280,d:190,ground:'#647a45',sky:[.7,.79,.88],fence:'#6b7280',fog:[90,300,.78],spawn:[[-131,0],[131,0]]},
+  outpost:{w:250,d:180,ground:'#c8a66c',sky:[.84,.82,.76],fence:'#a1866a',fog:[80,280,.8],spawn:[[-116,0],[116,0]]}};
+function buildBig(id){ const S=BIGSPEC[id], rng=mulberry32({forest:1101,town:2203,factory:3307,airfield:4409,outpost:5501}[id]||9);
+  const M=Object.assign({id,name:MAPDEF[id].name,big:true,cqb:false},S,{spawn:S.spawn.map(p=>p.slice())});
+  const K=bigKit(M,rng);
+  ({forest:mapForest,town:mapTown,factory:mapFactory,airfield:mapAirfield,outpost:mapOutpost})[id](M,K,rng);
+  M.boxes=K.B; M.trees=K.T; M.bush=K.BU; M.cyl=K.C; M.deco=K.D; M.vis=K.V;
+  const w=M.w, d=M.d, f=2.4; K.box(-w/2-.4,-d/2-.4,w/2+.4,-d/2,f,'fence'); K.box(-w/2-.4,d/2,w/2+.4,d/2+.4,f,'fence'); K.box(-w/2-.4,-d/2,-w/2,d/2,f,'fence'); K.box(w/2,-d/2,w/2+.4,d/2,f,'fence');
+  buildGrid(M); buildNav(M); return M; }
+/* helpers shared by the field builders: s=1 builds one half, s=-1 the same thing turned 180 degrees */
+function symT(s){ const X=x=>x*s, Z=z=>z*s; return {X,Z,R:(x0,z0,x1,z1)=>[X(x0),Z(z0),X(x1),Z(z1)],F:f=>s>0?f:({s:'n',n:'s',w:'e',e:'w'})[f],DIR:d=>s>0?d:({'+x':'-x','-x':'+x','+z':'-z','-z':'+z'})[d],P:pts=>pts.map(([x,z])=>[X(x),Z(z)])}; }
+function trail(K,pts,wd,col){ for(let k=0;k<pts.length-1;k++){ const [ax,az]=pts[k], [bx,bz]=pts[k+1], hw=wd/2; K.deco(Math.min(ax,bx)-hw,Math.min(az,bz)-hw,Math.max(ax,bx)+hw,Math.max(az,bz)+hw,col||'#6e5a3c'); K.kout(Math.min(ax,bx)-hw-.6,Math.min(az,bz)-hw-.6,Math.max(ax,bx)+hw+.6,Math.max(az,bz)+hw+.6); } }
+/* scatter mirrored pairs: fn(x,z,s) places one at (x,z) when both it and its twin are free */
+function scatter(M,K,n,r,take,fn,zone){ let placed=0; for(let i=0;i<n;i++){ const x=K.srnd(-M.w/2+3,0), z=K.srnd(-M.d/2+3,M.d/2-3); if(zone&&!zone(x,z)) continue; if(!K.occFree(x,z,r)||!K.occFree(-x,-z,r)) continue; K.occTake(x,z,take); K.occTake(-x,-z,take); fn(x,z,1); fn(-x,-z,-1); placed++; } return placed; }
+
+/* Blackwood Forest: a 260 x 180 m woodland field. Base camps at each end, a logging camp, zig-zag trench lines with log bunkers,
+   watch towers on the flanks, a crashed helicopter, and a walled farm with two-storey farmhouses in the middle */
+function mapForest(M,K,rng){ const {box,bc,deco,cyl,tree,bush,kout,sym,bldg,tower,bunker,trench,sand,crates,pallets,barrels,truck,srnd,rpick,vis}=K;
+  sym(s=>{ const {X,Z,R,F,DIR,P}=symT(s);
+    /* base camp */
+    kout(...R(-130,-17,-102,17)); bc(X(-112),Z(-11.5),4.4,3.4,2.3,'tent'); bc(X(-112),Z(11.5),4.4,3.4,2.3,'tent'); bc(X(-126.5),Z(-13),3,2.4,2,'tent');
+    sand(...R(-104.6,-14,-104,-4.5)); sand(...R(-104.6,4.5,-104,14)); crates(X(-107.5),Z(-2.8)); crates(X(-107.5),Z(3),1.1); pallets(X(-117),Z(-15.4)); barrels(X(-127),Z(14),3,'#365314');
+    deco(...R(-130,-16,-103,16),'#5b5137');
+    /* logging camp */
+    kout(...R(-100,-22,-64,22)); bldg(...R(-88,-6,-76,4),{fl:1,front:F('e'),mat:'wood',bid:'saw'+s});
+    bc(X(-91),Z(12),6,1.4,1.1,'log'); bc(X(-73),Z(-12.5),1.4,6,1.15,'log'); bc(X(-80),Z(16),5,1.2,1.0,'log'); bc(X(-96),Z(-9),1.2,5,1.2,'log'); bc(X(-70),Z(13),1.3,4.5,1.05,'log');
+    crates(X(-84),Z(-12)); crates(X(-86),Z(9),1.0); truck(X(-71),Z(4),false,'#3f5a2b'); deco(...R(-98,-20,-66,20),'#6b5a3e');
+    /* trench lines and bunkers */
+    trench(P([[-46,-82],[-46,-64],[-40,-64],[-40,-48],[-46,-48],[-46,-33]]),{gaps:[1,3],gapSide:1});
+    trench(P([[-44,-21],[-44,-9],[-38,-9],[-38,9],[-44,9],[-44,21]]),{gaps:[2],gapSide:-1});
+    trench(P([[-46,33],[-46,48],[-40,48],[-40,64],[-46,64],[-46,82]]),{gaps:[1,3],gapSide:1});
+    bunker(X(-55),Z(-56),F('e')); bunker(X(-55),Z(56),F('e')); bunker(X(-53),Z(0),F('e'));
+    /* watch towers */
+    tower(X(-76),Z(-71),DIR('+x')); tower(X(-76),Z(72),DIR('+x')); tower(X(-23),Z(38),DIR('-z'));
+    /* crashed helicopter */
+    bc(X(-28),Z(-62),9,2.7,2.6,'heli',.25); bc(X(-20.2),Z(-62.6),6.5,.9,2.5,'heli',2.0); bc(X(-17.5),Z(-62.6),.5,.25,4.2,'heli',2.4); kout(...R(-34,-66,-16,-58));
+    bc(X(-30),Z(-57.8),7.5,.25,2.85,'rotor',2.7);
+    /* the farm: two farmhouses facing a yard, barns, a well, a low stone wall with gaps */
+    bldg(...R(-7,-17,7,-7),{fl:2,front:F('n'),mat:'farm',bid:'farm'+s,trim:'#f5f5f4'});
+    bldg(...R(12,-21,26,-9),{fl:1,front:F('w'),mat:'barn',bid:'barn'+s,roofc:'tin'});
+    const sw=(x0,z0,x1,z1)=>box(...R(x0,z0,x1,z1),1.0,'stone');
+    sw(-30,-26.5,-19,-26); sw(-15,-26.5,-2,-26); sw(2,-26.5,15,-26); sw(19,-26.5,30.5,-26);
+    sw(-30.5,-26.5,-30,-13); sw(-30.5,-9,-30,4); sw(-30.5,8,-30,26.5);
+    cyl(X(9),Z(-2),.95,.95,'well','#8f8a80'); bc(X(-16),Z(-5),1.4,1.3,1.25,'hay'); bc(X(-17.6),Z(-5.2),1.4,1.3,1.25,'hay'); bc(X(-16.8),Z(-5.1),1.4,1.3,2.45,'hay',1.25); bc(X(20),Z(-3),1.3,1.4,1.25,'hay');
+    truck(X(-20),Z(-15),false,'#991b1b'); crates(X(5),Z(-22)); pallets(X(-24),Z(-20));
+    deco(...R(-30,-26,30,0),'#5f6b3a'); kout(...R(-31,-27,31,0));
+    /* objective areas stay open */
+    for(const [x,z] of [[-66,-48],[-66,50]]){ kout(...R(x-6,z-6,x+6,z+6)); deco(...R(x-5,z-5,x+5,z+5),'#58512f'); }
+    crates(X(-72.5),Z(-48)); bc(X(-72.5),Z(-48),.12,.12,6,'mast',1.2); crates(X(-72.5),Z(50)); bc(X(-72.5),Z(50),.12,.12,6,'mast',1.2);
+    /* trails */
+    trail(K,P([[-103,0],[-66,0],[-66,-48],[-48,-56]]),2.6); trail(K,P([[-66,0],[-48,0],[-31,0]]),2.6); trail(K,P([[-103,9],[-96,9],[-96,50],[-66,50],[-66,82]]),2.4);
+    trail(K,P([[-66,-48],[-66,-86]]),2.2); trail(K,P([[-66,-30],[-28,-30],[-28,-48],[0,-48],[0,-26]]),2.4); trail(K,P([[-96,-20],[-96,-40],[-66,-40]]),2.2);
+  });
+  /* scattered cover: rocks, log piles, old plywood barricades; then the forest itself */
+  scatter(M,K,140,2.6,2.2,(x,z,s)=>{ const r=.9+((Math.abs(x*7+z*13)%10)/10)*1.3; cyl(x,z,r,.9+r*.8,'rock','#77736b'); });
+  scatter(M,K,120,3.4,2.6,(x,z,s)=>{ const ax=(Math.abs(x+z)|0)%2===0; bc(x,z,ax?5:1.3,ax?1.3:5,1.05,'log'); });
+  scatter(M,K,60,2.6,2,(x,z,s)=>{ const ax=(Math.abs(x*3+z)|0)%2===0; bc(x,z,ax?3.2:.35,ax?.35:3.2,1.9,'ply'); });
+  scatter(M,K,40,1.6,1.2,(x,z,s)=>crates(x,z,1.15));
+  scatter(M,K,2000,1.0,.3,(x,z,s)=>{ const r=.65+(Math.abs(Math.sin(x*3.1+z*7.7))*.9); bush(x,z,r,1.15+r*.2); });
+  scatter(M,K,9000,.9,.95,(x,z,s)=>{ const k=Math.abs(Math.sin(x*12.9898+z*78.233))*1e4%1; const kind=k<.58?'pine':k<.88?'oak':'birch'; const h=kind==='pine'?11+k*12:kind==='oak'?9+k*6:10+k*5; tree(x,z,kind==='birch'?.2:kind==='oak'?.38+k*.15:.26+k*.18,h,kind); });
+  for(let i=0;i<160;i++){ const x=srnd(-M.w/2,M.w/2), z=srnd(-M.d/2,M.d/2), a=2+srnd(0,6), b=2+srnd(0,6); deco(x-a,z-b,x+a,z+b,rpick(['#3a5626','#4b6a33','#46602c','#52693a']),.006); }
+  M.points=[[-66,-48],[-66,50],[0,0],[66,-50],[66,48]]; M.sites=[[[-66,-48],[-66,50]],[[66,48],[66,-50]]]; }
+/* a row of buildings along one street edge, from xa to xb; front faces the street. o.tf: the symmetry transform */
+function townRow(K,T,xa,xb,zEdge,front,dmin,dmax,o){ o=o||{}; let x=xa; const out=[];
+  while(x+8.5<=xb){ let w=K.srnd(8.6,12.8); if(xb-(x+w)<8.6) w=xb-x; if(w>15) w=K.srnd(8.6,11); const d=K.srnd(dmin,dmax), r=K.rng?0:0;
+    const fl=K.srnd(0,1)<.22?1:K.srnd(0,1)<.72?2:3, roof=fl>=2&&K.srnd(0,1)<.45, mat=K.rpick(['plaster','brick','white','ochre','conc','brick','plaster']);
+    const z0=front==='s'?zEdge:zEdge-d, z1=front==='s'?zEdge+d:zEdge;
+    K.bldg(...T.R(x,z0,x+w,z1),{fl,roof,front:T.F(front),mat,bid:'t'+Math.round(x*10)+'_'+Math.round(zEdge*10)+'_'+o.s,trim:K.rpick(['#e7e5e4','#d6d3d1','#a8a29e','#f5f5f4'])});
+    out.push([x,z0,x+w,z1]); x+=w+K.srnd(1.8,3.2); }
+  return out; }
+/* Ashford Town: an abandoned town, 200 x 150 m. A main street and a grid of avenues; one- to three-storey houses with rooms, stairs and roofs;
+   a church with a bell tower and the town hall on the square; burnt-out cars, a bus, barricades; a gas station at each end */
+function mapTown(M,K,rng){ const {box,bc,deco,cyl,tree,bush,kout,sym,bldg,sand,crates,pallets,barrels,car,truck,jersey,srnd,rpick,vis,wallRun}=K;
+  const AS='#3b3d40', SW='#8f8c85';
+  /* streets (the same on both halves) */
+  deco(-88,-7,88,7,SW); deco(-88,-5,88,5,AS); for(let x=-84;x<84;x+=9) deco(x,-.12,x+4.5,.12,'#d6d3d1');
+  for(const ax of [-60,-20,20,60]){ deco(ax-4.5,-72,ax+4.5,72,SW); deco(ax-3,-72,ax+3,72,AS); }
+  for(const bz of [-40,40]){ deco(-84,bz-4.5,84,bz+4.5,SW); deco(-84,bz-3,84,bz+3,AS); }
+  for(const sx of [-1,1]){ deco(sx*84-4,-72,sx*84+4,72,AS); }
+  for(const ax of [-60,-20,20,60]) kout(ax-4.6,-75,ax+4.6,75); for(const bz of [-40,40]) kout(-88,bz-4.6,88,bz+4.6); kout(-88,-7.1,88,7.1);
+  sym(s=>{ const T=symT(s), {X,Z,R,F,DIR,P}=T;
+    /* the gas station base */
+    deco(...R(-100,-30,-88.5,30),'#55565a'); kout(...R(-100,-12,-88,12));
+    for(const [x,z] of [[-97.5,15.5],[-89.5,15.5],[-97.5,26.5],[-89.5,26.5]]) bc(X(x),Z(z),.35,.35,4.4,'post');
+    box(...R(-98.5,14.5,-88.5,27.5),4.75,'roof',4.4,{mat:'tin'}); for(const z of [18.5,23.5]){ bc(X(-95),Z(z),.8,1.4,1.6,'mach'); bc(X(-91.5),Z(z),.8,1.4,1.6,'mach'); }
+    bldg(...R(-99,-27,-90,-17),{fl:1,front:F('n'),mat:'white',bid:'gas'+s}); car(X(-93),Z(-12.5),true); truck(X(-96),Z(32),true,'#7c2d12');
+    /* blocks on this half: two columns, four rows */
+    for(const [xa,xb] of [[-80,-64.5],[-55.5,-24.5]]){
+      townRow(K,T,xa,xb,7.2,'s',9,11.5,{s}); townRow(K,T,xa,xb,35.4,'n',9,11.5,{s});
+      townRow(K,T,xa,xb,-35.4,'s',9,11.5,{s}); townRow(K,T,xa,xb,-7.2,'n',9,11.5,{s});
+      townRow(K,T,xa,xb,44.6,'s',9.5,12,{s});
+      /* the outer north row's yards: sheds and fences */
+      for(let x=xa+2;x<xb-3;x+=srnd(7,11)){ const z=srnd(59,67); if(srnd(0,1)<.5) bc(X(x),Z(z),3,2.4,2.2,'wall',0,{mat:'wood'}); else box(...R(x-2.5,z,x+2.5,z+.15),1.6,'ply'); } }
+    /* the outer south row of the other half comes from symmetry; courtyards get a few props */
+    for(const [x,z] of [[-72,21],[-46,21.5],[-34,-21],[-72,-21.5],[-50,-21]]){ if(srnd(0,1)<.5) car(X(x),Z(z),true,'#57534e',true); else { bc(X(x),Z(z),1.9,1.1,1.35,'mach',0,{col:'#365314'}); crates(X(x+3),Z(z)); } }
+    /* street wrecks and barricades */
+    car(X(-72),Z(-3),true,null,true); car(X(-31),Z(3.2),true,null,true); car(X(-60.8),Z(-28),false,null,true); car(X(-19.2),Z(55),false,null,true); car(X(-45),Z(-38),true,null,true); car(X(-77),Z(41.8),true,null,true);
+    bc(X(-42),Z(-2.2),11,2.6,2.9,'car',.4,{col:'#a16207',wreck:true}); kout(...R(-48,-4,-36,-.5));
+    jersey(...R(-52,-4.6,-51.2,-.6)); jersey(...R(-12,.6,-11.2,4.6)); sand(...R(-64.4,-11,-63.8,-7.6)); sand(...R(-56.2,7.6,-55.6,11)); jersey(...R(-23,-44.2,-17,-43.4)); jersey(...R(-63.5,-45,-62.7,-41));
+    sand(...R(-24,36.4,-21,37)); crates(X(-58),Z(-13)); pallets(X(-22),Z(12)); barrels(X(-66),Z(9),3,'#1e3a8a');
+    for(let x=-80;x<80;x+=20) cyl(X(x+3),Z(-6.6),.14,7,'pole','#5f4a30');
+    /* parks at the top and bottom of the centre column */
+    bc(X(0),Z(57),6,6,.4,'deck',0,{walk:true}); for(const [x,z] of [[-2.8,54.2],[2.8,54.2],[-2.8,59.8],[2.8,59.8]]) bc(X(x),Z(z),.25,.25,3.4,'post',.4); box(...R(-3.5,53.5,3.5,60.5),3.7,'roof',3.4,{mat:'tin'});
+    for(const [x,z] of [[-12,48],[-12,66],[12,66],[12,48],[-7,63],[8,52]]) tree(X(x),Z(z),.4,10,'oak');
+    for(const [x,z] of [[-9,51],[9,62],[-13,57],[13,57]]) bush(X(x),Z(z),1.1,1.3);
+    box(...R(-15,45,-6,45.6),.9,'stone'); box(...R(6,45,15,45.6),.9,'stone');
+  });
+  /* the square: the church and its bell tower on the north side, the town hall on the south */
+  deco(-15.5,7,15.5,22,'#9a958c'); deco(-15.5,-22,15.5,-7,'#9a958c');
+  cyl(0,14.5,2.4,.8,'well','#a8a29e'); cyl(0,-14.5,.9,3.4,'pole','#78716c');
+  for(const [x,z] of [[-10,10],[10,19],[-10,-19],[10,-10]]) bc(x,z,2,.5,.5,'furn');
+  { const t=.4, H=6.5, x0=-10, x1=3.6, z0=23, z1=35;
+    wallRun(true,z0,z0+t,x0,x1,0,H,[[-4.2,-2.2,'d',0,3.2],[-8.5,-7.3,'w',1.5,4.2],[0,1.2,'w',1.5,4.2]],'wall',{mat:'stone',bid:'church'});
+    wallRun(true,z1-t,z1,x0,x1,0,H,[[-8,-6.8,'w',1.5,4.2],[-4,-2.8,'w',1.5,4.2],[-.2,1,'w',1.5,4.2]],'wall',{mat:'stone',bid:'church'});
+    wallRun(false,x0,x0+t,z0+t,z1-t,0,H,[[27.2,28.8,'d',0,2.3],[31,32.2,'w',1.5,4.2]],'wall',{mat:'stone',bid:'church'});
+    wallRun(false,x1-t,x1,z0+t,z1-t,0,H,[[30,31.6,'d',0,2.3]],'wall',{mat:'stone',bid:'church'});
+    box(x0-.3,z0-.3,x1+.3,z1+.3,H+.35,'roof',H,{mat:'roof'});
+    for(let z=26;z<=32.5;z+=1.7){ bc(-7,z,4,.5,.85,'furn'); bc(.2,z,4.2,.5,.85,'furn'); } bc(-3.2,33.8,2.6,.8,1.0,'furn'); kout(x0-1,z0-1,x1+1,z1+1); }
+  bldg(3.6,23.5,10.6,32.5,{fl:3,roof:true,front:'e',mat:'stone',bid:'tower'});
+  bldg(-11,-34.5,11,-22.5,{fl:3,roof:true,front:'n',mat:'conc',bid:'hall',trim:'#f5f5f4'});
+  scatter(M,K,500,1.2,.8,(x,z)=>{ const k=Math.abs(Math.sin(x*3.1+z*1.7)); if(k<.6) bush(x,z,.7+k,1.2); else tree(x,z,.35,8+k*6,'oak'); },(x,z)=>Math.abs(z)>62||x<-86);
+  M.points=[[-60,-21],[-40,40],[0,0],[40,-40],[60,21]]; M.sites=[[[-60,-21],[-40,40]],[[60,21],[40,-40]]]; }
+
+/* Kessler Works: a 230 x 160 m industrial site. The main hall (9 m high, machinery, catwalk mezzanines with high windows), warehouses with racking,
+   container yards, a three-storey office block, a tank farm with pipe racks, a rail spur with wagons, loading docks */
+function mapFactory(M,K,rng){ const {box,bc,deco,cyl,tree,bush,kout,sym,bldg,sand,crates,pallets,barrels,car,truck,jersey,cont,CONTC,srnd,rpick,vis,wallRun,flight}=K;
+  const AS='#4a4b4e';
+  /* the main hall */
+  { const t=.3, H=9, W='wall', o={mat:'tin',bid:'hall'}, hw=[[-27,-23,'w',5.4,7.6],[-15,-11,'w',5.4,7.6],[-3,1,'w',5.4,7.6],[5,9,'w',5.4,7.6],[21,25,'w',5.4,7.6]];
+    wallRun(true,17.7,18,-30,30,0,H,[[12,18,'d',0,5.5],[-20,-18.4,'d']].concat(hw.filter(g=>g[1]<11||g[0]>19)),W,o);
+    wallRun(true,-18,-17.7,-30,30,0,H,[[-18,-12,'d',0,5.5],[18.4,20,'d']].concat(hw.map(g=>[-g[1],-g[0],'w',5.4,7.6]).filter(g=>g[0]>-11||g[1]<-19)),W,o);
+    wallRun(false,-30,-29.7,-17.7,17.7,0,H,[[-3,3,'d',0,5.5],[-12,-10.4,'d'],[8,10,'w',5.4,7.6]],W,o);
+    wallRun(false,29.7,30,-17.7,17.7,0,H,[[-3,3,'d',0,5.5],[10.4,12,'d'],[-10,-8,'w',5.4,7.6]],W,o);
+    box(-30.3,-18.3,30.3,18.3,H+.3,'roof',H,{mat:'tin'}); deco(-29.7,-17.7,29.7,17.7,'#8d8b84'); kout(-31,-19,31,19);
+    for(const x of [-20,-10,10,20]) for(const z of [-8,8]) bc(x,z,.5,.5,H,'pillar');
+    sym(s=>{ const {X,Z,R}=symT(s);
+      box(...R(-26,13.5,26,17.7),4.2,'floor',4.0,{walk:true,mat:'grate'}); box(...R(-23.9,13.42,26,13.5),5.3,'rail',4.2); box(...R(-26,13.42,-25.7,13.5),5.3,'rail',4.2); box(...R(-26.08,13.42,-26,17.7),5.3,'rail',4.2); box(...R(25.92,13.42,26,17.7),5.3,'rail',4.2);
+      flight(X(-24.8),Z(7.2),s>0?'+z':'-z',1.6,0,4.2,'step');
+      bc(X(-18),Z(-2),4.5,2.6,2.6,'mach'); bc(X(-9),Z(4.5),3.2,3.2,3.6,'mach'); bc(X(-4),Z(-6),2.4,2.4,1.9,'mach'); bc(X(-12),Z(-10.5),15,1.2,1.0,'conv'); bc(X(-22),Z(7.5),1.2,8,1.0,'conv'); bc(X(9),Z(11),5,1.8,1.6,'mach'); crates(X(-26),Z(-14)); pallets(X(-15.5),Z(4.5)); barrels(X(-27),Z(2),4,'#7c2d12'); });
+  }
+  sym(s=>{ const T=symT(s), {X,Z,R,F,DIR,P}=T;
+    /* roads */
+    deco(...R(-112,-4,-30,4),AS); deco(...R(-40,-24,40,-20),AS); deco(...R(-40,-24,-36,24),AS); deco(...R(-90,-36,-36,-32),AS); deco(...R(-90,-36,-86,36),AS); deco(...R(-86,32,-36,36),AS);
+    kout(...R(-112,-4.2,-30,4.2)); kout(...R(-115,-12,-100,12));
+    /* the guard house and gate */
+    bldg(...R(-106,14,-99,19.5),{fl:1,front:F('s'),mat:'conc',bid:'gate'+s}); bc(X(-99),Z(-5.5),.3,.3,1.1,'post'); bc(X(-99),Z(-9),.12,7,1.05,'rail',.95);
+    /* the rail spur and wagons */
+    deco(...R(-96.2,-78,-95.8,78),'#57534e'); deco(...R(-94.2,-78,-93.8,78),'#57534e');
+    for(const z of [-46,-26,26,46]){ bc(X(-95),Z(z),3,13.5,3.7,'wagon',.95,{col:rpick(['#7c2d12','#3f4a5a','#57534e'])}); kout(...R(-97,z-7.5,-93,z+7.5)); }
+    /* the warehouse with racking */
+    { const o={mat:'tin',bid:'wh'+s}, x0=-82, x1=-52, z0=-62, z1=-40, H=7;
+      const S=(x0b,z0b,x1b,z1b)=>R(x0b,z0b,x1b,z1b);
+      const wr=(horiz,c0,c1,a0,a1,cuts)=>{ if(s>0) wallRun(horiz,c0,c1,a0,a1,0,H,cuts,'wall',o); else wallRun(horiz,-c1,-c0,-a1,-a0,0,H,cuts.map(g=>[-g[1],-g[0],g[2],g[3],g[4]]),'wall',o); };
+      wr(true,z1-.3,z1,x0,x1,[[-72,-66,'d',0,4.5],[-60,-58.4,'d'],[-80,-77,'w',4.4,6]]); wr(true,z0,z0+.3,x0,x1,[[-62,-60.4,'d'],[-76,-73,'w',4.4,6]]);
+      wr(false,x0,x0+.3,z0+.3,z1-.3,[[-49,-47.4,'d']]); wr(false,x1-.3,x1,z0+.3,z1-.3,[[-53,-51.4,'d'],[-58,-55,'w',4.4,6]]);
+      box(...S(x0-.2,z0-.2,x1+.2,z1+.2),H+.3,'roof',H,{mat:'tin'}); deco(...S(x0,z0,x1,z1),'#8d8b84'); kout(...S(x0-1.5,z0-1.5,x1+1.5,z1+1.5));
+      for(const z of [-58.2,-54.6,-51,-47.4,-43.8]) bc(X(-70),Z(z),15,1.1,3.4,'rack'); }
+    for(const [x,z] of [[-62,-37.5],[-74,-37.5]]) truck(X(x),Z(z),true,rpick(['#1e3a8a','#57534e','#7f1d1d']));
+    bc(X(-46),Z(-28),2.4,1.2,2.1,'car',0,{col:'#eab308'}); pallets(X(-50),Z(-24.5),1.3); pallets(X(-48.4),Z(-24.5)); crates(X(-70),Z(-28)); crates(X(-71.4),Z(-26.6),1.0); barrels(X(-80),Z(-28),3,'#1e3a8a'); sand(...R(-56,-24,-55.4,-20));
+    /* the container yard */
+    for(const z of [22,27.5,33,50,55.5,61]) for(const x of [-77,-68.5,-60,-51.5]){ if(z>45&&x>-55) continue; const st=srnd(0,1)<.35?2:1; cont(X(x),Z(z),true,st,rpick(CONTC)); }
+    cont(X(-71),Z(41),false,1,rpick(CONTC)); cont(X(-52),Z(43),false,2,rpick(CONTC)); crates(X(-58),Z(38)); kout(...R(-70,35,-56,47));
+    /* the office block */
+    bldg(...R(-22,-62,0,-48),{fl:3,roof:true,front:F('n'),mat:'office',bid:'off'+s,trim:'#e5e7eb'}); car(X(-26),Z(-44),false); car(X(-3),Z(-44),true);
+    /* the tank farm and its pipe rack to the hall */
+    for(const [x,z] of [[-40,48],[-30.5,48],[-40,59],[-30.5,59]]) cyl(X(x),Z(z),3.3,10,'tank','#c9c9c1');
+    box(...R(-46,42,-45.4,65),.9,'wall',0,{mat:'conc'}); box(...R(-46,65,-24,65.6),.9,'wall',0,{mat:'conc'}); box(...R(-24.6,52,-24,65.6),.9,'wall',0,{mat:'conc'}); box(...R(-46,41.4,-36,42),.9,'wall',0,{mat:'conc'}); kout(...R(-47,40,-23,67));
+    for(let z=20;z<=40;z+=5) bc(X(-27.5),Z(z),.3,.3,3.4,'post'); box(...R(-28.2,18.2,-26.8,41),4.0,'pipe',3.4);
+    for(let x=-22;x<=-8;x+=7) bc(X(x),Z(-66),.3,.3,3.4,'post');
+  });
+  scatter(M,K,260,2.2,1.6,(x,z)=>{ const k=Math.abs(Math.sin(x*1.3+z*2.1)); if(k<.4) pallets(x,z,.8+k); else if(k<.7) barrels(x,z,2,'#3f6212'); else cyl(x,z,.9,1.2,'drum','#78350f'); },(x,z)=>!(Math.abs(x)<34&&Math.abs(z)<22));
+  scatter(M,K,200,1.2,.8,(x,z)=>bush(x,z,.8,1.1),(x,z)=>Math.abs(z)>70);
+  M.points=[[-62,-30],[-63,41],[0,0],[63,-41],[62,30]]; M.sites=[[[-62,-30],[-63,41]],[[62,30],[63,-41]]]; }
+
+/* Fort Harlan Airfield: 280 x 190 m, mirrored left to right. A runway and taxiway, three hangars (an aircraft and a two-storey workshop inside),
+   a four-storey control tower, barracks, HESCO revetments with jets, a fuel farm, guard towers */
+function mapAirfield(M,K,rng){ const {box,bc,deco,cyl,tree,bush,kout,bldg,tower,hesco,sand,crates,pallets,barrels,car,truck,humvee,jersey,srnd,rpick,vis,wallRun}=K;
+  const mir=f=>{ f(1); f(-1); };
+  const AS='#46474b';
+  deco(-140,-72,140,-54,AS); for(let x=-132;x<132;x+=14) deco(x,-63.3,x+7,-62.7,'#e5e7eb'); deco(-140,-71.4,140,-71,'#e5e7eb'); deco(-140,-55,140,-54.6,'#e5e7eb');
+  deco(-140,-45,140,-37,AS); deco(-92,-37,92,12,'#55565a'); deco(-140,46,140,52,'#6b6355');
+  /* the centre hangar (roof half gone) with a helicopter, the control tower, the crashed airliner on the runway */
+  { const o={mat:'hangar',bid:'hc'}, H=10;
+    wallRun(true,3.6,4,-18,18,0,H,[[-2,2,'d',0,3]],'wall',o); wallRun(true,-26,-25.6,-18,18,0,H,[[-14,14,'d',0,7]],'wall',o);
+    wallRun(false,-18,-17.6,-25.6,3.6,0,H,[[-6,-4.4,'d']],'wall',o); wallRun(false,17.6,18,-25.6,3.6,0,H,[[-6,-4.4,'d']],'wall',o);
+    box(-18.3,-12,18.3,4.3,H+.3,'roof',H,{mat:'tin'}); deco(-17.6,-25.6,17.6,3.6,'#5f6064'); kout(-19,-27,19,5);
+    bc(0,-13,3,11,3.0,'heli',.6); bc(0,-4.5,1,7,2.3,'heli',1.7); bc(0,-13,11,.3,3.35,'rotor',3.2); crates(-12,-2); crates(12,-20); pallets(-13,-20,1.2); }
+  bldg(-4.5,20,4.5,29,{fl:4,roof:true,front:'s',mat:'white',bid:'ctl',trim:'#94a3b8'}); bc(0,30.4,8,.6,1.0,'sand'); kout(-6,18,6,32);
+  bc(0,-63,24,3.8,3.8,'plane',.7,{col:'#cbd5e1'}); bc(-3,-63,4,22,3.0,'wing',2.2,{col:'#cbd5e1'}); bc(11,-63,3,.4,6.5,'plane',3.8,{col:'#cbd5e1'}); kout(-14,-75,14,-51);
+  mir(s=>{ const X=x=>x*s, R=(x0,z0,x1,z1)=>[X(x0),z0,X(x1),z1], F=f=>s>0?f:({w:'e',e:'w',s:'s',n:'n'})[f], DIR=d=>s>0?d:({'+x':'-x','-x':'+x','+z':'+z','-z':'-z'})[d];
+    const wr=(horiz,c0,c1,a0,a1,base,top,cuts,kind,o)=>{ if(horiz){ if(s>0) wallRun(true,c0,c1,a0,a1,base,top,cuts,kind,o); else wallRun(true,c0,c1,-a1,-a0,base,top,cuts.map(g=>[-g[1],-g[0],g[2],g[3],g[4]]),kind,o); } else wallRun(false,X(c0)<X(c1)?X(c0):X(c1),X(c0)<X(c1)?X(c1):X(c0),a0,a1,base,top,cuts,kind,o); };
+    /* the big hangar with a transport aircraft and a workshop inside */
+    { const o={mat:'hangar',bid:'h'+s}, H=11, x0=-80, x1=-40, z0=-28, z1=6;
+      wr(true,z0,z0+.35,x0,x1,0,H,[[-74,-46,'d',0,8]],'wall',o); wr(true,z1-.35,z1,x0,x1,0,H,[[-62,-60.4,'d'],[-52,-48,'w',2,4]],'wall',o);
+      wr(false,x0,x0+.35,z0+.35,z1-.35,0,H,[[-8,-6.4,'d'],[-20,-17,'w',2,4]],'wall',o); wr(false,x1-.35,x1,z0+.35,z1-.35,0,H,[[-14,-12.4,'d'],[-4,-1,'w',2,4]],'wall',o);
+      box(...R(x0-.3,z0-.3,x1+.3,z1+.3),H+.4,'roof',H,{mat:'tin'}); deco(...R(x0,z0,x1,z1),'#5f6064'); kout(...R(x0-1.5,z0-1.5,x1+1.5,z1+1.5));
+      bc(X(-60),-10,4,24,4.2,'plane',.9); bc(X(-60),-9,30,4,4.0,'wing',3.6); bc(X(-60),.6,.4,3,8,'plane',4.2); bc(X(-60),.6,10,2.2,4.6,'wing',4.3);
+      bldg(...R(-79.6,-4.5,-69.6,5.6),{fl:2,roof:true,front:'s',mat:'office',bid:'ws'+s}); crates(X(-46),-24); crates(X(-47.4),-22.6,1.0); pallets(X(-75),-20); bc(X(-50),-3,2.6,1.4,1.5,'car',0,{col:'#eab308'}); barrels(X(-77),-25,3,'#365314'); }
+    /* barracks */
+    for(const z0 of [-32,-16,14]) bldg(...R(-112,z0,-90,z0+8),{fl:1,front:F('e'),mat:'green',bid:'bk'+s+z0});
+    for(const z of [-20,-4,6,26]) sand(...R(-88,z,-87.4,z+3));
+    /* base HESCO, guard towers, the comms mast */
+    for(const [z0,z1] of [[-60,-34],[34,62]]) hesco(...R(-118.6,z0,-117.5,z1),2.1); hesco(...R(-118.6,-74,-117.5,-66),2.1);
+    tower(X(-110),-48,'+z'); tower(X(-110),48,'-z'); cyl(X(-124),30,.35,28,'pole','#9ca3af'); humvee(X(-124),-14,false); humvee(X(-124),16,false); truck(X(-104),40,true);
+    /* the fuel farm */
+    for(const [x,z] of [[-96,46],[-88,46],[-96,55],[-88,55]]) cyl(X(x),z+2,3,5,'tank','#d6d3d1'); box(...R(-101,41,-100.5,62),.9,'wall',0,{mat:'conc'}); box(...R(-101,61.5,-82,62),.9,'wall',0,{mat:'conc'}); box(...R(-101,41,-90,41.5),.9,'wall',0,{mat:'conc'}); kout(...R(-102,40,-81,63));
+    /* revetments and parked jets on the north grass */
+    for(const x of [-64,-34]){ hesco(...R(x-8,62,x-7,80),2.1); hesco(...R(x+7,62,x+8,80),2.1); hesco(...R(x-8,79,x+8,80.2),2.1); bc(X(x),70,2.2,13,2.6,'plane',.8,{col:'#6b7280'}); bc(X(x),72,10,3.2,1.95,'wing',1.75,{col:'#6b7280'}); bc(X(x),77,.3,2,4.6,'plane',2.6,{col:'#6b7280'}); }
+    /* cover on the runway and apron */
+    jersey(...R(-56,-70,-50,-69.2)); jersey(...R(-96,-57,-90,-56.2)); truck(X(-78),-60,true,'#9a3412'); car(X(-112),-63,true,'#44403c',true); sand(...R(-30,-66,-29.4,-61)); sand(...R(-124,-58,-121,-57.4));
+    humvee(X(-30),-34,true); crates(X(-86),-34); crates(X(-26),10); pallets(X(-34),18,1.2); truck(X(-24),-40,true,'#57534e'); barrels(X(-36),30,3,'#9a3412'); bc(X(-28),38,6,2.4,2.6,'cont',0,{col:'#44633a'});
+    jersey(...R(-14,8,-8,8.8)); sand(...R(-12,30,-9,30.6));
+  });
+  scatter(M,K,500,1.4,1.0,(x,z)=>{ const k=Math.abs(Math.sin(x*2.3+z*1.1)); if(k<.7) bush(x,z,.7+k*.6,1.2); else tree(x,z,.35,9+k*5,'oak'); },(x,z)=>z>54&&Math.abs(x)>8||z<-76||x<-125);
+  M.points=[[-85,-62],[-50,-16],[0,12],[50,-16],[85,-62]]; M.sites=[[[-50,-16],[-74,40]],[[50,-16],[74,40]]]; }
+
+/* Outpost Zafar: 250 x 180 m of desert. A HESCO-walled FOB in the middle (guard towers, a two-storey command post, CHU containers, tents, a helipad),
+   a mud-brick village of walled compounds with flat roofs on each side, a dry wadi, rock outcrops and a checkpoint on the road */
+function mapOutpost(M,K,rng){ const {box,bc,deco,cyl,tree,bush,kout,sym,bldg,tower,hesco,sand,crates,pallets,barrels,car,truck,humvee,jersey,cont,CONTC,srnd,rpick,vis,wallRun}=K;
+  deco(-125,-3.5,125,3.5,'#a68d5e'); deco(-34,-26,34,26,'#b89b68');
+  sym(s=>{ const T=symT(s), {X,Z,R,F,DIR,P}=T;
+    /* the FOB perimeter: a gate west (and east), a breach north (and south) */
+    hesco(...R(-35.1,-27.1,-34,-3),2.1); hesco(...R(-35.1,3,-34,27.1),2.1); hesco(...R(-34,26,10,27.1),2.1); hesco(...R(14,26,34,27.1),2.1);
+    sand(...R(-31.5,-8,-30.9,-4)); sand(...R(-31.5,4,-30.9,8));
+    tower(X(-29),Z(21),DIR('+z')); bldg(...R(-18,-14,-4,-4),{fl:2,roof:true,front:F('e'),mat:'conc',bid:'cp'+s,trim:'#d6d3d1'});
+    for(const z of [10,15.5,21]) for(const x of [-22,-14]) cont(X(x),Z(z),true,1,'#d6cfc0');
+    bc(X(-22),Z(-18),10,5,3.0,'tent'); bc(X(-28),Z(-11),4,3,2.4,'tent'); deco(...R(10,-21,22,-9),'#8f8a7a'); deco(...R(14.6,-18,15.4,-12),'#e5e7eb'); deco(...R(18.6,-18,19.4,-12),'#e5e7eb'); deco(...R(15,-15.4,19,-14.6),'#e5e7eb');
+    humvee(X(-8),Z(19),true); truck(X(6),Z(19.5),true,'#a08a5c'); cyl(X(-30),Z(-2),1.1,2.2,'tank','#57534e'); barrels(X(-30),Z(-20),3,'#365314'); crates(X(-6),Z(-20)); crates(X(-4.6),Z(-21.4),1.0); sand(...R(-2,8,2,8.6));
+    /* the staging area (base) */
+    kout(...R(-125,-12,-104,12)); humvee(X(-118),Z(-16),false); humvee(X(-114),Z(17),false); truck(X(-108),Z(-20),false,'#a08a5c'); bc(X(-121),Z(20),5,4,2.6,'tent'); sand(...R(-104.6,-12,-104,-5)); sand(...R(-104.6,5,-104,12));
+    /* the checkpoint on the road */
+    jersey(...R(-47,-3.3,-46.2,1)); jersey(...R(-42,-1,-41.2,3.3)); sand(...R(-45,6,-43,6.6)); bc(X(-44),Z(-6.5),2,2,2.4,'wall',0,{mat:'conc'}); car(X(-56),Z(1.6),true,'#44403c',true);
+    /* the wadi */
+    deco(...R(-41,-90,-36,-8),'#b08f5b'); deco(...R(-41,8,-36,90),'#b08f5b');
+    /* the village: walled compounds with a gate on the street side, a flat-roofed house and a yard */
+    const comp=(x0,z0,x1,z1,gate)=>{ const t=.4, H=2.6, o={mat:'mud',bid:'cw'+s+x0+z0}, g=2.6;
+      const gx=(x0+x1)/2, gz=(z0+z1)/2;
+      wallRun(true,...(s>0?[z0,z0+t,x0,x1]:[-z0-t,-z0,-x1,-x0]),0,H,gate==='s'?[[s>0?gx-g/2:-gx-g/2,s>0?gx+g/2:-gx+g/2,'g']]:[],'wall',o);
+      wallRun(true,...(s>0?[z1-t,z1,x0,x1]:[-z1,-z1+t,-x1,-x0]),0,H,gate==='n'?[[s>0?gx-g/2:-gx-g/2,s>0?gx+g/2:-gx+g/2,'g']]:[],'wall',o);
+      wallRun(false,...(s>0?[x0,x0+t,z0+t,z1-t]:[-x0-t,-x0,-z1+t,-z0-t]),0,H,gate==='w'?[[s>0?gz-g/2:-gz-g/2,s>0?gz+g/2:-gz+g/2,'g']]:[],'wall',o);
+      wallRun(false,...(s>0?[x1-t,x1,z0+t,z1-t]:[-x1,-x1+t,-z1+t,-z0-t]),0,H,gate==='e'?[[s>0?gz-g/2:-gz-g/2,s>0?gz+g/2:-gz+g/2,'g']]:[],'wall',o);
+      /* the house sits at the far side from the gate, front towards the yard */
+      const fl=srnd(0,1)<.6?2:1, hd=8.5;
+      if(gate==='e') bldg(...R(x0+t+.1,z0+t+.1,x0+t+.1+hd,z1-t-.1),{fl,roof:true,front:F('e'),mat:'mud',bid:'mh'+s+x0+z0,trim:'#9c7a4c'});
+      else if(gate==='w') bldg(...R(x1-t-.1-hd,z0+t+.1,x1-t-.1,z1-t-.1),{fl,roof:true,front:F('w'),mat:'mud',bid:'mh'+s+x0+z0,trim:'#9c7a4c'});
+      else if(gate==='s') bldg(...R(x0+t+.1,z1-t-.1-hd,x1-t-.1,z1-t-.1),{fl,roof:true,front:F('s'),mat:'mud',bid:'mh'+s+x0+z0,trim:'#9c7a4c'});
+      else bldg(...R(x0+t+.1,z0+t+.1,x1-t-.1,z0+t+.1+hd),{fl,roof:true,front:F('n'),mat:'mud',bid:'mh'+s+x0+z0,trim:'#9c7a4c'});
+      const yx=gate==='e'?x1-3:gate==='w'?x0+3:gx+3.5, yz=gate==='s'?z0+3:gate==='n'?z1-3:gz+4.5; barrels(X(yx),Z(yz),2,'#78350f'); kout(...R(x0-1,z0-1,x1+1,z1+1)); };
+    comp(-98,-56,-82,-38,'e'); comp(-76,-56,-60,-38,'n'); comp(-98,-32,-82,-14,'e'); comp(-76,-32,-60,-14,'e');
+    comp(-98,14,-82,32,'e'); comp(-76,14,-60,32,'w'); comp(-98,38,-82,56,'e'); comp(-76,38,-60,56,'s');
+    /* the market on the road through the village */
+    for(const [x,z] of [[-90,-8.5],[-80,-8.5],[-68,8.5],[-86,8.5]]){ bc(X(x),Z(z),3,1.6,1.0,'furn'); vis(...R(x-1.8,z-1.2,x+1.8,z+1.2),2.3,2.4,rpick(['#b45309','#1e3a8a','#7f1d1d','#365314'])); for(const [a,b] of [[-1.6,-1],[1.6,-1],[-1.6,1],[1.6,1]]) bc(X(x+a),Z(z+b),.1,.1,2.3,'post'); }
+    cyl(X(-72),Z(-9),1.0,.9,'well','#a8a29e'); for(const [x,z] of [[-100,-8],[-62,9],[-79,-62],[-91,62]]) tree(X(x),Z(z),.25,8+srnd(0,3),'palm');
+    /* rock outcrops */
+    for(const [x,z,r,h] of [[-30,-62,5,5],[-24,-70,3.2,3.6],[-56,-72,4.4,4.2],[-12,62,4.6,4.8],[-4,72,3,3.4],[-50,68,3.6,3.2],[-110,-60,4,4],[-112,62,3.4,3]]) cyl(X(x),Z(z),r,h,'rock','#a0855e');
+  });
+  scatter(M,K,260,2.4,2,(x,z)=>{ const k=Math.abs(Math.sin(x*1.9+z*.7)); cyl(x,z,.8+k*1.4,.7+k*1.5,'rock','#a78b62'); },(x,z)=>Math.abs(x)>36||Math.abs(z)>28);
+  scatter(M,K,500,1.2,.8,(x,z)=>{ const k=Math.abs(Math.sin(x*3.7+z*2.9)); if(k<.75) bush(x,z,.5+k*.6,.9); else tree(x,z,.25,7+k*3,'palm'); },(x,z)=>Math.abs(x)>36||Math.abs(z)>28);
+  M.points=[[-72,0],[-50,44],[0,0],[50,-44],[72,0]]; M.sites=[[[-72,0],[-50,44]],[[72,0],[50,-44]]]; }
+
+/* ---------- spatial grid: boxes, trees, round bunkers and bushes are bucketed in 6 m cells, so collisions, BBs and sight lines only test what is near them ---------- */
+let QS=1;
+function buildGrid(M){ const cs=6, ox=-M.w/2-cs, oz=-M.d/2-cs, nx=Math.ceil((M.w+2*cs)/cs)+1, nz=Math.ceil((M.d+2*cs)/cs)+1, cells=new Array(nx*nz);
+  for(let k=0;k<cells.length;k++) cells[k]={b:[],t:[],c:[],u:[]};
+  const put=(key,o,x0,z0,x1,z1)=>{ const i0=clamp(Math.floor((x0-ox)/cs),0,nx-1), i1=clamp(Math.floor((x1-ox)/cs),0,nx-1), j0=clamp(Math.floor((z0-oz)/cs),0,nz-1), j1=clamp(Math.floor((z1-oz)/cs),0,nz-1);
+    for(let j=j0;j<=j1;j++) for(let i=i0;i<=i1;i++) cells[j*nx+i][key].push(o); };
+  for(const b of M.boxes) put('b',b,b.x0,b.z0,b.x1,b.z1);
+  for(const t of M.trees) put('t',t,t.x-t.r,t.z-t.r,t.x+t.r,t.z+t.r);
+  for(const c of M.cyl) put('c',c,c.x-c.r,c.z-c.r,c.x+c.r,c.z+c.r);
+  for(const q of M.bush) put('u',q,q.x-q.r,q.z-q.r,q.x+q.r,q.z+q.r);
+  M.sg={cs,ox,oz,nx,nz,cells}; }
+const cellAt=(M,x,z)=>{ const g=M.sg; return g.cells[clamp(Math.floor((z-g.oz)/g.cs),0,g.nz-1)*g.nx+clamp(Math.floor((x-g.ox)/g.cs),0,g.nx-1)]; };
+/* everything of one kind ('b' boxes, 't' trees, 'c' cylinders, 'u' bushes) whose footprint may touch a rectangle, each once */
+function nearRect(M,key,x0,z0,x1,z1){ const g=M.sg, q=++QS, out=[], i0=clamp(Math.floor((x0-g.ox)/g.cs),0,g.nx-1), i1=clamp(Math.floor((x1-g.ox)/g.cs),0,g.nx-1), j0=clamp(Math.floor((z0-g.oz)/g.cs),0,g.nz-1), j1=clamp(Math.floor((z1-g.oz)/g.cs),0,g.nz-1);
+  for(let j=j0;j<=j1;j++) for(let i=i0;i<=i1;i++) for(const o of g.cells[j*g.nx+i][key]){ if(o._q===q) continue; o._q=q; out.push(o); } return out; }
+/* the cells a segment passes through (a 2D DDA walk) */
+function cellsSeg(M,ax,az,bx,bz){ const g=M.sg, out=[], cs=g.cs, dx=bx-ax, dz=bz-az; let i=Math.floor((ax-g.ox)/cs), j=Math.floor((az-g.oz)/cs); const ti=Math.floor((bx-g.ox)/cs), tj=Math.floor((bz-g.oz)/cs), si=dx>0?1:-1, sj=dz>0?1:-1;
+  const tdx=Math.abs(dx)>1e-9?cs/Math.abs(dx):1e9, tdz=Math.abs(dz)>1e-9?cs/Math.abs(dz):1e9; let tx=Math.abs(dx)>1e-9?((si>0?(i+1):i)*cs+g.ox-ax)/dx:1e9, tz=Math.abs(dz)>1e-9?((sj>0?(j+1):j)*cs+g.oz-az)/dz:1e9;
+  for(let n=0;n<512;n++){ if(i>=0&&j>=0&&i<g.nx&&j<g.nz) out.push(g.cells[j*g.nx+i]); if(i===ti&&j===tj) break; if(tx<tz){ if(tx>1) break; i+=si; tx+=tdx; } else { if(tz>1) break; j+=sj; tz+=tdz; } }
+  if(ti>=0&&tj>=0&&ti<g.nx&&tj<g.nz){ const c=g.cells[tj*g.nx+ti]; if(out[out.length-1]!==c) out.push(c); } return out; }
+/* can someone stand at height y here, or does something block a body of radius r? */
+function blockedAt(M,x,z,r,y){ y=y||0; for(const b of nearRect(M,'b',x-r,z-r,x+r,z+r)) if(b.h>y+.45&&b.y0<y+1.6&&x>b.x0-r&&x<b.x1+r&&z>b.z0-r&&z<b.z1+r) return true;
+  for(const t of nearRect(M,'t',x-r,z-r,x+r,z+r)) if(Math.hypot(t.x-x,t.z-z)<t.r+r) return true; for(const c of nearRect(M,'c',x-r,z-r,x+r,z+r)) if(c.h>y+.45&&Math.hypot(c.x-x,c.z-z)<c.r+r) return true; return false; }
+/* the floor under a point: the ground, or the top of whatever box (a stair step, a floor, a platform) is within a step of your feet */
+const STEP=.5;
+/* the foot has some size: a surface within 0.18 m of your centre holds you */
+function supportAt(M,x,z,y){ let s=0; const m=.18; for(const b of nearRect(M,'b',x-m,z-m,x+m,z+m)) if(b.h>s&&b.h<=y+STEP&&x>=b.x0-m&&x<=b.x1+m&&z>=b.z0-m&&z<=b.z1+m) s=b.h; return s; }
+
+/* ---------- navigation: a 0.5 m grid in layers (the ground, floors, stairs and platforms), weighted A* and string-pulled paths ---------- */
+function buildNav(M){ const cs=.5, nx=Math.ceil(M.w/cs), nz=Math.ceil(M.d/cs), N=nx*nz, r=.42, X0=-M.w/2, Z0=-M.d/2;
+  const span=(lo,hi,o,n)=>[Math.max(0,Math.floor((lo-o)/cs-.5)+1),Math.min(n-1,Math.ceil((hi-o)/cs-.5)-1)];
+  const cand=new Array(N);
+  const walk=b=>b.walk||(b.h<=.45&&b.y0<=.05);
+  for(const b of M.boxes){ if(!walk(b)) continue; const [i0,i1]=span(b.x0-.01,b.x1+.01,X0,nx), [j0,j1]=span(b.z0-.01,b.z1+.01,Z0,nz);
+    for(let j=j0;j<=j1;j++) for(let i=i0;i<=i1;i++){ const k=j*nx+i, L=cand[k]||(cand[k]=[0]); if(!L.some(h=>Math.abs(h-b.h)<.05)) L.push(b.h); } }
+  /* a surface with something solid standing on it is not a surface */
+  for(const b of M.boxes){ const [i0,i1]=span(b.x0-.01,b.x1+.01,X0,nx), [j0,j1]=span(b.z0-.01,b.z1+.01,Z0,nz);
+    for(let j=j0;j<=j1;j++) for(let i=i0;i<=i1;i++){ const k=j*nx+i, L=cand[k]||(cand[k]=[0]); for(let q=L.length-1;q>=0;q--) if(b.y0<=L[q]+.05&&b.h>L[q]+.05) L.splice(q,1); } }
+  for(const c of M.cyl){ const [i0,i1]=span(c.x-c.r,c.x+c.r,X0,nx), [j0,j1]=span(c.z-c.r,c.z+c.r,Z0,nz); for(let j=j0;j<=j1;j++) for(let i=i0;i<=i1;i++){ if(Math.hypot(X0+(i+.5)*cs-c.x,Z0+(j+.5)*cs-c.z)>=c.r) continue; const k=j*nx+i, L=cand[k]||(cand[k]=[0]); for(let q=L.length-1;q>=0;q--) if(c.h>L[q]+.05) L.splice(q,1); } }
+  const first=new Int32Array(N+1); let tot=0; for(let k=0;k<N;k++){ first[k]=tot; tot+=cand[k]?cand[k].length:1; } first[N]=tot;
+  const H=new Float32Array(tot), blk=new Uint8Array(tot); for(let k=0;k<N;k++){ const L=cand[k]; if(L){ L.sort((a,b)=>a-b); L.forEach((h,q)=>H[first[k]+q]=h); } }
+  for(const b of M.boxes){ if(b.h<=.45) continue; const [i0,i1]=span(b.x0-r,b.x1+r,X0,nx), [j0,j1]=span(b.z0-r,b.z1+r,Z0,nz);
+    for(let j=j0;j<=j1;j++) for(let i=i0;i<=i1;i++){ const k=j*nx+i; for(let n=first[k];n<first[k+1];n++) if(b.h>H[n]+.45&&b.y0<H[n]+1.6) blk[n]=1; } }
+  for(const t of M.trees.concat(M.cyl)){ const R=t.r+r, [i0,i1]=span(t.x-R,t.x+R,X0,nx), [j0,j1]=span(t.z-R,t.z+R,Z0,nz);
+    for(let j=j0;j<=j1;j++) for(let i=i0;i<=i1;i++){ if(Math.hypot(X0+(i+.5)*cs-t.x,Z0+(j+.5)*cs-t.z)>=R) continue; const k=j*nx+i; for(let n=first[k];n<first[k+1];n++) if(t.h>H[n]+.45) blk[n]=1; } }
+  const cellN=new Int32Array(tot); for(let k=0;k<N;k++) for(let n=first[k];n<first[k+1];n++) cellN[n]=k;
+  const NV={cs,nx,nz,X0,Z0,first,H,blk,cellN,tot,comp:new Int32Array(tot).fill(-1),gS:new Float32Array(tot),came:new Int32Array(tot),st:new Uint32Array(tot),cl:new Uint32Array(tot),gen:1,heapN:new Int32Array(1024),heapF:new Float32Array(1024)};
+  M.nav=NV;
+  /* connected areas, so a goal you cannot reach is moved to the nearest place you can */
+  let cid=0; const stack=new Int32Array(tot), nb=new Int32Array(8);
+  for(let s=0;s<tot;s++){ if(blk[s]||NV.comp[s]>=0) continue; let sp=0; stack[sp++]=s; NV.comp[s]=cid; let size=0;
+    while(sp){ const c=stack[--sp]; size++; const m=navNb(NV,c,nb); for(let q=0;q<m;q++){ const d=nb[q]; if(NV.comp[d]<0){ NV.comp[d]=cid; stack[sp++]=d; } } } cid++; }
+  NV.ncomp=cid; }
+/* the walkable node in a cell nearest a height (within tol), or -1 */
+function navAt(NV,k,h,tol){ let best=-1, bd=tol; for(let n=NV.first[k];n<NV.first[k+1];n++){ if(NV.blk[n]) continue; const d=Math.abs(NV.H[n]-h); if(d<=bd){ bd=d; best=n; } } return best; }
+/* neighbours of a node: the eight cells around it, at a height you can step to; no cutting corners */
+function navNb(NV,c,out){ const k=NV.cellN[c], nx=NV.nx, ci=k%nx, cj=(k/nx)|0, h=NV.H[c]; let m=0;
+  for(let dj=-1;dj<=1;dj++) for(let di=-1;di<=1;di++){ if(!di&&!dj) continue; const i=ci+di, j=cj+dj; if(i<0||j<0||i>=nx||j>=NV.nz) continue; const d=navAt(NV,j*nx+i,h,.45); if(d<0) continue;
+    if(di&&dj&&(navAt(NV,cj*nx+i,h,.45)<0||navAt(NV,j*nx+ci,h,.45)<0)) continue; out[m++]=d; } return m; }
+const navXZ=(NV,n)=>{ const k=NV.cellN[n]; return [NV.X0+((k%NV.nx)+.5)*NV.cs,NV.Z0+(((k/NV.nx)|0)+.5)*NV.cs]; };
+/* the nearest walkable node to a point at about height y (any height when y is null), only in area `comp` when given */
+function navLocate(M,x,z,y,comp,rad){ const NV=M.nav, cs=NV.cs, ci=clamp(Math.floor((x-NV.X0)/cs),0,NV.nx-1), cj=clamp(Math.floor((z-NV.Z0)/cs),0,NV.nz-1); let best=-1, bd=1e9;
+  for(let R=0;R<=(rad||12);R++){ for(let dj=-R;dj<=R;dj++) for(let di=-R;di<=R;di++){ if(Math.max(Math.abs(di),Math.abs(dj))!==R) continue; const i=ci+di, j=cj+dj; if(i<0||j<0||i>=NV.nx||j>=NV.nz) continue; const k=j*NV.nx+i;
+      for(let n=NV.first[k];n<NV.first[k+1];n++){ if(NV.blk[n]) continue; if(comp!=null&&NV.comp[n]!==comp) continue; const dy=y==null?NV.H[n]*.05:Math.abs(NV.H[n]-y); if(y!=null&&dy>1.3) continue; const d=(di*di+dj*dj)*cs*cs+dy*dy*4; if(d<bd){ bd=d; best=n; } } }
+    if(best>=0&&R*cs>Math.sqrt(bd)+cs) break; }
+  return best; }
+let NAVWORK=0;
+/* can you walk a straight line from a (at height ah) to b? Follows floors and stairs along the way; returns the height you arrive at, or null */
+function walkLine(M,ax,az,ah,bx,bz){ const NV=M.nav, L=Math.hypot(bx-ax,bz-az), n=Math.max(1,Math.ceil(L/(NV.cs*.5))); let h=ah;
+  for(let k=0;k<=n;k++){ const x=lerp(ax,bx,k/n), z=lerp(az,bz,k/n), i=Math.floor((x-NV.X0)/NV.cs), j=Math.floor((z-NV.Z0)/NV.cs); if(i<0||j<0||i>=NV.nx||j>=NV.nz) return null; const d=navAt(NV,j*NV.nx+i,h,.45); if(d<0) return null; h=NV.H[d]; }
+  return h; }
+function findPath(M,ax,az,bx,bz,ay,by){ const NV=M.nav, H=NV.H;
+  const s=navLocate(M,ax,az,ay||0,null,8); if(s<0) return null; const comp=NV.comp[s];
+  let t=navLocate(M,bx,bz,by==null?0:by,comp,6); if(t<0) t=navLocate(M,bx,bz,null,comp,24); if(t<0) return null;
+  const gen=++NV.gen, gS=NV.gS, came=NV.came, st=NV.st, cl=NV.cl, nb=new Int32Array(8), [tx,tz]=navXZ(NV,t), th=H[t];
+  const hf=n=>{ const [x,z]=navXZ(NV,n), dx=Math.abs(x-tx), dz=Math.abs(z-tz); return (Math.max(dx,dz)+.414*Math.min(dx,dz)+Math.abs(H[n]-th))/NV.cs*1.5; };
+  let hN=NV.heapN, hF=NV.heapF, hl=0;
+  const push=(n,f)=>{ if(hl>=hN.length){ const a=new Int32Array(hN.length*2), b=new Float32Array(hN.length*2); a.set(hN); b.set(hF); hN=NV.heapN=a; hF=NV.heapF=b; } let i=hl++; while(i>0){ const p=(i-1)>>1; if(hF[p]<=f) break; hN[i]=hN[p]; hF[i]=hF[p]; i=p; } hN[i]=n; hF[i]=f; };
+  const pop=()=>{ const top=hN[0], en=hN[--hl], ef=hF[hl]; let i=0; for(;;){ const l=2*i+1, r=l+1; let m=-1, mf=ef; if(l<hl&&hF[l]<mf){ m=l; mf=hF[l]; } if(r<hl&&hF[r]<mf){ m=r; } if(m<0) break; hN[i]=hN[m]; hF[i]=hF[m]; i=m; } hN[i]=en; hF[i]=ef; return top; };
+  st[s]=gen; gS[s]=0; came[s]=-1; push(s,hf(s)); let found=false, best=s, bh=1e9, it=0;
+  while(hl){ const c=pop(); if(cl[c]===gen) continue; cl[c]=gen; it++; if(c===t){ found=true; break; } const hc=hf(c); if(hc<bh){ bh=hc; best=c; } if(it>24000) break;
+    const ck=NV.cellN[c], m=navNb(NV,c,nb);
+    for(let q=0;q<m;q++){ const d=nb[q]; if(cl[d]===gen) continue; const dk=NV.cellN[d], diag=(dk%NV.nx)!==(ck%NV.nx)&&((dk/NV.nx)|0)!==((ck/NV.nx)|0), ng=gS[c]+(diag?1.414:1)+Math.abs(H[d]-H[c])*2;
+      if(st[d]!==gen||ng<gS[d]){ st[d]=gen; gS[d]=ng; came[d]=c; push(d,ng+hf(d)); } } }
+  NAVWORK+=it; const end=found?t:best;
+  const pts=[]; for(let c=end;c>=0;c=came[c]){ const [x,z]=navXZ(NV,c); pts.push([x,z,H[c]]); if(c===s) break; } pts.reverse();
+  /* string pulling: walk to the furthest point you can reach in a straight line */
+  const out=[]; let a=pts[0], k=1; out.push(a); if(Math.hypot(a[0]-ax,a[1]-az)<NV.cs*.75) out.pop();
+  while(k<pts.length){ let far=k; for(let q=k+1;q<pts.length&&q<k+48;q++){ const h=walkLine(M,a[0],a[1],a[2],pts[q][0],pts[q][1]); if(h!==null&&Math.abs(h-pts[q][2])<.3) far=q; else if(q>far+6) break; } out.push(pts[far]); a=pts[far]; k=far+1; }
   return out; }
 
 /* ---------- sight: a 3D segment against the boxes (low walls can be seen over, windows can be seen through), trees, round bunkers and smoke; bushes hide you past 3 m ---------- */
 function segBox(ax,ay,az,bx,by,bz,b){ let t0=0,t1=1; const d=[bx-ax,by-ay,bz-az], o=[ax,ay,az], lo=[b.x0,b.y0||0,b.z0], hi=[b.x1,b.h,b.z1];
   for(let k=0;k<3;k++){ if(Math.abs(d[k])<1e-9){ if(o[k]<lo[k]||o[k]>hi[k]) return -1; continue; } let u=(lo[k]-o[k])/d[k], v=(hi[k]-o[k])/d[k]; if(u>v){ const s=u; u=v; v=s; } t0=Math.max(t0,u); t1=Math.min(t1,v); if(t0>t1) return -1; } return t0; }
 let SMOKES=[];
-function losClear(M,a,b,bushes){ for(const bx of M.boxes){ if(segBox(a[0],a[1],a[2],b[0],b[1],b[2],bx)>=0) return false; }
+function losClear(M,a,b,bushes){ const cells=cellsSeg(M,a[0],a[2],b[0],b[2]), q=++QS;
+  for(const c of cells) for(const bx of c.b){ if(bx._q===q) continue; bx._q=q; if(segBox(a[0],a[1],a[2],b[0],b[1],b[2],bx)>=0) return false; }
   const dx=b[0]-a[0], dz=b[2]-a[2], L2=dx*dx+dz*dz||1e-9;
-  for(const t of M.trees){ const u=clamp(((t.x-a[0])*dx+(t.z-a[2])*dz)/L2,0,1); if(Math.hypot(a[0]+dx*u-t.x,a[2]+dz*u-t.z)<t.r) return false; }
-  for(const c of M.cyl){ const u=clamp(((c.x-a[0])*dx+(c.z-a[2])*dz)/L2,0,1); if(Math.hypot(a[0]+dx*u-c.x,a[2]+dz*u-c.z)<c.r&&lerp(a[1],b[1],u)<c.h) return false; }
+  for(const c of cells) for(const t of c.t){ if(t._q===q) continue; t._q=q; const u=clamp(((t.x-a[0])*dx+(t.z-a[2])*dz)/L2,0,1); if(Math.hypot(a[0]+dx*u-t.x,a[2]+dz*u-t.z)<t.r&&lerp(a[1],b[1],u)<t.h) return false; }
+  for(const cc of cells) for(const c of cc.c){ if(c._q===q) continue; c._q=q; const u=clamp(((c.x-a[0])*dx+(c.z-a[2])*dz)/L2,0,1); if(Math.hypot(a[0]+dx*u-c.x,a[2]+dz*u-c.z)<c.r&&lerp(a[1],b[1],u)<c.h) return false; }
   for(const s of SMOKES){ if(s.r<.5) continue; const dy=b[1]-a[1], L3=L2+dy*dy, u=clamp(((s.x-a[0])*dx+(s.y-a[1])*dy+(s.z-a[2])*dz)/L3,0,1); if(Math.hypot(a[0]+dx*u-s.x,a[1]+dy*u-s.y,a[2]+dz*u-s.z)<s.r*.85) return false; }
-  if(bushes) for(const q of M.bush){ const u=clamp(((q.x-a[0])*dx+(q.z-a[2])*dz)/L2,0,1); const y=lerp(a[1],b[1],u); if(y<1.25&&Math.hypot(a[0]+dx*u-q.x,a[2]+dz*u-q.z)<q.r&&Math.sqrt(L2)*Math.min(u,1-u)>3) return false; }
+  if(bushes){ const L=Math.sqrt(L2); for(const c of cells) for(const qb of c.u){ if(qb._q===q) continue; qb._q=q; const u=clamp(((qb.x-a[0])*dx+(qb.z-a[2])*dz)/L2,0,1); const y=lerp(a[1],b[1],u); if(y<(qb.hh||1.25)&&Math.hypot(a[0]+dx*u-qb.x,a[2]+dz*u-qb.z)<qb.r&&L*Math.min(u,1-u)>3) return false; } }
   return true; }
 
 /* ---------- audio ---------- */
@@ -363,13 +836,14 @@ const DIFF=[{n:'Rookie',react:1.5,err:1.7,lead:.5},{n:'Regular',react:1,err:1,le
 const TEAMS=PB?[{name:'Dynasty',col:'#facc15',arm:'#fde047',kit:'#1e3a8a',helm:'#111827',paint:[1,.86,.1],jersey2:'#facc15'},{name:'Impact',col:'#ec4899',arm:'#f472b6',kit:'#18181b',helm:'#0f172a',paint:[.95,.3,.7],jersey2:'#ec4899'}]
   :[{name:'Blue',col:'#2563eb',arm:'#3b82f6',kit:'#4d5a3a',helm:'#3f4a2b'},{name:'Red',col:'#dc2626',arm:'#ef4444',kit:'#9c8558',helm:'#7a6a48'}];
 const CALLSIGNS=['Viper','Ghost','Hawk','Rook','Bishop','Kilo','Echo','Fox','Moose','Tank','Ranger','Spud','Nova','Jinx','Bear','Dutch','Smokey','Ziggy','Tex','Pixel','Ollie','Mack','Juno','Bravo','Sly'];
-const MODES=PB?{race:'Race to points (speedball)',elim:'Elimination',ctf:'Capture the flag',tdm:'Team deathmatch'}:{tdm:'Team deathmatch',elim:'Elimination',ctf:'Capture the flag',dom:'Domination'};
+const MODES=PB?{race:'Race to points (speedball)',elim:'Elimination',ctf:'Capture the flag',tdm:'Team deathmatch'}:{tdm:'Team deathmatch',elim:'Elimination',ctf:'Capture the flag',dom:'Domination',bomb:'Search & destroy'};
+const ROUNDS=m=>m==='elim'||m==='race'||m==='bomb';
 const keys=new Set(); const held=a=>a.some(k=>keys.has(k));
 const SKEY=PB?'rinkRivalsPaintballV1':'rinkRivalsAirsoftV1'; let SV=(()=>{ try{ return Object.assign({games:0,wins:0,hits:0,outs:0,shots:0,caps:0,xp:0},JSON.parse(localStorage.getItem(SKEY)||'null')||{}); }catch(e){ return {games:0,wins:0,hits:0,outs:0,shots:0,caps:0,xp:0}; } })();
 const saveSV=()=>{ try{ localStorage.setItem(SKEY,JSON.stringify(SV)); }catch(e){} };
 const PKEY=PB?'rinkRivalsPaintballPrefs':'rinkRivalsAirsoftPrefs';
 try{ const p=JSON.parse(localStorage.getItem(PKEY)||'null'); if(p) ({mapSel,modeSel,priSel,secSel,teamSize,diff,medic,raceTo,att}=Object.assign({mapSel,modeSel,priSel,secSel,teamSize,diff,medic,raceTo,att},p)); }catch(e){}
-if(!MAPDEF[mapSel]||!(PB?MAPDEF[mapSel].pb:MAPDEF[mapSel].as)) mapSel=PB?'speed':'wood'; if(!MODES[modeSel]) modeSel=PB?'race':'tdm'; if(!PRIMARY.includes(priSel)) priSel=PRIMARY[0]; if(!SECONDARY.includes(secSel)) secSel=SECONDARY[0];
+if(!MAPDEF[mapSel]||!(PB?MAPDEF[mapSel].pb:MAPDEF[mapSel].as)) mapSel=PB?'speed':'wood'; if(![3,5,7,10,12].includes(teamSize)) teamSize=5; if(!MODES[modeSel]) modeSel=PB?'race':'tdm'; if(!PRIMARY.includes(priSel)) priSel=PRIMARY[0]; if(!SECONDARY.includes(secSel)) secSel=SECONDARY[0];
 const savePrefs=()=>{ try{ localStorage.setItem(PKEY,JSON.stringify({mapSel,modeSel,priSel,secSel,teamSize,diff,medic,raceTo,att})); }catch(e){} };
 const MAPS={}; const getMap=id=>MAPS[id]||(MAPS[id]=buildMap(id));
 const eyeH=e=>1.62-.6*e.crouch;
@@ -383,37 +857,42 @@ function mkEnt(i,team,name,bot,pri,sec,eatt){ const w=[pri,sec]; const e={i,team
   st:{hits:0,outs:0,shots:0,ff:0,caps:0,revives:0},ai:bot?{think:Math.random()*.3,path:null,pi:0,goal:null,target:null,seenT:0,burst:0,pause:0,cover:null,sup:0,mem:{},strafe:Math.random()<.5?1:-1,react:0,aimE:[0,0],stuckT:0,plan:0,role:Math.random()<.5?'att':'def'}:null};
   e.ammo=w.map((id,k)=>{ const g=gunOf(e,k); return {mag:g.mag,res:g.mag*(g.mags-1)}; }); e.auto=WEAPONS[pri].auto; return e; }
 function spawnPoint(team,k){ const M=A.M, [sx,sz]=M.spawn[team]; const n=A.ents.filter(e=>e.team===team).length; const z=sz+((k%n)-(n-1)/2)*(M.speed?2.2:1.6), x=sx+(team?-1:1)*Math.floor(k/7)*1.4; return [x,z]; }
-function resetEnt(e,x,z){ e.spawnN=(e.spawnN||0)+1; Object.assign(e,{x,z,y:0,vy:0,vx:0,vz:0,yaw:e.team?Math.PI:0,pitch:0,crouch:0,out:false,outT:0,down:false,downT:0,reloadT:0,cycT:0,nades:PB?0:2,smokes:PB?0:1,carry:null,splats:[]}); if(e.ai){ Object.assign(e.ai,{path:null,goal:null,target:null,cover:null,mem:{}}); } }
+function resetEnt(e,x,z){ e.spawnN=(e.spawnN||0)+1; Object.assign(e,{x,z,y:0,vy:0,vx:0,vz:0,onG:true,use:false,yaw:e.team?Math.PI:0,pitch:0,crouch:0,out:false,outT:0,down:false,downT:0,reloadT:0,cycT:0,nades:PB?0:2,smokes:PB?0:1,carry:null,splats:[]}); if(e.ai){ Object.assign(e.ai,{path:null,goal:null,target:null,cover:null,mem:{},pend:false,outPlan:false,stuckN:0}); } }
 function placeAll(){ const per=[0,0]; for(const e of A.ents){ const k=per[e.team]++; const [x,z]=spawnPoint(e.team,k); resetEnt(e,x,z); e.ammo=e.w.map((id,k)=>{ const g=gunOf(e,k); return {mag:g.mag,res:g.mag*(g.mags-1)}; }); }
-  A.nades=[]; SMOKES=A.smokes=[]; resetFlags(); }
-function resetFlags(){ const M=A.M; A.flags=[]; if(A.mode==='ctf'){ for(let t=0;t<2;t++){ const [sx,sz]=M.spawn[t]; const hx=sx+(t?-3:3); A.flags.push({team:t,home:[hx,sz],x:hx,z:sz,carrier:null,dropT:0}); } }
+  A.nades=[]; SMOKES=A.smokes=[]; A.intel=[{},{}]; resetFlags(); if(A.mode==='bomb') resetBomb(); }
+function resetFlags(){ const M=A.M; A.flags=[]; if(A.mode==='ctf'){ for(let t=0;t<2;t++){ const [sx,sz]=M.spawn[t]; const hx=sx+(t?-3:3)*(M.big?1.4:1); A.flags.push({team:t,home:[hx,sz],x:hx,z:sz,carrier:null,dropT:0}); } }
   if(A.mode==='race') A.flags.push({team:-1,home:[0,0],x:0,z:0,carrier:null,dropT:0}); }
 function newGame(){ const M=getMap(mapSel); let pri=priSel; if(M.cqb&&!WEAPONS[pri].cqb) pri='m4';
-  const timed=modeSel==='tdm'||modeSel==='dom'||modeSel==='ctf';
-  A={M,mode:modeSel,ents:[],bbs:[],fx:[],feed:[],splats:[],nades:[],smokes:[],flags:[],points:[],t:0,clock:modeSel==='ctf'?600:timed?480:0,score:[0,0],limit:modeSel==='tdm'?teamSize*6:modeSel==='dom'?150:modeSel==='ctf'?3:modeSel==='race'?raceTo:4,round:1,roundT:0,over:false,msg:null,msgT:0,dmgDir:[],marker:0,spect:null,introT:2.5,domT:0};
+  const timed=modeSel==='tdm'||modeSel==='dom'||modeSel==='ctf', ts=M.big?teamSize:Math.min(7,teamSize);
+  A={M,mode:modeSel,ts,ents:[],bbs:[],fx:[],feed:[],splats:[],nades:[],smokes:[],flags:[],points:[],intel:[{},{}],t:0,clock:modeSel==='ctf'?(M.big?900:600):timed?(M.big?600:480):0,score:[0,0],limit:modeSel==='tdm'?ts*6:modeSel==='dom'?(M.big?220:150):modeSel==='ctf'?3:modeSel==='race'?raceTo:4,round:1,roundT:0,over:false,msg:null,msgT:0,dmgDir:[],marker:0,spect:null,introT:2.5,domT:0};
   SMOKES=A.smokes;
-  if(modeSel==='dom') A.points=(M.points||[[0,0]]).map((p,k)=>({name:'ABC'[k],x:p[0],z:p[1],own:-1,prog:0,by:-1}));
+  if(modeSel==='dom') A.points=(M.points||[[0,0]]).map((p,k)=>({name:'ABCDE'[k],x:p[0],z:p[1],own:-1,prog:0,by:-1}));
   const names=CALLSIGNS.slice().sort(()=>Math.random()-.5); let n=0;
   A.ents.push(mkEnt(0,0,'You',false,pri,secSel,WEAPONS[pri].att?Object.assign({},att):null));
-  const pool=PB?['cs3','cs3','cs3','t98','tmc','pump']:M.cqb?['m4','m4','ak','mp5','mp5','g36','p90','m870']:['m4','m4','ak','ak','g36','mp5','p90','vsr','sr25','m249','m870'];
-  for(let t=0;t<2;t++) for(let k=(t?0:1);k<teamSize;k++){ const wp=pick(pool), ba=WEAPONS[wp].att?{optic:pick(['iron','dot','dot','acog']),muzzle:pick(['none','none','supp','tracer']),mag:pick(['mid','hi']),grip:pick(['none','fore'])}:null;
+  const pool=PB?['cs3','cs3','cs3','t98','tmc','pump']:M.cqb?['m4','m4','ak','mp5','mp5','g36','p90','m870']:M.big?['m4','m4','ak','ak','g36','mp5','p90','vsr','vsr','sr25','sr25','m249','m870']:['m4','m4','ak','ak','g36','mp5','p90','vsr','sr25','m249','m870'];
+  for(let t=0;t<2;t++) for(let k=(t?0:1);k<ts;k++){ const wp=pick(pool), ba=WEAPONS[wp].att?{optic:pick(['iron','dot','dot','acog']),muzzle:pick(['none','none','supp','tracer']),mag:pick(['mid','hi']),grip:pick(['none','fore'])}:null;
     A.ents.push(mkEnt(A.ents.length,t,names[n++],true,wp,PB?'tipx':Math.random()<.2?'m203':'glock',ba)); }
-  placeAll(); phase='play'; $('menu').classList.add('hidden'); $('result').classList.add('hidden'); paused=false; built3=false;
-  banner(M.name,`${MODES[modeSel]} · ${teamSize} v ${teamSize} · you are on ${TEAMS[0].name}`,TEAMS[0].col,2.4); sfx.whistle(); speak(PB?'Ten seconds! Five! Game on!':'Game on!',true); renderKeysHelp(); updateBoard(); }
+  placeAll(); if(M.big&&!M.warm){ M.warm=true; perches(M); for(let k=0;k<6;k++) findPath(M,M.spawn[k%2][0],M.spawn[k%2][1],(k-2.5)*M.w*.12,(k%3-1)*M.d*.3); }
+  phase='play'; $('menu').classList.add('hidden'); $('result').classList.add('hidden'); paused=false; built3=false;
+  banner(M.name,`${MODES[modeSel]} · ${ts} v ${ts} · you are on ${TEAMS[0].name}`,TEAMS[0].col,2.4); sfx.whistle(); speak(PB?'Ten seconds! Five! Game on!':'Game on!',true); renderKeysHelp(); updateBoard(); }
 
 /* ---------- movement and collisions ---------- */
-function collide(e){ const M=A.M, r=.32; for(let it=0;it<2;it++){ for(const b of M.boxes){ if(b.h<=.45||e.y>b.h-.1||b.y0>1.7) continue; const cx=clamp(e.x,b.x0,b.x1), cz=clamp(e.z,b.z0,b.z1), dx=e.x-cx, dz=e.z-cz, d=Math.hypot(dx,dz);
+function collide(e){ const M=A.M, r=.32; const near=nearRect(M,'b',e.x-1,e.z-1,e.x+1,e.z+1), round=nearRect(M,'t',e.x-1,e.z-1,e.x+1,e.z+1).concat(nearRect(M,'c',e.x-1,e.z-1,e.x+1,e.z+1));
+  for(let it=0;it<2;it++){ for(const b of near){ if(b.h<=e.y+STEP||b.y0>=e.y+1.6) continue; const cx=clamp(e.x,b.x0,b.x1), cz=clamp(e.z,b.z0,b.z1), dx=e.x-cx, dz=e.z-cz, d=Math.hypot(dx,dz);
       if(d<r){ if(d>1e-6){ e.x=cx+dx/d*r; e.z=cz+dz/d*r; } else { const o=[e.x-b.x0,b.x1-e.x,e.z-b.z0,b.z1-e.z], m=Math.min(...o); if(m===o[0]) e.x=b.x0-r; else if(m===o[1]) e.x=b.x1+r; else if(m===o[2]) e.z=b.z0-r; else e.z=b.z1+r; } } }
-    for(const t of M.trees.concat(M.cyl)){ const dx=e.x-t.x, dz=e.z-t.z, d=Math.hypot(dx,dz); if(d<t.r+r&&d>1e-6&&(t.h===undefined||e.y<t.h-.1)){ e.x=t.x+dx/d*(t.r+r); e.z=t.z+dz/d*(t.r+r); } } } }
-function moveEnt(e,wx,wz,dt){ const acc=e.y>0?3:12; e.vx+=(wx-e.vx)*Math.min(1,dt*acc); e.vz+=(wz-e.vz)*Math.min(1,dt*acc); e.x+=e.vx*dt; e.z+=e.vz*dt;
-  if(e.y>0||e.vy>0){ e.vy-=G*dt; e.y=Math.max(0,e.y+e.vy*dt); if(e.y===0) e.vy=0; }
-  collide(e); e.spd=Math.hypot(e.vx,e.vz); e.ph+=e.spd*dt*1.9; }
-function separate(){ const E=A.ents; for(let i=0;i<E.length;i++) for(let j=i+1;j<E.length;j++){ const a=E[i], b=E[j], dx=b.x-a.x, dz=b.z-a.z, d=Math.hypot(dx,dz); if(d<.62&&d>1e-6){ const p=(.62-d)/2; a.x-=dx/d*p; a.z-=dz/d*p; b.x+=dx/d*p; b.z+=dz/d*p; } } }
+    for(const t of round){ const dx=e.x-t.x, dz=e.z-t.z, d=Math.hypot(dx,dz); if(d<t.r+r&&d>1e-6&&(t.h===undefined||e.y<t.h-.1)){ e.x=t.x+dx/d*(t.r+r); e.z=t.z+dz/d*(t.r+r); } } } }
+/* you stand on the ground or on whatever is under your feet (stairs, floors, a tower deck), step up anything up to 0.5 m and fall off edges */
+function moveEnt(e,wx,wz,dt){ const acc=e.onG===false?3:12; e.vx+=(wx-e.vx)*Math.min(1,dt*acc); e.vz+=(wz-e.vz)*Math.min(1,dt*acc); e.x+=e.vx*dt; e.z+=e.vz*dt;
+  collide(e); const sup=supportAt(A.M,e.x,e.z,e.y);
+  if(e.vy>0||e.y>sup+.02&&!(e.onG!==false&&e.y-sup<=STEP+.05)){ e.vy-=G*dt; e.y+=e.vy*dt; if(e.y<=sup){ e.y=sup; e.vy=0; } e.onG=e.y<=sup+.001; }
+  else { e.y=e.y<sup?Math.min(sup,lerp(e.y,sup,Math.min(1,dt*22))+dt*.6):Math.max(sup,lerp(e.y,sup,Math.min(1,dt*22))-dt*.6); e.vy=0; e.onG=true; }
+  if(!(e.y>=0)) e.y=0; e.spd=Math.hypot(e.vx,e.vz); e.ph+=e.spd*dt*1.9; }
+function separate(){ const E=A.ents; for(let i=0;i<E.length;i++) for(let j=i+1;j<E.length;j++){ const a=E[i], b=E[j], dx=b.x-a.x, dz=b.z-a.z, d=Math.hypot(dx,dz); if(d<.62&&d>1e-6&&Math.abs(a.y-b.y)<1.2){ const p=(.62-d)/2; a.x-=dx/d*p; a.z-=dz/d*p; b.x+=dx/d*p; b.z+=dz/d*p; } } }
 
 /* ---------- firing and projectile flight ---------- */
 const fwdOf=(yaw,pitch)=>[Math.cos(yaw)*Math.cos(pitch),Math.sin(pitch),Math.sin(yaw)*Math.cos(pitch)];
 function muzzle(e){ const f=fwdOf(e.yaw,e.pitch), rx=-Math.sin(e.yaw), rz=Math.cos(e.yaw), y=eyeH(e)-.12+e.y; return [e.x+f[0]*.55+rx*.12,y+f[1]*.55,e.z+f[2]*.55+rz*.12]; }
-function spreadOf(e){ const w=gunOf(e); let s=w.spread+Math.min(1,e.spd/4)*.014+(e.y>0?.03:0); if(e.crouch>.5) s*=.75; if(e.ads) s*=(w.kind==='bolt'||w.kind==='dmr')?.15:.5*(w.adsK||1); else if(w.kind==='bolt'||w.kind==='dmr') s*=3; if(w.heavy&&e.spd>.5) s*=1.6; return s; }
+function spreadOf(e){ const w=gunOf(e); let s=w.spread+Math.min(1,e.spd/4)*.014+(e.onG===false?.03:0); if(e.crouch>.5) s*=.75; if(e.ads) s*=(w.kind==='bolt'||w.kind==='dmr')?.15:.5*(w.adsK||1); else if(w.kind==='bolt'||w.kind==='dmr') s*=3; if(w.heavy&&e.spd>.5) s*=1.6; return s; }
 function fire(e){ const w=gunOf(e), a=e.ammo[e.cur];
   if(e.reloadT>0||e.cycT>0||e.out||e.down) return false; if(a.mag<=0){ if(!e.bot&&!e.emptyClick){ sfx.empty(); e.emptyClick=true; } startReload(e); return false; }
   a.mag--; e.cycT=1/w.rps; e.st.shots++; e.recoil=Math.min(1,e.recoil+(w.kind==='bolt'||w.kind==='dmr'?.9:w.kind==='shotgun'||w.kind==='shell'?1:.35)*(w.recoilK||1));
@@ -439,14 +918,15 @@ function stepBBs(dt){ const M=A.M, me=ME();
     b.x+=b.vx*dt; b.y+=b.vy*dt; b.z+=b.vz*dt;
     const pcol=TEAMS[b.team].paint;
     if(b.y<=0||b.t>3){ b.dead=true; if(b.y<=0){ if(b.pb){ splat(b,[0,1,0],pcol); } else puff(b,'#a8a29e',.4); } continue; }
-    let hitW=null; for(const q of M.boxes) if(b.x>q.x0&&b.x<q.x1&&b.z>q.z0&&b.z<q.z1&&b.y<q.h&&b.y>(q.y0||0)){ hitW=q; break; }
-    let hitC=null; if(!hitW) for(const t of M.trees) if(b.y<t.h&&Math.hypot(b.x-t.x,b.z-t.z)<t.r){ hitC=t; break; }
-    if(!hitW&&!hitC) for(const c of M.cyl) if(b.y<c.h&&Math.hypot(b.x-c.x,b.z-c.z)<c.r){ hitC=c; break; }
+    const cell=cellAt(M,b.x,b.z);
+    let hitW=null; for(const q of cell.b) if(b.x>q.x0&&b.x<q.x1&&b.z>q.z0&&b.z<q.z1&&b.y<q.h&&b.y>(q.y0||0)){ hitW=q; break; }
+    let hitC=null; if(!hitW) for(const t of cell.t) if(b.y<t.h&&Math.hypot(b.x-t.x,b.z-t.z)<t.r){ hitC=t; break; }
+    if(!hitW&&!hitC) for(const c of cell.c) if(b.y<c.h&&Math.hypot(b.x-c.x,b.z-c.z)<c.r){ hitC=c; break; }
     if(hitW||hitC){ b.dead=true; const d=Math.hypot(b.x-me.x,b.z-me.z);
       if(b.pb){ const brk=v>30||Math.random()<.6; if(brk){ b.x=b.px; b.y=b.py; b.z=b.pz; const n=hitW?hitFace(b,hitW):norm2([b.x-hitC.x,0,b.z-hitC.z]); splat(b,n,pcol); if(d<20) sfx.splat(clamp(1.5/(1+d*.25),0,1)); } else if(d<12) sfx.bounce(); }
       else { puff(b,'#fef3c7',1); if(d<14) sfx.tick(clamp(1.5/(1+d*.3),0,1)); } continue; }
-    for(const q of M.bush) if(b.y<1.3&&Math.hypot(b.x-q.x,b.z-q.z)<q.r&&Math.random()<.18){ b.vx*=.6; b.vz*=.6; b.vy+=rnd(-3,3); b.vx+=rnd(-3,3); b.vz+=rnd(-3,3); }
-    for(const e of A.ents){ if(e===b.own||e.out) continue; if(Math.abs(e.x-b.x)>2||Math.abs(e.z-b.z)>2) continue; const top=e.y+1.45-.55*e.crouch-(e.down?.8:0);
+    for(const q of cell.u) if(b.y<(q.hh||1.3)&&Math.hypot(b.x-q.x,b.z-q.z)<q.r&&Math.random()<.18){ b.vx*=.6; b.vz*=.6; b.vy+=rnd(-3,3); b.vx+=rnd(-3,3); b.vz+=rnd(-3,3); }
+    for(const e of A.ents){ if(e===b.own||e.out) continue; if(Math.abs(e.x-b.x)>2||Math.abs(e.z-b.z)>2||b.y<e.y-.5||b.y>e.y+2.5) continue; const top=e.y+1.45-.55*e.crouch-(e.down?.8:0);
       const dBody=segVert(b.px,b.py,b.pz,b.x,b.y,b.z,e.x,e.y+.15,top,e.z), dHead=segVert(b.px,b.py,b.pz,b.x,b.y,b.z,e.x,e.y+eyeH(e)-.02-(e.down?1:0),e.y+eyeH(e)+.06-(e.down?1:0),e.z);
       if(dBody<(b.pb?.27:.25)||dHead<(b.pb?.17:.15)){ b.dead=true; if(e.down) break; if(b.pb){ const brk=Math.random()<clamp(.25+v/91*.72,.2,.97); if(brk) registerHit(e,b,dHead<.17); else { if(e===me||b.own===me) toast(e===me?'Bounced off you! Still in.':'Bounce! No break.','#fde047'); sfx.bounce(); } } else if(v>12) registerHit(e,b); break; }
       if(e.ai&&dBody<1.3) e.ai.sup=.7; if(e===me&&dBody<1&&!b.cracked){ b.cracked=true; sfx.crack(); } } }
@@ -456,34 +936,36 @@ function puff(b,col,s){ A.fx.push({x:b.x,y:b.y,z:b.z,t:0,col,s}); if(A.fx.length
 /* honor system: a hit is a hit. The player calls it, raises a hand and walks back to respawn (or goes down for a medic) */
 function registerHit(v,b,head,bySrc){ if(NETG()) return; const s=b?b.own:bySrc, ff=s.team===v.team, me=ME();
   if(v.carry){ const f=v.carry; f.carrier=null; f.x=v.x; f.z=v.z; f.dropT=0; v.carry=null; A.feed.unshift({t:0,txt:`${v.name} dropped the flag`,col:'#fde047'}); }
-  if(medic&&!PB&&A.mode!=='elim'){ v.down=true; v.downT=0; } else { v.out=true; v.outT=0; }
+  if(A.bomb&&A.bomb.carrier===v){ const B=A.bomb; B.carrier=null; B.x=v.x; B.z=v.z; B.y=v.y; B.plantP=0; A.feed.unshift({t:0,txt:`${v.name} dropped the bomb`,col:'#fb923c'}); }
+  if(medic&&!PB&&!ROUNDS(A.mode)){ v.down=true; v.downT=0; } else { v.out=true; v.outT=0; }
   if(b&&b.pb){ v.splats.push({y:clamp(b.y-v.y,.3,1.6),a:Math.atan2(b.z-v.z,b.x-v.x)-v.yaw,col:TEAMS[s.team].paint}); }
   v.st.outs++; if(!ff){ s.st.hits++; if(A.mode==='tdm') A.score[s.team]++; } else s.st.ff++;
   A.feed.unshift({t:0,txt:`${s.name} ${ff?'⚠':'➜'} ${v.name}${ff?' (friendly fire)':head?' (mask)':''}`,col:ff?'#fbbf24':TEAMS[s.team].arm}); if(A.feed.length>6) A.feed.pop();
   const d=Math.hypot(v.x-me.x,v.z-me.z);
   if(v===me){ sfx.hitme(); speak(PB?'Hit! I\'m out!':'Hit!',true); A.dmgDir.push({a:Math.atan2(s.z-me.z,s.x-me.x),t:0}); SV.outs++; }
   else { if(d<35) speak(pick(PB?['Hit!','I\'m hit!','Out!']:['Hit!','Hit!','Hit! Hit!','Ow, hit!']),false,1.3); if(s===me){ A.marker=.35; sfx.marker(); SV.hits++; SV.xp+=10; if(ff) toast('Friendly fire! That was your teammate.','#fbbf24'); } }
-  if(A.mode==='elim'||A.mode==='race') checkRound(); }
+  if(ROUNDS(A.mode)) checkRound(); }
 
 /* ---------- grenades and smoke ---------- */
 function throwNade(e,kind,tx,tz){ if(e.out||e.down) return; if(kind==='nade'?e.nades<=0:e.smokes<=0) return; if(kind==='nade') e.nades--; else e.smokes--;
   let f; if(tx!==undefined){ const d=Math.hypot(tx-e.x,tz-e.z), sp=clamp(Math.sqrt(d*G/Math.sin(2*.6)),4,16); f=[Math.cos(Math.atan2(tz-e.z,tx-e.x))*Math.cos(.6)*sp,Math.sin(.6)*sp,Math.sin(Math.atan2(tz-e.z,tx-e.x))*Math.cos(.6)*sp]; }
   else { const dir=fwdOf(e.yaw,e.pitch+.25); f=[dir[0]*14,dir[1]*14+1.5,dir[2]*14]; }
-  A.nades.push({x:e.x,y:e.y+1.5,z:e.z,vx:f[0],vy:f[1],vz:f[2],t:0,kind,own:e,fuse:kind==='nade'?3:1.6}); sfx.pin(); if(!e.bot) toast(kind==='nade'?'Grenade out!':'Smoke out!','#fde047'); else if(Math.hypot(e.x-ME().x,e.z-ME().z)<30) speak(kind==='nade'?'Grenade!':'Smoke!',false); }
+  A.nades.push({x:e.x,y:e.y+1.5,py:e.y+1.5,z:e.z,vx:f[0],vy:f[1],vz:f[2],t:0,kind,own:e,fuse:kind==='nade'?3:1.6}); sfx.pin(); if(!e.bot) toast(kind==='nade'?'Grenade out!':'Smoke out!','#fde047'); else if(Math.hypot(e.x-ME().x,e.z-ME().z)<30) speak(kind==='nade'?'Grenade!':'Smoke!',false); }
 function stepNades(dt){ const M=A.M, me=ME();
-  for(const n of A.nades){ n.t+=dt; n.vy-=G*dt; const ox=n.x, oz=n.z; n.x+=n.vx*dt; n.y+=n.vy*dt; n.z+=n.vz*dt;
+  for(const n of A.nades){ n.t+=dt; n.vy-=G*dt; const ox=n.x, oz=n.z; if(n.py===undefined) n.py=n.y; n.x+=n.vx*dt; n.y+=n.vy*dt; n.z+=n.vz*dt;
     if(n.y<.06){ n.y=.06; n.vy=-n.vy*.3; n.vx*=.6; n.vz*=.6; }
-    for(const q of M.boxes) if(n.x>q.x0&&n.x<q.x1&&n.z>q.z0&&n.z<q.z1&&n.y<q.h&&n.y>(q.y0||0)){ n.x=ox; n.z=oz; n.vx*=-.35; n.vz*=-.35; break; }
+    for(const q of cellAt(M,n.x,n.z).b) if(n.x>q.x0&&n.x<q.x1&&n.z>q.z0&&n.z<q.z1&&n.y<q.h&&n.y>(q.y0||0)){ if(n.py>=q.h-.03){ n.y=q.h+.06; n.vy=Math.abs(n.vy)*.3; n.vx*=.6; n.vz*=.6; } else if(n.py<=(q.y0||0)+.03){ n.y=(q.y0||0)-.06; n.vy=-Math.abs(n.vy)*.3; } else { n.x=ox; n.z=oz; n.vx*=-.35; n.vz*=-.35; } break; }
+    n.py=n.y;
     if(n.t>=n.fuse&&!n.done){ n.done=true; const d=Math.hypot(n.x-me.x,n.z-me.z);
       if(n.kind==='nade'){ sfx.nade(clamp(2/(1+d*.15),0,1)); for(let k=0;k<26;k++) A.fx.push({x:n.x+rnd(-1.5,1.5),y:rnd(.1,1.4),z:n.z+rnd(-1.5,1.5),t:0,col:'#fef3c7',s:.8});
         /* a BB grenade sprays everyone with a clear line within ~3.5 m, team-mates included (honor rules) */
-        for(const e of A.ents){ if(e.out||e.down) continue; const dd=Math.hypot(e.x-n.x,e.z-n.z); if(dd<3.6&&losClear(M,[n.x,.35,n.z],chest(e),false)&&Math.random()<1-dd/5) registerHit(e,null,false,n.own); } }
-      else { sfx.smoke(); A.smokes.push({x:n.x,y:1.4,z:n.z,r:0,t:0}); } } }
+        for(const e of A.ents){ if(e.out||e.down) continue; const dd=Math.hypot(e.x-n.x,e.z-n.z); if(dd<3.6&&Math.abs(e.y-n.y)<2.2&&losClear(M,[n.x,n.y+.3,n.z],chest(e),false)&&Math.random()<1-dd/5) registerHit(e,null,false,n.own); } }
+      else { sfx.smoke(); A.smokes.push({x:n.x,y:n.y+1.35,z:n.z,r:0,t:0}); } } }
   A.nades=A.nades.filter(n=>!n.done);
   for(const s of A.smokes){ s.t+=dt; s.r=s.t<3?4.6*s.t/3:s.t<20?4.6:Math.max(0,4.6*(1-(s.t-20)/4)); } A.smokes=A.smokes.filter(s=>s.t<24); SMOKES=A.smokes; }
 
 /* ---------- objectives: flags and control points ---------- */
-function stepObjectives(dt){ const me=ME();
+function stepObjectives(dt){ const me=ME(); if(A.mode==='bomb') stepBomb(dt);
   for(const f of A.flags){ if(f.carrier){ f.x=f.carrier.x; f.z=f.carrier.z; continue; }
     if(f.team>=0&&(f.x!==f.home[0]||f.z!==f.home[1])){ f.dropT+=dt; if(f.dropT>25){ f.x=f.home[0]; f.z=f.home[1]; A.feed.unshift({t:0,txt:`${TEAMS[f.team].name} flag returned`,col:TEAMS[f.team].arm}); } }
     for(const e of A.ents){ if(e.out||e.down||e.carry) continue; if(Math.hypot(e.x-f.x,e.z-f.z)>1.3) continue;
@@ -498,61 +980,123 @@ function stepObjectives(dt){ const me=ME();
       if(p.own>=0&&p.prog>=0&&p.own!==t){ p.own=-1; p.prog=0; } if(p.own<0&&p.prog>=1){ p.own=t; p.prog=1; sfx.flag(); A.feed.unshift({t:0,txt:`${TEAMS[t].name} took point ${p.name}`,col:TEAMS[t].arm}); if(Math.hypot(me.x-p.x,me.z-p.z)<20) speak(`${t===0?'We':'They'} captured ${p.name}`,false); } }
     if(A.domT>=2){ A.domT-=2; for(const p of A.points) if(p.own>=0) A.score[p.own]++; if(A.score[0]>=A.limit||A.score[1]>=A.limit) endGame(); } } }
 
+/* ---------- search & destroy: attackers carry a bomb to one of the defenders' two sites and plant it (4 s); defenders stop them or defuse it (7 s) before it goes off (40 s); sides swap each round ---------- */
+function sitesOf(M,t){ if(M.sites) return M.sites[t]; const sx=M.spawn[t][0]*.42, out=[]; for(const sz of [-M.d*.27,M.d*.27]){ const n=navLocate(M,sx,sz,0,null,24); out.push(n>=0?navXZ(M.nav,n):[sx,sz]); } return out; }
+function resetBomb(){ const at=(A.round+1)%2; A.sites=sitesOf(A.M,1-at).map((p,k)=>({name:'AB'[k],x:p[0],z:p[1]})); A.clock=A.M.big?300:180;
+  const atk=A.ents.filter(e=>e.team===at), bots=atk.filter(e=>e.bot), c=bots.length?pick(bots):atk[0];
+  A.bomb={att:at,carrier:c||null,x:c?c.x:0,z:c?c.z:0,y:0,planted:false,site:-1,fuse:0,plantP:0,defP:0,defBy:null,target:Math.random()<.5?0:1,beep:0};
+  if(A.t>0||A.round>1) banner(`Round ${A.round}`,at===ME().team?'You attack: plant the bomb at A or B':'You defend sites A and B',TEAMS[at].col,2.4); }
+function stepBomb(dt){ const B=A.bomb, me=ME(); if(!B||A.roundOver>0||A.introT>0) return; const at=B.att, df=1-at;
+  if(!B.planted){ A.clock=Math.max(0,A.clock-dt); if(A.clock<=0){ A.score[df]++; endRound(df,'time ran out before the plant'); return; }
+    const c=B.carrier;
+    if(c){ B.x=c.x; B.z=c.z; B.y=c.y; const k=A.sites.findIndex(s=>Math.hypot(s.x-c.x,s.z-c.z)<3.5);
+      if(k>=0&&(c.bot||c.use)&&c.spd<1.3){ B.plantP+=dt; if(B.plantP>=4){ B.planted=true; B.site=k; B.fuse=40; B.carrier=null; B.plantP=0; c.st.caps++; if(c===me){ SV.caps++; SV.xp+=40; } sfx.flag(); A.feed.unshift({t:0,txt:`${c.name} planted the bomb at ${A.sites[k].name}`,col:'#fb923c'}); banner('Bomb planted',`Site ${A.sites[k].name} · 40 seconds`,'#f97316',2); speak(c.team===me.team?'Bomb planted. Defend it!':'The bomb is planted! Defuse it!',true); } }
+      else B.plantP=Math.max(0,B.plantP-dt*2); }
+    else for(const e of A.ents) if(e.team===at&&!e.out&&!e.down&&Math.hypot(e.x-B.x,e.z-B.z)<1.3&&Math.abs(e.y-B.y)<1.6){ B.carrier=e; A.feed.unshift({t:0,txt:`${e.name} has the bomb`,col:TEAMS[at].arm}); if(e===me) toast('You have the bomb: get to site A or B and hold E to plant','#fb923c'); break; }
+    return; }
+  B.fuse-=dt; B.beep-=dt; const dMe=Math.hypot(me.x-B.x,me.z-B.z);
+  if(B.beep<=0){ B.beep=clamp(B.fuse/40,.12,1); if(dMe<70) tone(1950,.05,'square',.045*clamp(1.6/(1+dMe*.08),0,1)); }
+  if(B.fuse<=0){ sfx.nade(clamp(3/(1+dMe*.05),0,1)); for(let k=0;k<60;k++) A.fx.push({x:B.x+rnd(-4,4),y:B.y+rnd(.1,3.5),z:B.z+rnd(-4,4),t:rnd(-.2,0),col:pick(['#fef3c7','#fb923c','#9ca3af']),s:2.2}); A.score[at]++; endRound(at,'the bomb went off'); return; }
+  let who=null, wd=1.35; for(const e of A.ents){ if(e.team!==df||e.out||e.down) continue; const d=Math.hypot(e.x-B.x,e.z-B.z); if(d<wd&&Math.abs(e.y-B.y)<1.6&&(e.bot||e.use)&&e.spd<1.3){ wd=d; who=e; } }
+  if(who){ B.defP+=dt; B.defBy=who; if(B.defP>=7){ who.st.caps++; if(who===me){ SV.caps++; SV.xp+=40; } A.feed.unshift({t:0,txt:`${who.name} defused the bomb`,col:TEAMS[df].arm}); A.score[df]++; endRound(df,`${who.name} defused the bomb`); } }
+  else { B.defP=0; B.defBy=null; } }
+
 /* ---------- bots ---------- */
 const RANGE={aeg:46,pistol:30,bolt:62,dmr:58,shotgun:22,shell:24,pb:34,pump:36};
 const chest=e=>[e.x,e.y+1.2-.5*e.crouch-(e.down?.8:0),e.z];
-function canSee(e,t){ const dx=t.x-e.x, dz=t.z-e.z, d=Math.hypot(dx,dz); if(d>80) return false; const fa=Math.abs(angD(Math.atan2(dz,dx)-e.yaw)); if(fa>1.25&&d>7) return false;
+function canSee(e,t){ const dx=t.x-e.x, dz=t.z-e.z, d=Math.hypot(dx,dz); if(d>(A.M.big?95:80)||Math.abs(t.y-e.y)>12) return false; const fa=Math.abs(angD(Math.atan2(dz,dx)-e.yaw)); if(fa>1.25&&d>7) return false;
   return losClear(A.M,[e.x,e.y+eyeH(e),e.z],chest(t),true)||losClear(A.M,[e.x,e.y+eyeH(e),e.z],[t.x,t.y+eyeH(t)-(t.down?1:0),t.z],true); }
-function coverSpot(e,thr,adv){ const M=A.M; let best=null, bs=-1e9; const dNow=Math.hypot(thr.x-e.x,thr.z-e.z), R=RANGE[gunOf(e).kind];
-  const cands=[]; for(const b of M.boxes){ if(b.kind==='fence'||b.h<.8||b.y0>0) continue; const cx=(b.x0+b.x1)/2, cz=(b.z0+b.z1)/2; if(Math.hypot(cx-e.x,cz-e.z)>(adv?20:14)) continue; cands.push({b,pts:[[b.x0-.6,cz],[b.x1+.6,cz],[cx,b.z0-.6],[cx,b.z1+.6],[b.x0-.6,b.z0-.6],[b.x1+.6,b.z1+.6],[b.x0-.6,b.z1+.6],[b.x1+.6,b.z0-.6]],low:b.h<1.5}); }
-  for(const c of M.cyl){ if(Math.hypot(c.x-e.x,c.z-e.z)>(adv?20:14)) continue; const pts=[]; for(let k=0;k<8;k++){ const a=k/8*Math.PI*2; pts.push([c.x+Math.cos(a)*(c.r+.55),c.z+Math.sin(a)*(c.r+.55)]); } cands.push({pts,low:c.h<1.5}); }
-  for(const cd of cands) for(const [px,pz] of cd.pts){
-      if(blockedAt(M,px,pz,.38)) continue; const ey=cd.low?1.0:1.6; if(losClear(M,[thr.x,1.5,thr.z],[px,ey,pz],false)) continue;
-      const dMe=Math.hypot(px-e.x,pz-e.z), dT=Math.hypot(px-thr.x,pz-thr.z), want=R*.75; if(adv&&dT>dNow-4) continue; const sc=(adv?-Math.abs(dT-want)*1.0-dMe*.3:-dMe*1.2-Math.abs(dT-want)*.35)-(cd.low?0:1.5); if(sc>bs){ bs=sc; best={x:px,z:pz,low:cd.low,dT}; } }
+function coverSpot(e,thr,adv){ const M=A.M; let best=null, bs=-1e9; const dNow=Math.hypot(thr.x-e.x,thr.z-e.z), R=RANGE[gunOf(e).kind], rr=adv?20:14;
+  const cands=[]; for(const b of nearRect(M,'b',e.x-rr,e.z-rr,e.x+rr,e.z+rr)){ if(b.kind==='fence'||b.h<.8||b.y0>0||b.kind==='step'||b.kind==='wstep') continue; const cx=(b.x0+b.x1)/2, cz=(b.z0+b.z1)/2; if(Math.hypot(cx-e.x,cz-e.z)>rr) continue;
+    const pts=[[b.x0-.6,cz],[b.x1+.6,cz],[cx,b.z0-.6],[cx,b.z1+.6],[b.x0-.6,b.z0-.6],[b.x1+.6,b.z1+.6],[b.x0-.6,b.z1+.6],[b.x1+.6,b.z0-.6]];
+    /* long walls: also spots along their length, nearest you */
+    if(b.x1-b.x0>4){ const px=clamp(e.x,b.x0+.6,b.x1-.6); pts.push([px,b.z0-.6],[px,b.z1+.6]); } if(b.z1-b.z0>4){ const pz=clamp(e.z,b.z0+.6,b.z1-.6); pts.push([b.x0-.6,pz],[b.x1+.6,pz]); }
+    cands.push({b,pts,low:b.h<1.5}); }
+  for(const c of nearRect(M,'c',e.x-rr,e.z-rr,e.x+rr,e.z+rr)){ if(Math.hypot(c.x-e.x,c.z-e.z)>rr||c.h<.8) continue; const pts=[]; for(let k=0;k<8;k++){ const a=k/8*Math.PI*2; pts.push([c.x+Math.cos(a)*(c.r+.55),c.z+Math.sin(a)*(c.r+.55)]); } cands.push({pts,low:c.h<1.5}); }
+  /* score every spot first (cheap), then test the best ones for cover from the threat, best first */
+  const list=[]; for(const cd of cands) for(const [px,pz] of cd.pts){ const dMe=Math.hypot(px-e.x,pz-e.z), dT=Math.hypot(px-thr.x,pz-thr.z), want=R*.75; if(adv&&dT>dNow-4) continue;
+      list.push({px,pz,low:cd.low,dT,sc:(adv?-Math.abs(dT-want)*1.0-dMe*.3:-dMe*1.2-Math.abs(dT-want)*.35)-(cd.low?0:1.5)}); }
+  list.sort((a,b)=>b.sc-a.sc); let tests=0;
+  for(const c of list){ if(tests>=28) break; if(blockedAt(M,c.px,c.pz,.38)) continue; tests++; if(losClear(M,[thr.x,thr.y+1.5,thr.z],[c.px,c.low?1.0:1.6,c.pz],false)) continue; best={x:c.px,z:c.pz,low:c.low,dT:c.dT}; break; }
   return best; }
-function goTo(e,x,z){ const ai=e.ai; ai.goal=[x,z]; ai.path=findPath(A.M,e.x,e.z,x,z); ai.pi=0; ai.plan=1.6+Math.random(); }
+/* paths are planned under a budget of searched nodes per frame; a bot over budget keeps walking its old path and plans next frame */
+const NAVBUDGET=14000;
+function goTo(e,x,z,y){ const ai=e.ai; ai.goal=[x,z,y]; ai.plan=1.6+Math.random(); if(NAVWORK>NAVBUDGET){ ai.pend=true; return; } ai.pend=false; ai.path=findPath(A.M,e.x,e.z,x,z,e.y,y); ai.pi=0; }
+function navPend(e){ const ai=e.ai; if(ai&&ai.pend&&ai.goal&&NAVWORK<=NAVBUDGET){ ai.pend=false; ai.path=findPath(A.M,e.x,e.z,ai.goal[0],ai.goal[1],e.y,ai.goal[2]); ai.pi=0; } }
+const carrying=e=>!!(e.carry||A.bomb&&A.bomb.carrier===e);
 /* where the objective wants this bot to be when nobody is in sight */
 function objectiveGoal(e){ const M=A.M, ai=e.ai;
   if(e.carry){ const f=e.carry; return f.team<0?M.spawn[1-e.team]:A.flags.find(g=>g.team===e.team).home; }
+  if(A.mode==='bomb'&&A.bomb){ const B=A.bomb, S=A.sites, atk=e.team===B.att, a=(e.i*2.39)%6.283;
+    if(B.planted) return atk?[B.x+Math.cos(a)*(7+(e.i%3)*3),B.z+Math.sin(a)*(7+(e.i%3)*3)]:[B.x,B.z];
+    if(atk){ if(B.carrier===e){ const s=S[B.target]; return [s.x,s.z]; }
+      if(!B.carrier){ const near=A.ents.filter(o=>o.team===e.team&&!o.out&&!o.down).sort((p,q)=>Math.hypot(p.x-B.x,p.z-B.z)-Math.hypot(q.x-B.x,q.z-B.z)); if(near[0]===e||near[1]===e) return [B.x,B.z]; }
+      const s=S[B.target], c=B.carrier, r=4+(e.i%4)*3; if(c&&Math.hypot(c.x-s.x,c.z-s.z)>40&&e.i%2) return [c.x+Math.cos(a)*6,c.z+Math.sin(a)*6]; return [s.x+Math.cos(a)*r,s.z+Math.sin(a)*r]; }
+    const s=S[e.i%2], gs=guardSpots(s); if(gs.length){ const g=gs[(e.i*7)%gs.length]; return [g[0],g[1]]; } const r=5+(e.i%3)*4; return [s.x+Math.cos(a)*r,s.z+Math.sin(a)*r]; }
   if(A.mode==='ctf'||A.mode==='race'){ const enemyFlag=A.flags.find(f=>f.team!==e.team), myFlag=A.flags.find(f=>f.team===e.team);
     if(myFlag&&myFlag.carrier) return [myFlag.carrier.x,myFlag.carrier.z];
     if(myFlag&&(myFlag.x!==myFlag.home[0]||myFlag.z!==myFlag.home[1])) return [myFlag.x,myFlag.z];
     if(enemyFlag&&enemyFlag.carrier&&enemyFlag.carrier.team===e.team) return [enemyFlag.carrier.x+rnd(-3,3),enemyFlag.carrier.z+rnd(-3,3)];
-    if(ai.role==='att'||A.mode==='race') return enemyFlag?[enemyFlag.x,enemyFlag.z]:null; if(myFlag) return [myFlag.home[0]+rnd(-6,6)*(e.team?-1:1),myFlag.home[1]+rnd(-6,6)]; }
-  if(A.mode==='dom'){ const P=A.points; let best=null, bd=1e9; for(const p of P){ const want=p.own!==e.team; const d=Math.hypot(p.x-e.x,p.z-e.z)+(want?0:25)+(ai.role==='def'&&p.own===e.team?-18:0); if(d<bd){ bd=d; best=p; } } return best?[best.x+rnd(-2,2),best.z+rnd(-2,2)]:null; }
-  /* medic: pick up a downed team-mate nearby */
+    if(ai.role==='att'||A.mode==='race'){ if(!enemyFlag) return null;
+      /* big fields: attackers split over the north, centre and south lanes until they are close */
+      if(M.big&&!enemyFlag.carrier&&Math.abs(enemyFlag.x-e.x)>55){ const lane=[-.3,0,.3][e.i%3]*M.d, sd=Math.sign(enemyFlag.x-e.x); return [clamp(e.x+sd*45,-M.w/2+4,M.w/2-4),lane+((e.i*13)%9-4)]; }
+      return [enemyFlag.x,enemyFlag.z]; } if(myFlag) return [myFlag.home[0]+rnd(-6,6)*(e.team?-1:1)*(M.big?2:1),myFlag.home[1]+rnd(-6,6)*(M.big?2:1)]; }
+  if(A.mode==='dom'){ const P=A.points; let best=null, bd=1e9; for(const p of P){ const want=p.own!==e.team; const d=Math.hypot(p.x-e.x,p.z-e.z)+(want?0:M.big?130:25)+(ai.role==='def'&&p.own===e.team?(M.big?-60:-18):0)+(want&&p.own>=0?(M.big?-10:0):0)+((e.i*7+P.indexOf(p)*3)%5)*(M.big?6:0); if(d<bd){ bd=d; best=p; } } return best?[best.x+rnd(-2,2),best.z+rnd(-2,2)]:null; }
   return null; }
+/* spots beside solid cover around a bomb site (computed once per site) */
+function guardSpots(s){ if(s.gs) return s.gs; const M=A.M, out=[]; for(const b of nearRect(M,'b',s.x-15,s.z-15,s.x+15,s.z+15)){ if(b.y0>0||b.h<1||b.kind==='fence') continue; const cx=(b.x0+b.x1)/2, cz=(b.z0+b.z1)/2;
+    for(const [px,pz] of [[b.x0-.7,cz],[b.x1+.7,cz],[cx,b.z0-.7],[cx,b.z1+.7]]){ const d=Math.hypot(px-s.x,pz-s.z); if(d<3||d>15||blockedAt(M,px,pz,.4)) continue; const n=navLocate(M,px,pz,0,null,2); if(n<0||M.nav.comp[n]!==M.nav.comp[navLocate(M,s.x,s.z,0,null,6)]) continue; out.push([px,pz]); } }
+  return s.gs=out; }
+/* high places (tower decks, upper floors, roofs) for marksmen to hold */
+function perches(M){ if(M.perch) return M.perch; const NV=M.nav, out=[], main=NV.comp[navLocate(M,M.spawn[0][0],M.spawn[0][1],0,null,8)]; for(let n=0;n<NV.tot;n+=3){ if(NV.blk[n]||NV.H[n]<2.5||NV.comp[n]!==main) continue; const [x,z]=navXZ(NV,n); out.push([x,z,NV.H[n]]); } return M.perch=out; }
+/* team radio: what any bot has seen recently, for the others to hunt on a big field */
+function intelPick(e){ const I=A.intel&&A.intel[e.team]; if(!I) return null; let best=null, bd=1e9; for(const k in I){ const m=I[k], t=A.ents[k]; if(!t||t.out||A.t-m.t>15) continue; const d=Math.hypot(m.x-e.x,m.z-e.z)+(A.t-m.t)*4; if(d<bd){ bd=d; best=m; } } return best; }
 function botThink(e,dt){ const ai=e.ai, D=DIFF[diff], w=gunOf(e), M=A.M;
-  let tgt=null, td=1e9; for(const t of A.ents){ if(t.team===e.team||t.out||t.down) continue; if(canSee(e,t)){ const d=Math.hypot(t.x-e.x,t.z-e.z); ai.mem[t.i]={x:t.x,z:t.z,t:A.t}; if(d<td){ td=d; tgt=t; } } }
+  let tgt=null, td=1e9; for(const t of A.ents){ if(t.team===e.team||t.out||t.down) continue; if(canSee(e,t)){ const d=Math.hypot(t.x-e.x,t.z-e.z); ai.mem[t.i]={x:t.x,z:t.z,t:A.t}; if(A.intel) A.intel[e.team][t.i]={x:t.x,z:t.z,t:A.t}; if(d<td){ td=d; tgt=t; } } }
   if(tgt&&tgt!==ai.target){ ai.react=(.28+Math.random()*.35)*D.react; ai.burst=0; }
   ai.target=tgt;
-  if(tgt&&!e.carry){ const R=RANGE[w.kind];
+  const B=A.mode==='bomb'?A.bomb:null, defusing=B&&B.planted&&e.team!==B.att&&Math.hypot(B.x-e.x,B.z-e.z)<4;
+  const ef=A.mode==='ctf'&&ai.role==='att'?A.flags.find(f=>f.team!==e.team&&!f.carrier):null, rush=ef&&(Math.hypot(ef.x-e.x,ef.z-e.z)<(M.big?50:22)&&Math.random()<.85||M.big&&td>28&&Math.random()<.75);
+  if(rush){ ai.cover=null; const g=objectiveGoal(e)||[ef.x,ef.z]; if(!ai.goal||Math.hypot(ai.goal[0]-g[0],ai.goal[1]-g[1])>3||ai.plan<=0) goTo(e,g[0],g[1]); return; }
+  if(tgt&&!carrying(e)&&!defusing){ const R=RANGE[w.kind];
+    /* high up (a window, a tower, a roof) with a target in range: hold the position */
+    if(e.y>1.2&&td<R){ if(!ai.cover||!ai.cover.hold){ ai.cover={x:e.x,z:e.z,low:false,dT:td,hold:true}; ai.path=null; ai.pend=false; } }
+    else { if(ai.cover&&ai.cover.hold) ai.cover=null;
     const atC=ai.cover&&Math.hypot(ai.cover.x-e.x,ai.cover.z-e.z)<.9;
-    if(td>R*.95){ if(!ai.cover||(atC&&(ai.coverT=(ai.coverT||0)+.25)>1.2+Math.random()*2)){ ai.coverT=0; ai.cover=coverSpot(e,tgt,true); if(ai.cover) goTo(e,ai.cover.x,ai.cover.z); else goTo(e,lerp(e.x,tgt.x,.5),lerp(e.z,tgt.z,.5)); } }
+    if(td>R*.95){ if(!ai.cover||(atC&&(ai.coverT=(ai.coverT||0)+.25)>1.2+Math.random()*2)){ ai.coverT=0; ai.cover=coverSpot(e,tgt,true); if(ai.cover) goTo(e,ai.cover.x,ai.cover.z); else goTo(e,lerp(e.x,tgt.x,.5),lerp(e.z,tgt.z,.5),tgt.y); } }
     else if(!ai.cover||Math.hypot(ai.cover.x-e.x,ai.cover.z-e.z)>16||ai.cover.dT>R){ ai.cover=coverSpot(e,tgt); if(ai.cover) goTo(e,ai.cover.x,ai.cover.z); else ai.path=null; }
     /* smoke a long crossing; frag someone pinned behind cover */
-    if(e.smokes>0&&td>18&&!atC&&Math.random()<.02*dt*60) throwNade(e,'smoke',lerp(e.x,tgt.x,.4),lerp(e.z,tgt.z,.4)); }
-  else { ai.cover=null; const dn=A.ents.find(f=>f.team===e.team&&f.down&&f!==e&&Math.hypot(f.x-e.x,f.z-e.z)<16);
-    if(dn){ if(!ai.goal||Math.hypot(ai.goal[0]-dn.x,ai.goal[1]-dn.z)>1) goTo(e,dn.x,dn.z); ai.revive=dn; return; } ai.revive=null;
-    const mem=Object.entries(ai.mem).filter(([i,m])=>A.t-m.t<7&&!A.ents[i].out).sort((a,b)=>b[1].t-a[1].t)[0];
-    if(mem&&e.nades>0&&!e.carry&&A.t-mem[1].t<3&&!mem[1].heard){ const d=Math.hypot(mem[1].x-e.x,mem[1].z-e.z); if(d>6&&d<20&&Math.random()<.04) throwNade(e,'nade',mem[1].x,mem[1].z); }
-    const obj=objectiveGoal(e);
-    if(obj&&(e.carry||!mem||A.mode==='race'||ai.role==='att'&&A.mode!=='tdm'&&A.mode!=='elim')){ if(!ai.goal||ai.plan<=0||Math.hypot(ai.goal[0]-obj[0],ai.goal[1]-obj[1])>3) goTo(e,obj[0],obj[1]); }
+    if(e.smokes>0&&td>18&&!atC&&Math.random()<.02*dt*60) throwNade(e,'smoke',lerp(e.x,tgt.x,.4),lerp(e.z,tgt.z,.4)); } }
+  else { ai.cover=null; const dn=A.mode==='bomb'?null:A.ents.find(f=>f.team===e.team&&f.down&&f!==e&&Math.hypot(f.x-e.x,f.z-e.z)<16);
+    if(dn){ if(!ai.goal||Math.hypot(ai.goal[0]-dn.x,ai.goal[1]-dn.z)>1) goTo(e,dn.x,dn.z,dn.y); ai.revive=dn; return; } ai.revive=null;
+    let mem=Object.entries(ai.mem).filter(([i,m])=>A.t-m.t<7&&!A.ents[i].out).sort((a,b)=>b[1].t-a[1].t)[0];
+    if(mem&&e.nades>0&&!carrying(e)&&A.t-mem[1].t<3&&!mem[1].heard){ const d=Math.hypot(mem[1].x-e.x,mem[1].z-e.z); if(d>6&&d<20&&Math.random()<.04) throwNade(e,'nade',mem[1].x,mem[1].z); }
+    const obj=objectiveGoal(e), urgent=carrying(e)||defusing||B&&(B.planted&&e.team!==B.att||!B.carrier&&!B.planted&&e.team===B.att&&obj&&Math.hypot(obj[0]-B.x,obj[1]-B.z)<.1);
+    if(!mem&&M.big&&(A.mode==='tdm'||A.mode==='elim'||B)&&!urgent&&(e.i%3!==0||A.mode!=='bomb')){ const it=intelPick(e); if(it&&Math.hypot(it.x-e.x,it.z-e.z)<(A.mode==='bomb'?45:160)) mem=[-1,it]; }
+    if(obj&&(urgent||!mem||A.mode==='race'||ai.role==='att'&&A.mode!=='tdm'&&A.mode!=='elim')){ if(!ai.goal||ai.plan<=0||Math.hypot(ai.goal[0]-obj[0],ai.goal[1]-obj[1])>3) goTo(e,obj[0],obj[1]); }
     else if(mem&&(!ai.goal||ai.plan<=0)) goTo(e,mem[1].x+rnd(-3,3),mem[1].z+rnd(-3,3));
-    else if(!ai.path||ai.pi>=(ai.path?ai.path.length:0)||ai.plan<=0){ const side=e.team?-1:1, ex=A.mode==='elim'||A.mode==='race'?rnd(-M.w*.15,M.w*.3)*side:rnd(-M.w*.1,M.w*.42)*side; goTo(e,clamp(ex,-M.w/2+3,M.w/2-3),rnd(-M.d/2+3,M.d/2-3)); }
+    else if(!ai.path||ai.pi>=(ai.path?ai.path.length:0)||ai.plan<=0){ const side=e.team?-1:1, marks=w.kind==='bolt'||w.kind==='dmr';
+      if(M.big&&ai.perch&&Math.hypot(ai.perch[0]-e.x,ai.perch[1]-e.z)<1.5&&Math.random()<.8){ ai.plan=6+Math.random()*8; return; }
+      ai.perch=null; if(M.big&&Math.random()<(marks?.45:.12)){ const P=perches(M).filter(p=>p[0]*side<M.w*.2); if(P.length){ const g=pick(P); ai.perch=g; goTo(e,g[0],g[1],g[2]); ai.plan=10+Math.random()*10; return; } } const ex=A.mode==='elim'||A.mode==='race'?rnd(-M.w*.15,M.w*.3)*side:rnd(-M.w*.1,M.w*.42)*side; goTo(e,clamp(ex,-M.w/2+3,M.w/2-3),rnd(-M.d/2+3,M.d/2-3)); }
     const a=e.ammo[e.cur]; if(a.mag<w.mag*.45) startReload(e); } }
 function botStep(e,dt){ const ai=e.ai, D=DIFF[diff], w=gunOf(e); ai.think-=dt; ai.plan-=dt; ai.sup=Math.max(0,ai.sup-dt);
   if(ai.think<=0){ ai.think=.22+Math.random()*.12; botThink(e,dt); }
-  const t=ai.target; let mx=0, mz=0, spd=(t?2.6:3.6)*(w.heavy?.85:1)*(e.carry?1.15:1), crouchWant=0;
-  if(ai.path&&ai.pi<ai.path.length){ const [px,pz]=ai.path[ai.pi], dx=px-e.x, dz=pz-e.z, d=Math.hypot(dx,dz); if(d<.45) ai.pi++; else { mx=dx/d; mz=dz/d; } }
+  navPend(e);
+  const t=ai.target; let mx=0, mz=0, spd=(t?2.6:3.6)*(w.heavy?.85:1)*(carrying(e)?1.15:1), crouchWant=0;
+  if(ai.path&&ai.pi<ai.path.length){ const q=ai.path[ai.pi], [px,pz]=q, dx=px-e.x, dz=pz-e.z, d=Math.hypot(dx,dz), nx=ai.path[ai.pi+1], tight=Math.abs((q[2]||0)-e.y)>.15||nx&&Math.abs((nx[2]||0)-(q[2]||0))>.15; if(d<(tight?.22:.45)) ai.pi++; else { mx=dx/d; mz=dz/d; } }
   const atCover=ai.cover&&Math.hypot(ai.cover.x-e.x,ai.cover.z-e.z)<.8;
-  if(t&&!ai.cover&&!e.carry&&(!ai.path||ai.pi>=ai.path.length)){ const ang=Math.atan2(t.z-e.z,t.x-e.x)+Math.PI/2*ai.strafe; mx=Math.cos(ang)*.7; mz=Math.sin(ang)*.7; if(Math.random()<dt*.6) ai.strafe*=-1; }
+  if(t&&!ai.cover&&!carrying(e)&&(!ai.path||ai.pi>=ai.path.length)){ const ang=Math.atan2(t.z-e.z,t.x-e.x)+Math.PI/2*ai.strafe; mx=Math.cos(ang)*.7; mz=Math.sin(ang)*.7; if(Math.random()<dt*.6) ai.strafe*=-1; }
   if(atCover){ mx=mz=0; crouchWant=(ai.cover.low&&(e.reloadT>0||ai.sup>0||ai.peekT>0))?1:0; ai.peekT=(ai.peekT||0)-dt; if(ai.peekT<-1.6-Math.random()*1.5) ai.peekT=.7+Math.random(); }
   if(ai.sup>0&&!atCover) crouchWant=.6;
+  /* planting or defusing the bomb */
+  const B=A.mode==='bomb'?A.bomb:null;
+  if(B&&B.carrier===e&&!B.planted&&A.sites.some(s=>Math.hypot(s.x-e.x,s.z-e.z)<2.6)){ mx=mz=0; crouchWant=1; }
+  if(B&&B.planted&&e.team!==B.att&&Math.hypot(B.x-e.x,B.z-e.z)<1.1){ mx=mz=0; crouchWant=1; }
   /* reviving a team-mate */
   if(ai.revive&&!t&&Math.hypot(ai.revive.x-e.x,ai.revive.z-e.z)<1.1){ mx=mz=0; crouchWant=1; ai.revive.revP=(ai.revive.revP||0)+dt; if(ai.revive.revP>2.5) revive(ai.revive,e); }
   e.crouch=lerp(e.crouch,crouchWant,Math.min(1,dt*6)); if(e.crouch>.5) spd=1.6;
-  if(Math.hypot(mx,mz)>.3&&e.spd<.4){ ai.stuckT+=dt; if(ai.stuckT>.8){ ai.stuckT=0; ai.plan=0; e.vx+=rnd(-2,2); e.vz+=rnd(-2,2); } } else ai.stuckT=0;
+  if(Math.hypot(mx,mz)>.3&&e.spd<.4){ ai.stuckT+=dt; if(ai.stuckT>.8){ ai.stuckT=0; ai.plan=0; e.vx+=rnd(-2,2); e.vz+=rnd(-2,2); ai.stuckN=(ai.stuckN||0)+1;
+      if(ai.goal&&ai.stuckN>=2){ ai.stuckN=0; ai.pend=true; navPend(e); } } } else { ai.stuckT=0; if(e.spd>1.2) ai.stuckN=0; }
   moveEnt(e,mx*spd,mz*spd,dt);
   if(t){ const d=Math.hypot(t.x-e.x,t.z-e.z), di=clamp(Math.round(d),1,89), ft=FT[e.w[e.cur]], tof=ft.tof[di]*D.lead, px=t.x+t.vx*tof, pz=t.z+t.vz*tof, ty=t.y+1.15-.5*t.crouch-(t.down?.8:0), m=muzzle(e);
     const wantYaw=Math.atan2(pz-e.z,px-e.x), wantPitch=Math.atan2(ty-m[1]-ft.drop[di],d); e.yaw+=angD(wantYaw-e.yaw)*Math.min(1,dt*9); e.pitch=lerp(e.pitch,wantPitch,Math.min(1,dt*9));
@@ -561,17 +1105,22 @@ function botStep(e,dt){ const ai=e.ai, D=DIFF[diff], w=gunOf(e); ai.think-=dt; a
       const block=A.ents.some(f=>f!==e&&f.team===e.team&&!f.out&&Math.hypot(f.x-e.x,f.z-e.z)<d&&Math.abs(angD(Math.atan2(f.z-e.z,f.x-e.x)-e.yaw))<Math.atan2(.6,Math.max(1,Math.hypot(f.x-e.x,f.z-e.z))));
       if(!block){ if(ai.pause>0) ai.pause-=dt; else { const sk=(.012+d*.00035)*D.err*(1+Math.min(1,t.spd/3)*.8+(e.spd>.5?.6:0)); if(ai.burst<=0){ ai.aimE=[gauss()*sk,gauss()*sk*.8]; } ai.burst+=dt; if(fire(e)&&!w.auto) ai.pause=rnd(.15,.5)/D.react+(w.kind==='bolt'?.6:0);
           if(w.auto&&ai.burst>rnd(.3,.9)){ ai.burst=0; ai.pause=rnd(.2,.6)*D.react; } } } } }
-  else { if(e.spd>.3) e.yaw+=angD(Math.atan2(e.vz,e.vx)-e.yaw)*Math.min(1,dt*5); e.pitch=lerp(e.pitch,0,dt*3); } }
+  else { if(e.spd>.3) e.yaw+=angD(Math.atan2(e.vz,e.vx)-e.yaw)*Math.min(1,dt*5); else { const es=A.M.spawn[1-e.team], ld=ai.mem&&Object.values(ai.mem).sort((a,b)=>b.t-a.t)[0], tx=ld&&A.t-ld.t<10?ld.x:es[0], tz=ld&&A.t-ld.t<10?ld.z:es[1]; e.yaw+=angD(Math.atan2(tz-e.z,tx-e.x)-e.yaw)*Math.min(1,dt*1.5); } e.pitch=lerp(e.pitch,0,dt*3); } }
 function revive(v,by){ v.down=false; v.downT=0; v.revP=0; by.st.revives++; sfx.revive(); A.feed.unshift({t:0,txt:`${by.name} revived ${v.name}`,col:TEAMS[by.team].arm}); if(v===ME()) toast('Medic! You are back in.','#34d399'); }
 
 /* ---------- rounds, outs, the clock ---------- */
-function checkRound(){ const alive=[0,1].map(t=>A.ents.some(e=>e.team===t&&!e.out)); if(alive[0]&&alive[1]) return; const win=alive[0]?0:1; A.score[win]++; endRound(win,'eliminated the other team'); }
+function checkRound(){ if(A.roundOver>0) return; const alive=[0,1].map(t=>A.ents.some(e=>e.team===t&&!e.out));
+  if(A.mode==='bomb'&&A.bomb){ const at=A.bomb.att, df=1-at; if(!alive[df]){ A.score[at]++; endRound(at,'eliminated the defenders'); } else if(!alive[at]&&!A.bomb.planted){ A.score[df]++; endRound(df,'eliminated the attackers'); } return; }
+  if(alive[0]&&alive[1]) return; const win=alive[0]?0:1; A.score[win]++; endRound(win,'eliminated the other team'); }
 function endRound(win,how){ if(A.roundOver>0) return; A.roundOver=2.8; banner(A.mode==='race'?`Point ${TEAMS[win].name}`:`${TEAMS[win].name} take round ${A.round}`,`${how} · ${A.score[0]} – ${A.score[1]}`,TEAMS[win].col,2.6); sfx.whistle(); if(win===0) SV.xp+=30; }
 function stepOuts(dt){ for(const e of A.ents){
     if(e.down){ e.downT+=dt; if(!e.bot&&held(['KeyE'])){} if(e.downT>40){ e.down=false; e.out=true; e.outT=0; } continue; }
-    if(!e.out) continue; e.outT+=dt; if(A.mode==='elim'||A.mode==='race') continue;
-    if(e.bot&&e.outT>1.4){ const [sx,sz]=A.M.spawn[e.team]; if(!e.ai.path||e.ai.goal&&e.ai.goal[0]!==sx) goTo(e,sx,sz); if(e.ai.path&&e.ai.pi<e.ai.path.length){ const [px,pz]=e.ai.path[e.ai.pi], dx=px-e.x, dz=pz-e.z, d=Math.hypot(dx,dz); if(d<.45) e.ai.pi++; else moveEnt(e,dx/d*3,dz/d*3,dt); } }
-    if(e.outT>(e.bot?7:4.5)){ const [x,z]=spawnPoint(e.team,Math.floor(Math.random()*teamSize)); resetEnt(e,x+rnd(-1,1),z); const g=gunOf(e); e.ammo[e.cur].mag=Math.max(e.ammo[e.cur].mag,Math.min(g.mag,e.ammo[e.cur].mag+e.ammo[e.cur].res)); if(!e.bot) toast('Back in the game!','#34d399'); } } }
+    if(!e.out) continue; e.outT+=dt; if(ROUNDS(A.mode)) continue;
+    if(e.bot&&e.outT>1.4){ const [sx,sz]=A.M.spawn[e.team]; if(!e.ai.outPlan){ e.ai.outPlan=true; goTo(e,sx,sz); } navPend(e); if(e.ai.path&&e.ai.pi<e.ai.path.length){ const [px,pz]=e.ai.path[e.ai.pi], dx=px-e.x, dz=pz-e.z, d=Math.hypot(dx,dz); if(d<.45) e.ai.pi++; else moveEnt(e,dx/d*3,dz/d*3,dt); } }
+    if(e.outT>(e.bot?7:4.5)){ let [x,z]=spawnPoint(e.team,Math.floor(Math.random()*(A.ts||teamSize))); x+=rnd(-1,1);
+      /* big fields, domination: respawn at a point your team holds when no enemy is close to it */
+      if(A.M.big&&A.mode==='dom'){ const own=A.points.filter(p=>p.own===e.team&&!A.ents.some(o=>o.team!==e.team&&!o.out&&Math.hypot(o.x-p.x,o.z-p.z)<28)); if(own.length&&Math.random()<.7){ const p=pick(own), n=navLocate(A.M,p.x+rnd(-6,6),p.z+rnd(-6,6),0,null,10); if(n>=0) [x,z]=navXZ(A.M.nav,n); } }
+      resetEnt(e,x,z); const g=gunOf(e); e.ammo[e.cur].mag=Math.max(e.ammo[e.cur].mag,Math.min(g.mag,e.ammo[e.cur].mag+e.ammo[e.cur].res)); if(!e.bot) toast('Back in the game!','#34d399'); } } }
 function endGame(){ if(A.over) return; A.over=true; phase='over'; if(document.pointerLockElement) document.exitPointerLock(); const me=ME(), win=A.score[0]>A.score[1]?0:A.score[1]>A.score[0]?1:-1;
   SV.games++; if(win===0){ SV.wins++; SV.xp+=100; } SV.shots+=me.st.shots; saveSV(); sfx.whistle();
   const rows=A.ents.slice().sort((a,b)=>b.st.hits+b.st.caps*3-(a.st.hits+a.st.caps*3)||a.st.outs-b.st.outs);
@@ -591,8 +1140,8 @@ function playerStep(dt){ const e=ME(), w=gunOf(e);
   const f=(held(['KeyW'])?1:0)-(held(['KeyS'])?1:0), s=(held(['KeyD'])?1:0)-(held(['KeyA'])?1:0); let mx=Math.cos(e.yaw)*f-Math.sin(e.yaw)*s, mz=Math.sin(e.yaw)*f+Math.cos(e.yaw)*s; const L=Math.hypot(mx,mz)||1; mx/=L; mz/=L;
   const crouch=held(['KeyC','ControlLeft']); e.crouch=lerp(e.crouch,crouch?1:0,Math.min(1,dt*10)); const sprint=held(['ShiftLeft','ShiftRight'])&&f>0&&!e.ads&&e.crouch<.3;
   const spd=(e.crouch>.5?1.6:sprint?5.4:e.ads?2.2:3.6)*(w.heavy?.85:1); moveEnt(e,(f||s)?mx*spd:0,(f||s)?mz*spd:0,dt);
-  if(held(['Space'])&&e.y===0&&e.vy===0&&e.crouch<.3){ e.vy=3.6; e.y=.001; }
-  e.ads=(adsHeld||held(['KeyX']))&&e.reloadT<=0; e.sprint=sprint;
+  if(held(['Space'])&&e.onG!==false&&e.vy===0&&e.crouch<.3){ e.vy=3.6; e.y+=.001; e.onG=false; }
+  e.ads=(adsHeld||held(['KeyX']))&&e.reloadT<=0; e.sprint=sprint; e.use=held(['KeyE']);
   /* revive a downed team-mate: stand next to them and hold E */
   const dn=A.ents.find(o=>o!==e&&o.team===e.team&&o.down&&Math.hypot(o.x-e.x,o.z-e.z)<1.3); A.revTarget=dn||null;
   if(dn&&held(['KeyE'])){ dn.revP=(dn.revP||0)+dt; if(dn.revP>2.5) revive(dn,e); } else if(dn) dn.revP=Math.max(0,(dn.revP||0)-dt);
@@ -600,6 +1149,7 @@ function playerStep(dt){ const e=ME(), w=gunOf(e);
 function step(dt){
   if(toastT>0){ toastT-=dt; if(toastT<=0) $('toast').classList.remove('on'); }
   if(bannerT>0&&!paused){ bannerT-=dt; if(bannerT<=0) $('banner').classList.remove('on'); }
+  NAVWORK=0;
   if(!A||paused||phase!=='play') return; A.t+=dt; A.marker=Math.max(0,A.marker-dt); for(const d of A.dmgDir) d.t+=dt; A.dmgDir=A.dmgDir.filter(d=>d.t<1.2); for(const f of A.feed) f.t+=dt; for(const f of A.fx) f.t+=dt; A.fx=A.fx.filter(f=>f.t<.5);
   A.later=(A.later||[]).filter(l=>{ if(A.t>=l.t){ l.f(); return false; } return true; });
   if(A.introT>0){ A.introT-=dt; playerStep(dt); return; }
@@ -617,15 +1167,17 @@ function hudText(t,x,y,size=18,col='#fff',align='left'){ ctx.font=`800 ${size}px
 function rr(x,y,w,h,r,col){ ctx.fillStyle=col; ctx.beginPath(); ctx.roundRect(x,y,w,h,r); ctx.fill(); }
 const fmtC=s=>`${Math.floor(s/60)}:${String(Math.floor(s%60)).padStart(2,'0')}`;
 const SC2=17; function view2D(){ const me=ME(); return {X:x=>W/2+(x-me.x)*SC2,Z:z=>H/2+(z-me.z)*SC2}; }
-function draw2D(){ const M=A.M, V=view2D(); ctx.fillStyle=M.ground; ctx.fillRect(0,0,W,H);
-  for(const q of M.bush){ ctx.fillStyle='#2f5a24'; ctx.beginPath(); ctx.arc(V.X(q.x),V.Z(q.z),q.r*SC2,0,Math.PI*2); ctx.fill(); }
+function draw2D(){ const M=A.M, V=view2D(), me=ME(), hw=W/2/SC2+2, hh=H/2/SC2+2, x0=me.x-hw, x1=me.x+hw, z0=me.z-hh, z1=me.z+hh; ctx.fillStyle=M.ground; ctx.fillRect(0,0,W,H);
+  for(const r of M.deco||[]){ if(r.x1<x0||r.x0>x1||r.z1<z0||r.z0>z1) continue; ctx.fillStyle=r.col; ctx.fillRect(V.X(r.x0),V.Z(r.z0),(r.x1-r.x0)*SC2,(r.z1-r.z0)*SC2); }
+  for(const q of nearRect(M,'u',x0,z0,x1,z1)){ ctx.fillStyle='#2f5a24'; ctx.beginPath(); ctx.arc(V.X(q.x),V.Z(q.z),q.r*SC2,0,Math.PI*2); ctx.fill(); }
   for(const sp of A.splats){ if(sp.n[1]<.5) continue; ctx.fillStyle=`rgb(${sp.col.map(v=>v*255|0).join(',')})`; ctx.beginPath(); ctx.arc(V.X(sp.x),V.Z(sp.z),sp.s*SC2*1.2,0,Math.PI*2); ctx.fill(); }
-  for(const b of M.boxes){ if(b.y0>1.5) continue; ctx.fillStyle=b.kind==='fence'?M.fence:b.kind==='cont'?'#4b6584':b.kind==='sand'?'#c2a878':b.kind==='wall'?'#9ca3af':b.h<1.3?'#a16207':'#c69c6d'; ctx.fillRect(V.X(b.x0),V.Z(b.z0),(b.x1-b.x0)*SC2,(b.z1-b.z0)*SC2); }
-  for(const c of M.cyl){ ctx.fillStyle=c.col; ctx.beginPath(); ctx.arc(V.X(c.x),V.Z(c.z),c.r*SC2,0,Math.PI*2); ctx.fill(); }
+  for(const b of nearRect(M,'b',x0,z0,x1,z1)){ if(b.y0>1.5) continue; ctx.fillStyle=b.kind==='fence'?M.fence:b.kind==='cont'?'#4b6584':b.kind==='sand'?'#c2a878':b.kind==='wall'?'#9ca3af':b.h<1.3?'#a16207':'#c69c6d'; ctx.fillRect(V.X(b.x0),V.Z(b.z0),(b.x1-b.x0)*SC2,(b.z1-b.z0)*SC2); }
+  for(const c of nearRect(M,'c',x0,z0,x1,z1)){ ctx.fillStyle=c.col; ctx.beginPath(); ctx.arc(V.X(c.x),V.Z(c.z),c.r*SC2,0,Math.PI*2); ctx.fill(); }
   for(const s of A.smokes){ ctx.fillStyle='rgba(220,220,220,.75)'; ctx.beginPath(); ctx.arc(V.X(s.x),V.Z(s.z),s.r*SC2,0,Math.PI*2); ctx.fill(); }
   for(const f of A.flags){ ctx.fillStyle=f.team<0?'#fde047':TEAMS[f.team].col; ctx.fillRect(V.X(f.x)-4,V.Z(f.z)-14,10,7); ctx.fillStyle='#fff'; ctx.fillRect(V.X(f.x)-5,V.Z(f.z)-14,2,16); }
   for(const p of A.points){ ctx.strokeStyle=p.own<0?'#e5e7eb':TEAMS[p.own].arm; ctx.lineWidth=3; ctx.beginPath(); ctx.arc(V.X(p.x),V.Z(p.z),4*SC2,0,Math.PI*2); ctx.stroke(); hudText(p.name,V.X(p.x),V.Z(p.z)+6,18,ctx.strokeStyle,'center'); }
-  for(const t of M.trees){ ctx.fillStyle='#1f3d17'; ctx.beginPath(); ctx.arc(V.X(t.x),V.Z(t.z),Math.max(t.r*SC2,9),0,Math.PI*2); ctx.fill(); }
+  if(A.mode==='bomb'&&A.sites){ for(const st of A.sites){ ctx.strokeStyle='#fb923c'; ctx.lineWidth=3; ctx.strokeRect(V.X(st.x-3.5),V.Z(st.z-3.5),7*SC2,7*SC2); hudText(st.name,V.X(st.x),V.Z(st.z)+6,18,'#fb923c','center'); } const B=A.bomb; if(B&&!B.carrier){ ctx.fillStyle=B.planted?'#ef4444':'#fb923c'; ctx.fillRect(V.X(B.x)-5,V.Z(B.z)-5,10,10); } }
+  for(const t of nearRect(M,'t',x0,z0,x1,z1)){ ctx.fillStyle='#1f3d17'; ctx.beginPath(); ctx.arc(V.X(t.x),V.Z(t.z),Math.max(t.r*SC2,9),0,Math.PI*2); ctx.fill(); }
   ctx.fillStyle='#fef9c3'; for(const b of A.bbs){ ctx.fillRect(V.X(b.x)-1.5,V.Z(b.z)-1.5,3,3); }
   for(const e of A.ents){ ctx.fillStyle=e.out||e.down?'rgba(120,120,120,.7)':TEAMS[e.team].kit; ctx.strokeStyle=TEAMS[e.team].arm; ctx.lineWidth=3; ctx.beginPath(); ctx.arc(V.X(e.x),V.Z(e.z),7,0,Math.PI*2); ctx.fill(); ctx.stroke();
     ctx.strokeStyle='#111'; ctx.beginPath(); ctx.moveTo(V.X(e.x),V.Z(e.z)); ctx.lineTo(V.X(e.x+Math.cos(e.yaw)*.9),V.Z(e.z+Math.sin(e.yaw)*.9)); ctx.stroke(); if(e.out) hudText('HIT',V.X(e.x),V.Z(e.z)-12,12,'#f87171','center'); } }
@@ -640,28 +1192,54 @@ function drawHUD(){ const me=ME(), w=gunOf(me), a=me.ammo[me.cur];
   for(const d of A.dmgDir){ const rel=angD(d.a-me.yaw)+Math.PI/2; ctx.strokeStyle=`rgba(239,68,68,${1-d.t/1.2})`; ctx.lineWidth=10; ctx.beginPath(); ctx.arc(W/2,H/2,120,rel-.35-Math.PI/2,rel+.35-Math.PI/2); ctx.stroke(); }
   /* score and clock */
   rr(W/2-150,10,300,48,12,'rgba(5,8,18,.82)'); hudText(String(A.score[0]),W/2-92,48,34,TEAMS[0].arm,'center'); hudText(String(A.score[1]),W/2+92,48,34,TEAMS[1].arm,'center');
-  const timed=A.mode==='tdm'||A.mode==='dom'||A.mode==='ctf'; hudText(timed?fmtC(A.clock):A.mode==='race'?`Point ${A.round}`:`Round ${A.round}`,W/2,40,22,'#fff','center'); hudText(A.mode==='tdm'?`first to ${A.limit}`:A.mode==='dom'?`first to ${A.limit} pts`:A.mode==='ctf'?`first to ${A.limit} caps`:A.mode==='race'?`race to ${A.limit}`:`first to ${A.limit} rounds`,W/2,54,11,'#94a3b8','center');
-  if(A.mode==='dom') A.points.forEach((p,k)=>{ const x=W/2-36+k*36, y=78, col=p.own<0?'#94a3b8':TEAMS[p.own].arm; rr(x-15,y-16,30,26,6,'rgba(5,8,18,.8)'); if(p.by>=0&&p.own!==p.by&&p.prog>0){ ctx.fillStyle=TEAMS[p.by].arm; ctx.fillRect(x-15,y+8,30*clamp(p.prog,0,1),3); } hudText(p.name,x,y+3,18,col,'center'); });
+  const timed=A.mode==='tdm'||A.mode==='dom'||A.mode==='ctf'; hudText(timed?fmtC(A.clock):A.mode==='bomb'?(A.bomb&&A.bomb.planted?`💣 ${fmtC(Math.max(0,A.bomb.fuse))}`:`R${A.round} · ${fmtC(A.clock)}`):A.mode==='race'?`Point ${A.round}`:`Round ${A.round}`,W/2,40,22,A.mode==='bomb'&&A.bomb&&A.bomb.planted?'#fb923c':'#fff','center'); hudText(A.mode==='tdm'?`first to ${A.limit}`:A.mode==='dom'?`first to ${A.limit} pts`:A.mode==='ctf'?`first to ${A.limit} caps`:A.mode==='race'?`race to ${A.limit}`:`first to ${A.limit} rounds`,W/2,54,11,'#94a3b8','center');
+  if(A.mode==='dom') A.points.forEach((p,k)=>{ const x=W/2-(A.points.length-1)*18+k*36, y=78, col=p.own<0?'#94a3b8':TEAMS[p.own].arm; rr(x-15,y-16,30,26,6,'rgba(5,8,18,.8)'); if(p.by>=0&&p.own!==p.by&&p.prog>0){ ctx.fillStyle=TEAMS[p.by].arm; ctx.fillRect(x-15,y+8,30*clamp(p.prog,0,1),3); } hudText(p.name,x,y+3,18,col,'center'); });
   if(A.mode==='ctf'||A.mode==='race'){ A.flags.forEach((f,k)=>{ const st=f.carrier?(f.carrier.team===0?'carried by '+f.carrier.name:'taken!'):(f.x!==f.home[0]||f.z!==f.home[1])?'dropped':'home'; hudText(`${f.team<0?'Flag':TEAMS[f.team].name+' flag'}: ${st}`,W/2,80+k*16,13,f.team<0?'#fde047':TEAMS[f.team].arm,'center'); }); }
-  if(A.mode==='elim'||A.mode==='race'){ for(let t=0;t<2;t++){ const n=A.ents.filter(e=>e.team===t&&!e.out).length; hudText('●'.repeat(n),t?W/2+160:W/2-160,40,14,TEAMS[t].arm,t?'left':'right'); } }
+  if(A.mode==='bomb'&&A.bomb){ const B=A.bomb, mine=B.att===me.team, st=B.planted?`planted at ${A.sites[B.site].name}`:B.carrier?(B.carrier===me?'you have it':`carried by ${B.carrier.team===me.team?B.carrier.name:'the enemy'}`):'dropped';
+    hudText(`${mine?'ATTACK':'DEFEND'} · Bomb: ${st}`,W/2,80,14,mine?'#fb923c':'#93c5fd','center');
+    const pr=B.plantP>0?B.plantP/4:B.defP>0?B.defP/7:0; if(pr>0){ rr(W/2-110,H/2+46,220,16,8,'rgba(5,8,18,.8)'); ctx.fillStyle=B.plantP>0?'#fb923c':'#34d399'; ctx.fillRect(W/2-106,H/2+50,212*clamp(pr,0,1),8); hudText(B.plantP>0?'PLANTING':'DEFUSING',W/2,H/2+42,14,'#fff','center'); }
+    if(!me.out&&!me.down){ if(B.carrier===me&&A.sites.some(x=>Math.hypot(x.x-me.x,x.z-me.z)<3.5)) hudText('Hold E to plant',W/2,H/2+80,18,'#fb923c','center'); else if(B.planted&&me.team!==B.att&&Math.hypot(B.x-me.x,B.z-me.z)<1.35) hudText('Hold E to defuse',W/2,H/2+80,18,'#34d399','center'); } }
+  if(ROUNDS(A.mode)){ for(let t=0;t<2;t++){ const n=A.ents.filter(e=>e.team===t&&!e.out).length; hudText('●'.repeat(n),t?W/2+160:W/2-160,40,14,TEAMS[t].arm,t?'left':'right'); } }
   /* kill feed */
   A.feed.slice(0,5).forEach((f,i)=>{ if(f.t>6) return; hudText(f.txt,W-16,30+i*20,14,f.col,'right'); });
   /* ammo */
   rr(W-230,H-78,214,64,12,'rgba(5,8,18,.82)'); hudText(me.reloadT>0?'RELOADING':`${a.mag}`,W-130,H-36,me.reloadT>0?22:36,a.mag<w.mag*.2?'#f87171':'#fff','right'); hudText(`/ ${a.res}`,W-124,H-36,18,'#94a3b8'); hudText(`${w.name} · ${w.auto?(me.auto?(w.ramp?'RAMP':'AUTO'):'SEMI'):w.kind==='bolt'?'BOLT':w.kind==='shotgun'||w.kind==='pump'?'PUMP':w.kind==='shell'?'40MM':'SEMI'}`,W-26,H-20,12,'#cbd5e1','right');
   if(!PB){ rr(W-230,H-112,214,28,10,'rgba(5,8,18,.75)'); hudText(`💣 ${me.nades} (G)   💨 ${me.smokes} (H)${me.carry?'   🚩 FLAG':''}`,W-222,H-92,15,'#e2e8f0'); } else if(me.carry){ rr(W-230,H-112,214,28,10,'rgba(5,8,18,.75)'); hudText('🚩 You have the flag',W-222,H-92,15,'#fde047'); }
   /* radar */
-  const rx=86, ry=H-86, R=70, sc=R/28; rr(rx-R-6,ry-R-6,2*R+12,2*R+12,12,'rgba(5,8,18,.7)'); ctx.save(); ctx.beginPath(); ctx.arc(rx,ry,R,0,Math.PI*2); ctx.clip(); ctx.translate(rx,ry); ctx.rotate(-me.yaw-Math.PI/2);
-  ctx.fillStyle='rgba(148,163,184,.55)'; for(const b of A.M.boxes){ if(b.kind==='fence') continue; ctx.fillRect((b.x0-me.x)*sc,(b.z0-me.z)*sc,(b.x1-b.x0)*sc,(b.z1-b.z0)*sc); }
+  const rx=86, ry=H-86, R=70, rng=A.M.big?50:28, sc=R/rng; rr(rx-R-6,ry-R-6,2*R+12,2*R+12,12,'rgba(5,8,18,.7)'); ctx.save(); ctx.beginPath(); ctx.arc(rx,ry,R,0,Math.PI*2); ctx.clip(); ctx.translate(rx,ry); ctx.rotate(-me.yaw-Math.PI/2);
+  ctx.fillStyle='rgba(148,163,184,.55)'; for(const b of nearRect(A.M,'b',me.x-rng*1.45,me.z-rng*1.45,me.x+rng*1.45,me.z+rng*1.45)){ if(b.kind==='fence'||b.y0>1.5||b.h<.5) continue; ctx.fillRect((b.x0-me.x)*sc,(b.z0-me.z)*sc,(b.x1-b.x0)*sc,(b.z1-b.z0)*sc); }
+  /* objectives: shown at the radar's edge when they are further away */
+  const objs=A.points.map(p=>[p.x,p.z,p.name,p.own<0?'#e5e7eb':TEAMS[p.own].arm]).concat(A.flags.map(f=>[f.x,f.z,'⚑',f.team<0?'#fde047':TEAMS[f.team].arm]),A.mode==='bomb'&&A.sites?A.sites.map(x=>[x.x,x.z,x.name,'#fb923c']):[],A.mode==='bomb'&&A.bomb&&!A.bomb.carrier?[[A.bomb.x,A.bomb.z,'💣','#fb923c']]:[]);
+  for(const [ox,oz,lab,col] of objs){ let dx=(ox-me.x)*sc, dz=(oz-me.z)*sc; const L=Math.hypot(dx,dz); if(L>R-8){ dx*=(R-8)/L; dz*=(R-8)/L; } ctx.save(); ctx.translate(dx,dz); ctx.rotate(me.yaw+Math.PI/2); ctx.font="800 11px 'Arial Narrow',sans-serif"; ctx.textAlign='center'; ctx.fillStyle=col; ctx.fillText(lab,0,4); ctx.restore(); }
   const spotted=new Set(); for(const f of A.ents) if(f.team===0&&!f.out) for(const t of A.ents) if(t.team===1&&!t.out&&f.ai&&f.ai.target===t) spotted.add(t);
   for(const e of A.ents){ if(e===me) continue; if(e.team===1&&!spotted.has(e)) continue; ctx.fillStyle=e.out?'#64748b':TEAMS[e.team].arm; ctx.beginPath(); ctx.arc((e.x-me.x)*sc,(e.z-me.z)*sc,3.5,0,Math.PI*2); ctx.fill(); }
   ctx.restore(); ctx.fillStyle='#fde047'; ctx.beginPath(); ctx.moveTo(rx,ry-6); ctx.lineTo(rx-5,ry+5); ctx.lineTo(rx+5,ry+5); ctx.closePath(); ctx.fill();
   /* hit / intro / messages */
   if(me.down){ ctx.fillStyle='rgba(185,28,28,.32)'; ctx.fillRect(0,0,W,H); hudText('HIT! MEDIC!',W/2,H/2-30,58,'#fff','center'); hudText(`Stay down: a team-mate can revive you · bleed out in ${Math.max(0,Math.ceil(40-me.downT))}`,W/2,H/2+8,20,'#fde68a','center'); if(me.revP>0) hudText(`Being revived ${Math.round(me.revP/2.5*100)}%`,W/2,H/2+40,20,'#34d399','center'); }
   if(A.revTarget&&!me.out&&!me.down) hudText(`Hold E to revive ${A.revTarget.name} ${A.revTarget.revP?Math.round(A.revTarget.revP/2.5*100)+'%':''}`,W/2,H/2+70,18,'#34d399','center');
-  if(me.out){ ctx.fillStyle='rgba(185,28,28,.28)'; ctx.fillRect(0,0,W,H); hudText('HIT!',W/2,H/2-30,64,'#fff','center'); hudText(A.mode==='elim'||A.mode==='race'?(PB?'Marker up, walk off the field: out until the next point':'You are out until the next round'):`Hand up, walk back to respawn · back in ${Math.max(0,Math.ceil(4.5-me.outT))}`,W/2,H/2+8,20,'#fde68a','center'); }
+  if(me.out){ ctx.fillStyle='rgba(185,28,28,.28)'; ctx.fillRect(0,0,W,H); hudText('HIT!',W/2,H/2-30,64,'#fff','center'); hudText(ROUNDS(A.mode)?(PB?'Marker up, walk off the field: out until the next point':'You are out until the next round'):`Hand up, walk back to respawn · back in ${Math.max(0,Math.ceil(4.5-me.outT))}`,W/2,H/2+8,20,'#fde68a','center'); }
   if(A.introT>0) hudText(A.introT>1?'Ready…':'Game on!',W/2,H/2-60,48,'#fde047','center');
   if(phase==='play'&&A.t<9) hudText(view3?`Click to aim with the mouse · WASD move · click fire · right-click aim · R reload · C crouch · Shift sprint · 1/2 guns${PB?'':' · G grenade · H smoke · E revive'}`:'Mouse aims · click fires · WASD move · R reload · C crouch · V for 3D',W/2,H-124,15,'#fde68a','center');
+  if(held(['Tab'])||A.showMap) drawOverview();
+  else if(A.M.big&&phase==='play'&&A.t<14) hudText('Hold Tab for the field map',86,H-176,13,'#cbd5e1','center');
   if(view3&&!document.pointerLockElement&&phase==='play'&&!touchLook.on&&A.t>.5&&!isTouch) hudText('Click the game to aim with the mouse (or use the arrow keys)',W/2,H/2+80,16,'#cbd5e1','center'); }
+/* the whole field, scaled to fit: drawn once per map, then your team, spotted enemies and the objectives on top */
+const OVC={};
+function overviewImg(M){ if(OVC[M.id]) return OVC[M.id]; const s=Math.min((W*.86)/M.w,(H*.8)/M.d), c=document.createElement('canvas'); c.width=Math.ceil(M.w*s*DPR); c.height=Math.ceil(M.d*s*DPR); const x=c.getContext('2d'); x.setTransform(DPR*s,0,0,DPR*s,M.w/2*DPR*s,M.d/2*DPR*s);
+  x.fillStyle=M.ground; x.fillRect(-M.w/2,-M.d/2,M.w,M.d); for(const r of M.deco||[]){ x.fillStyle=r.col; x.fillRect(r.x0,r.z0,r.x1-r.x0,r.z1-r.z0); }
+  x.fillStyle='rgba(31,61,23,.55)'; for(const q of M.bush){ x.beginPath(); x.arc(q.x,q.z,q.r,0,7); x.fill(); } x.fillStyle='#1f3d17'; for(const t of M.trees){ x.beginPath(); x.arc(t.x,t.z,Math.max(1.1,t.r*3),0,7); x.fill(); }
+  for(const b of M.boxes){ if(b.y0>1.5&&b.kind!=='roof'&&b.kind!=='roofw') continue; x.fillStyle=b.kind==='fence'?M.fence:b.kind==='roof'||b.kind==='roofw'?'rgba(120,113,108,.92)':b.kind==='wall'?'#d6d3d1':b.kind==='cont'?(b.col||'#4b6584'):b.kind==='berm'?'#5b4a32':b.kind==='hesco'?'#b59a6a':b.h<1.3?'#a16207':'#a8a29e'; x.fillRect(b.x0,b.z0,b.x1-b.x0,b.z1-b.z0); }
+  for(const q of M.cyl){ x.fillStyle=q.col; x.beginPath(); x.arc(q.x,q.z,q.r,0,7); x.fill(); }
+  return OVC[M.id]={c,s}; }
+function drawOverview(){ const M=A.M, me=ME(), {c,s}=overviewImg(M), w=M.w*s, h=M.d*s, ox=(W-w)/2, oy=(H-h)/2+8, X=x=>ox+(x+M.w/2)*s, Z=z=>oy+(z+M.d/2)*s;
+  rr(ox-10,oy-30,w+20,h+40,12,'rgba(5,8,18,.82)'); ctx.drawImage(c,ox,oy,w,h); hudText(`${M.name}${MAPDEF[M.id]&&MAPDEF[M.id].size?' · '+MAPDEF[M.id].size:''}`,ox+4,oy-10,16,'#fde68a');
+  for(let t=0;t<2;t++){ const [sx,sz]=M.spawn[t]; hudText(t?'RED BASE':'BLUE BASE',X(sx),Z(sz)-14,12,TEAMS[t].arm,'center'); }
+  for(const p of A.points){ ctx.strokeStyle=p.own<0?'#e5e7eb':TEAMS[p.own].arm; ctx.lineWidth=2.5; ctx.beginPath(); ctx.arc(X(p.x),Z(p.z),Math.max(6,4*s),0,7); ctx.stroke(); hudText(p.name,X(p.x),Z(p.z)+5,14,ctx.strokeStyle,'center'); }
+  for(const f of A.flags) hudText('⚑',X(f.x),Z(f.z)+5,16,f.team<0?'#fde047':TEAMS[f.team].arm,'center');
+  if(A.mode==='bomb'&&A.sites){ for(const st of A.sites){ ctx.strokeStyle='#fb923c'; ctx.lineWidth=2.5; ctx.strokeRect(X(st.x)-8,Z(st.z)-8,16,16); hudText(st.name,X(st.x),Z(st.z)+5,13,'#fb923c','center'); } if(A.bomb&&!A.bomb.carrier) hudText('💣',X(A.bomb.x),Z(A.bomb.z)+5,13,'#fb923c','center'); }
+  const spotted=new Set(); for(const f of A.ents) if(f.team===me.team&&!f.out&&f.ai&&f.ai.target) spotted.add(f.ai.target);
+  for(const e of A.ents){ if(e===me||e.out) continue; if(e.team!==me.team&&!spotted.has(e)) continue; ctx.fillStyle=TEAMS[e.team].arm; ctx.beginPath(); ctx.arc(X(e.x),Z(e.z),3.5,0,7); ctx.fill(); }
+  ctx.save(); ctx.translate(X(me.x),Z(me.z)); ctx.rotate(me.yaw+Math.PI/2); ctx.fillStyle='#fde047'; ctx.beginPath(); ctx.moveTo(0,-8); ctx.lineTo(-5,5); ctx.lineTo(5,5); ctx.closePath(); ctx.fill(); ctx.restore(); }
 function draw(){ ctx.clearRect(0,0,W,H); if(view3) render3D(frameDtG); if(!A||phase==='menu'){ if(!view3){ ctx.fillStyle='#0b1120'; ctx.fillRect(0,0,W,H); } return; } if(!view3) draw2D(); drawHUD(); }
 
 /* ---------- board, toasts ---------- */
@@ -711,18 +1289,19 @@ addEventListener('blur',()=>{ keys.clear(); mouseDown=false; adsHeld=false; });
 
 /* ---------- menu ---------- */
 const pill=(attr,val,on,label,key)=>`<button data-${attr}="${val}" class="${on?'on':''}" tabindex="-1">${label}${key?` <kbd>${key}</kbd>`:''}</button>`;
-function renderMenu(){ const M=getMap(mapSel), w=WEAPONS[priSel], maps=Object.keys(MAPDEF).filter(k=>PB?MAPDEF[k].pb:MAPDEF[k].as);
+function renderMenu(){ const M=getMap(mapSel), w=WEAPONS[priSel], maps=Object.keys(MAPDEF).filter(k=>(PB?MAPDEF[k].pb:MAPDEF[k].as)&&!MAPDEF[k].big), bigs=Object.keys(MAPDEF).filter(k=>(PB?MAPDEF[k].pb:MAPDEF[k].as)&&MAPDEF[k].big);
   let h=PB?`<h1>Rink Rivals: Paintball</h1><p>Speedball on an NXL field of inflatable bunkers, woodsball and scenario fields. Real 0.68-calibre paint: heavy drag, no hop-up, balls that knuckle off line and sometimes bounce instead of breaking. A break is an out: marker up, walk off. Hang the flag to win the point.</p>`
     :`<h1>Rink Rivals: Airsoft</h1><p>First-person airsoft. Real 6 mm BB ballistics with hop-up, real replicas and their fire rates, attachments, BB grenades and smoke, the honor system and a medic rule. Squads of bots use cover, hear your shots, throw smoke, play the objective and revive each other.</p>`;
   h+=`<div class="pills"><span class="lbl">Field</span>${maps.map((k,i)=>pill('mp',k,mapSel===k,MAPDEF[k].name,String(i+1))).join('')}<a href="./" tabindex="-1">Home</a><a href="${PB?'airsoft':'paintball'}" tabindex="-1">${PB?'Airsoft':'Paintball'}</a></div>
+  <div class="pills"><span class="lbl">Big fields</span>${bigs.map(k=>pill('mp',k,mapSel===k,MAPDEF[k].name,'')).join('')}</div>
   <div class="pills"><span class="lbl">Game</span>${Object.keys(MODES).map(k=>pill('md',k,modeSel===k,MODES[k],'')).join('')}${PB&&modeSel==='race'?`<span class="lbl">Race to</span>${[2,3,4,5].map(n=>pill('rt',n,raceTo===n,String(n),'')).join('')}`:''}</div>
   <div class="pills"><span class="lbl">${PB?'Marker':'Primary'}</span>${PRIMARY.map(id=>pill('w',id,priSel===id,WEAPONS[id].name+(M.cqb&&!WEAPONS[id].cqb?' (not allowed)':''),'')).join('')}</div>
   <div class="pills"><span class="lbl">Sidearm</span>${SECONDARY.map(id=>pill('sw',id,secSel===id,WEAPONS[id].name,'')).join('')}${!PB?`<span class="lbl">Medic rule</span>${pill('mr',1,medic,'On','')}${pill('mr',0,!medic,'Off','')}`:''}</div>`;
   if(w.att) h+=`<div class="pills"><span class="lbl">Attachments</span>${Object.keys(ATT).map(slot=>ATT[slot].map(a=>pill('at',slot+':'+a.id,att[slot]===a.id,a.name,'')).join('')).join('<span class="lbl">·</span>')}</div>`;
-  h+=`<div class="pills"><span class="lbl">Teams</span>${[3,5,7].map(n=>pill('ts',n,teamSize===n,`${n} v ${n}`,'')).join('')}<span class="lbl">Bots</span>${DIFF.map((d,i)=>pill('d',i,diff===i,d.n,String(i+5))).join('')}</div>
+  h+=`<div class="pills"><span class="lbl">Teams</span>${(M.big?[3,5,7,10,12]:[3,5,7]).map(n=>pill('ts',n,(M.big?teamSize:Math.min(7,teamSize))===n,`${n} v ${n}`,'')).join('')}<span class="lbl">Bots</span>${DIFF.map((d,i)=>pill('d',i,diff===i,d.n,String(i+5))).join('')}</div>
   <div class="pills"><button class="gold" data-act="start" tabindex="-1">Game on! <kbd>Enter</kbd></button><button class="gold" data-act="online" tabindex="-1" style="background:#22c55e;border-color:#22c55e">🌐 Play online vs people <kbd>O</kbd></button></div>
   <div class="pills"><span class="lbl">Online</span>${pill('nb',1,netBots,'Bots fill the teams','')}${pill('nb',0,!netBots,'People only','')}<span class="lbl" style="text-transform:none">up to 8 players, 4 v 4 · matched with anyone on the site or by room code</span></div>
-  <div id="hint">${esc(w.name)}: ${Math.round(w.v0*3.281)} fps${w.pb?'':` with ${w.bb.toFixed(2)} g BBs`} · ${w.auto?`${w.rps} ${w.pb?'balls':'rounds'} a second`:w.kind==='bolt'?'bolt action, 4x scope':w.kind==='dmr'?'semi-auto, 3x scope':w.kind==='shotgun'||w.kind==='pump'?'pump action':'semi-auto'} · ${w.mag}-${w.pb&&w.mag>=100?'ball hopper':'round mags'} · effective range about ${maxRange(priSel)} m. ${M.cqb?'CQB rules: no snipers, DMRs or LMGs indoors.':''} ${SV.games?`Record: ${SV.wins} wins in ${SV.games} games, ${SV.hits} hits${SV.caps?`, ${SV.caps} flags`:''} · rank ${rankOf(SV.xp)}.`:''}</div>`;
+  <div id="hint">${esc(w.name)}: ${Math.round(w.v0*3.281)} fps${w.pb?'':` with ${w.bb.toFixed(2)} g BBs`} · ${w.auto?`${w.rps} ${w.pb?'balls':'rounds'} a second`:w.kind==='bolt'?'bolt action, 4x scope':w.kind==='dmr'?'semi-auto, 3x scope':w.kind==='shotgun'||w.kind==='pump'?'pump action':'semi-auto'} · ${w.mag}-${w.pb&&w.mag>=100?'ball hopper':'round mags'} · effective range about ${maxRange(priSel)} m. ${M.cqb?'CQB rules: no snipers, DMRs or LMGs indoors.':''}${M.big?` ${M.name}: ${MAPDEF[M.id].size} with multi-storey buildings, stairs and towers. Hold Tab for the field map.`:''} ${SV.games?`Record: ${SV.wins} wins in ${SV.games} games, ${SV.hits} hits${SV.caps?`, ${SV.caps} flags`:''} · rank ${rankOf(SV.xp)}.`:''}</div>`;
   $('menuIn').innerHTML=h; $('logoL').src=badgeA(TEAMS[0].arm); setText('nameL',TEAMS[0].name); setText('tpL','You'); setText('scoreL',''); $('logoR').src=badgeA(TEAMS[1].arm); setText('nameR',TEAMS[1].name); setText('tpR','Bots'); setText('scoreR','');
   setText('cntT',PB?'Paintball':'Airsoft'); setText('innT',M.name); setText('outsT',MODES[modeSel]); setText('basesT',''); lastBoard=''; renderKeysHelp(); }
 $('menuIn').addEventListener('mousedown',e=>{ if(e.target.closest('button')) e.preventDefault(); });
@@ -731,7 +1310,7 @@ $('menuIn').addEventListener('click',e=>{ const b=e.target.closest('button'); if
   savePrefs(); renderMenu(); });
 function menuKey(code){ if(code==='KeyO'){ if(typeof NETA!=='undefined'&&NETA) NETA.open(); return; } const dg=code.replace('Numpad','Digit'), maps=Object.keys(MAPDEF).filter(k=>PB?MAPDEF[k].pb:MAPDEF[k].as), i=+dg.slice(5)-1; if(dg.startsWith('Digit')&&i>=0&&i<maps.length&&i<4){ mapSel=maps[i]; } else if(['Digit5','Digit6','Digit7'].includes(dg)){ diff=+dg.slice(5)-5; } else if(['Enter','NumpadEnter','Space'].includes(code)){ startGame(); return; } else return; savePrefs(); renderMenu(); }
 function startGame(){ audio(); savePrefs(); newGame(); }
-function renderKeysHelp(){ $('keysHelp').innerHTML=`<div><b>Look</b> mouse (click the game) or arrow keys</div><div><b>Move</b> WASD</div><div><b>Fire</b> click or F</div><div><b>Aim</b> right-click or X</div><div><b>Reload</b> R</div><div><b>Crouch</b> C</div><div><b>Sprint</b> Shift</div><div><b>Jump</b> Space</div><div><b>Guns</b> 1 2 or Q</div><div><b>Fire mode</b> B</div>${PB?'':'<div><b>Grenade / smoke</b> G H</div><div><b>Revive</b> hold E</div>'}<div><b>3D / top-down</b> V</div><div><b>Pause</b> Esc</div>`; }
+function renderKeysHelp(){ $('keysHelp').innerHTML=`<div><b>Look</b> mouse (click the game) or arrow keys</div><div><b>Move</b> WASD</div><div><b>Fire</b> click or F</div><div><b>Aim</b> right-click or X</div><div><b>Reload</b> R</div><div><b>Crouch</b> C</div><div><b>Sprint</b> Shift</div><div><b>Jump</b> Space</div><div><b>Guns</b> 1 2 or Q</div><div><b>Fire mode</b> B</div>${PB?'':'<div><b>Grenade / smoke</b> G H</div><div><b>Revive</b> hold E</div>'}<div><b>Field map</b> hold Tab</div>${PB?'':'<div><b>Plant / defuse</b> hold E</div>'}<div><b>3D / top-down</b> V</div><div><b>Pause</b> Esc</div>`; }
 function toMenu(){ if(document.pointerLockElement) document.exitPointerLock(); phase='menu'; A=null; $('result').classList.add('hidden'); $('menu').classList.remove('hidden'); renderMenu(); }
 
 /* ---------- 3D engine (shared with the other Rink Rivals sports) ---------- */
@@ -989,7 +1568,7 @@ void main(){vec4 t=texture2D(uTex,vUV*uUVR.zw+uUVR.xy);if(t.a<0.04)discard;gl_Fr
     time+=dt||1/60; resize();
     gl.viewport(0,0,cw,ch); const SK=cam.sky||[.04,.06,.12]; FOGC=SK; gl.clearColor(SK[0],SK[1],SK[2],1); gl.clear(gl.COLOR_BUFFER_BIT|gl.DEPTH_BUFFER_BIT);
     gl.enable(gl.DEPTH_TEST); gl.disable(gl.CULL_FACE); gl.disable(gl.BLEND); gl.depthMask(true);
-    eye=cam.eye; VP=mul(persp(cam.fov*Math.PI/180,cw/ch,cam.near||6,cam.far||14000),lookAt(cam.eye,cam.center,[0,1,0]));
+    eye=cam.eye; VP=mul(persp(cam.fov*Math.PI/180,cw/ch,cam.near||6,cam.far||14000),lookAt(cam.eye,cam.center,cam.up||[0,1,0]));
     cheer=cam.cheer||0;
     useC(); if(world) part(world,I(),[1,1,1]); if(crowdM) part(crowdM,I(),[1,1,1]);
     decals.length=0; shadows.length=0;
@@ -1029,6 +1608,7 @@ const hx=h=>{ const n=parseInt(h.slice(1),16); return [((n>>16)&255)/255,((n>>8)
 const shade=(c,f)=>[c[0]*f,c[1]*f,c[2]*f];
 const hx3=hx;
 function build3(){ if(built3||!R3.ok||!A) return; built3=true; const M=A.M, K=K3;
+  if(M.big){ R3.setStatic(()=>{}); if(BIG3.M!==M) buildBig3(M); return; }
   R3.setStatic((G0,cr,P)=>{ const {primBox,primCyl,primSphere,T,S,RY,mm}=P, Bx=primBox(), CY=primCyl(10), CN=primCyl(9,.02), SP=primSphere(5,8), rng=mulberry32(5);
     const box=(x,y,z,sx,sy,sz,col,ry)=>G0.add(Bx,mm(T(x*K,y*K,z*K),RY(ry||0),S(sx*K,sy*K,sz*K)),col);
     /* ground in patches so it isn't flat-coloured */
@@ -1058,6 +1638,118 @@ function build3(){ if(built3||!R3.ok||!A) return; built3=true; const M=A.M, K=K3
     if(M.cqb){ for(let x=-M.w/2;x<=M.w/2;x+=7) box(x,4.2,0,.3,.3,M.d,'#2b3038'); for(let x=-M.w/2+3.5;x<M.w/2;x+=7) for(let z=-M.d/2+4;z<M.d/2;z+=8) box(x,4,z,1.6,.08,.3,'#fffbe6'); }
     else { for(let i=0;i<120;i++){ const a=i/120*Math.PI*2, r=Math.max(M.w,M.d)*.75+rng()*12, x=Math.cos(a)*r, z=Math.sin(a)*r*.75, h=10+rng()*8; G0.add(CN,mm(T(x*K,h*.5*K,z*K),S(h*.45*K,h*K,h*.45*K)),shade(hx('#24451c'),.8+rng()*.3)); } }
   }); }
+/* ---------- 3D for the big fields: static scenery merged into 32 m chunks, each in a detailed and a light version (LOD),
+   drawn only when in view and inside the haze, with our own shader for distance fog into the sky colour ---------- */
+const BIG3={M:null,chunks:[],far:null,prog:null,loc:null};
+const GLX=(()=>{ try{ return $('gl').getContext('webgl'); }catch(e){ return null; } })();
+class GB{ constructor(){ this.n=0; this.cap=4096; this.p=new Float32Array(this.cap*3); this.nr=new Float32Array(this.cap*3); this.c=new Float32Array(this.cap*3); this.ph=new Float32Array(this.cap); }
+  grow(k){ if(this.n+k<=this.cap) return; while(this.n+k>this.cap) this.cap*=2; const g=(a,m)=>{ const b=new Float32Array(this.cap*m); b.set(a); return b; }; this.p=g(this.p,3); this.nr=g(this.nr,3); this.c=g(this.c,3); this.ph=g(this.ph,1); }
+  v(x,y,z,nx,ny,nz,c,ph){ const i=this.n++, j=i*3; this.p[j]=x*K3; this.p[j+1]=y*K3; this.p[j+2]=z*K3; this.nr[j]=nx; this.nr[j+1]=ny; this.nr[j+2]=nz; this.c[j]=c[0]; this.c[j+1]=c[1]; this.c[j+2]=c[2]; this.ph[i]=ph||0; }
+  quad(a,b,c2,d,n,col,ph){ this.grow(6); for(const q of [a,b,c2,a,c2,d]) this.v(q[0],q[1],q[2],n[0],n[1],n[2],col,ph); }
+  /* an axis-aligned box; skip: faces to leave out (bottom by default) */
+  box(x0,y0,z0,x1,y1,z1,col,noBottom){ const c=col; this.quad([x0,y1,z0],[x0,y1,z1],[x1,y1,z1],[x1,y1,z0],[0,1,0],c);
+    const s=shade(c,.86), s2=shade(c,.78); this.quad([x0,y0,z0],[x1,y0,z0],[x1,y1,z0],[x0,y1,z0],[0,0,-1],s2); this.quad([x1,y0,z1],[x0,y0,z1],[x0,y1,z1],[x1,y1,z1],[0,0,1],s);
+    this.quad([x0,y0,z1],[x0,y0,z0],[x0,y1,z0],[x0,y1,z1],[-1,0,0],s); this.quad([x1,y0,z0],[x1,y0,z1],[x1,y1,z1],[x1,y1,z0],[1,0,0],s2);
+    if(!noBottom) this.quad([x0,y0,z1],[x1,y0,z1],[x1,y0,z0],[x0,y0,z0],[0,-1,0],shade(c,.7)); }
+  /* a box turned about the vertical axis */
+  rbox(cx,cy,cz,sx,sy,sz,a,col){ const ca=Math.cos(a), sa=Math.sin(a), P=(u,v,w)=>[cx+u*ca-w*sa,cy+v,cz+u*sa+w*ca], hx=sx/2, hy=sy/2, hz=sz/2;
+    const F=[[[ -hx,hy,-hz],[-hx,hy,hz],[hx,hy,hz],[hx,hy,-hz],[0,1,0]],[[-hx,-hy,-hz],[hx,-hy,-hz],[hx,hy,-hz],[-hx,hy,-hz],[0,0,-1]],[[hx,-hy,hz],[-hx,-hy,hz],[-hx,hy,hz],[hx,hy,hz],[0,0,1]],[[-hx,-hy,hz],[-hx,-hy,-hz],[-hx,hy,-hz],[-hx,hy,hz],[-1,0,0]],[[hx,-hy,-hz],[hx,-hy,hz],[hx,hy,hz],[hx,hy,-hz],[1,0,0]]];
+    for(const f of F){ const n=f[4], N=[n[0]*ca-n[2]*sa,n[1],n[0]*sa+n[2]*ca]; this.quad(P(...f[0]),P(...f[1]),P(...f[2]),P(...f[3]),N,n[1]?col:shade(col,.84)); } }
+  /* a cylinder or cone (rt: top radius as a fraction) */
+  cyl(x,z,r,y0,y1,seg,col,rt,cap){ rt=rt===undefined?1:rt; this.grow(seg*12); for(let i=0;i<seg;i++){ const a0=i/seg*Math.PI*2, a1=(i+1)/seg*Math.PI*2, c0=Math.cos(a0), s0=Math.sin(a0), c1=Math.cos(a1), s1=Math.sin(a1), sl=(1-rt)*r/(y1-y0||1);
+      const nA=norm2([c0,sl,s0]), nB=norm2([c1,sl,s1]), cc=shade(col,.82+.18*Math.max(0,c0*.4+s0*.6+.4));
+      this.v(x+c0*r,y0,z+s0*r,...nA,cc); this.v(x+c1*r,y0,z+s1*r,...nB,cc); this.v(x+c1*r*rt,y1,z+s1*r*rt,...nB,cc); this.v(x+c0*r,y0,z+s0*r,...nA,cc); this.v(x+c1*r*rt,y1,z+s1*r*rt,...nB,cc); this.v(x+c0*r*rt,y1,z+s0*r*rt,...nA,cc);
+      if(cap!==false&&rt>0){ this.v(x,y1,z,0,1,0,col); this.v(x+c1*r*rt,y1,z+s1*r*rt,0,1,0,col); this.v(x+c0*r*rt,y1,z+s0*r*rt,0,1,0,col); } } }
+  sph(x,y,z,rx,ry,rz,la,lo,col){ this.grow(la*lo*6); const P=(i,j)=>{ const t=i/la*Math.PI, f=j/lo*Math.PI*2; return [Math.sin(t)*Math.cos(f),Math.cos(t),Math.sin(t)*Math.sin(f)]; };
+    for(let i=0;i<la;i++) for(let j=0;j<lo;j++){ const a=P(i,j), b=P(i+1,j), c=P(i+1,j+1), d=P(i,j+1); for(const q of [a,b,c,a,c,d]){ const k=.78+.22*(q[1]*.5+.5); this.v(x+q[0]*rx,y+q[1]*ry,z+q[2]*rz,q[0],q[1],q[2],shade(col,k)); } } }
+  upload(gl){ if(!this.n) return null; const mk=(a,k)=>{ const b=gl.createBuffer(); gl.bindBuffer(gl.ARRAY_BUFFER,b); gl.bufferData(gl.ARRAY_BUFFER,a.subarray(0,this.n*k),gl.STATIC_DRAW); return b; };
+    return {pos:mk(this.p,3),nor:mk(this.nr,3),col:mk(this.c,3),ph:mk(this.ph,1),n:this.n}; } }
+const freeM=(gl,m)=>{ if(m) for(const k of ['pos','nor','col','ph']) gl.deleteBuffer(m[k]); };
+const MATC={plaster:'#d6c7a4',brick:'#9b4c3b',conc:'#a9aaa5',farm:'#e4d8bf',barn:'#8b2e24',wood:'#8a6a46',mud:'#b48d5c',white:'#e2ded5',ochre:'#c7a15a',tin:'#8c949b',stone:'#8f8a80',green:'#7d8f6a',blue:'#7c93a8',hangar:'#8e969c',office:'#b9bcb8'};
+const KINDC={floor:'#8d7b68',roof:'#7a3b2e',roofw:'#8f8a84',rail:'#3f3f46',step:'#9b8f80',wstep:'#8a6a46',post:'#5f4a30',deck:'#8a6a46',tin:'#7b838a',ply:'#c69c6d',log:'#6b4423',logroof:'#5a3a20',berm:'#6e5737',hesco:'#b39866',sand:'#bfa46f',tarp:'#69694a',heli:'#4d5a3c',rotor:'#1f2328',mast:'#9ca3af',tent:'#9e9e76',crate:'#9a7442',pallet:'#a7814f',furn:'#6b4a2f',hay:'#d4b85a',stone:'#8f8a80',jersey:'#bcb9b1',fence:'#3f4a36',mach:'#5b6b73',conv:'#4b5563',rack:'#c2410c',pipe:'#9ca3af',wagon:'#7c2d12',plane:'#9aa3a8',wing:'#9aa3a8',tank:'#c8c8c0',pillar:'#9a9b96',cab:'#1f2937',wall:'#c9c3b5'};
+function bidShade(b){ if(!b.bid) return 1; let h=0; for(const ch of String(b.bid)) h=(h*31+ch.charCodeAt(0))%997; return .9+(h%20)/100; }
+/* one box of the field, with its details in the detailed version */
+function emitBox(G,b,hi,M){ const x0=b.x0, x1=b.x1, z0=b.z0, z1=b.z1, y0=b.y0||0, y1=b.h, sx=x1-x0, sz=z1-z0, cx=(x0+x1)/2, cz=(z0+z1)/2, k=b.kind;
+  let col=b.col?hx(b.col):hx(k==='wall'?(MATC[b.mat]||KINDC.wall):k==='roof'?(b.mat==='tin'?KINDC.tin:KINDC.roof):(KINDC[k]||'#9ca3af'));
+  if(k==='wall') col=shade(col,bidShade(b));
+  if(k==='fence'){ G.box(x0,y0,z0,x1,y1*.92,z1,hx('#2f3a2a'),true); if(hi){ const L=Math.max(sx,sz); for(let s=0;s<=L;s+=4) G.box(sx>sz?x0+s-.06:x0-.04,0,sx>sz?z0-.04:z0+s-.06,sx>sz?x0+s+.06:x1+.04,y1,sx>sz?z1+.04:z0+s+.06,hx('#5f4a30'),true); } return; }
+  if(k==='car'||k==='truck'){ G.box(x0,y0,z0,x1,y1,z1,col); const ax=sx>sz; for(const a of [-1,1]) for(const c of [-1,1]){ const wx=ax?cx+a*(sx/2-.75):cx+c*(sx/2-.02), wz=ax?cz+c*(sz/2-.02):cz+a*(sz/2-.75); if(hi) G.box(wx-(ax?.36:.12),0,wz-(ax?.12:.36),wx+(ax?.36:.12),.72,wz+(ax?.12:.36),hx('#111'),true); }
+    if(b.wreck) G.box(x0+.05,y1,z0+.05,x1-.05,y1+.02,z1-.05,hx('#3f2f25')); return; }
+  if(k==='cab'){ G.box(x0,y0,z0,x1,y1,z1,col); if(hi){ const g=hx('#1e293b'); const e=.02; G.box(x0-e,y0+.15,z0+.2,x0,y1-.12,z1-.2,g,true); G.box(x1,y0+.15,z0+.2,x1+e,y1-.12,z1-.2,g,true); G.box(x0+.2,y0+.15,z0-e,x1-.2,y1-.12,z0,g,true); G.box(x0+.2,y0+.15,z1,x1-.2,y1-.12,z1+e,g,true); } return; }
+  G.box(x0,y0,z0,x1,y1,z1,col,y0<=.01);
+  if(!hi) return;
+  if(k==='wall'&&y1-y0>1.2&&y0<.05){ G.box(x0-.01,0,z0-.01,x1+.01,.18,z1+.01,shade(col,.7),true); }
+  else if(k==='ply') for(let s=y0+.6;s<y1;s+=.6) G.box(x0-.005,s,z0-.005,x1+.005,s+.02,z1+.005,shade(col,.8),true);
+  else if(k==='sand') for(let s=y0+.25;s<y1;s+=.25) G.box(x0-.01,s,z0-.01,x1+.01,s+.03,z1+.01,shade(col,.82),true);
+  else if(k==='berm'){ G.box(x0+.05,y1,z0+.05,x1-.05,y1+.18,z1-.05,hx('#a8936a')); }
+  else if(k==='hesco'){ const L=Math.max(sx,sz); for(let s=0;s<=L;s+=1.05) G.box(sx>sz?x0+s-.03:x0-.02,y0,sx>sz?z0-.02:z0+s-.03,sx>sz?x0+s+.03:x1+.02,y1+.02,sx>sz?z1+.02:z0+s+.03,hx('#6b6f5a'),true); G.box(x0+.06,y1-.04,z0+.06,x1-.06,y1+.01,z1-.06,hx('#9b8457')); }
+  else if(k==='cont'){ const L=Math.max(sx,sz); for(let s=.3;s<L;s+=.3) G.box(sx>sz?x0+s-.02:x0-.03,y0+.05,sx>sz?z0-.03:z0+s-.02,sx>sz?x0+s+.02:x1+.03,y1-.05,sx>sz?z1+.03:z0+s+.02,shade(col,.75),true); }
+  else if(k==='log'){ const n=Math.max(1,Math.round((y1-y0)/.3)), ax=sx>sz; for(let i=0;i<n;i++){ const yy=y0+(i+.5)*(y1-y0)/n; G.box(ax?x0-.02:x0-.03,yy-.015,ax?z0-.03:z0-.02,ax?x1+.02:x1+.03,yy+.015,ax?z1+.03:z1+.02,shade(col,.7),true); } }
+  else if(k==='crate'||k==='pallet') G.box(x0+.05,y1,z0+.05,x1-.05,y1+.01,z1-.05,shade(col,.85),true);
+  else if(k==='tent'){ G.box(x0+.2,y1,z0+.2,x1-.2,y1+.35,z1-.2,shade(col,.92)); }
+  else if(k==='step'||k==='wstep') G.box(x0,y1-.03,z0,x1,y1,z1,shade(col,1.08),true); }
+function emitTree(G,t,hi){ const k=t.kind||'pine', h=t.h, r=t.r;
+  if(t.palm){ G.cyl(t.x,t.z,r,0,h,hi?6:4,hx('#8a6a42'),.75,false); if(hi) for(let i=0;i<7;i++){ const a=i/7*Math.PI*2; G.rbox(t.x+Math.cos(a)*1.2,h-.2,t.z+Math.sin(a)*1.2,2.6,.06,.5,a,hx('#4d7c2a')); } else G.sph(t.x,h-.2,t.z,2,.5,2,2,5,hx('#4d7c2a')); return; }
+  const lc=shade(hx(k==='pine'?'#2c5221':k==='oak'?'#3d6a2a':'#5d8a3a'),.82+((Math.abs(t.x*13+t.z*7)%10)/10)*.36);
+  const bark=k==='birch'?hx('#d6d3c8'):hx('#4a3423');
+  if(k==='pine'){ G.cyl(t.x,t.z,r,0,h*.72,hi?6:4,bark,.5,false); if(hi){ G.cyl(t.x,t.z,h*.2,h*.3,h*.68,8,shade(lc,.9),0); G.cyl(t.x,t.z,h*.16,h*.52,h*.86,8,lc,0); G.cyl(t.x,t.z,h*.1,h*.72,h*1.02,7,shade(lc,1.12),0); } else G.cyl(t.x,t.z,h*.19,h*.3,h*1.0,5,lc,0); return; }
+  G.cyl(t.x,t.z,r,0,h*.62,hi?6:4,bark,.6,false);
+  if(hi){ G.sph(t.x,h*.66,t.z,h*.3,h*.24,h*.3,4,7,lc); G.sph(t.x+h*.1,h*.82,t.z-h*.06,h*.22,h*.18,h*.22,4,6,shade(lc,1.1)); } else G.sph(t.x,h*.7,t.z,h*.3,h*.28,h*.3,3,5,lc); }
+function emitCyl(G,c,hi){ const col=hx(c.col||'#888'), seg=hi?(c.r>2?16:10):6;
+  if(c.shape==='rock'){ G.cyl(c.x,c.z,c.r,0,c.h,hi?7:5,col,.62); return; }
+  G.cyl(c.x,c.z,c.r,0,c.h,seg,col,1); if(hi&&c.shape==='drum'){ G.cyl(c.x,c.z,c.r*1.02,c.h*.3,c.h*.34,seg,hx('#111'),1,false); G.cyl(c.x,c.z,c.r*1.02,c.h*.66,c.h*.7,seg,hx('#111'),1,false); }
+  if(hi&&c.shape==='tank'){ G.cyl(c.x,c.z,c.r*1.01,c.h-.4,c.h,seg,shade(col,.8),1,false); G.cyl(c.x,c.z,c.r*.98,c.h,c.h+c.r*.25,seg,shade(col,.95),.15); }
+  if(c.shape==='well'&&hi) G.cyl(c.x,c.z,c.r*.75,c.h-.01,c.h+.005,seg,hx('#1f2937'),1); }
+function buildBig3(M){ const gl=GLX; if(!gl) return; for(const ch of BIG3.chunks){ freeM(gl,ch.hi); freeM(gl,ch.lo); } freeM(gl,BIG3.far); BIG3.chunks=[]; BIG3.M=M;
+  const CS=32, nx=Math.ceil(M.w/CS), nz=Math.ceil(M.d/CS), ox=-M.w/2, oz=-M.d/2, cells=[];
+  for(let k=0;k<nx*nz;k++) cells.push({hi:new GB(),lo:new GB(),b:[Infinity,Infinity,-Infinity,-Infinity],top:0});
+  const cellOfP=(x,z)=>cells[clamp(Math.floor((z-oz)/CS),0,nz-1)*nx+clamp(Math.floor((x-ox)/CS),0,nx-1)];
+  const grow=(c,x0,z0,x1,z1,y)=>{ c.b[0]=Math.min(c.b[0],x0); c.b[1]=Math.min(c.b[1],z0); c.b[2]=Math.max(c.b[2],x1); c.b[3]=Math.max(c.b[3],z1); c.top=Math.max(c.top,y||0); };
+  /* ground: 4 m tiles with a little colour noise */
+  const g0=hx(M.ground), rng=mulberry32(77);
+  for(let x=ox;x<-ox-.01;x+=4) for(let z=oz;z<-oz-.01;z+=4){ const c=cellOfP(x+2,z+2), f=.9+rng()*.16, col=shade(g0,f); for(const G of [c.hi,c.lo]) G.quad([x,0,z],[x,0,z+4],[x+4,0,z+4],[x+4,0,z],[0,1,0],col); grow(c,x,z,x+4,z+4,0); }
+  for(const r of M.deco||[]){ const c=cellOfP((r.x0+r.x1)/2,(r.z0+r.z1)/2), col=hx(r.col); for(const G of [c.hi,c.lo]) G.quad([r.x0,r.y,r.z0],[r.x0,r.y,r.z1],[r.x1,r.y,r.z1],[r.x1,r.y,r.z0],[0,1,0],col); grow(c,r.x0,r.z0,r.x1,r.z1,r.y); }
+  for(const b of M.boxes){ const c=cellOfP((b.x0+b.x1)/2,(b.z0+b.z1)/2); emitBox(c.hi,b,true,M); emitBox(c.lo,b,false,M); grow(c,b.x0,b.z0,b.x1,b.z1,b.h); }
+  for(const v of M.vis||[]){ const c=cellOfP((v.x0+v.x1)/2,(v.z0+v.z1)/2); c.hi.box(v.x0,v.y0,v.z0,v.x1,v.y1,v.z1,hx(v.col)); grow(c,v.x0,v.z0,v.x1,v.z1,v.y1); }
+  for(const t of M.trees){ const c=cellOfP(t.x,t.z); emitTree(c.hi,t,true); emitTree(c.lo,t,false); grow(c,t.x-t.h*.3,t.z-t.h*.3,t.x+t.h*.3,t.z+t.h*.3,t.h); }
+  for(const q of M.bush){ const c=cellOfP(q.x,q.z), col=shade(hx('#3b6b2a'),.78+((Math.abs(q.x*7+q.z*3)%10)/10)*.4), hh=(q.hh||1.2)*.62; c.hi.sph(q.x,hh*.5,q.z,q.r,hh,q.r,4,7,col); c.lo.sph(q.x,hh*.5,q.z,q.r,hh,q.r,2,5,col); grow(c,q.x-q.r,q.z-q.r,q.x+q.r,q.z+q.r,hh); }
+  for(const cy of M.cyl){ const c=cellOfP(cy.x,cy.z); emitCyl(c.hi,cy,true); emitCyl(c.lo,cy,false); grow(c,cy.x-cy.r,cy.z-cy.r,cy.x+cy.r,cy.z+cy.r,cy.h); }
+  /* base flags */
+  for(let t=0;t<2;t++){ const [sx,sz]=M.spawn[t], c=cellOfP(sx,sz+6); for(const G of [c.hi,c.lo]){ G.cyl(sx,sz+6,.06,0,5,6,hx('#e5e7eb')); G.box(sx,4.2,sz+5.98,sx+1.3,4.95,sz+6.02,hx(TEAMS[t].col)); } }
+  let verts=0; for(const c of cells){ if(!c.hi.n) continue; verts+=c.hi.n; const cx=(c.b[0]+c.b[2])/2, cz=(c.b[1]+c.b[3])/2, rad=Math.hypot(c.b[2]-c.b[0],c.b[3]-c.b[1],c.top)/2; BIG3.chunks.push({cx,cz,rad,hi:c.hi.upload(gl),lo:c.lo.upload(gl),nh:c.hi.n,nl:c.lo.n}); }
+  /* beyond the fence: ground to the horizon, and a skyline in the haze */
+  const F=new GB(), R0=Math.max(M.w,M.d), gc=shade(g0,.92);
+  F.quad([-R0*3,-.02,-R0*3],[-R0*3,-.02,R0*3],[R0*3,-.02,R0*3],[R0*3,-.02,-R0*3],[0,1,0],gc);
+  const hr=mulberry32(91); for(let i=0;i<150;i++){ const a=i/150*Math.PI*2, r=R0*.62+hr()*40, x=Math.cos(a)*r*(M.w/R0+.1), z=Math.sin(a)*r*(M.d/R0+.1); if(Math.abs(x)<M.w/2+8&&Math.abs(z)<M.d/2+8) continue;
+    if(M.id==='outpost') F.sph(x,0,z,12+hr()*14,4+hr()*7,10+hr()*10,3,6,shade(hx('#b8955e'),.85+hr()*.2));
+    else if(M.id==='town'||M.id==='factory') { const h=6+hr()*14, s=6+hr()*8; F.box(x-s,0,z-s,x+s,h,z+s,shade(hx('#8a8a86'),.8+hr()*.2),true); }
+    else { const h=14+hr()*10; F.cyl(x,z,h*.32,0,h,6,shade(hx('#24451c'),.8+hr()*.3),0); } }
+  BIG3.far=F.upload(gl); BIG3.verts=verts; }
+function big3Prog(gl,prog0){ if(BIG3.prog) return BIG3.prog;
+  const loc={aPos:gl.getAttribLocation(prog0,'aPos'),aNor:gl.getAttribLocation(prog0,'aNor'),aCol:gl.getAttribLocation(prog0,'aCol'),aPh:gl.getAttribLocation(prog0,'aPh')};
+  const mk=(t,src)=>{ const sh=gl.createShader(t); gl.shaderSource(sh,src); gl.compileShader(sh); if(!gl.getShaderParameter(sh,gl.COMPILE_STATUS)) throw new Error(gl.getShaderInfoLog(sh)); return sh; };
+  const p=gl.createProgram(); gl.attachShader(p,mk(gl.VERTEX_SHADER,`attribute vec3 aPos;attribute vec3 aNor;attribute vec3 aCol;attribute float aPh;uniform mat4 uVP;varying vec3 vCol;varying vec3 vN;varying vec3 vW;varying float vP;
+void main(){vCol=aCol;vN=aNor;vW=aPos;vP=aPh;gl_Position=uVP*vec4(aPos,1.0);}`));
+  gl.attachShader(p,mk(gl.FRAGMENT_SHADER,`precision mediump float;varying vec3 vCol;varying vec3 vN;varying vec3 vW;varying float vP;uniform vec3 uLight,uEye,uSky;uniform vec2 uFog;
+void main(){vec3 c=vCol;if(vP>-0.5){vec3 n=normalize(vN);float d=max(dot(n,uLight),0.0);float h=0.5+0.5*n.y;c=vCol*(0.34+0.26*h+0.52*d);}
+float f=clamp((length(vW-uEye)-uFog.x)/(uFog.y-uFog.x),0.0,1.0);f=f*f*(3.0-2.0*f);gl_FragColor=vec4(mix(c,uSky,f),1.0);}`));
+  for(const k in loc) if(loc[k]>=0) gl.bindAttribLocation(p,loc[k],k); gl.linkProgram(p); if(!gl.getProgramParameter(p,gl.LINK_STATUS)) throw new Error(gl.getProgramInfoLog(p));
+  const u={}; for(const n of ['uVP','uLight','uEye','uSky','uFog']) u[n]=gl.getUniformLocation(p,n); BIG3.prog={p,u,loc}; return BIG3.prog; }
+function mat4Mul(a,b){ const o=new Float32Array(16); for(let i=0;i<4;i++) for(let j=0;j<4;j++){ let s=0; for(let k=0;k<4;k++) s+=a[k*4+j]*b[i*4+k]; o[i*4+j]=s; } return o; }
+function big3VP(cam,gl){ const as=gl.canvas.width/Math.max(1,gl.canvas.height), fy=cam.fov*Math.PI/180, t=1/Math.tan(fy/2), n=cam.near, f=cam.far, P=new Float32Array(16); P[0]=t/as; P[5]=t; P[10]=(f+n)/(n-f); P[11]=-1; P[14]=2*f*n/(n-f);
+  const e=cam.eye, c=cam.center, nz=norm2([e[0]-c[0],e[1]-c[1],e[2]-c[2]]), u=[0,1,0], xa=norm2([u[1]*nz[2]-u[2]*nz[1],u[2]*nz[0]-u[0]*nz[2],u[0]*nz[1]-u[1]*nz[0]]), ya=[nz[1]*xa[2]-nz[2]*xa[1],nz[2]*xa[0]-nz[0]*xa[2],nz[0]*xa[1]-nz[1]*xa[0]];
+  const dt=(a,b)=>a[0]*b[0]+a[1]*b[1]+a[2]*b[2], V=new Float32Array([xa[0],ya[0],nz[0],0, xa[1],ya[1],nz[1],0, xa[2],ya[2],nz[2],0, -dt(xa,e),-dt(ya,e),-dt(nz,e),1]); return mat4Mul(P,V); }
+/* drawn first thing inside R3.frame's draw callback; restores the engine's program afterwards */
+function drawBig3(cam){ const gl=GLX, M=A.M; if(!gl||BIG3.M!==M) return; const prog0=gl.getParameter(gl.CURRENT_PROGRAM); let P; try{ P=big3Prog(gl,prog0); }catch(e){ console.warn(e); BIG3.M=null; return; }
+  gl.useProgram(P.p); gl.uniformMatrix4fv(P.u.uVP,false,big3VP(cam,gl)); const L=norm2([.35,.85,.4]); gl.uniform3fv(P.u.uLight,L); gl.uniform3fv(P.u.uEye,cam.eye); gl.uniform3fv(P.u.uSky,M.sky); const fz=M.fog||[70,250]; gl.uniform2f(P.u.uFog,fz[0]*K3,fz[1]*K3);
+  const bind=m=>{ for(const [k,b,n] of [['aPos','pos',3],['aNor','nor',3],['aCol','col',3],['aPh','ph',1]]){ const l=P.loc[k]; if(l<0) continue; gl.bindBuffer(gl.ARRAY_BUFFER,m[b]); gl.vertexAttribPointer(l,n,gl.FLOAT,false,0,0); } gl.drawArrays(gl.TRIANGLES,0,m.n); };
+  const ex=cam.eye[0]/K3, ez=cam.eye[2]/K3, fwd=norm2([cam.center[0]-cam.eye[0],0,cam.center[2]-cam.eye[2]]), far=fz[1]+10, half=Math.min(1.5,(cam.fov*Math.PI/180)*.5*(gl.canvas.width/Math.max(1,gl.canvas.height))+.25);
+  let drawn=0, vtx=0; if(BIG3.far) bind(BIG3.far);
+  for(const c of BIG3.chunks){ const dx=c.cx-ex, dz=c.cz-ez, d=Math.hypot(dx,dz); if(d-c.rad>far) continue;
+    if(d>c.rad+4){ const ang=Math.acos(clamp((dx*fwd[0]+dz*fwd[2])/d,-1,1)); if(ang-Math.asin(Math.min(1,c.rad/d))>half) continue; }
+    const m=d-c.rad<55?c.hi:c.lo; if(!m) continue; bind(m); drawn++; vtx+=m.n; }
+  BIG3.stat={drawn,vtx,total:BIG3.chunks.length}; gl.useProgram(prog0); }
+
 /* a player in kit: plate carrier, helmet, goggles, armband, a replica in both hands; out players raise a hand */
 function drawSoldier(e,lod){ const K=K3, T=TEAMS[e.team], kit=T.kit, s=Math.sin(e.ph), c=e.down?.6:e.crouch, base=e.down?R3.mm(R3.T(e.x*K,.25*K,e.z*K),R3.RY(-e.yaw),R3.RZ(-1.35),R3.T(-.4*K,0,0)):R3.mm(R3.T(e.x*K,e.y*K,e.z*K),R3.RY(-e.yaw));
   const P=(a,b,th,col)=>R3.part(R3.UB,R3.mm(base,R3.beam([a[0]*K,a[1]*K,a[2]*K],[b[0]*K,b[1]*K,b[2]*K],th*K,th*K)),col), J=(p,r,col)=>R3.part(R3.US,R3.mm(base,R3.T(p[0]*K,p[1]*K,p[2]*K),R3.S(r*K,r*K,r*K)),col);
@@ -1077,7 +1769,8 @@ function drawSoldier(e,lod){ const K=K3, T=TEAMS[e.team], kit=T.kit, s=Math.sin(
     if(w.pb&&w.mag>=100) R3.part(R3.UB,R3.mm(base,R3.T((gun[0]+dir[0]*.1)*K,(gun[1]+.13)*K,gun[2]*K),R3.RZ(pitch),R3.S(.2*K,.17*K,.15*K)),TEAMS[e.team].jersey2||'#111');
     if(lod){ R3.part(R3.UB,R3.mm(base,R3.T((gun[0]+dir[0]*.12)*K,(gun[1]-.08)*K,gun[2]*K),R3.RZ(pitch),R3.S(.05*K,.14*K,.04*K)),'#18181b'); if(w.zoom) R3.part(R3.UC,R3.mm(base,R3.T((gun[0]+dir[0]*.2)*K,(gun[1]+.07)*K,gun[2]*K),R3.RZ(pitch-Math.PI/2),R3.S(.05*K,.3*K,.05*K)),'#111'); } }
   for(const sd of [-1,1]) R3.part(R3.UC,R3.mm(base,R3.T((sh[0]-.02)*K,(sh[1]-.12)*K,(.21*sd)*K),R3.S(.11*K,.07*K,.11*K)),T.arm);
-  R3.shadow(e.x*K,e.z*K,20); }
+  if(e.carry===undefined||true){ const B=A.bomb; if(B&&B.carrier===e) R3.part(R3.UB,R3.mm(base,R3.T(-.24*K,(sh[1]-.15)*K,0),R3.S(.16*K,.26*K,.3*K)),'#3f3f46'); }
+  if(e.y<.3) R3.shadow(e.x*K,e.z*K,20); }
 /* the replica in your hands, drawn in camera space */
 function drawViewmodel(e,eye,f,rt,up){ const w=gunOf(e), K=K3, ads=e.ads?1:0, bob=e.sprint?Math.sin(e.ph*1.5)*.025:Math.sin(e.ph)*.008, rl=e.reloadT>0?Math.sin(Math.min(1,e.reloadT/w.reload)*Math.PI)*.18:0;
   const off=[.46-.08*ads-e.recoil*.04,-.2+.1*ads+bob-rl,.16*(1-ads)], P=[eye[0]+f[0]*off[0]+rt[0]*off[2]+up[0]*off[1],eye[1]+f[1]*off[0]+rt[1]*off[2]+up[1]*off[1],eye[2]+f[2]*off[0]+rt[2]*off[2]+up[2]*off[1]];
@@ -1093,16 +1786,20 @@ function drawViewmodel(e,eye,f,rt,up){ const w=gunOf(e), K=K3, ads=e.ads?1:0, bo
 function render3D(dt){
   if(!A||phase==='menu'){ const a=performance.now()/9000; R3.frame({eye:[Math.sin(a)*30*K3,9*K3,Math.cos(a)*30*K3],center:[0,1*K3,0],fov:50,sky:[.55,.7,.88]},()=>{},dt); return; }
   build3(); const K=K3, M=A.M; let me=ME();
-  let src=me; if(me.out&&A.mode==='elim'){ src=A.ents.find(e=>e.team===0&&!e.out)||me; }
+  let src=me; if(me.out&&ROUNDS(A.mode)){ src=A.ents.find(e=>e.team===me.team&&!e.out)||me; }
   const ey=src.y+eyeH(src)+(src===me&&me.out?-.15:0), f=fwdOf(src.yaw,src.pitch), rt=[-Math.sin(src.yaw),0,Math.cos(src.yaw)], up=[-Math.sin(src.pitch)*Math.cos(src.yaw),Math.cos(src.pitch),-Math.sin(src.pitch)*Math.sin(src.yaw)];
   const eye=[src.x,ey,src.z], w=gunOf(me), fov=me.ads?(w.zoom?56/w.zoom:w.dot?46:52):72;
-  R3.frame({eye:[eye[0]*K,eye[1]*K,eye[2]*K],center:[(eye[0]+f[0]*10)*K,(eye[1]+f[1]*10)*K,(eye[2]+f[2]*10)*K],fov,near:.05*K,far:4000,sky:M.sky},()=>{
-    for(const e of A.ents){ if(e===src) continue; const d=Math.hypot(e.x-src.x,e.z-src.z); if(d>110) continue; drawSoldier(e,d<25); }
+  const cam={eye:[eye[0]*K,eye[1]*K,eye[2]*K],center:[(eye[0]+f[0]*10)*K,(eye[1]+f[1]*10)*K,(eye[2]+f[2]*10)*K],fov,near:.05*K,far:M.big?((M.fog||[0,300])[1]+60)*K:4000,sky:M.sky};
+  R3.frame(cam,()=>{
+    if(M.big) drawBig3(cam); const vis=M.big?(M.fog||[0,200])[1]:110;
+    for(const e of A.ents){ if(e===src) continue; const d=Math.hypot(e.x-src.x,e.z-src.z); if(d>Math.min(110,vis)) continue; drawSoldier(e,d<25); }
     const em=R3.partE||R3.part;
     for(const b of A.bbs){ const d=Math.hypot(b.x-eye[0],b.z-eye[2]); if(d<.6||d>90) continue; const s=Math.max(b.pb?.0087:.012,d*(b.pb?.0013:.0016)); (b.tr?em:b.pb?R3.part:em)(R3.US,R3.mm(R3.T(b.x*K,b.y*K,b.z*K),R3.S(s*K,s*K,s*K)),b.pb?TEAMS[b.team].paint:b.tr?[.4,1,.3]:'#fffbe6'); if(b.pb) continue; if(d<25) R3.part(R3.UB,R3.beam([b.px*K,b.py*K,b.pz*K],[b.x*K,b.y*K,b.z*K],s*.6*K,s*.6*K),'#e5e7eb'); }
     for(const sp of A.splats){ const d=Math.hypot(sp.x-eye[0],sp.z-eye[2]); if(d>60) continue; const n=sp.n, o=.004; const m=n[1]>.5?R3.mm(R3.T(sp.x*K,(sp.y+o)*K,sp.z*K),R3.RY(sp.r),R3.S(sp.s*1.6*K,.002*K,sp.s*K)):Math.abs(n[0])>.5?R3.mm(R3.T((sp.x+n[0]*o)*K,sp.y*K,sp.z*K),R3.S(.002*K,sp.s*1.4*K,sp.s*K)):R3.mm(R3.T(sp.x*K,sp.y*K,(sp.z+n[2]*o)*K),R3.S(sp.s*K,sp.s*1.4*K,.002*K)); R3.part(R3.US,m,sp.col); }
     for(const f of A.flags){ R3.part(R3.UB,R3.mm(R3.T(f.x*K,1.3*K,f.z*K),R3.S(.04*K,2.6*K,.04*K)),'#e5e7eb'); if(!f.carrier) em(R3.UB,R3.mm(R3.T(f.x*K,2.3*K,(f.z+.35)*K),R3.RX(Math.sin(A.t*4)*.15),R3.S(.02*K,.45*K,.7*K)),f.team<0?[1,.85,.1]:hx(TEAMS[f.team].col)); }
     for(const p of A.points){ const col=p.own<0?[.85,.85,.85]:hx(TEAMS[p.own].arm); for(let k=0;k<24;k++){ const a=k/24*Math.PI*2; em(R3.UB,R3.mm(R3.T((p.x+Math.cos(a)*4)*K,.03*K,(p.z+Math.sin(a)*4)*K),R3.RY(-a),R3.S(.1*K,.02*K,.9*K)),col); } R3.part(R3.UB,R3.mm(R3.T(p.x*K,1.5*K,p.z*K),R3.S(.05*K,3*K,.05*K)),'#e5e7eb'); em(R3.UB,R3.mm(R3.T(p.x*K,2.7*K,(p.z+.3)*K),R3.S(.02*K,.4*K,.6*K)),col); }
+    if(A.mode==='bomb'&&A.sites){ for(const st of A.sites){ for(const [ax,az,bx2,bz2] of [[-1,-1,1,-1],[1,-1,1,1],[1,1,-1,1],[-1,1,-1,-1]]) em(R3.UB,R3.beam([(st.x+ax*3.5)*K,.05*K,(st.z+az*3.5)*K],[(st.x+bx2*3.5)*K,.05*K,(st.z+bz2*3.5)*K],.03*K,.18*K),[1,.55,.15]); R3.part(R3.UB,R3.mm(R3.T((st.x+3.5)*K,1.1*K,(st.z+3.5)*K),R3.S(.06*K,2.2*K,.06*K)),'#e5e7eb'); em(R3.UB,R3.mm(R3.T((st.x+3.5)*K,2.1*K,(st.z+3.75)*K),R3.S(.02*K,.5*K,.5*K)),[1,.55,.15]); }
+      const B=A.bomb; if(B&&!B.carrier){ R3.part(R3.UB,R3.mm(R3.T(B.x*K,(B.y+.1)*K,B.z*K),R3.S(.34*K,.2*K,.26*K)),'#3f3f46'); if(!B.planted||Math.sin(A.t*Math.PI*2/Math.max(.12,B.fuse/40))>0) em(R3.US,R3.mm(R3.T(B.x*K,(B.y+.22)*K,B.z*K),R3.S(.04*K,.04*K,.04*K)),B.planted?[1,.1,.1]:[1,.6,.1]); } }
     for(const n of A.nades){ R3.part(R3.UC,R3.mm(R3.T(n.x*K,n.y*K,n.z*K),R3.S(.05*K,.12*K,.05*K)),n.kind==='nade'?'#3f3f46':'#9ca3af'); }
     for(const sm of A.smokes){ if(sm.r<.2) continue; for(let k=0;k<12;k++){ const a=k*2.4, rr=sm.r*(.35+.55*((k*37)%10)/10), yy=.6+((k*53)%10)/10*sm.r*.6; R3.part(R3.US,R3.mm(R3.T((sm.x+Math.cos(a)*rr*.7)*K,yy*K,(sm.z+Math.sin(a)*rr*.7)*K),R3.S(sm.r*.62*K,sm.r*.55*K,sm.r*.62*K)),[.82,.83,.85]); } }
     for(const p of A.fx){ const s=(.04+p.t*.25)*p.s; R3.part(R3.US,R3.mm(R3.T(p.x*K,p.y*K,p.z*K),R3.S(s*K,s*K,s*K)),p.col); }
@@ -1112,8 +1809,8 @@ function render3D(dt){
   for(const e of A.ents){ if(e===src) continue; const d=Math.hypot(e.x-src.x,e.z-src.z); if(d>60) continue; const p=R3.proj(e.x*K,(e.y+2.05)*K,e.z*K); if(!p) continue;
     if(e.down) hudText(e.team===0?'MEDIC! ✚':'HIT!',p[0]*W,p[1]*H+20,16,e.team===0?'#34d399':'#f87171','center'); else if(e.out&&e.outT<3) hudText(PB?'OUT!':'HIT!',p[0]*W,p[1]*H,18,'#f87171','center'); else if(e.team===0&&!e.out&&d<45) hudText(e.name+(e.carry?' 🚩':''),p[0]*W,p[1]*H,13,'#93c5fd','center'); else if(e.carry&&!e.out) hudText('🚩',p[0]*W,p[1]*H,18,'#fde047','center'); }
   /* objective markers at the screen edge */
-  const marks=A.flags.map(f=>({x:f.x,z:f.z,t:f.team<0?'🚩':(f.team===0?'Our flag':'Enemy flag'),c:f.team<0?'#fde047':TEAMS[f.team].arm})).concat(A.points.map(p=>({x:p.x,z:p.z,t:p.name,c:p.own<0?'#e5e7eb':TEAMS[p.own].arm})));
-  for(const m of marks){ const p=R3.proj(m.x*K,2.6*K,m.z*K); if(p&&p[0]>0&&p[0]<1&&p[1]>0&&p[1]<1) hudText(m.t,p[0]*W,p[1]*H,14,m.c,'center'); }
+  const marks=A.flags.map(f=>({x:f.x,z:f.z,t:f.team<0?'🚩':(f.team===me.team?'Our flag':'Enemy flag'),c:f.team<0?'#fde047':TEAMS[f.team].arm})).concat(A.points.map(p=>({x:p.x,z:p.z,t:p.name,c:p.own<0?'#e5e7eb':TEAMS[p.own].arm})),A.mode==='bomb'&&A.sites?A.sites.map(x=>({x:x.x,z:x.z,t:x.name,c:'#fb923c'})):[],A.mode==='bomb'&&A.bomb&&!A.bomb.carrier?[{x:A.bomb.x,z:A.bomb.z,t:'💣',c:'#fb923c'}]:[]);
+  for(const m of marks){ const p=R3.proj(m.x*K,2.6*K,m.z*K); if(p&&p[0]>0&&p[0]<1&&p[1]>0&&p[1]<1) hudText(m.t+(M.big?` ${Math.round(Math.hypot(m.x-src.x,m.z-src.z))}m`:''),p[0]*W,p[1]*H,14,m.c,'center'); }
 }
 
 /* ---------- loop ---------- */
@@ -1126,7 +1823,7 @@ $('viewBtn2').addEventListener('click',e=>{ e.stopPropagation(); audio(); setVie
 $('viewBtn2').addEventListener('pointerdown',e=>e.stopPropagation());
 $('btnSnd').addEventListener('click',()=>{ muted=!muted; $('btnSnd').textContent=muted?'Sound off':'Sound on'; if(!muted){ audio(); sfx.click(); } });
 $('result').addEventListener('click',()=>{ if(phase==='over') toMenu(); });
-if(TEST) window.__as={throwNade,revive,gunOf,getAtt:()=>att,set medic(v){medic=v;},get A(){return A;},get phase(){return phase;},step,newGame,keys,getMap,findPath,losClear,WEAPONS,FT,fire,set diff(v){diff=v;},set mapSel(v){mapSel=v;},set modeSel(v){modeSel=v;},set teamSize(v){teamSize=v;},set priSel(v){priSel=v;},look};
+if(TEST) window.__as={BIG3,navLocate,navXZ,supportAt,get NAVWORK(){return NAVWORK;},set showMap(v){A.showMap=v;},set view3(v){setView3(v);},throwNade,revive,gunOf,getAtt:()=>att,set medic(v){medic=v;},get A(){return A;},get phase(){return phase;},step,newGame,keys,getMap,findPath,losClear,WEAPONS,FT,fire,set diff(v){diff=v;},set mapSel(v){mapSel=v;},set modeSel(v){modeSel=v;},set teamSize(v){teamSize=v;},get teamSize(){return teamSize;},set priSel(v){priSel=v;},look};
 setView3(view3);
 renderMenu();
 requestAnimationFrame(frame);
@@ -1156,7 +1853,7 @@ function netAssign(){ NA.ids={}; for(const p of NA.api.all()){ const e=seatEnt(p
 function addBB(a,vis){ const e=A.ents[a[0]]; if(!e) return; A.bbs.push({x:a[1],y:a[2],z:a[3],px:a[1],py:a[2],pz:a[3],vx:a[4],vy:a[5],vz:a[6],t:0,k:a[7],hop:a[8],own:e,team:e.team,pb:!!a[9],fsr:!!a[10],kn:null,tr:!!a[11],vis}); }
 function snapOut(){ return {t:'snap',e:A.ents.map(e=>[q2(e.x),q2(e.y),q2(e.z),q2(e.yaw),q2(e.pitch),q2(e.crouch),e.out?1:0,e.down?1:0,e.cur,e.spawnN||0,e.w[e.cur]]),
   s:A.score,k:q2(A.clock),r:A.round,ro:q2(A.roundOver||0),it:q2(A.introT||0),f:A.flags.map(f=>[q2(f.x),q2(f.z),f.carrier?f.carrier.i:-1]),p:A.points.map(p=>[p.own,q2(p.prog),p.by]),
-  sm:A.smokes.map(s=>[q2(s.x),q2(s.z),q2(s.r),q2(s.t)]),fd:A.feed.slice(0,5).map(f=>[f.txt,f.col,q2(f.t)]),b:NA.out.splice(0)}; }
+  sm:A.smokes.map(s=>[q2(s.x),q2(s.z),q2(s.r),q2(s.t)]),bm:A.bomb?[q2(A.bomb.x),q2(A.bomb.z),q2(A.bomb.y),A.bomb.carrier?A.bomb.carrier.i:-1,A.bomb.planted?1:0,A.bomb.site,q2(A.bomb.fuse),q2(A.bomb.plantP),q2(A.bomb.defP),A.bomb.att]:null,fd:A.feed.slice(0,5).map(f=>[f.txt,f.col,q2(f.t)]),b:NA.out.splice(0)}; }
 function snapIn(m){ if(!A) return; const me=ME();
   m.e.forEach((a,i)=>{ const e=A.ents[i]; if(!e) return; const wasOut=e.out;
     if(e===me){ if(a[9]!==(e.spawnN||0)){ e.spawnN=a[9]; e.x=a[0]; e.z=a[2]; e.y=a[1]; e.yaw=a[3]; e.pitch=0; e.vx=e.vz=0; Object.assign(e.ammo[0],{mag:gunOf(e,0).mag}); } e.out=!!a[6]; e.down=!!a[7]; if(e.out&&!wasOut){ sfx.hitme(); A.dmgDir.push({a:0,t:0}); } return; }
@@ -1164,6 +1861,7 @@ function snapIn(m){ if(!A) return; const me=ME();
   A.score=m.s; A.clock=m.k; if(m.r!==A.round){ A.round=m.r; A.bbs=[]; } A.roundOver=m.ro; A.introT=m.it;
   m.f.forEach((a,i)=>{ const f=A.flags[i]; if(!f) return; f.x=a[0]; f.z=a[1]; f.carrier=a[2]>=0?A.ents[a[2]]:null; for(const e of A.ents) if(e.carry===f&&f.carrier!==e) e.carry=null; if(f.carrier) f.carrier.carry=f; });
   m.p.forEach((a,i)=>{ const p=A.points[i]; if(p){ p.own=a[0]; p.prog=a[1]; p.by=a[2]; } });
+  if(m.bm&&A.bomb){ const B=A.bomb, b=m.bm; if(B.att!==b[9]){ B.att=b[9]; A.sites=sitesOf(A.M,1-B.att).map((p,k)=>({name:'AB'[k],x:p[0],z:p[1]})); } B.x=b[0]; B.z=b[1]; B.y=b[2]; B.carrier=b[3]>=0?A.ents[b[3]]:null; B.planted=!!b[4]; B.site=b[5]; B.fuse=b[6]; B.plantP=b[7]; B.defP=b[8]; }
   A.smokes.length=0; for(const s of m.sm) A.smokes.push({x:s[0],y:1.4,z:s[1],r:s[2],t:s[3]});
   A.feed=m.fd.map(f=>({txt:f[0],col:f[1],t:f[2]}));
   for(const b of m.b) if(b[0]!==A.meI) addBB(b,true); }
@@ -1174,7 +1872,7 @@ const NETA=window.RRO?RRO.init({game:SPORT,maxPlayers:8,minPlayers:1,blurb:`Play
     newGame(); NA.allow=false; },
   onMsg(m){ if(!NA||!A) return;
     if(m.t==='snap'&&!NA.host) snapIn(m);
-    else if(m.t==='me'&&NA.host){ const e=NA.ids[m.from]; if(!e||m.s[7]!==(e.spawnN||0)) return; const [x,y,z,yaw,pitch,cr,cur]=m.s; e.spd=Math.hypot(x-e.x,z-e.z)*20; e.x=x; e.y=y; e.z=z; e.yaw=yaw; e.pitch=pitch; e.crouch=cr; e.cur=cur; if(m.w&&WEAPONS[m.w]) e.w[cur]=m.w; if(m.st) e.sprint=!!m.st; }
+    else if(m.t==='me'&&NA.host){ const e=NA.ids[m.from]; if(!e||m.s[7]!==(e.spawnN||0)) return; const [x,y,z,yaw,pitch,cr,cur]=m.s; e.spd=Math.hypot(x-e.x,z-e.z)*20; e.x=x; e.y=y; e.z=z; e.yaw=yaw; e.pitch=pitch; e.crouch=cr; e.cur=cur; if(m.w&&WEAPONS[m.w]) e.w[cur]=m.w; e.sprint=!!m.st; e.use=!!m.u; }
     else if(m.t==='bb'&&NA.host){ for(const b of m.l) addBB(b,false), NA.out.push(b); }
     else if(m.t==='nade'&&NA.host){ const e=NA.ids[m.from]; if(e) throwNade(e,m.kind); }
     else if(m.t==='re'&&!NA.host){ const o=m.o||{}; Object.assign(window,{}); if(o.mapSel) mapSel=o.mapSel; if(o.modeSel) modeSel=o.modeSel; if(o.teamSize) teamSize=o.teamSize; NA.seed=m.seed; NA.allow=true; newGame(); NA.allow=false; }
@@ -1183,7 +1881,7 @@ const NETA=window.RRO?RRO.init({game:SPORT,maxPlayers:8,minPlayers:1,blurb:`Play
       if(!NA.host&&api.isHost()){ toast('The host left: playing on against bots','#f87171'); NA=null; } } },
   onEnd(){ NA=null; }}):null;
 setInterval(()=>{ if(!NA||!A||phase!=='play') return; if(NA.host){ NA.api.send(snapOut()); return; }
-  const e=ME(); NA.api.send({t:'me',s:[q2(e.x),q2(e.y),q2(e.z),q2(e.yaw),q2(e.pitch),q2(e.crouch),e.cur,e.spawnN||0],w:e.w[e.cur],st:e.sprint?1:0}); if(NA.out.length) NA.api.send({t:'bb',l:NA.out.splice(0)}); },50);
+  const e=ME(); NA.api.send({t:'me',s:[q2(e.x),q2(e.y),q2(e.z),q2(e.yaw),q2(e.pitch),q2(e.crouch),e.cur,e.spawnN||0],w:e.w[e.cur],st:e.sprint?1:0,u:e.use?1:0}); if(NA.out.length) NA.api.send({t:'bb',l:NA.out.splice(0)}); },50);
 
 })();
 </script>
