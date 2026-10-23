@@ -355,7 +355,7 @@ function planeStep(A,I,dt,env){ const P=A.P, m=A.m||P.m;
   let T=P.prop?P.T0*fr*clamp(1-vf/P.vProp*.85,.12,1.15)*(rho/1.225+.15)/1.15:(A.ab&&!dry?P.ab*(P.spool?Math.max(fr,.9):1):P.T0*fr)*(rho/1.225)**.7;
   if(P.bpr) T*=1-.9*Math.min(A.mach,1)+.55*Math.min(A.mach,1)**2;
   if(A.rev>0) T=A.rev>=1?-P.T0*P.rev*Math.max(0,fr-(P.idleT||.04))*1.05:P.T0*(P.idleT||.04)*.3;
-  T*=eng; A.T=T;
+  T*=eng*(A.tk==null?1:A.tk); A.T=T;
   if(A.burn&&P.fuelCap&&A.fuel>0){ const ff=(P.ff||0)*(A.ab?2.2:Math.max(.06,Math.abs(fr)))*(P.prop?1:Math.max(.35,(rho/1.225)**.7)), b=ff*dt/3600; A.fuel=Math.max(0,A.fuel-b); A.m=Math.max(P.oew*.9,m-b); A.ffr=ff; } else A.ffr=0;
   F=add(F,mul(A.f,T)); F[1]-=m*G;
   /* the ground: wheels, brakes, nose-wheel steering */
@@ -436,6 +436,7 @@ const keys=new Set(); const held=a=>a.some(k=>keys.has(k));
 const SKEY='rinkRivalsFlightV1'; let SV=(()=>{ try{ return Object.assign({flights:0,landings:0,best:{},kills:0},JSON.parse(localStorage.getItem(SKEY)||'null')||{}); }catch(e){ return {flights:0,landings:0,best:{},kills:0}; } })();
 const saveSV=()=>{ try{ localStorage.setItem(SKEY,JSON.stringify(SV)); }catch(e){} };
 const MODES={free:{name:'Free flight',desc:'Line up on the runway, throttle up (R), rotate at the right speed (S) and fly anywhere: the lake, the town, the mountains to the north, or over to another airport. Land on any runway.'},
+ emerg:{name:'Emergency training',desc:'Take off and fly the circuit: something will go wrong. An engine failure, an engine fire, a bird strike or a landing gear that will not come down. Fly the aircraft first, run the checklist, then get it back onto any runway in one piece.'},
  land:{name:'Landing challenge',desc:'You are on a 3 degree final approach with a crosswind. Follow the glideslope and the PAPI lights, flare and touch down softly in the touchdown zone on the centreline.'},
  race:{name:'Air race',desc:'A pylon course over the lake and the airfield. Blue gates: wings level. Red gates: knife edge (wings vertical). Hitting a pylon or flying too high costs seconds.'},
  dog:{name:'Dogfight',desc:'Guns only. Waves of enemy fighters. Lead your target, manage your energy, don\'t fly into the ground. Prop planes fight Fw 190s, jets fight MiG-29s.'},
@@ -467,6 +468,7 @@ function spawnFinal(pk,R,dist,o){ o=o||{}; const P=PLANES[pk], aimA=-R.len/2+R.a
   return A; }
 function newFlight(o){ o=o||{}; const car=o.car||null; let M=car?(car.fmode||'career'):modeSel;
   if(M==='career'&&!car){ showHub(); return; }
+  let emg=false; if(M==='emerg'){ M='free'; emg=true; }
   if(car) planeSel=car.plane;
   let P=PLANES[planeSel], A, wind=[0,0,0], R=APT[aptSel]||APTS[0], dest=null, hood=false, note='';
   if((M==='free'||M==='land')&&(P.rwyMin||0)>R.len){ const R2=APTS.filter(r=>r.len>=(P.rwyMin||0)).sort((a,b)=>b.len-a.len)[0]||APT.RVI; note=`${R.name} is too short for the ${P.short}: ${R2.name}`; R=R2; }
@@ -485,6 +487,7 @@ function newFlight(o){ o=o||{}; const car=o.car||null; let M=car?(car.fmode||'ca
   if(M==='race'||M==='dog'){ const v=len(A.v), q=.5*rhoAt(A.p[1])*v*v; A.aTrim=clamp((A.m*G/(q*P.S)-P.CL0-(A.flaps?P.flapCL[A.flaps]:0))/P.CLa,-.05,P.as*.8); }
   FL={mode:M,A,ai:[],bul:[],fx:[],trail:[],t:0,wind,env:{wind,t:0},msg:null,msgT:0,over:false,score:0,gates:[],gi:0,pen:0,raceT:0,kills:0,wave:0,touched:null,hornT:0,warnT:0,startT:performance.now(),
     dest,apt:R,car,hood,tacc:1,ev:{},co:{},cmf:{rough:0,gMax:1,gMin:1,bankMax:0},bounces:0,newApp:false,maxAgl:0,dev:{loc:0,gs:0,n:0},toT:null,skipped:0,lastAgl:0,agl:0};
+  if(emg) FL.emerg={at:rnd(20,55),kind:null,hold:0,fireT:0};
   if(M==='race') buildCourse();
   if(M==='dog') nextWave();
   phase='play'; paused=false; hideHub(); $('menu').classList.add('hidden'); $('result').classList.add('hidden'); built3=false; cam3=null; keys.clear();
@@ -560,7 +563,7 @@ function step(dt){
   if(!FL||paused||phase!=='play') return; if(FL.msgT>0) FL.msgT-=dt; if(FL.hitMark>0) FL.hitMark-=dt;
   const A=FL.A; let ta=FL.tacc||1; if(ta>1&&!accelOK()){ FL.tacc=ta=1; toast('Time back to normal','#fbbf24'); }
   const sub=Math.max(6,Math.ceil(6*ta)), h=dt*ta/sub;
-  for(let s=0;s<sub;s++){ FL.t+=h; FL.env.t=FL.t; const prev=A.p.slice();
+  for(let s=0;s<sub;s++){ FL.t+=h; FL.env.t=FL.t; if(FL.emerg) emergTick(h); const prev=A.p.slice();
     const I=A.dead?{pitch:0,roll:0,yaw:0,thr:0}:input(h); A.brakes=FL.__I?!!FL.__I.brake:held(['KeyB']); planeStep(A,I,h,FL.env);
     if(held(['Space','KeyJ'])&&A.P.guns&&!A.dead) fireGuns(A,h);
     for(const B of FL.ai){ planeStep(B,B.dead?{pitch:0,roll:0,yaw:0,thr:0}:aiControl(B,h),h,{wind:[0,0,0],t:FL.t}); if(!B.dead&&B.p[1]<groundAt(B.p[0],B.p[2])+3){ kill(B,-1); } }
@@ -631,7 +634,23 @@ function checkTouch(A){ const T=A.touch; if(!T) return; A.touch=null; if(A.dead)
   FL.touched={fpm:Math.round(fpm),c:+c.toFixed(1),tdz:Math.round(tdz),roll:+rollD.toFixed(1),sc,grade,rwy:!!R,apt:R?R.id:null,pitch:+(T.pitch*180/Math.PI).toFixed(1),kt:Math.round(T.spd*KT),t:FL.t}; SV.landings++; saveSV();
   msg(`${grade}: ${Math.round(fpm)} fpm · ${c.toFixed(1)} m off centre${R?` · ${tdz>0?'+':''}${Math.round(tdz)} m from the aim point`:' · off runway'}`,sc>=75?'#22c55e':'#fde047');
   if(FL.mode==='land'){ const F=FL; setTimeout(()=>{ if(FL===F&&!FL.over) finish('land'); },3500); } }
+/* ---------- emergency training: one failure, picked at random once you are established in the climb ---------- */
+const EMK={eng:'Engine failure',fire:'Engine fire',birds:'Bird strike',gear:'Landing gear failure'};
+function emergTick(dt){ const E=FL.emerg, A=FL.A, P=A.P; if(A.dead||FL.over) return;
+  if(!E.kind){ if(!A.ground&&(FL.agl||0)>140&&FL.t>E.at){ const pool=['eng','fire','birds']; if(!P.gearFixed) pool.push('gear'); E.kind=pool[Math.floor(Math.random()*pool.length)]; E.t0=FL.t; const multi=(P.eng||1)>=2;
+      if(E.kind==='eng'){ A.tk=multi?(P.eng-1)/P.eng:0; msg(multi?`ENGINE ${1+Math.floor(Math.random()*P.eng)} FAILURE: hold the nose, full power on the others`:'ENGINE FAILURE: pitch for best glide, pick your runway or a field','#f87171'); }
+      else if(E.kind==='fire') msg('ENGINE FIRE! Press I to shut the engine down and fire the extinguisher','#f87171');
+      else if(E.kind==='birds'){ A.tk=multi?.75:.6; A.hp=Math.max(.3,A.hp-.18); E.crack=1; msg('BIRD STRIKE! Damaged engine and windscreen: reduced power','#f87171'); }
+      else { A.gear=0; A.gearT=0; msg('GEAR UNSAFE: it will not come down normally. Hold G for 5 seconds to crank it down by hand','#fbbf24'); }
+      try{ sfx.warn&&sfx.warn(); }catch(e){} }
+    return; }
+  if(E.kind==='fire'&&!E.out){ E.fireT+=dt; A.smoke=1; if(E.fireT>12) A.hp=Math.max(.05,A.hp-dt*.025); if(A.hp<=.06&&!A.ground){ A.tk=0; } }
+  if(E.kind==='gear'&&!E.fixed){ if(keys.has('KeyG')) E.hold+=dt; else E.hold=Math.max(0,E.hold-dt*.6); if(E.hold>=5){ E.fixed=true; A.gear=1; msg('Gear down and locked (alternate extension)','#22c55e'); } }
+  if(FL.touched&&A.ground&&Math.hypot(A.v[0],A.v[2])<4&&!FL.over) finish('emerg'); }
+function emergIsolate(){ const E=FL&&FL.emerg; if(!E||E.kind!=='fire'||E.out) return false; E.out=true; const P=FL.A.P, multi=(P.eng||1)>=2; FL.A.tk=multi?(P.eng-1)/P.eng:0; FL.A.smoke=0; msg(`Fire out. Engine shut down${multi?': fly on the others':': you are a glider now'}`,'#22c55e'); return true; }
 function finish(why){ if(FL.over) return; FL.over=true; phase='over'; SV.flights++; const M=FL.mode, P=FL.A.P; let h='', rec='';
+  if(FL.emerg){ const E=FL.emerg, L=FL.touched, ok=why==='emerg'&&L&&!FL.A.dead, gearUp=E.kind==='gear'&&!E.fixed&&L; if(ok){ SV.emerg=(SV.emerg||0)+1; try{ lbPost('emerg',1,`${EMK[E.kind]} · ${P.short||P.name}`); }catch(e){} }
+    $('resultIn').innerHTML=`<h2>${ok?(gearUp?'Belly landing: everyone walks away':'Emergency handled: safe landing'):FL.A.dead?'Crashed':'Flight over'}</h2><div class="rs">${E.kind?EMK[E.kind]:'No emergency yet'}</div><p>${L?`Touchdown ${L.fpm} fpm · ${esc(L.grade)}`:''}${E.kind==='fire'?` · fire ${E.out?`out after ${Math.round(E.fireT)} s`:'never put out'}`:''}</p><p>Emergencies survived: ${SV.emerg||0}</p><p>Enter for the menu, R to fly again.</p>`; saveSV(); setTimeout(()=>{ if(phase==='over') $('result').classList.remove('hidden'); },400); return; }
   if(FL.car){ h=careerFinish(why); }
   else if(M==='race'&&why==='race'){ const tot=FL.raceT+FL.pen; FL.score=tot; const k='race_'+planeSel; if(!SV.best[k]||tot<SV.best[k]) SV.best[k]=tot; rec=fmtS(SV.best[k]);
     h=`<h2>Course complete</h2><div class="rs">${fmtS(tot)}</div><p>Flying time ${fmtS(FL.raceT)} + ${FL.pen} s penalties · ${P.name}</p><table class="ls"><tr>${FL.gates.map((g,i)=>`<th>${i+1}</th>`).join('')}</tr><tr>${FL.gates.map(g=>`<td>${g.pen?'+'+g.pen:'✓'}</td>`).join('')}</tr></table><p>Personal best ${rec}</p>`; }
@@ -684,7 +703,10 @@ function drawSystems(A){ const P=A.P, x=16, w=330, y=H-150, idle=P.idle||.22; rr
   lines.forEach(([t,c],i)=>hudText(t,cx2,y+22+i*20,14,c)); }
 /* where to: the destination airport's bearing and distance */
 function navTo(A,R){ const tp=rwWorld(R,-R.len/2,0), dx=tp[0]-A.p[0], dz=tp[2]-A.p[2], d=Math.hypot(dx,dz), brg=(Math.atan2(-dx,dz)*180/Math.PI+360)%360; const fh=norm([A.f[0],0,A.f[2]]), rh=[-fh[2],0,fh[0]], rel=Math.atan2(-(dx*rh[0]+dz*rh[2]),dx*fh[0]+dz*fh[2]); return {d,brg,rel}; }
-function drawHUD(){ const A=FL.A, P=A.P, cx=W/2, cy=H/2, pitch=Math.asin(clamp(A.f[1],-1,1)), roll=Math.atan2(-A.r[1],A.u[1]), hdg=(Math.atan2(-A.f[0],A.f[2])*180/Math.PI+360)%360, alt=A.p[1]-groundAt(A.p[0],A.p[2]), msl=A.p[1];
+function drawEmerg(){ const E=FL&&FL.emerg; if(!E||!E.kind||FL.over) return; const blink=Math.floor(performance.now()/400)%2===0, active=E.kind==='fire'?!E.out:E.kind==='gear'?!E.fixed:true;
+  if(E.crack){ ctx.save(); ctx.strokeStyle='rgba(255,255,255,.45)'; ctx.lineWidth=1.2; for(let k=0;k<9;k++){ ctx.beginPath(); ctx.moveTo(W*.62,H*.3); let x=W*.62, y=H*.3; for(let j=0;j<5;j++){ x+=Math.cos(k*.7+j)*40; y+=Math.sin(k*1.3+j*.5)*34; ctx.lineTo(x,y); } ctx.stroke(); } ctx.restore(); }
+  rr(W/2-200,H-150,400,46,10,active&&blink?'rgba(185,28,28,.9)':'rgba(5,10,24,.85)'); hudText(`${EMK[E.kind]}${E.kind==='fire'&&!E.out?' · press I':E.kind==='gear'&&!E.fixed?` · hold G ${E.hold>0?Math.round(E.hold/5*100)+'%':''}`:''}`,W/2,H-121,20,'#fff','center'); }
+function drawHUD(){ drawEmerg(); const A=FL.A, P=A.P, cx=W/2, cy=H/2, pitch=Math.asin(clamp(A.f[1],-1,1)), roll=Math.atan2(-A.r[1],A.u[1]), hdg=(Math.atan2(-A.f[0],A.f[2])*180/Math.PI+360)%360, alt=A.p[1]-groundAt(A.p[0],A.p[2]), msl=A.p[1];
   /* under the hood (the instrument checkride): no outside view until decision height */
   if(FL.hood&&!A.dead){ const k=clamp((FL.agl-250)/150,0,1)*.94; if(k>0){ ctx.fillStyle=`rgba(118,124,134,${k})`; ctx.fillRect(0,0,W,H); if(k>.5) hudText('IN CLOUD · fly the instruments to 250 ft',cx,H*.32,17,'#e5e7eb','center'); } }
   if(camMode===1&&!A.dead) drawCockpit(A);
@@ -772,6 +794,8 @@ addEventListener('keydown',e=>{
   if(e.code==='KeyK'){ skipCruise(); return; }
   if(e.code==='KeyT'||e.code==='KeyY'){ const n=nFlaps(P); if(!n) return; const dn=e.code==='KeyT';
     if(!P.big&&dn&&A.flaps===n){ A.flaps=0; } else A.flaps=clamp(A.flaps+(dn?1:-1),0,n); toast(`Flaps ${flapLab(P,A.flaps)}${P.vfe&&A.flaps?` · max ${P.vfe[A.flaps]} kt`:''}`,'#93c5fd'); sfx.click(); return; }
+  if(e.code==='KeyI'){ if(emergIsolate()) return; }
+  if(e.code==='KeyG'&&FL&&FL.emerg&&FL.emerg.kind==='gear'&&!FL.emerg.fixed){ toast('The gear will not move: hold G for 5 s to crank it down','#fbbf24'); return; }
   if(e.code==='KeyG'){ if(P.gearFixed) return; if(A.ground){ toast('Not on the ground!','#f87171'); return; } A.gear=A.gear?0:1; sfx.gear(); toast(A.gear?'Gear down':'Gear up','#93c5fd'); return; }
   if(e.code==='KeyX'){ if(!P.big) return; /* RET → ARMED → FLIGHT → FULL → RET */ if(!A.sbArm&&!A.sbLev){ A.sbArm=true; } else if(A.sbArm&&!A.sbLev){ A.sbArm=false; A.sbLev=.5; } else if(A.sbLev<1){ A.sbLev=1; } else { A.sbLev=0; A.sbGnd=false; }
     toast(`Spoilers ${sbName(A)}`,'#93c5fd'); sfx.click(); return; }
@@ -800,7 +824,7 @@ $('menuIn').addEventListener('click',e=>{ const b=e.target.closest('button'); if
 function menuKey(code){ const dg=code.replace('Numpad','Digit'), i='123456789'.indexOf(dg.slice(-1)); if(dg.startsWith('Digit')&&i>=0&&modeSel!=='career'){ planeSel=PKEYS[i]; savePrefs(); renderMenu(); } else if(['Enter','NumpadEnter','Space'].includes(code)) startGame(); }
 function startGame(){ audio(); savePrefs(); if(modeSel==='career') showHub(); else newFlight(); }
 function renderKeysHelp(){ const P=FL&&FL.A?FL.A.P:PLANES[planeSel], big=P&&P.big;
-  $('keysHelp').innerHTML='<div><b>Pitch</b> W nose down, S pull up</div><div><b>Roll</b> A D</div><div><b>Rudder / steer</b> Q E</div><div><b>Thrust</b> R up, F down'+(P&&P.ab?' (hold R at full for '+(P.cls==='sst'?'reheat':'afterburner')+')':'')+'</div><div><b>Flaps</b> T down, Y up</div><div><b>Gear</b> G</div><div><b>Brakes</b> B</div>'+
+  $('keysHelp').innerHTML='<div><b>Pitch</b> W nose down, S pull up</div><div><b>Roll</b> A D</div><div><b>Rudder / steer</b> Q E</div><div><b>Thrust</b> R up, F down'+(P&&P.ab?' (hold R at full for '+(P.cls==='sst'?'reheat':'afterburner')+')':'')+'</div><div><b>Flaps</b> T down, Y up</div><div><b>Gear</b> G</div><div><b>Brakes</b> B</div>'+(FL&&FL.emerg?'<div><b>Engine fire handle</b> I</div><div><b>Alternate gear</b> hold G</div>':'')+''+
     (big?'<div><b>Spoilers</b> X (arm / flight / full)</div><div><b>Autobrake</b> N</div><div><b>Reverse</b> hold H on the ground</div>':'')+(P&&P.guns?'<div><b>Guns</b> Space</div>':'')+'<div><b>Time</b> [ ]</div>'+(FL&&FL.car?'<div><b>Skip cruise</b> K</div>':'')+'<div><b>Camera</b> C</div><div><b>Pause</b> Esc</div>'; }
 function toMenu(){ phase='menu'; FL=null; planeSel=prefPlane; hideHub(); $('result').classList.add('hidden'); $('menu').classList.remove('hidden'); renderMenu(); }
 function hideHub(){ document.body.classList.remove('inhub'); }
@@ -1564,7 +1588,7 @@ $('viewBtn2').addEventListener('click',e=>{ e.stopPropagation(); audio(); setVie
 $('viewBtn2').addEventListener('pointerdown',e=>e.stopPropagation());
 $('btnSnd').addEventListener('click',()=>{ muted=!muted; $('btnSnd').textContent=muted?'Sound off':'Sound on'; if(!muted){ audio(); sfx.click(); } });
 $('result').addEventListener('click',()=>{ if(phase==='over'){ if(FL&&FL.car) showHub(); else toMenu(); } });
-if(TEST) window.__fl={get FL(){return FL;},get phase(){return phase;},step,newFlight,keys,planeStep,mkPlane,PLANES,APTS,APT,terrainH,groundAt,onRunway,rwLocal,rwWorld,ilsFor,vSpeeds,vStall,lineUp,spawnFinal,spawnRunway,trimThrust,draw,render3D,
+if(TEST) window.__fl={emergIsolate,set modeSel(v){modeSel=v;},set planeSel(v){planeSel=v;},get FL(){return FL;},get phase(){return phase;},step,newFlight,keys,planeStep,mkPlane,PLANES,APTS,APT,terrainH,groundAt,onRunway,rwLocal,rwWorld,ilsFor,vSpeeds,vStall,lineUp,spawnFinal,spawnRunway,trimThrust,draw,render3D,
   get CR(){return CR;},set CR(v){CR=v;},newCareer,saveCR,loadCR,genOffers,startJob,startRide,showHub,renderHub,skipCruise,skipInfo,finish,RIDES,RIDE,rateLanding,toMenu,
   set planeSel(v){planeSel=v;},get planeSel(){return planeSel;},set modeSel(v){modeSel=v;},set aptSel(v){aptSel=v;},set camMode(v){camMode=v;}};
 setView3(view3);
@@ -1573,7 +1597,7 @@ requestAnimationFrame(frame);
 
 /* ---------- world records ---------- */
 const LBG=((location.pathname.split('/').pop()||'').replace(/\.html$/,'')||'game').toLowerCase(), lbPost=(id,s,t)=>{ try{ window.RRL&&RRL.post(id,s,t); }catch(e){} }, lbBoards=l=>{ try{ window.RRL&&RRL.boards(LBG,l); }catch(e){} };
-lbBoards(Object.keys(PLANES).flatMap(k=>{ const P=PLANES[k], l=[{id:'race_'+k,name:'Air race · '+P.short,mode:'min'},{id:'land_'+k,name:'Landing · '+P.short,mode:'max'}]; if(P.guns) l.push({id:'dog_'+k,name:'Dogfight kills · '+P.short,mode:'max'}); return l; }).concat([{id:'car_land',name:'Career · best landing rating',mode:'max'},{id:'car_earn',name:'Career · total earnings ($)',mode:'max'},{id:'car_hours',name:'Career · flight hours',mode:'max'}]));
+lbBoards(Object.keys(PLANES).flatMap(k=>{ const P=PLANES[k], l=[{id:'race_'+k,name:'Air race · '+P.short,mode:'min'},{id:'land_'+k,name:'Landing · '+P.short,mode:'max'}]; if(P.guns) l.push({id:'dog_'+k,name:'Dogfight kills · '+P.short,mode:'max'}); return l; }).concat([{id:'emerg',name:'Emergencies survived (emergency training)',mode:'sum'},{id:'car_land',name:'Career · best landing rating',mode:'max'},{id:'car_earn',name:'Career · total earnings ($)',mode:'max'},{id:'car_hours',name:'Career · flight hours',mode:'max'}]));
 { const _f=finish; finish=function(why){ const was=FL&&FL.over, r=_f.apply(this,arguments); try{ if(!was&&FL){ const M=FL.mode;
   if(FL.car&&FL.carRes){ const R=FL.carRes; if(R.rate!=null) lbPost('car_land',R.rate,`${R.rate}/100 · ${FL.A.P.short}${FL.touched?` · ${FL.touched.fpm} fpm`:''}`); if(R.earned>0) lbPost('car_earn',Math.round(R.earned),`$${Math.round(R.earned).toLocaleString('en-US')}`); if(R.hours>0) lbPost('car_hours',+R.hours.toFixed(1),`${R.hours.toFixed(1)} h`); }
   if(FL.car&&FL.mode==='career'){}
