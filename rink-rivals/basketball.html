@@ -647,6 +647,7 @@ function gameOver(){
   const row=(t,s)=>`<tr><td>${esc(t.abbr)}</td>${G.qs[s].map(v=>`<td>${v}</td>`).join('')}<td class="tot">${G.score[s]}</td></tr>`;
   $('resultIn').innerHTML=`<h2>${esc(w.full)} win!</h2><div class="rs">${G.score[0]} - ${G.score[1]}</div><table class="ls"><tr><th></th>${G.qs[0].map((_,i)=>`<th>${i<4?i+1:'OT'+(i>4?i-3:'')}</th>`).join('')}<th>T</th></tr>${row(a,0)}${row(h,1)}</table>${potg(G)}${boxHTML(G)}<p>${G.inLeague?'Enter or click to go back to your team.':'Enter for the menu, R for a rematch.'}</p>`;
   if(G.inLeague) userGame(G);
+  if(G.cup&&CUP&&!G.net){ const won=G.score[0]>G.score[1], msg=cupAfter(won,G.score[0],G.score[1]); $('resultIn').innerHTML=$('resultIn').innerHTML.replace('<table class="ls">',`<p style="color:#fde68a;font-size:20px">${esc(G.cup)} · ${esc(msg)}</p>`+cupHTML()+'<table class="ls">'); }
   updateBoard();
   setTimeout(()=>{ if(phase==='over') $('result').classList.remove('hidden'); },G.ffast?100:1500);
 }
@@ -779,23 +780,24 @@ function pickerHTML(i,who,cls){ const t=TEAMS[curTeam(i)], R=DEF[t.id].roster, b
 function renderMenu(){
   const fsv=readSave(FKEY), csv=readSave(CKEY);
   let h=`<h1>Rink Rivals: Basketball</h1><p>All 30 NBA teams with real stars. 5-on-5 with shot timing, crossovers, alley-oops, blocks, free throws, a full franchise with playoffs, draft and trades, and a career mode.</p>
-  <div class="pills">${pill('m',1,menuMode===1,'Vs CPU','1')}${pill('m',2,menuMode===2,'2 Players','2')}${pill('m',3,menuMode===3,'Franchise','3')}${pill('m',4,menuMode===4,'Career','4')}<a href="./" tabindex="-1">Home</a><a href="hockey" tabindex="-1">Hockey</a><a href="soccer" tabindex="-1">Soccer</a></div>
+  <div class="pills">${pill('m',1,menuMode===1,'Vs CPU','1')}${pill('m',2,menuMode===2,'2 Players','2')}${pill('m',3,menuMode===3,'Franchise','3')}${pill('m',4,menuMode===4,'Career','4')}${pill('m',5,menuMode===5,'🏆 NBA Cup','')}<a href="./" tabindex="-1">Home</a><a href="hockey" tabindex="-1">Hockey</a><a href="soccer" tabindex="-1">Soccer</a></div>
   <div class="pills"><span class="lbl">Quarters</span>${QLEN.map(([s,t])=>pill('q',s,qSel===s,t,'')).join('')}</div>`;
   if(menuMode!==2) h+=`<div class="pills"><span class="lbl">CPU level</span>${[0,1,2].map(d=>pill('d',d,diff===d,DIFF_NAMES[d],5+d)).join('')}</div>`;
   if(menuMode===4) h+=`<div class="pills"><span class="lbl">Position</span>${POS_ORDER.map(q=>pill('cp',q,carPos===q,POS_NAME[q],'')).join('')}</div><div class="pills"><span class="lbl">Your name</span><input id="carName" maxlength="22" value="${esc(carName)}" style="font:inherit;font-size:18px;padding:6px 10px;border-radius:10px;border:2px solid #27345a;background:#0f1730;color:#fff;width:220px"></div>`;
-  if(menuMode>=3) h+=`<div class="pills"><span class="lbl">Season</span>${[[10,'10 games'],[20,'20 games'],[41,'41 games'],[82,'Full 82']].map(([n,t])=>pill('s',n,frLen===n,t,'')).join('')}</div>`;
+  if(menuMode===5) h+=cupHTML()+(CUP&&CUP.titles?`<p>NBA Cups won: ${'🏆'.repeat(Math.min(10,CUP.titles))}</p>`:'');
+  if(menuMode===3||menuMode===4) h+=`<div class="pills"><span class="lbl">Season</span>${[[10,'10 games'],[20,'20 games'],[41,'41 games'],[82,'Full 82']].map(([n,t])=>pill('s',n,frLen===n,t,'')).join('')}</div>`;
   if(menuMode===1) h+=`<div class="pickers">${pickerHTML(0,'You (away)','p1')}${pickerHTML(1,'CPU (home)','p2')}</div>`;
   else if(menuMode===2) h+=`<div class="pickers">${pickerHTML(0,'Player 1 (away)','p1')}${pickerHTML(1,'Player 2 (home)','p2')}</div>`;
   else h+=`<div class="pickers">${pickerHTML(0,'Your team','p1')}</div>`;
-  h+=`<div class="pills"><button class="gold" data-act="start" tabindex="-1">${menuMode===3?'New franchise':menuMode===4?'Start career':'Tip off'} <kbd>Enter</kbd></button>${menuMode===3&&fsv?`<button data-act="cont" tabindex="-1">Continue ${esc(TEAMS[fsv.id].name)}, ${fsv.season} <kbd>C</kbd></button>`:''}${menuMode===4&&csv?`<button data-act="ccont" tabindex="-1">Continue ${esc(csv.name)}, ${csv.season} <kbd>C</kbd></button>`:''}</div><div id="hint"></div>`;
+  h+=`<div class="pills"><button class="gold" data-act="start" tabindex="-1">${menuMode===3?'New franchise':menuMode===4?'Start career':menuMode===5?(CUP&&!CUP.out?`Play: ${cupStageName()}`:'Enter the NBA Cup'):'Tip off'} <kbd>Enter</kbd></button>${menuMode===3&&fsv?`<button data-act="cont" tabindex="-1">Continue ${esc(TEAMS[fsv.id].name)}, ${fsv.season} <kbd>C</kbd></button>`:''}${menuMode===4&&csv?`<button data-act="ccont" tabindex="-1">Continue ${esc(csv.name)}, ${csv.season} <kbd>C</kbd></button>`:''}</div><div id="hint"></div>`;
   h+=menuMode===2?`<div class="how"><div><b>Player 1</b> <kbd>A</kbd><kbd>D</kbd> team</div><div><b>Player 2</b> <kbd>←</kbd><kbd>→</kbd> team</div></div>`:`<div class="how"><div><b>Team</b> <kbd>A</kbd><kbd>D</kbd></div>${menuMode===1?'<div><b>CPU team</b> <kbd>←</kbd><kbd>→</kbd></div>':''}</div>`;
   $('menuIn').innerHTML=h;
   const tl=TEAMS[curTeam(0)], tr=TEAMS[curTeam(1)];
   $('logoL').src=tl.logo; setText('nameL',tl.full); $('sideL').style.setProperty('--tc',tl.c1); setText('scoreL',0); setText('tpL',menuMode===2?'Player 1':'You');
-  if(menuMode>=3){ $('logoR').src=tl.logo; setText('nameR',menuMode===4?'Career':'Franchise'); $('sideR').style.setProperty('--tc','#ffd166'); setText('tpR',`${frLen} games`); }
+  if(menuMode>=3){ $('logoR').src=tl.logo; setText('nameR',menuMode===5?'NBA Cup':menuMode===4?'Career':'Franchise'); $('sideR').style.setProperty('--tc','#ffd166'); setText('tpR',`${frLen} games`); }
   else { $('logoR').src=tr.logo; setText('nameR',tr.full); $('sideR').style.setProperty('--tc',tr.c1); setText('tpR',menuMode===2?'Player 2':'CPU'); }
   setText('scoreR',0); setText('cntT',fmtClock(qSel)); setText('innT','Q1'); setText('outsT','Tip-off'); setText('basesT',''); lastBoard='';
-  $('hint').textContent=menuMode===4?(csv?'Starting a new career replaces your saved one.':'Create a rookie and chase MVPs and rings. You control only your player; call for the ball with Space.'):menuMode===3?(fsv?'Starting a new franchise replaces your saved one.':'Run an NBA team: play or sim every game, trade, make the playoffs, draft rookies.'):menuMode===2?'Each player controls their team; the ring shows who you control.':'Run the offense, time your jumpers, drive for dunks and lock down on defense.';
+  $('hint').textContent=menuMode===5?'In-season tournament: win your group (or grab a wild card) and then three knockout games to lift the Cup. Pick your team with A and D before your first game.':menuMode===4?(csv?'Starting a new career replaces your saved one.':'Create a rookie and chase MVPs and rings. You control only your player; call for the ball with Space.'):menuMode===3?(fsv?'Starting a new franchise replaces your saved one.':'Run an NBA team: play or sim every game, trade, make the playoffs, draft rookies.'):menuMode===2?'Each player controls their team; the ring shows who you control.':'Run the offense, time your jumpers, drive for dunks and lock down on defense.';
   renderKeysHelp();
 }
 $('menuIn').addEventListener('input',e=>{ if(e.target.id==='carName') carName=e.target.value; });
@@ -826,8 +828,37 @@ function renderKeysHelp(){
   if(G&&G.kind==='2p') k.innerHTML='<div><b>Player 1</b> WASD · Space pass/steal · E lob · hold J shoot/jump · C crossover · Q switch · Shift turbo</div><div><b>Player 2</b> arrows · Enter pass/steal · . lob · hold / shoot · , crossover · \' switch · right Shift turbo</div>';
   else k.innerHTML=(G&&G.car?'<div><b>Career</b> you are the yellow-ring player · Space calls for the ball</div>':'')+'<div><b>Move</b> WASD or arrows</div><div><b>Pass / steal</b> Space</div><div><b>Alley-oop</b> E</div><div><b>Shoot</b> hold J, let go in the green</div><div><b>Dunk</b> J while driving to the rim</div><div><b>Crossover</b> C</div><div><b>Block / jump</b> J</div><div><b>Switch</b> Q</div><div><b>Turbo</b> Shift</div><div><b>3D view</b> V</div><div><b>Sim rest</b> X</div><div><b>Timeout</b> P</div>';
 }
+/* ---------- NBA Cup: a five-team group (four games), then the knockouts in Las Vegas ---------- */
+const CUPK='rinkRivalsBBCup'; let CUP=(()=>{ try{ return JSON.parse(localStorage.getItem(CUPK)||'null'); }catch(e){ return null; } })();
+const saveCup=()=>{ try{ localStorage.setItem(CUPK,JSON.stringify(CUP)); }catch(e){} };
+const cupOvr=id=>teamOvr(DEF[id].roster);
+function cupNew(me){ const conf=TEAMS[me].cf, pool=shuffle(LEAGUE_IDS.filter(id=>id!==me&&TEAMS[id].cf===conf)), grp=[me].concat(pool.slice(0,4));
+  CUP={me,conf,grp,rec:Object.fromEntries(grp.map(id=>[id,{w:0,l:0,pd:0}])),played:[],stage:'group',n:0,ko:[],out:null,year:(CUP&&CUP.year||2025)+1}; saveCup(); }
+function cupOpp(){ if(!CUP||CUP.out) return null; if(CUP.stage==='group') return CUP.grp[1+CUP.n]; return CUP.koOpp; }
+const cupStageName=()=>CUP?({group:`Group game ${CUP.n+1} of 4`,qf:'Quarter-final',sf:'Semi-final · Las Vegas',final:'NBA Cup Final · Las Vegas'})[CUP.stage]:'';
+function cupRec(a,b,sa,sb){ const R=CUP.rec; if(!R[a]||!R[b]) return; R[a].pd+=sa-sb; R[b].pd+=sb-sa; if(sa>sb){ R[a].w++; R[b].l++; } else { R[b].w++; R[a].l++; } }
+function cupOrder(){ return CUP.grp.slice().sort((x,y)=>CUP.rec[y].w-CUP.rec[x].w||CUP.rec[y].pd-CUP.rec[x].pd); }
+function cupAfter(won,sa,sb){ const opp=cupOpp(); let msg='';
+  if(CUP.stage==='group'){ cupRec(CUP.me,opp,sa,sb); CUP.played.push({o:opp,sa,sb}); CUP.n++;
+    if(CUP.n>=4){ const others=CUP.grp.slice(1); for(let i=0;i<others.length;i++) for(let j=i+1;j<others.length;j++){ const S=simGame({kind:'sim',t:[others[i],others[j]],ros:[DEF[others[i]].roster,DEF[others[j]].roster]}); cupRec(others[i],others[j],S.score[0],S.score[1]); }
+      const o=cupOrder(), pos=o.indexOf(CUP.me), r=CUP.rec[CUP.me], wild=pos===1&&r.w>=3&&Math.random()<.65;
+      if(pos===0||wild){ CUP.stage='qf'; const pool=LEAGUE_IDS.filter(id=>TEAMS[id].cf===CUP.conf&&!CUP.grp.includes(id)).sort((a,b)=>cupOvr(b)-cupOvr(a)); CUP.koOpp=pool[Math.floor(Math.random()*Math.min(4,pool.length))]; msg=pos===0?'Group winners! Into the quarter-finals.':'Through as a wild card! Into the quarter-finals.'; }
+      else { CUP.out=pos===1?'Missed out on a wild card':`Finished ${ORD(pos+1)} in the group`; msg=CUP.out+'. Your Cup run is over.'; } }
+    else msg=`Next: ${TEAMS[cupOpp()].full}`; }
+  else if(!won){ CUP.out=`Lost in the ${cupStageName().split(' ·')[0].toLowerCase()}`; msg=CUP.out+'.'; }
+  else if(CUP.stage==='qf'){ CUP.stage='sf'; const pool=LEAGUE_IDS.filter(id=>TEAMS[id].cf===CUP.conf&&id!==CUP.me&&id!==opp).sort((a,b)=>cupOvr(b)-cupOvr(a)); CUP.koOpp=pool[Math.floor(Math.random()*3)]; msg='Off to Las Vegas for the semi-finals!'; }
+  else if(CUP.stage==='sf'){ CUP.stage='final'; const pool=LEAGUE_IDS.filter(id=>TEAMS[id].cf!==CUP.conf).sort((a,b)=>cupOvr(b)-cupOvr(a)); CUP.koOpp=pool[Math.floor(Math.random()*3)]; msg=`Into the NBA Cup Final against the ${TEAMS[CUP.koOpp].full}!`; }
+  else if(CUP.stage==='final'){ CUP.out='champ'; CUP.titles=(CUP.titles||0)+1; msg='🏆 NBA Cup champions!'; try{ lbPost('cup',1,TEAMS[CUP.me].full); }catch(e){} }
+  saveCup(); return msg; }
+function cupHTML(){ if(!CUP) return ''; const o=cupOrder();
+  return `<div style="max-width:560px;margin:6px auto;text-align:left"><div style="color:#fde68a;font-weight:800">${CUP.year} NBA Cup · ${esc(TEAMS[CUP.me].full)} · ${CUP.out?(CUP.out==='champ'?'🏆 Champions':esc(CUP.out)):cupStageName()}</div>
+  <table class="ls" style="font-size:14px"><tr><th>Group</th><th>W</th><th>L</th><th>+/-</th></tr>${o.map(id=>`<tr${id===CUP.me?' style="background:rgba(255,209,102,.2)"':''}><td>${esc(TEAMS[id].full)}</td><td>${CUP.rec[id].w}</td><td>${CUP.rec[id].l}</td><td>${CUP.rec[id].pd>0?'+':''}${CUP.rec[id].pd}</td></tr>`).join('')}</table>
+  ${CUP.played.length?`<div style="font-size:14px;color:#cbd5e1">${CUP.played.map(g=>`${g.sa>g.sb?'W':'L'} ${g.sa}-${g.sb} v ${TEAMS[g.o].abbr}`).join(' · ')}</div>`:''}</div>`; }
+function cupPlay(){ if(!CUP||CUP.out||CUP.me!==curTeam(0)&&CUP.stage==='group'&&CUP.n===0) cupNew(curTeam(0)); const opp=cupOpp(); if(!opp) return;
+  newGame({kind:'ex',t:[CUP.me,opp],ros:[DEF[CUP.me].roster,DEF[opp].roster],qlen:qSel},['solo',null],false); G.cup=cupStageName(); banner(G.cup,`${TEAMS[CUP.me].full} v ${TEAMS[opp].full}`,'#facc15',2.4); }
 function startGame(){
   audio();
+  if(menuMode===5){ cupPlay(); return; }
   if(menuMode===3){ newFranchise(); return; }
   if(menuMode===4){ newCareer(); return; }
   const t0=curTeam(0), t1=curTeam(1), auto=TEST&&/[?&]auto\b/.test(location.search);
@@ -1258,7 +1289,7 @@ void main(){vec4 t=texture2D(uTex,vUV*uUVR.zw+uUVR.xy);if(t.a<0.04)discard;gl_Fr
     time+=dt||1/60; resize();
     gl.viewport(0,0,cw,ch); gl.clearColor(.04,.06,.12,1); gl.clear(gl.COLOR_BUFFER_BIT|gl.DEPTH_BUFFER_BIT);
     gl.enable(gl.DEPTH_TEST); gl.disable(gl.CULL_FACE); gl.disable(gl.BLEND); gl.depthMask(true);
-    eye=cam.eye; VP=mul(persp(cam.fov*Math.PI/180,cw/ch,cam.near||6,cam.far||14000),lookAt(cam.eye,cam.center,[0,1,0]));
+    eye=cam.eye; VP=mul(persp(cam.fov*Math.PI/180,cw/ch,cam.near||6,cam.far||14000),lookAt(cam.eye,cam.center,cam.up||[0,1,0]));
     cheer=cam.cheer||0;
     useC(); if(world) part(world,I(),[1,1,1]); if(crowdM) part(crowdM,I(),[1,1,1]);
     decals.length=0; shadows.length=0;
@@ -1349,14 +1380,14 @@ function toggleFs(){ const st=$('stage'); try{ if(document.fullscreenElement) do
 $('btnFs').addEventListener('click',toggleFs);
 $('btnSnd').addEventListener('click',()=>{ muted=!muted; $('btnSnd').textContent=muted?'Sound off':'Sound on'; if(!muted){ audio(); sfx.click(); } });
 $('result').addEventListener('click',()=>{ if(phase==='over'){ if(G&&G.inLeague) showHub(); else toMenu(); } });
-if(TEST) window.__bk={get G(){return G;},get L(){return L;},setL:x=>{L=x;},get phase(){return phase;},step,startGame,setMode:m=>{menuMode=m;},newLeague,simGame,gameOpts,finishRound,poDay,simDraft,showHub,hubSet:t=>{hubTab=t;renderHub();},playLeague,simUser,newCareer,setCarPos:q=>{carPos=q;},findMe,shoot,doPass,DEF};
+if(TEST) window.__bk={get CUP(){return CUP;},cupPlay,get G(){return G;},get L(){return L;},setL:x=>{L=x;},get phase(){return phase;},step,startGame,setMode:m=>{menuMode=m;},newLeague,simGame,gameOpts,finishRound,poDay,simDraft,showHub,hubSet:t=>{hubTab=t;renderHub();},playLeague,simUser,newCareer,setCarPos:q=>{carPos=q;},findMe,shoot,doPass,DEF};
 setView3(view3);
 renderMenu();
 requestAnimationFrame(frame);
 
 /* ---------- world records ---------- */
 const LBG=((location.pathname.split('/').pop()||'').replace(/\.html$/,'')||'game').toLowerCase(), lbPost=(id,s,t)=>{ try{ window.RRL&&RRL.post(id,s,t); }catch(e){} }, lbBoards=l=>{ try{ window.RRL&&RRL.boards(LBG,l); }catch(e){} };
-lbBoards([{id:'wins',name:'Wins vs CPU',mode:'sum'},{id:'margin',name:'Biggest win vs CPU',mode:'max'}]);
+lbBoards([{id:'cup',name:'NBA Cups won',mode:'sum'},{id:'wins',name:'Wins vs CPU',mode:'sum'},{id:'margin',name:'Biggest win vs CPU',mode:'max'}]);
 { const _f=gameOver; gameOver=function(){ const was=G&&G.over, s=G&&G.score.slice(); const r=_f.apply(this,arguments); try{ if(!was&&menuMode===1&&!G.net){ const m=s[0]-s[1]; if(m>0){ lbPost('wins',1); lbPost('margin',m,s[0]+'-'+s[1]); } } }catch(e){} return r; }; }
 
 })();
