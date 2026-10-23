@@ -236,7 +236,7 @@ const shuffleDeck=(n,rng)=>{ const a=[...Array(n).keys()]; for(let i=n-1;i>0;i--
 
 /* ---------- the game state (plain data, so it can be sent to everyone online) ---------- */
 function newGameState(players,opts){ const rng=mulberry32(opts.seed||1); const G={pl:players.map((p,i)=>({id:i,name:p.name,tok:p.tok,ai:!!p.ai,lvl:p.lvl||1,cash:1500,pos:0,lock:0,free:0,out:false,dbl:0})),own:Array(40).fill(-1),houses:Array(40).fill(0),mort:Array(40).fill(false),
-  turn:0,phase:'roll',dice:[1,1],rolled:false,log:[],bank:{houses:32,hotels:12},fort:shuffleDeck(16,rng),hall:shuffleDeck(16,rng),card:null,auction:null,trade:null,seed:opts.seed||1,rngN:0,rounds:0,maxRounds:opts.rounds||0,winner:null,debt:null,ver:0};
+  turn:0,phase:'roll',dice:[1,1],rolled:false,log:[],bank:{houses:32,hotels:12},fort:shuffleDeck(16,rng),hall:shuffleDeck(16,rng),card:null,auction:null,trade:null,seed:opts.seed||1,rngN:0,rounds:0,maxRounds:opts.rounds||0,winner:null,debt:null,ver:0,rules:opts.rules||{},pot:0};
   return G; }
 /* a deterministic dice stream from the seed (so every client agrees) */
 function rnd01(G){ G.rngN++; const r=mulberry32((G.seed*7919+G.rngN*104729)>>>0)(); return r; }
@@ -251,7 +251,7 @@ function rentOf(G,i,diceSum){ const s=SQ[i], o=G.own[i]; if(o<0||G.mort[i]) retu
 const houseCost=i=>GROUPS[SQ[i].g].h;
 const netWorth=(G,pid)=>{ const p=G.pl[pid]; let w=p.cash; for(let i=0;i<40;i++) if(G.own[i]===pid){ w+=G.mort[i]?SQ[i].p/2:SQ[i].p; if(G.houses[i]) w+=G.houses[i]*houseCost(i); } return w; };
 /* the money: paying someone (or the bank, to=-1); if short, the player must raise it or go bankrupt */
-function pay(G,from,to,amt,why){ const p=G.pl[from]; p.cash-=amt; if(to>=0) G.pl[to].cash+=amt; logx(G,`${p.name} pays ${amt}${to>=0?' to '+G.pl[to].name:''}${why?' ('+why+')':''}`); if(p.cash<0) G.debt={pid:from,to,amt:-p.cash}; }
+function pay(G,from,to,amt,why){ const p=G.pl[from]; p.cash-=amt; if(to>=0) G.pl[to].cash+=amt; else if(G.rules&&G.rules.fp&&amt>0) G.pot=(G.pot||0)+amt; /* house rule: fines and taxes go to the middle of the board */ logx(G,`${p.name} pays ${amt}${to>=0?' to '+G.pl[to].name:''}${why?' ('+why+')':''}`); if(p.cash<0) G.debt={pid:from,to,amt:-p.cash}; }
 function gain(G,pid,amt,why){ G.pl[pid].cash+=amt; logx(G,`${G.pl[pid].name} collects ${amt}${why?' ('+why+')':''}`); }
 /* building: evenly across the set, only on full unmortgaged sets, and only while the bank has houses */
 function canBuild(G,pid,i){ const s=SQ[i]; if(s.t!=='prop'||G.own[i]!==pid||!ownsSet(G,pid,s.g)) return false; const set=GROUP_SQ[s.g]; if(set.some(j=>G.mort[j])) return false; const h=G.houses[i]; if(h>=5) return false; if(h<Math.min(...set.map(j=>G.houses[j]))) return true; if(set.some(j=>G.houses[j]<h)) return false; if(G.pl[pid].cash<houseCost(i)) return false; return h===4?G.bank.hotels>0:G.bank.houses>0; }
@@ -273,6 +273,8 @@ function land(G){ const p=curP(G), i=p.pos, s=SQ[i], sum=G.dice[0]+G.dice[1], mu
   if(OWNABLE(i)){ const o=G.own[i]; if(o<0){ G.phase='buy'; return true; } if(o!==p.id&&!G.mort[i]){ let r=rentOf(G,i,sum); if(mult) r*=mult; if(ten&&s.t==='util') r=10*sum; if(r>0) pay(G,p.id,o,r,`rent on ${s.n}`); } }
   else if(s.t==='tax') pay(G,p.id,-1,s.a,s.n); else if(s.t==='golock'){ logx(G,`${p.name} goes to the Lockup`); return toLock(G); }
   else if(s.t==='fort'||s.t==='hall') return drawCard(G,s.t);
+  else if(s.t==='park'&&G.rules&&G.rules.fp&&G.pot>0){ gain(G,p.id,G.pot,'the Town Square jackpot'); G.jackpot={pid:p.id,amt:G.pot}; G.pot=0; }
+  else if(s.t==='start'&&G.rules&&G.rules.go2) gain(G,p.id,200,'landing on START: double salary');
   G.phase=G.debt?'debt':'done'; return true; }
 function drawCard(G,deck){ const p=curP(G), D=deck==='fort'?FORTUNE:HALL, arr=G[deck], k=arr.shift(); const c=D[k]; G.card={deck,x:c.x,t:Date.now?0:0}; logx(G,`${p.name}: "${c.x}"`); if(c.k!=='free') arr.push(k); else p.free++;
   if(c.k==='goto') return moveTo(G,c.to,true); if(c.k==='move'){ p.pos=(p.pos+c.a+40)%40; return land(G); } if(c.k==='lock') return toLock(G);
@@ -339,18 +341,18 @@ function aiStep(G){ if(G.phase==='over') return false;
   if(G.phase==='done'){ aiManage(G,p.id); if(!G.trade||G.trade.state!=='offer'){ const t=rnd01(G)<.25?aiProposeTrade(G,p.id):null; if(t){ G.trade={...t,state:'offer'}; logx(G,`${p.name} offers a trade to ${G.pl[t.to].name}`); G.ver++; return true; } } endTurn(G); return true; }
   return false; }
 /* ---------- setup ---------- */
-let G=null, phase='menu', paused=false, seats=[{k:'you',tok:0},{k:'ai',tok:2,lvl:1},{k:'ai',tok:5,lvl:2},{k:'off',tok:6,lvl:1}], lenSel=0, camMode=0, sel=-1, tradeUI=null, cardShow=0, lastCard=null, net=null, myPids=[0];
+let G=null, phase='menu', paused=false, seats=[{k:'you',tok:0},{k:'ai',tok:2,lvl:1},{k:'ai',tok:5,lvl:2},{k:'off',tok:6,lvl:1}], lenSel=0, rulesSel={fp:false,go2:false}, camMode=0, sel=-1, tradeUI=null, cardShow=0, lastCard=null, net=null, myPids=[0];
 const LENS=[{n:'Classic (until one is left)',r:150},{n:'Quick (30 rounds, richest wins)',r:30},{n:'Short (15 rounds)',r:15}];
 const AIN=['Easy','Normal','Shrewd'];
 const SKEY='rinkRivalsLandlordV1'; let SV=(()=>{ try{ return Object.assign({w:0,p:0,best:0},JSON.parse(localStorage.getItem(SKEY)||'null')||{}); }catch(e){ return {w:0,p:0,best:0}; } })();
 const saveSV=()=>{ try{ localStorage.setItem(SKEY,JSON.stringify(SV)); }catch(e){} };
-try{ const p=JSON.parse(localStorage.getItem('rinkRivalsLandlordPrefs')||'null'); if(p&&Array.isArray(p.seats)&&p.seats.length===4){ seats=p.seats; lenSel=p.lenSel||0; } }catch(e){}
-const savePrefs=()=>{ try{ localStorage.setItem('rinkRivalsLandlordPrefs',JSON.stringify({seats,lenSel})); }catch(e){} };
+try{ const p=JSON.parse(localStorage.getItem('rinkRivalsLandlordPrefs')||'null'); if(p&&Array.isArray(p.seats)&&p.seats.length===4){ seats=p.seats; lenSel=p.lenSel||0; if(p.rules) rulesSel={fp:!!p.rules.fp,go2:!!p.rules.go2}; } }catch(e){}
+const savePrefs=()=>{ try{ localStorage.setItem('rinkRivalsLandlordPrefs',JSON.stringify({seats,lenSel,rules:rulesSel})); }catch(e){} };
 const keys=new Set();
 let disp=[0,0,0,0], diceT=0, aiT=0, lastVer=-1;
 
 function newGame(o){ o=o||{}; let players; if(o.online){ players=o.players; myPids=o.mine; } else { const act=seats.filter(s=>s.k!=='off'); let hn=0; players=act.map((s,i)=>({name:s.k==='you'?(act.filter(q=>q.k==='you').length>1?`Player ${++hn}`:'You'):['Ava','Marco','Kenji','Lena','Omar','Priya'][i%6]+' (AI)',tok:s.tok,ai:s.k==='ai',lvl:s.lvl||1})); myPids=players.map((p,i)=>p.ai?-1:i).filter(i=>i>=0); }
-  G=newGameState(players,{seed:o.seed||Math.floor(Math.random()*1e9),rounds:LENS[o.len??lenSel].r}); disp=G.pl.map(()=>0); diceT=0; sel=-1; tradeUI=null; phase='play'; $('menu').classList.add('hidden'); $('result').classList.add('hidden'); camE=null; banner('Landlord',`${G.pl.length} players · ${LENS[o.len??lenSel].n}`,'#16a34a',2); updateBoard(); renderKeysHelp(); }
+  G=newGameState(players,{seed:o.seed||Math.floor(Math.random()*1e9),rounds:LENS[o.len??lenSel].r,rules:o.rules||(o.online?{}:rulesSel)}); disp=G.pl.map(()=>0); diceT=0; sel=-1; tradeUI=null; phase='play'; $('menu').classList.add('hidden'); $('result').classList.add('hidden'); camE=null; banner('Landlord',`${G.pl.length} players · ${LENS[o.len??lenSel].n}${G.rules.fp?' · jackpot':''}${G.rules.go2?' · double START':''}`,'#16a34a',2); updateBoard(); renderKeysHelp(); }
 const iAm=pid=>myPids.includes(pid);
 const myTurn=()=>G&&iAm(G.turn)&&!G.pl[G.turn].ai;
 const isHostOrLocal=()=>!net||!net.on||net.isHost();
@@ -396,6 +398,7 @@ const PX=774, PW=334;
 function drawHUD(){ BTN=[]; if(!G) return;
   /* players */ G.pl.forEach((p,i)=>{ const y=46+i*34, cur=G.turn===i&&G.phase!=='over'; rr(PX,y,PW,31,9,cur?'rgba(250,204,21,.25)':'rgba(5,10,24,.78)'); rr(PX,y,6,31,3,PCOL[i]); hudText(TOKENS[p.tok].e,PX+22,y+23,18,'#fff','center');
     hudText(`${p.name}${iAm(i)&&!p.ai&&myPids.length>1?' ●':''}`,PX+40,y+14,15,p.out?'#64748b':'#fff'); hudText(p.out?'bankrupt':`${p.lock?'in the Lockup · ':''}${[...Array(40).keys()].filter(k=>G.own[k]===i).length} properties${p.free?' · free card':''}`,PX+40,y+28,12,'#94a3b8'); hudText(`${p.cash}`,PX+PW-12,y+23,20,p.cash<0?'#f87171':'#86efac','right'); });
+  if(G.rules&&G.rules.fp) hudText(`Jackpot: ${G.pot||0}`,PX+8,38,14,'#fde047');
   let y=46+G.pl.length*34+6; const cur=G.pl[G.turn], mine=myTurn(); rr(PX,y,PW,142,10,'rgba(5,10,24,.85)');
   const dueBy=G.debt?G.pl[G.debt.pid]:null;
   if(G.trade&&G.trade.state==='offer'&&iAm(G.trade.to)&&!G.pl[G.trade.to].ai){ const t=G.trade; hudText(`${G.pl[t.from].name} offers you:`,PX+12,y+22,15,'#fde047'); hudText(`${t.give.map(i=>SQ[i].n).join(', ')||'nothing'}${t.cashGive?` + ${t.cashGive} cash`:''}`,PX+12,y+44,13,'#e2e8f0'); hudText(`for ${t.get.map(i=>SQ[i].n).join(', ')||'nothing'}${t.cashGet?` + ${t.cashGet} cash`:''}`,PX+12,y+64,13,'#e2e8f0'); button('tAcc','Accept',PX+12,y+100,150,36,'#16a34a'); button('tDec','Decline',PX+172,y+100,150,36,'#dc2626'); }
@@ -471,19 +474,20 @@ const pill=(attr,val,on,label)=>`<button data-${attr}="${val}" class="${on?'on':
 function renderMenu(){ $('menuIn').innerHTML=`<h1>Rink Rivals: Landlord</h1><p>The property-trading game, after Lizzie Magie's 1904 <i>Landlord's Game</i>: buy streets, stations and utilities, complete the colour sets, build houses and hotels, trade, mortgage, survive the Lockup, and bankrupt everyone else. Your token is a Rink Rivals sport.</p>
   ${seats.map((s,i)=>`<div class="pills"><span class="lbl" style="color:${PCOL[i]}">Seat ${i+1}</span>${pill('seat',i+':you',s.k==='you','Human')}${pill('seat',i+':ai',s.k==='ai','AI')}${i>1?pill('seat',i+':off',s.k==='off','Empty'):''}${s.k==='ai'?AIN.map((n,l)=>pill('lvl',i+':'+l,(s.lvl||1)===l,n)).join(''):''}${s.k!=='off'?`<button data-tok="${i}" tabindex="-1">${TOKENS[s.tok].e} ${TOKENS[s.tok].n}</button>`:''}</div>`).join('')}
   <div class="pills"><span class="lbl">Length</span>${LENS.map((l,i)=>pill('len',i,lenSel===i,l.n)).join('')}</div>
+  <div class="pills"><span class="lbl">House rules</span>${pill('rule','fp',rulesSel.fp,'Town Square jackpot (taxes, fines and bail go to the middle)')}${pill('rule','go2',rulesSel.go2,'Land exactly on START: collect 400')}</div>
   <div class="pills"><button class="gold" data-act="start" tabindex="-1">Deal me in <kbd>Enter</kbd></button><a href="./" tabindex="-1">Home</a><a href="chess" tabindex="-1">Chess</a></div>
   <div id="hint">Games ${SV.p} · won ${SV.w}${SV.best?` · biggest fortune ${SV.best}`:''}</div>`; updateBoard(); renderKeysHelp(); }
 $('menuIn').addEventListener('mousedown',e=>{ if(e.target.closest('button')) e.preventDefault(); });
 $('menuIn').addEventListener('click',e=>{ const b=e.target.closest('button'); if(!b) return; const d=b.dataset; audio(); sfx.click();
-  if(d.seat){ const [i,k]=d.seat.split(':'); seats[+i].k=k; if(!seats.some(s=>s.k==='you')) seats[0].k='you'; } else if(d.lvl){ const [i,l]=d.lvl.split(':'); seats[+i].lvl=+l; } else if(d.tok!==undefined){ const i=+d.tok, used=seats.map(s=>s.tok); let t=seats[i].tok; do{ t=(t+1)%TOKENS.length; }while(used.includes(t)&&t!==seats[i].tok); seats[i].tok=t; } else if(d.len!==undefined) lenSel=+d.len; else if(d.act==='start'){ startGame(); return; } savePrefs(); renderMenu(); });
+  if(d.seat){ const [i,k]=d.seat.split(':'); seats[+i].k=k; if(!seats.some(s=>s.k==='you')) seats[0].k='you'; } else if(d.lvl){ const [i,l]=d.lvl.split(':'); seats[+i].lvl=+l; } else if(d.tok!==undefined){ const i=+d.tok, used=seats.map(s=>s.tok); let t=seats[i].tok; do{ t=(t+1)%TOKENS.length; }while(used.includes(t)&&t!==seats[i].tok); seats[i].tok=t; } else if(d.len!==undefined) lenSel=+d.len; else if(d.rule) rulesSel[d.rule]=!rulesSel[d.rule]; else if(d.act==='start'){ startGame(); return; } savePrefs(); renderMenu(); });
 function startGame(){ audio(); savePrefs(); newGame(); }
 function renderKeysHelp(){ $('keysHelp').innerHTML='<div><b>Roll / end turn</b> Space</div><div><b>Buy</b> B</div><div><b>Auction</b> A</div><div><b>Deeds</b> click a square</div><div><b>Camera</b> C</div><div><b>View</b> V</div><div><b>Menu</b> Esc</div>'; }
 function toMenu(){ phase='menu'; G=null; tradeUI=null; $('result').classList.add('hidden'); $('menu').classList.remove('hidden'); renderMenu(); }
 
 /* ---------- online: the host runs the game; everyone else sends their moves and gets the table back ---------- */
 net=window.RRO?RRO.init({game:'landlord',maxPlayers:4,minPlayers:2,blurb:'Play Landlord with up to four people online: the host deals, the empty seats can be filled with AI landlords.',
-  getOpts:()=>({seed:Math.floor(Math.random()*1e9),len:lenSel,fill:seats.filter(s=>s.k==='ai').length}),
-  onStart:(msg,api)=>{ const o=msg.opts||{}, all=api.all(), me=all.findIndex(p=>p.id===api.me.id), players=all.map((p,i)=>({name:p.name||('Player '+(i+1)),tok:i,ai:false})); for(let k=0;k<Math.min(o.fill||0,4-players.length);k++) players.push({name:['Ava','Marco','Kenji'][k]+' (AI)',tok:players.length+2,ai:true,lvl:1}); newGame({online:true,players,mine:[me],seed:o.seed,len:o.len}); if(api.isHost()) broadcast(); },
+  getOpts:()=>({seed:Math.floor(Math.random()*1e9),len:lenSel,rules:rulesSel,fill:seats.filter(s=>s.k==='ai').length}),
+  onStart:(msg,api)=>{ const o=msg.opts||{}, all=api.all(), me=all.findIndex(p=>p.id===api.me.id), players=all.map((p,i)=>({name:p.name||('Player '+(i+1)),tok:i,ai:false})); for(let k=0;k<Math.min(o.fill||0,4-players.length);k++) players.push({name:['Ava','Marco','Kenji'][k]+' (AI)',tok:players.length+2,ai:true,lvl:1}); newGame({online:true,players,mine:[me],seed:o.seed,len:o.len,rules:o.rules||{}}); if(api.isHost()) broadcast(); },
   onMsg:(m)=>{ if(!G) return; if(m.t==='G'&&!net.isHost()){ const prev=G; G=m.G; if(prev.ver!==G.ver&&G.rolled&&prev.dice&&(prev.dice[0]!==G.dice[0]||prev.dice[1]!==G.dice[1]||prev.turn!==G.turn)) { diceT=.9; sfx.dice(); } } else if(m.t==='act'&&net.isHost()) applyAct(m.pid,m.a,m.arg); },
   onPeers:(api,kind,m)=>{ if(kind==='leave'&&G&&api.isHost()){ const all=api.all(); G.pl.forEach(p=>{ if(!p.ai&&!all.some(q=>q.name===p.name)){ p.ai=true; p.name+=' (AI)'; } }); G.ver++; broadcast(); toast('A player left: an AI takes their seat','#fbbf24'); } },
   onEnd:()=>{} }):null;
