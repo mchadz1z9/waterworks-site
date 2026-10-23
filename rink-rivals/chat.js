@@ -6,7 +6,7 @@
   /* automated tests open the pages from disk or with ?test: never connect those to the real chat */
   const OFF=/[?&]test\b/.test(location.search)||(location.protocol==='file:'&&!/[?&]chat\b/.test(location.search));
   let GAME=((location.pathname.split('/').pop()||'').replace(/\.html$/,'')||'home').toLowerCase().replace(/[^a-z0-9]/g,'')||'home'; if(GAME==='index') GAME='home';
-  const GN={home:'🏠 Home',hockey:'🏒 Hockey',baseball:'⚾ Baseball',football:'🏈 Football',soccer:'⚽ Soccer',basketball:'🏀 Basketball',ufc:'🥊 UFC',f1:'🏎️ F1',skate:'🛹 Skate',golf:'⛳ Golf',bowling:'🎳 Bowling',drift:'💨 Drift',nascar:'🏁 NASCAR',moto:'🏍️ MotoGP',fencing:'🤺 Fencing',airsoft:'🎯 Airsoft',paintball:'🟡 Paintball',surf:'🏄 Surfing',discgolf:'🥏 Disc Golf',pickleball:'🏓 Pickleball',skydive:'🪂 Skydiving',kart:'🏎️ Kart',flight:'✈️ Flight',tennis:'🎾 Tennis',fishing:'🎣 Fishing',chess:'♟️ Chess',monster:'🛻 Monster Truck',waterpolo:'🤽 Water Polo',mx:'🏍️ Motocross',jetski:'🚤 Jet Ski',minigolf:'⛳ Mini Golf',archery:'🏹 Archery',ski:'⛷️ Ski',tabletennis:'🏓 Table Tennis',rocket:'🚗 Rocket Soccer',athletics:'🏃 Track & Field',br:'🌀 Storm Royale',volleyball:'🏐 Volleyball',hunting:'🦌 Hunting',ultimate:'🥏 Ultimate',badminton:'🏸 Badminton',sailing:'⛵ Sailing',pool:'🎱 Pool & Snooker',karate:'🥋 Karate',kayak:'🛶 Kayak',rodeo:'🤠 Rodeo',landlord:'🏘️ Landlord',poker:'🃏 Poker','820':'🏀 82-0','84up':'⭐ 84 & Up',darts:'🎯 Darts',curling:'🥌 Curling',axe:'🪓 Axe Throwing',empires:'🌍 Empires'};
+  const GN={home:'🏠 Home',blackjack:'🂡 Blackjack',hockey:'🏒 Hockey',baseball:'⚾ Baseball',football:'🏈 Football',soccer:'⚽ Soccer',basketball:'🏀 Basketball',ufc:'🥊 UFC',f1:'🏎️ F1',skate:'🛹 Skate',golf:'⛳ Golf',bowling:'🎳 Bowling',drift:'💨 Drift',nascar:'🏁 NASCAR',moto:'🏍️ MotoGP',fencing:'🤺 Fencing',airsoft:'🎯 Airsoft',paintball:'🟡 Paintball',surf:'🏄 Surfing',discgolf:'🥏 Disc Golf',pickleball:'🏓 Pickleball',skydive:'🪂 Skydiving',kart:'🏎️ Kart',flight:'✈️ Flight',tennis:'🎾 Tennis',fishing:'🎣 Fishing',chess:'♟️ Chess',monster:'🛻 Monster Truck',waterpolo:'🤽 Water Polo',mx:'🏍️ Motocross',jetski:'🚤 Jet Ski',minigolf:'⛳ Mini Golf',archery:'🏹 Archery',ski:'⛷️ Ski',tabletennis:'🏓 Table Tennis',rocket:'🚗 Rocket Soccer',athletics:'🏃 Track & Field',br:'🌀 Storm Royale',volleyball:'🏐 Volleyball',hunting:'🦌 Hunting',ultimate:'🥏 Ultimate',badminton:'🏸 Badminton',sailing:'⛵ Sailing',pool:'🎱 Pool & Snooker',karate:'🥋 Karate',kayak:'🛶 Kayak',rodeo:'🤠 Rodeo',landlord:'🏘️ Landlord',poker:'🃏 Poker','820':'🏀 82-0','84up':'⭐ 84 & Up',darts:'🎯 Darts',curling:'🥌 Curling',axe:'🪓 Axe Throwing',empires:'🌍 Empires'};
   const ls={ get:k=>{ try{ return localStorage.getItem(k); }catch(e){ return null; } }, set:(k,v)=>{ try{ localStorage.setItem(k,v); }catch(e){} } };
   let pid=ls.get('rrPid'); if(!pid||pid.length<8){ pid=Array.from({length:12},()=>'abcdefghijklmnopqrstuvwxyz0123456789'[Math.floor(Math.random()*36)]).join(''); ls.set('rrPid',pid); }
   let name=(ls.get('rrOnlineName')||'').trim();
@@ -30,7 +30,13 @@
 .rrc .wr{display:flex;align-items:center;gap:8px;padding:7px 9px;border-radius:10px;background:rgba(255,255,255,.05)} .rrc .wr b{flex:1;min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap} .rrc .wr span{color:#94a3b8;font-size:13px;white-space:nowrap} .rrc .wr a{background:#22c55e;color:#04210f;text-decoration:none;font:800 14px 'Big Shoulders Display','Arial Narrow',sans-serif;border-radius:8px;padding:3px 10px;white-space:nowrap} .rrc .wr a.here{background:#334155;color:#cbd5e1} .rrc header small::before{content:'';display:inline-block;width:8px;height:8px;border-radius:50%;background:#4ade80;margin-right:5px}
 .rrc header button{background:rgba(255,255,255,.12);border:0;color:#fff;border-radius:8px;padding:3px 8px;cursor:pointer;font:700 13px system-ui,sans-serif}
 .rrc .log{flex:1;overflow-y:auto;padding:8px 10px;display:flex;flex-direction:column;gap:6px;scrollbar-width:thin}
-#rrcPop{position:fixed;right:14px;bottom:116px;z-index:9550;max-width:300px;background:#0f172a;color:#e2e8f0;border:2px solid #6366f1;border-radius:14px;padding:9px 12px;font:600 14px/1.35 system-ui,sans-serif;box-shadow:0 10px 30px rgba(0,0,0,.45);cursor:pointer;opacity:0;transform:translateY(10px);pointer-events:none;transition:opacity .25s,transform .25s} #rrcPop.on{opacity:1;transform:none;pointer-events:auto} #rrcPop span{font-size:11px;color:#94a3b8} #rrcPop div{margin-top:2px;word-wrap:break-word} #rrcPop small{display:block;margin-top:4px;color:#818cf8;font-size:11px} .rrc header .bell{background:none;border:0;cursor:pointer;font-size:15px;padding:0 4px} .rrc .m a{color:#7dd3fc;text-decoration:underline;word-break:break-all} .rrc .m{line-height:1.3;word-wrap:break-word;position:relative;padding:5px 8px;border-radius:10px;background:rgba(255,255,255,.04)}
+#rrcPop{position:fixed;left:50%;top:18px;z-index:9550;width:min(640px,calc(100vw - 32px));box-sizing:border-box;background:#0f172a;color:#f8fafc;border:3px solid #6366f1;border-radius:18px;padding:16px 22px;font:700 22px/1.35 system-ui,sans-serif;box-shadow:0 18px 50px rgba(0,0,0,.55);cursor:pointer;opacity:0;transform:translate(-50%,-30px);pointer-events:none;transition:opacity .25s,transform .25s} #rrcPop.on{opacity:1;transform:translate(-50%,0);pointer-events:auto}
+#rrcPop b{font-size:24px}
+#rrcPop.inv{border-color:#22c55e;cursor:default}
+#rrcPop .ib{display:flex;gap:10px;margin-top:12px}
+#rrcPop .ib button{font:800 18px system-ui,sans-serif;border-radius:12px;padding:10px 20px;border:0;cursor:pointer}
+#rrcPop .ib .y{background:#22c55e;color:#052e16}
+#rrcPop .ib .n{background:#334155;color:#e2e8f0} #rrcPop span{font-size:15px;color:#94a3b8} #rrcPop div{margin-top:6px;word-wrap:break-word} #rrcPop small{display:block;margin-top:8px;color:#818cf8;font-size:14px} .rrc header .bell{background:none;border:0;cursor:pointer;font-size:15px;padding:0 4px} .rrc .m a{color:#7dd3fc;text-decoration:underline;word-break:break-all} .rrc .m{line-height:1.3;word-wrap:break-word;position:relative;padding:5px 8px;border-radius:10px;background:rgba(255,255,255,.04)}
 .rrc .m.me{background:rgba(99,102,241,.18)}
 .rrc .m .n{font-weight:800} .rrc .m .g{font-size:11px;color:#94a3b8;margin-left:6px;font-weight:700} .rrc .m .t{float:right;font-size:11px;color:#64748b;margin-left:6px}
 .rrc .m .x{display:none;position:absolute;right:4px;top:18px;background:#1e293b;border:0;color:#fca5a5;border-radius:6px;font-size:11px;cursor:pointer;padding:1px 6px}
@@ -80,8 +86,19 @@
     if(hidden){ missed++; document.title=`(${missed}) 💬 ${m.name}: ${m.text}`.slice(0,60); if(!titleT){ titleT=setInterval(()=>{ if(!document.hidden){ clearInterval(titleT); titleT=null; missed=0; document.title=baseTitle; } },1000); }
       try{ if(window.Notification&&Notification.permission==='granted'){ const n=new Notification(`${m.name} on Rink Rivals`,{body:String(m.text).slice(0,120),tag:'rrchat',silent:false}); n.onclick=()=>{ window.focus(); toggle(true); n.close(); }; } }catch(e){} return; }
     if(open||docked) return; ping();
-    if(!pop){ pop=document.createElement('div'); pop.id='rrcPop'; pop.setAttribute('role','status'); document.body.appendChild(pop); pop.addEventListener('click',()=>{ pop.classList.remove('on'); toggle(true); }); }
-    pop.innerHTML=`<b style="color:hsl(${hue(m.name)},85%,70%)">${esc(m.name)}</b> <span>${esc(GN[m.game]||'')}</span><div>${esc(String(m.text).slice(0,140))}</div><small>Click to reply</small>`; pop.classList.add('on'); clearTimeout(popT); popT=setTimeout(()=>pop&&pop.classList.remove('on'),6000); }
+    if(popInv) return; mkPop(); pop.classList.remove('inv');
+    pop.innerHTML=`<b style="color:hsl(${hue(m.name)},85%,70%)">${esc(m.name)}</b> <span>${esc(GN[m.game]||'')}</span><div>${esc(String(m.text).slice(0,140))}</div><small>Click to reply</small>`; pop.classList.add('on'); clearTimeout(popT); popT=setTimeout(()=>pop&&pop.classList.remove('on'),8000); }
+  let popInv=false;
+  function mkPop(){ if(pop) return; pop=document.createElement('div'); pop.id='rrcPop'; pop.setAttribute('role','status'); document.body.appendChild(pop); pop.addEventListener('click',e=>{ if(popInv) return; pop.classList.remove('on'); toggle(true); }); }
+  /* someone invited you into their online room: a big card with Join */
+  function inviteCard(m){ mkPop(); popInv=true; ping(); const gn=GN[m.game.replace(/[^a-z0-9]/g,'')]||m.game;
+    pop.classList.add('inv'); pop.innerHTML=`<b style="color:hsl(${hue(m.from)},85%,70%)">${esc(m.from)}</b> invited you to play <b>${esc(gn)}</b>!<div class="ib"><button class="y">Join game</button><button class="n">No thanks</button></div>`;
+    const close=()=>{ popInv=false; pop.classList.remove('on','inv'); clearTimeout(popT); };
+    pop.querySelector('.y').onclick=ev=>{ ev.stopPropagation(); close(); location.href=`${m.game==='home'?'./':m.game}?room=${encodeURIComponent(m.room)}`; };
+    pop.querySelector('.n').onclick=ev=>{ ev.stopPropagation(); close(); };
+    pop.classList.add('on'); clearTimeout(popT); popT=setTimeout(close,45000);
+    if(document.hidden){ try{ if(window.Notification&&Notification.permission==='granted') new Notification(`${m.from} invited you to ${gn}`,{body:'Open Rink Rivals to join',tag:'rrinv'}); }catch(e){} } }
+  let invCb=null;
   function sys(t){ const el=document.createElement('div'); el.className='sys'; el.textContent=t; log.appendChild(el); log.scrollTop=log.scrollHeight; }
   function tx(o){ if(ws&&ws.readyState===1) ws.send(JSON.stringify(o)); }
   function send(){ const t=inp.value.trim(); if(!t) return; if(!name){ askName(); return; } if(!ws||ws.readyState!==1){ sys('Not connected yet, try again in a second.'); return; } tx({t:'say',text:t}); inp.value=''; }
@@ -96,6 +113,8 @@
       else if(m.t==='clear'){ log.innerHTML=''; msgs.clear(); }
       else if(m.t==='you'){ name=m.name; ls.set('rrOnlineName',name); }
       else if(m.t==='who'){ roster=m.list||[]; setN(roster.length); renderWho(); try{ dispatchEvent(new CustomEvent('rrc-who',{detail:roster})); }catch(e){} }
+      else if(m.t==='invite') inviteCard(m);
+      else if(m.t==='invsent'){ if(invCb) try{ invCb(m); }catch(e){} }
       else if(m.t==='sys') sys(m.text); };
     ws.onclose=()=>{ clearInterval(pingT); cnt.textContent='reconnecting…'; later(); }; ws.onerror=()=>{ try{ ws.close(); }catch(e){} }; }
   function later(){ retry=Math.min(retry+1,6); setTimeout(connect,1000*retry*retry); }
@@ -109,7 +128,7 @@
   function start(){ build(); connect(); }
   if(document.readyState==='loading') document.addEventListener('DOMContentLoaded',start); else start();
   addEventListener('rr-name',e=>{ const v=String(e.detail||'').trim(); if(!v||v===name) return; name=v; if(inp) inp.placeholder='Message everyone…'; tx({t:'name',name:v}); });
-  window.RRC={ toggle:on=>toggle(on==null?!open:on), showWho, get online(){ return online; }, get roster(){ return roster; } };
+  window.RRC={ invite(id,game,room,cb){ invCb=cb||null; tx({t:'invite',to:id,game,room}); }, toggle:on=>toggle(on==null?!open:on), showWho, get online(){ return online; }, get roster(){ return roster; } };
 })();
 
 /* Rink Rivals player name: everyone picks a name once, before they play (it's the name on the chat, online games and the records) */

@@ -85,9 +85,17 @@
       return; }
     panel.innerHTML=`<div class="box"><h2>Room</h2><div class="code">${code}</div><p>Send this code (or the link) to a friend.</p><input readonly value="${esc(link)}" onclick="this.select()">
     <ul>${[me].concat(peers).sort((a,b)=>a.seat-b.seat).map(p=>`<li>${p.seat===0?'👑':'🎮'} ${esc(p.name)}${p.id===me.id?' (you)':''}</li>`).join('')}</ul>
+    <div id="rroInv"></div>
     ${host?`<button class="gold" id="rroGo" ${peers.length<(cfg.minPlayers||1)?'disabled style="opacity:.5"':''}>Start</button>`:'<p>Waiting for the host to start…</p>'}<button id="rroLeave">Leave</button></div>`;
     if(host) panel.querySelector('#rroGo').onclick=()=>{ const msg={t:'start',seed:Math.floor(Math.random()*1e9),opts:cfg.getOpts?cfg.getOpts():null}; send(msg); begin(msg); };
-    panel.querySelector('#rroLeave').onclick=()=>{ leave(); hideUI(); }; }
+    panel.querySelector('#rroLeave').onclick=()=>{ leave(); hideUI(); }; invList(); }
+  /* invite anyone who is on the site right now: they get a big card with a Join button */
+  const PAGE=(location.pathname.split('/').pop()||'').replace(/\.html$/,'')||'index', invSent={};
+  function invList(){ const el=panel&&panel.querySelector('#rroInv'); if(!el) return; if(!window.RRC||!RRC.invite){ el.innerHTML=''; return; }
+    const inRoom=new Set([me].concat(peers).map(p=>p.name)), list=(RRC.roster||[]).filter(p=>!p.me&&p.id&&!inRoom.has(p.name)).slice(0,8);
+    el.innerHTML=`<p>Invite someone who's online:</p>${list.length?list.map(p=>`<div style="display:flex;align-items:center;gap:8px;margin:4px 0"><span style="flex:1;font-size:18px">${esc(p.name)}</span><button data-inv="${esc(p.id)}" ${invSent[p.id]?'disabled style="opacity:.6"':''}>${invSent[p.id]||'Invite'}</button></div>`).join(''):'<p style="font-size:14px">Nobody else is online right now.</p>'}`;
+    el.querySelectorAll('[data-inv]').forEach(b=>b.onclick=()=>{ const id=b.dataset.inv; invSent[id]='Sending…'; invList(); RRC.invite(id,PAGE,code,r=>{ invSent[r.to]=r.ok?'Invited ✓':'Not online'; if(!r.ok) setTimeout(()=>{ delete invSent[r.to]; invList(); },4000); invList(); }); }); }
+  addEventListener('rrc-who',()=>{ if(panel&&ws&&!started&&!quick) invList(); });
   function begin(msg){ started=true; hideUI(); badge(); cfg.onStart&&cfg.onStart(msg,api); }
   function badge(){ let b=document.getElementById('rroB'); if(!b){ b=document.createElement('button'); b.id='rroB'; document.body.appendChild(b); b.onclick=()=>{ if(confirm('Leave the online game?')) leave(); }; } b.textContent=`Online · ${code} · ${peers.length+1} players`; }
   function connect(c,name){ code=c; closing=false; if(!/^Q/.test(c)) quick=false; hideInvite(); ui(); panel.innerHTML=`<div class="box"><h2>Connecting…</h2><p>Room ${esc(c)}</p></div>`;

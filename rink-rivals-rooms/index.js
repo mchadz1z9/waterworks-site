@@ -135,6 +135,8 @@ function gibberish(text){ const t=text.toLowerCase().replace(URLRE,' '); const w
   return letters>=5&&bad/letters>.34; }
 const PERSONAL=/(\b\d{3}[\s.-]?\d{3}[\s.-]?\d{4}\b|[a-z0-9._%+-]+@[a-z0-9.-]+\.[a-z]{2,}|\b\d{1,5}\s+\w+\s+(street|st|avenue|ave|road|rd|drive|dr|lane|ln|crescent|cres|court|ct)\b|\bmy\s+address\b|\bwhere\s+do\s+you\s+live\b|\bhow\s+old\s+are\s+you\b)/i;
 const cleanName=n=>{ let s=String(n||'').replace(/[\u0000-\u001f<>]/g,'').replace(/\s+/g,' ').trim().slice(0,20); if(!s) s='Player'; for(const r of CHAT_BAD){ r.lastIndex=0; if(r.test(s)) return 'Player'; } if(LINK.test(s)||PERSONAL.test(s)) return 'Player'; return s; };
+/* a short public id for a person (the private player id never leaves the server) */
+const pubId=w=>{ let h=2166136261; for(const c of String(w)){ h^=c.charCodeAt(0); h=Math.imul(h,16777619); } return (h>>>0).toString(36); };
 export class Chat {
   constructor(ctx){ this.ctx=ctx; this.sql=ctx.storage.sql;
     this.sql.exec('CREATE TABLE IF NOT EXISTS m(id INTEGER PRIMARY KEY AUTOINCREMENT, ts INTEGER, name TEXT, text TEXT, game TEXT, who TEXT, hid INTEGER DEFAULT 0)');
@@ -146,7 +148,7 @@ export class Chat {
   count(){ this.all({t:'n',n:this.socks().length}); this.who(); }
   /* who is on the site and which game each person is in (one entry per person, newest tab wins) */
   who(){ const m=new Map(); for(const ws of this.socks()){ const a=ws.deserializeAttachment(); m.set(a.who,{name:a.name,game:a.game,me:a.who}); }
-    const list=[...m.values()]; for(const ws of this.socks()){ const a=ws.deserializeAttachment(); this.send(ws,{t:'who',list:list.map(x=>({name:x.name,game:x.game,me:x.me===a.who}))}); } }
+    const list=[...m.values()]; for(const ws of this.socks()){ const a=ws.deserializeAttachment(); this.send(ws,{t:'who',list:list.map(x=>({name:x.name,game:x.game,id:pubId(x.me),me:x.me===a.who}))}); } }
   hist(){ return this.sql.exec('SELECT id,ts,name,text,game FROM m WHERE hid=0 ORDER BY id DESC LIMIT 60').toArray().reverse(); }
   async fetch(req){
     if(new URL(req.url).pathname==='/admin'){ let m={}; try{ m=await req.json(); }catch(e){}
@@ -165,6 +167,16 @@ export class Chat {
     if(m.t==='hello'){ const who=String(m.pid||'').replace(/[^a-z0-9]/gi,'').slice(0,24)||crypto.randomUUID().slice(0,12); a={name:cleanName(m.name),game:String(m.game||'home').replace(/[^a-z0-9]/g,'').slice(0,16)||'home',who,ts:[],last:''}; ws.serializeAttachment(a); this.count(); return; }
     if(!a) return;
     if(m.t==='where'){ a.game=String(m.game||'home').replace(/[^a-z0-9]/g,'').slice(0,16)||'home'; ws.serializeAttachment(a); this.who(); return; }
+    /* invite one person into your online room: only a room code and a game travel, nothing else */
+    if(m.t==='invite'){ const now=Date.now(), to=String(m.to||'').slice(0,12), room=String(m.room||'').toUpperCase(), game=String(m.game||'').toLowerCase().replace(/[^a-z0-9-]/g,'').slice(0,16);
+      if(!to||!/^[A-Z0-9]{4,8}$/.test(room)||!game) return;
+      const mu=this.sql.exec('SELECT until FROM mute WHERE who=?',a.who).toArray()[0]; if(mu&&mu.until>now){ this.send(ws,{t:'sys',text:'You are muted, so you cannot send invites right now.'}); return; }
+      a.inv=(a.inv||[]).filter(t=>now-t<60000); if(a.inv.length>=6){ this.send(ws,{t:'invsent',ok:false,to,why:'Slow down on the invites, try again in a minute.'}); return; }
+      const targets=this.socks().filter(s=>{ const b=s.deserializeAttachment(); return b&&pubId(b.who)===to&&b.who!==a.who; });
+      if(!targets.length){ this.send(ws,{t:'invsent',ok:false,to,why:'They are not online any more.'}); return; }
+      a.inv.push(now); ws.serializeAttachment(a); const tn=targets[0].deserializeAttachment().name;
+      for(const s of targets) this.send(s,{t:'invite',from:a.name,game,room});
+      this.send(ws,{t:'invsent',ok:true,to,name:tn}); return; }
     if(m.t==='name'){ a.name=cleanName(m.name); ws.serializeAttachment(a); this.send(ws,{t:'you',name:a.name}); this.who(); return; }
     if(m.t==='ping'){ this.send(ws,{t:'pong'}); return; }
     if(m.t==='report'){ const id=+m.id; if(!id) return; this.sql.exec('INSERT OR IGNORE INTO r(mid,who) VALUES(?,?)',id,a.who); const c=this.sql.exec('SELECT COUNT(*) AS c FROM r WHERE mid=?',id).toArray()[0].c;
