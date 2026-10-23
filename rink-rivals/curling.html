@@ -310,7 +310,8 @@ function applyRules(pre,st,thrown,shotNo,fgzOn){ const notes=[];
   const t=st.find(s=>s.id===thrown); if(t&&t.on&&t.x-SR<SH.hogF&&!t.hit){ t.on=false; t.out='hog'; notes.push('hog'); }
   /* a stone that has been knocked back short of the far hog line is out of play */
   for(const s of st) if(s.on&&s.id!==thrown&&s.x+SR<SH.hogF){ s.on=false; s.out='short'; }
-  if(fgzOn&&shotNo<5&&t){ const prot=pre.filter(s=>s.on&&s.team!==t.team&&inFGZ(s)); for(const p of prot){ const now=st.find(s=>s.id===p.id); if(!now.on){
+  /* mixed doubles: no stone at all may be knocked out of play before the fourth delivered stone */
+  if(fgzOn&&shotNo<(NST===10?3:5)&&t){ const prot=pre.filter(s=>s.on&&(NST===10?s.id!==t.id:s.team!==t.team&&inFGZ(s))); for(const p of prot){ const now=st.find(s=>s.id===p.id); if(!now.on){
       /* five-rock rule: the delivered stone comes out, everything else goes back where it was */
       for(const s of st){ const q=pre.find(o=>o.id===s.id); if(q){ s.x=q.x; s.z=q.z; s.on=q.on; s.out=q.out||null; } s.vx=s.vz=0; s.mv=false; }
       t.on=false; t.out='fgz'; notes.push('fgz'); break; } } }
@@ -361,8 +362,10 @@ function utilOf(st,env,T,nT,nO,lastTeam,diff,eLeft){ const e=evalEnd(st,env,T,nT
   let u=0; for(let r=-6;r<=6;r++){ const lo=r===-6?0:Phi((r-.5-e.ep)/e.sd), hi=r===6?1:Phi((r+.5-e.ep)/e.sd); u+=(hi-lo)*wpOf(diff+r,eLeft,ham(r)); } return {u,ep:e.ep}; }
 
 /* ---------- the throwing order: the team without the hammer throws first, then alternate, 8 each ---------- */
+/* stones thrown per end: 16, or 10 in mixed doubles (plus one pre-placed stone a side) */
+let NST=16;
 const teamOfShot=(k,ham)=>k%2===0?1-ham:ham;
-function leftAfter(k,ham,T){ let n=0; for(let j=k+1;j<16;j++) if(teamOfShot(j,ham)===T) n++; return n; }
+function leftAfter(k,ham,T){ let n=0; for(let j=k+1;j<NST;j++) if(teamOfShot(j,ham)===T) n++; return n; }
 /* simulate one delivery from a position: the rules are applied when everything stops */
 function simShot(st0,env,shot,thrownId,shotNo,fgz,sweepFn){ const st=cloneSt(st0), pre=cloneSt(st0), s=st.find(o=>o.id===thrownId); launch(s,shot); const ev=[];
   let n=0; const ctl={id:thrownId,sw:0}; while(n<36000){ if(sweepFn) ctl.sw=sweepFn(s,n); if(!simStep(st,env,ctl,ev)) break; n++; }
@@ -404,7 +407,7 @@ function* planGen(sit){ const env=sit.env, T=sit.team, k=sit.k, id=sit.thrownId,
   if(lv.noise0) for(const r of res) r.u0+=gauss()*lv.noise0;
   res.sort((a,b)=>b.u0-a.u0); const top=res.slice(0,lv.look>0?10:4);
   for(const r of top){ let su=r.u0, m=1; for(let j=0;j<(lv.look>0?4:2);j++){ if(used>budget*.8&&j>=1) break; const sh={v:r.c.shot.v+gauss()*sv,ang:r.c.shot.ang+gauss()*sa,turn:r.c.shot.turn}; const q=simShot(sit.st,env,sh,id,k,true); su+=sitUtil(sit,q.st,k).u; m++; tick(); yield ++n; t0=pnow(); } r.um=su/m; r.u=r.um; }
-  const remain=15-k;
+  const remain=NST-1-k;
   if(lv.look>1&&remain>=1&&remain<=3){ top.sort((a,b)=>b.um-a.um); const O=1-T, ko=k+1;
     for(const r of top.slice(0,5)){ const s2={...sit,st:r.st,team:O}, oid=sit.nextId(O,r.st); if(oid==null){ continue; } let worst=null;
       if(used>budget*1.6) break; for(const c of candidates(s2,O,true)){ const q=simShot(r.st,env,c.shot,oid,ko,true); const u=sitUtil(sit,q.st,ko).u; if(worst===null||u<worst) worst=u; if(++n%6===0){ tick(); yield n; t0=pnow(); } }
@@ -460,7 +463,8 @@ const sfx={ hit:v=>{ const n=performance.now(); if(n-lastClk<30) return; lastClk
 let lastSay=0; function say(t){ if(muted) return; try{ const ss=window.speechSynthesis; if(!ss) return; const n=performance.now(); if(n-lastSay<900) return; lastSay=n; ss.cancel(); const u=new SpeechSynthesisUtterance(t); u.rate=1.25; u.pitch=.85; u.volume=.9; ss.speak(u); }catch(e){} }
 
 /* ================= the game: matches, ends, deliveries, sweeping, the skip's calls ================= */
-const MODES={ai:{n:'Match vs the pros'},local:{n:'2 players (same screen)'},draw:{n:'Draw to the button'}};
+const MDP={you:['You','Partner'],mouat:['Jennifer Dodds','Bruce Mouat'],edin:['Isabella Wranå','Rasmus Wranå'],gushue:['Kadriana Lott','Colton Lott'],retornaz:['Stefania Constantini','Amos Mosaner'],schwaller:['Briar Schwaller-Hürlimann','Yannick Schwaller'],tirinzoni:['Jenny Perret','Martin Rios'],homan:['Jocelyn Peterman','Brett Gallant'],hasselborg:['Almida de Val','Oskar Eriksson'],fujisawa:['Chiaki Matsumura','Yasumasa Tanida']};
+const MODES={ai:{n:'Match vs the pros'},md:{n:'Mixed doubles vs the pros'},local:{n:'2 players (same screen)'},draw:{n:'Draw to the button'}};
 let M=null, phase='menu', paused=false, modeSel='ai', myTeamSel=0, oppSel=1, lvlSel=2, endsSel=8, iceSel='medium', curlSel='normal', guide='full', relMode='manual', camMode=0, voice=true, ff=1;
 const keys=new Set(); const held=a=>a.some(k=>keys.has(k));
 const SKEY='rinkRivalsCurlingV1'; let SV=(()=>{ try{ return Object.assign({w:{},l:{},best:null,bigEnd:0,games:0},JSON.parse(localStorage.getItem(SKEY)||'null')||{}); }catch(e){ return {w:{},l:{},best:null,bigEnd:0,games:0}; } })();
@@ -470,26 +474,29 @@ const savePrefs=()=>{ try{ localStorage.setItem('rinkRivalsCurlingPrefs',JSON.st
 const POS=['Lead','Second','Third','Fourth'];
 
 /* ---------- a match ---------- */
-function newMatch(o){ o=o||{}; const online=!!o.online, mode=online?'online':(o.mode||modeSel), env=mkEnv(o.ice||iceSel,o.curl||curlSel); table(env);
+function newMatch(o){ o=o||{}; const md=!o.online&&(o.mode||modeSel)==='md'; NST=md?10:16; const online=!!o.online, mode=online?'online':md?'ai':(o.mode||modeSel), env=mkEnv(o.ice||iceSel,o.curl||curlSel); table(env);
   const tA=TEAMS[o.teamA!=null?o.teamA:myTeamSel]||TEAMS[0], tB=TEAMS[o.teamB!=null?o.teamB:oppSel]||TEAMS[1];
   const human=mode==='ai'?[true,false]:mode==='draw'?[true,true]:[true,true];
   M={mode,online,me:online?o.me:0,env,teams:[tA,mode==='draw'?tA:tB],human,ends:mode==='draw'?1:(o.ends||endsSel),end:0,score:[0,0],line:[[],[]],ham:0,k:0,st:[],stage:'intro',t:0,
     names:[o.nameA||null,o.nameB||null],lv:LEVELS[o.lvl!=null?o.lvl:lvlSel],stats:[{pts:0,n:0},{pts:0,n:0}],stam:[1,1],ev:[],evN:0,acc:0,msg:null,msgT:0,call:null,callT:0,shots:[],draw:mode==='draw'?{n:0,max:5,res:[]}:null,
-    broomZ:0,turn:1,called:.42,f:0,fDir:1,bigEnd:[0,0],hist:[]};
+    broomZ:0,turn:1,called:.42,f:0,fDir:1,bigEnd:[0,0],hist:[],md};
+  if(md&&!o.ends) M.ends=Math.min(M.ends,8);
   if(online){ M.teams=[TEAMS[o.teamA]||TEAMS[0],TEAMS[o.teamB]||TEAMS[1]]; }
   const sk=t=>skillErr(t.sk,M.lv.f); M.err=[sk(M.teams[0]),sk(M.teams[1])];
   M.ham=o.ham!=null?o.ham:(mode==='draw'?0:(Math.random()<.5?0:1));
   phase='play'; paused=false; $('menu').classList.add('hidden'); $('result').classList.add('hidden'); camE=null;
   if(mode==='draw'){ M.ham=0; newEnd(); banner('Draw to the button',`${M.draw.max} stones · closest to the pin wins the record`,'#0ea5e9',2.4); }
-  else { newEnd(); banner(`${M.teams[0].name} v ${M.teams[1].name}`,`${M.ends} ends · ${M.teams[M.ham].name} ${online?'have':'win the coin toss and take'} the hammer`,'#0ea5e9',3); }
+  else { newEnd(); banner(md?'Mixed doubles':`${M.teams[0].name} v ${M.teams[1].name}`,`${md?`${MDP[M.teams[0].id].join(' & ')} v ${MDP[M.teams[1].id].join(' & ')} · `:''}${M.ends} ends · ${M.teams[M.ham].name} ${online?'have':'win the coin toss and take'} the hammer`,'#0ea5e9',3); }
   updateBoard(); renderKeysHelp(); }
 const teamName=t=>M.online?(M.names[t]||M.teams[t].name):M.teams[t].name;
 /* who delivers stone k: the team without the hammer leads off, each player throws two */
 const shotTeam=k=>M.mode==='draw'?0:teamOfShot(k,M.ham);
-const thrower=k=>{ const t=shotTeam(k), n=Math.floor(k/2), p=M.mode==='draw'?3:Math.floor(n/2); return {team:t,pos:p,stone:n%2,name:M.teams[t].id==='you'||M.online?(M.online&&t!==M.me?(M.names[t]||'Opponent')+' · '+POS[p]:POS[p]):M.teams[t].pl[p]}; };
+const thrower=k=>{ if(M.md){ const t=shotTeam(k), n=Math.floor(k/2), w=n===0||n===4?0:1, nm=(MDP[M.teams[t].id]||['Player 1','Player 2'])[w]; return {team:t,pos:w?3:0,stone:n,name:nm}; } const t=shotTeam(k), n=Math.floor(k/2), p=M.mode==='draw'?3:Math.floor(n/2); return {team:t,pos:p,stone:n%2,name:M.teams[t].id==='you'||M.online?(M.online&&t!==M.me?(M.names[t]||'Opponent')+' · '+POS[p]:POS[p]):M.teams[t].pl[p]}; };
 const isHuman=t=>M.online?t===M.me:M.human[t];
 const myShot=()=>isHuman(shotTeam(M.k));
-function newEnd(){ M.st=[]; for(let i=0;i<16;i++) M.st.push(mkStone(i,i<8?0:1,i%8)); M.k=0; M.stam=[1,1]; M.endShots=[]; M.endPre=null; setupShot(); }
+function newEnd(){ M.st=[]; if(M.md){ for(let i=0;i<12;i++) M.st.push(mkStone(i,i<6?0:1,i%6)); placeMD(); } else for(let i=0;i<16;i++) M.st.push(mkStone(i,i<8?0:1,i%8)); M.k=0; M.stam=[1,1]; M.endShots=[]; M.endPre=null; setupShot(); }
+/* mixed doubles: the hammer team's stone sits at the back of the four-foot, the other team's guard in front of the house, both on the centre line */
+function placeMD(){ const H=M.st.find(s=>s.team===M.ham&&!s.thrown), Gd=M.st.find(s=>s.team===1-M.ham&&!s.thrown); for(const [s,x] of [[H,SH.r4-SR],[Gd,-(SH.r12+.915+SR)]]){ s.thrown=true; s.on=true; s.mv=false; s.x=x; s.z=0; s.vx=s.vz=s.w=0; s.placed=true; } }
 const nextStoneId=(T,st)=>{ const s=(st||M.st).find(o=>o.team===T&&!o.thrown); return s?s.id:null; };
 function setupShot(){ const T=shotTeam(M.k); M.thrown=nextStoneId(T); M.turn=M.turn||1; M.f=0; M.fDir=1; M.call=null; M.sweepIn=0; M.taps=[]; M.plan=null; M.planG=null; M.hint=null; M.hintG=null; M.ff=1;
   M.del=null; M.t=0; M.sw=0; M.stamina=M.stam[T];
@@ -581,13 +588,13 @@ function afterStop(hogged){ const T=shotTeam(M.k); let notes=M.notes||[]; M.note
   if(M.online&&myShot()&&NETO) NETO.send({t:'sync',k:M.k,end:M.end,st:M.st.map(o=>[+o.x.toFixed(5),+o.z.toFixed(5),o.on?1:0,o.thrown?1:0,+o.a.toFixed(3)]),notes,hog:hogged?1:0,grade});
   M.stam[T]=Math.min(1,M.stamina+.35); updateBoard(); }
 function nextShot(){ if(M.mode==='draw'){ if(M.draw.n>=M.draw.max) return drawOver(); /* reset the sheet for every stone */ M.st=[]; for(let i=0;i<16;i++) M.st.push(mkStone(i,i<8?0:1,i%8)); M.k=0; setupShot(); return; }
-  M.k++; if(M.k>=16) return endOver(); setupShot(); }
+  M.k++; if(M.k>=NST) return endOver(); setupShot(); }
 
 /* ---------- the end: count, measure, hammer ---------- */
 function endOver(){ const C=countEnd(M.st); M.stage='endover'; M.setT=0; let big, sub;
   /* a measure when the two closest stones of each side are within a centimetre */
   const h=C.h, op=h.find(s=>s.team!==C.team); M.measure=null; if(C.team>=0&&op){ const last=h[C.n-1]; if(dB(op)-dB(last)<.012) M.measure={a:last,b:op}; }
-  if(C.team<0){ big='Blank end'; sub=`${teamName(M.ham)} keep the hammer`; M.line[0].push(0); M.line[1].push(0); }
+  if(C.team<0){ big='Blank end'; if(M.md){ M.ham=1-M.ham; sub=`Mixed doubles: the hammer goes to ${teamName(M.ham)}`; } else sub=`${teamName(M.ham)} keep the hammer`; M.line[0].push(0); M.line[1].push(0); }
   else { M.score[C.team]+=C.n; M.line[C.team].push(C.n); M.line[1-C.team].push(0); const stole=C.team!==M.ham;
     big=`${teamName(C.team)} ${stole?'steal':'score'} ${C.n}`; sub=stole?`A steal! ${teamName(M.ham)} keep the hammer`:`${teamName(1-C.team)} take the hammer`;
     if(C.n>M.bigEnd[C.team]) M.bigEnd[C.team]=C.n; if(!stole) M.ham=1-C.team; }
@@ -700,9 +707,9 @@ function meter(){ const x=W/2-230, y=H-54, w=460, N=weightNodes();
   const v=vOfF(M.f); hudText(`${weightName(v)} · ${v.toFixed(2)} m/s`,x+w/2,y-14,16,'#fff','center'); hudText(M.turn>0?'↻ In-turn':'↺ Out-turn',x-18,y+12,16,M.turn>0?'#93c5fd':'#f9a8d4','right'); void N; }
 function drawHUD(){ const T=shotTeam(M.k), th=thrower(M.k);
   /* who's throwing */ rr(14,12,360,60,12,'rgba(5,10,24,.8)');
-  if(M.mode==='draw') hudText(`Draw to the button · stone ${Math.min(M.draw.max,M.draw.n+1)} of ${M.draw.max}`,26,36,20,'#fff'); else hudText(`End ${M.end+1}${M.end>=M.ends?' (extra)':''} · stone ${Math.min(16,M.k+1)} of 16`,26,36,20,'#fff');
+  if(M.mode==='draw') hudText(`Draw to the button · stone ${Math.min(M.draw.max,M.draw.n+1)} of ${M.draw.max}`,26,36,20,'#fff'); else hudText(`End ${M.end+1}${M.end>=M.ends?' (extra)':''} · stone ${Math.min(NST,M.k+1)} of ${NST}${M.md?' · mixed doubles':''}`,26,36,20,'#fff');
   hudText(`${M.mode==='draw'?'You':th.name}${M.mode==='draw'?'':' · '+teamName(T)}`,26,60,15,hcol(T));
-  /* stones left: eight a side */ if(M.mode!=='draw'){ for(let t=0;t<2;t++){ const left=M.st.filter(s=>s.team===t&&!s.thrown).length; for(let i=0;i<8;i++){ ctx.fillStyle=i<left?hcol(t):'rgba(148,163,184,.25)'; ctx.beginPath(); ctx.arc(26+i*13,86+t*14,5,0,7); ctx.fill(); } hudText(M.ham===t?'● hammer':'',26+8*13+10,90+t*14,12,'#fde047'); } }
+  /* stones left: eight a side */ if(M.mode!=='draw'){ for(let t=0;t<2;t++){ const left=M.st.filter(s=>s.team===t&&!s.thrown).length; for(let i=0;i<(M.md?6:8);i++){ ctx.fillStyle=i<left?hcol(t):'rgba(148,163,184,.25)'; ctx.beginPath(); ctx.arc(26+i*13,86+t*14,5,0,7); ctx.fill(); } hudText(M.ham===t?'● hammer':'',26+8*13+10,90+t*14,12,'#fde047'); } }
   if(view3&&camShot!=='house') drawHouse(W-96,150,68,{top:-SH.r12-.9});
   const st=M.stage;
   if((st==='aim'||st==='charge')&&myShot()){ meter(); hudText(st==='charge'?'Let go of Space to set the weight':'A/D or click: broom · Q: turn · W/S: called weight · H: skip\'s call · hold Space: throw',W/2,H-98,15,'#fde047','center');
@@ -723,7 +730,7 @@ let toastT=0, bannerT=0;
 const setText=(id,t)=>{ const e=$(id); if(e&&e.textContent!==String(t)) e.textContent=t; };
 function updateBoard(){ if(!M) return; const dr=M.mode==='draw';
   for(const [t,sfx2] of [[0,'L'],[1,'R']]){ const tm=M.teams[t]; $('logo'+sfx2).src=flagSrc(tm.nat); setText('name'+sfx2,dr&&t===1?'Best':teamName(t)); setText('tp'+sfx2,dr?(t===0?'Draw to the button':''):(M.ham===t?'● Hammer · ':'')+(M.online?'':tm.skip)); setText('score'+sfx2,dr?(t===0?M.draw.n:(SV.best!=null?(SV.best/10).toFixed(1):'-')):M.score[t]); $('side'+sfx2).style.setProperty('--tc',hcol(t)); }
-  setText('cntT',dr?'LSD':`End ${Math.min(M.end+1,99)}`); setText('innT',dr?`${M.draw.n}/${M.draw.max}`:`Stone ${Math.min(16,M.k+1)}/16`); setText('outsT',dr?'cm to the pin':`${M.ends} ends · ${ICES[M.env.ice].n} ice`); setText('basesT',''); }
+  setText('cntT',dr?'LSD':`End ${Math.min(M.end+1,99)}`); setText('innT',dr?`${M.draw.n}/${M.draw.max}`:`Stone ${Math.min(NST,M.k+1)}/${NST}`); setText('outsT',dr?'cm to the pin':`${M.ends} ends · ${ICES[M.env.ice].n} ice`); setText('basesT',''); }
 function toast(t,col='#34d399'){ const e=$('toast'); e.textContent=t; e.style.borderColor=col; e.classList.add('on'); toastT=2.2; }
 function banner(big,sub,glow='#000',dur=2){ const b=$('banner'); b.innerHTML=`<span class="big">${esc(big)}</span>${sub?`<span class="sub">${esc(sub)}</span>`:''}`; b.style.setProperty('--glow',glow); b.classList.add('on'); bannerT=dur; if(M&&M.stage==='intro') M.introT=dur; }
 
@@ -768,7 +775,7 @@ function renderMenu(){ const pros=TEAMS.slice(1); if(oppSel<1||oppSel>=TEAMS.len
   <div class="pills"><span class="lbl">Mode</span>${Object.entries(MODES).map(([k,v])=>pill('mode',k,modeSel===k,v.n)).join('')}</div>
   ${modeSel!=='draw'?`<div class="pills"><span class="lbl">${modeSel==='local'?'Team 1':'Your team'}</span>${TEAMS.map((t,i)=>pill('my',i,myTeamSel===i,`<img src="${flagSrc(t.nat)}" style="width:20px;height:13px;vertical-align:-1px"> ${i===0?t.name:t.skip}`)).join('')}</div>
   <div class="pills"><span class="lbl">${modeSel==='local'?'Team 2':'Opponent'}</span>${pros.map((t,i)=>pill('opp',i+1,oppSel===i+1,`<img src="${flagSrc(t.nat)}" style="width:20px;height:13px;vertical-align:-1px"> ${t.skip}`)).join('')}</div>`:''}
-  <div class="pills">${modeSel==='ai'?`<span class="lbl">Level</span>${LEVELS.map((l,i)=>pill('lvl',i,lvlSel===i,l.n)).join('')}`:''}${modeSel!=='draw'?`<span class="lbl">Ends</span>${[4,6,8,10].map(n=>pill('ends',n,endsSel===n,String(n))).join('')}`:''}</div>
+  <div class="pills">${modeSel==='ai'||modeSel==='md'?`<span class="lbl">Level</span>${LEVELS.map((l,i)=>pill('lvl',i,lvlSel===i,l.n)).join('')}`:''}${modeSel!=='draw'?`<span class="lbl">Ends</span>${[4,6,8,10].map(n=>pill('ends',n,endsSel===n,String(n))).join('')}`:''}</div>
   <div class="pills"><span class="lbl">Ice</span>${Object.entries(ICES).map(([k,v])=>pill('ice',k,iceSel===k,`${v.n} (${v.hh.toFixed(1)} s)`)).join('')}<span class="lbl">Curl</span>${Object.entries(CURLS).map(([k,v])=>pill('curl',k,curlSel===k,v.n)).join('')}</div>
   <div class="pills"><span class="lbl">Guide</span>${pill('guide','full',guide==='full','Path')}${pill('guide','line',guide==='line','Broom line')}${pill('guide','off',guide==='off','Off')}<span class="lbl">Release</span>${pill('rel','manual',relMode==='manual','Manual')}${pill('rel','auto',relMode==='auto','Auto')}<span class="lbl">Skip's voice</span>${pill('voice','1',voice,'On')}${pill('voice','0',!voice,'Off')}</div>
   <div class="pills"><button class="gold" data-act="start" tabindex="-1">${modeSel==='draw'?'Start the draw':'Throw the first stone'} <kbd>Enter</kbd></button><a href="./" tabindex="-1">Home</a></div>
