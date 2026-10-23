@@ -1073,26 +1073,23 @@ function resolveCatch(){
     ignore=ud; ud.stun=.35; }
   const defs=PL.ents.filter(f=>f.side===1&&f.stun<=0&&f!==ignore&&!(lob&&f.x<pt.x-1.2&&dist(f,pt)>.8)).map(f=>[f,dist(f,pt)]).sort((a,b)=>a[1]-b[1]), nd=defs[0], dr=dist(r,pt);
   const cx2=xf(r.pl)==='Deep Threat'||xf(r.pl)==='Mismatch'?.1:0;
-  if(humR){
-    if(dr<3.6){ const near=defs.filter(([,d])=>d<2.1).length, pc=Math.min(.97,(near>=2?.55:near===1?.82:.96)+cx2)*WET();
-      if(Math.random()<pc){ catchIt(r,pt,near); return; }
-      if(near&&nd&&Math.random()<.08) return pickOff(nd[0]);
-      return incomp(near?'Pass broken up':'Dropped'); }
-    if(nd&&nd[1]<1.2&&Math.random()<.03) return pickOff(nd[0]);
-    return incomp(pt.x>r.x?'Overthrown':'Underthrown');
-  }
-  if(nd&&nd[1]<1.1&&(nd[1]<dr-.3||nd[1]<.6&&nd[1]<dr+.2)){
+  /* a human's receiver gets a little help that fades over a franchise season and with the CPU level; the CPU's never does */
+  const hb=humR?clamp((G.ast.catch-1)*.12-(G.lvl-.55)*.08,-.06,.1):0, reach=(humR?2.4:1.45)+(lob?.25:0), near=defs.filter(([,d])=>d<2.1).length;
+  if(nd&&nd[1]<1.1&&(nd[1]<dr-.3||nd[1]<.6&&nd[1]<dr+.2)){ /* the defender is on the ball first */
     const f=nd[0], bh=xf(f.pl)==='Ball Hawk'||xf(f.pl)==='Shutdown'?1.4:1;
-    if(Math.random()<(.012+f.pl.a.cov/2000+(f.pl.a.han-60)/1100)*bh*(A.type==='bullet'?.8:lob?1.15:1)) return pickOff(f);
-    if(dr<1.6&&Math.random()<.42+cx2+(r.pl.a.han-70)/250-(f.pl.a.cov-70)/400){ catchIt(r,pt,1); return; }
+    if(Math.random()<(.012+f.pl.a.cov/2000+(f.pl.a.han-60)/1100)*bh*(A.type==='bullet'?.8:lob?1.15:1)*(humR?G.ast.intMul*1.4:1)) return pickOff(f);
+    if(dr<(humR?2:1.6)&&Math.random()<.42+cx2+hb*1.5+(r.pl.a.han-70)/250-(f.pl.a.cov-70)/400){ catchIt(r,pt,Math.max(1,near)); return; }
     return incomp('Pass broken up');
   }
-  if(dr<1.45+(lob?.25:0)){
+  if(dr<reach){
     const dd=Math.hypot(pt.x-A.x0,pt.y-A.y0), press=nd&&nd[1]<1.6?.26*(1.6-nd[1])/1.6+.08-(r.pl.a.han-70)/400:0;
-    const p=Math.min(.97,.56+r.pl.a.han/300+(1.4-Math.min(dr,1.4))/6-press-(A.type==='bullet'&&dd<8?.05:0))*WET();
-    if(Math.random()<p){ catchIt(r,pt,0); return; }
+    const p=Math.min(.97,.56+r.pl.a.han/300+(1.4-Math.min(dr,1.4))/6-Math.max(0,dr-1.4)*.16-press*(near>=2?1.5:1)+(press>0?cx2*.5:0)+hb-(A.type==='bullet'&&dd<8?.05:0))*WET();
+    if(Math.random()<p){ catchIt(r,pt,nd&&nd[1]<1.6?near:0); return; }
+    if(nd&&nd[1]<1.2&&Math.random()<.07*(humR?G.ast.intMul:1)) return pickOff(nd[0]); /* tipped and picked */
+    return incomp(nd&&nd[1]<1.6?'Pass broken up':'Dropped');
   }
-  incomp(dr<1.45?'Dropped':'Incomplete');
+  if(humR&&nd&&nd[1]<1.2&&Math.random()<.04*G.ast.intMul*2) return pickOff(nd[0]);
+  incomp(pt.x>r.x+1?'Overthrown':pt.x<r.x-1?'Underthrown':'Incomplete');
 }
 function give(e){ PL.ball.st='held'; PL.ball.holder=e; PL.carrierT=0; const tm=e.team; if(G.car&&G.car.slot!=='QB') return; if(G.ctrl[tm]){ if(tm===offT()) PL.hum[0]=e; else PL.hum[1]=e; } const ot=1-tm; if(G.ctrl[ot]&&e.side!==(ot===offT()?0:1)){ const mine=PL.ents.filter(f=>f.team===ot&&f.stun<=0).sort((a,b)=>dist(a,e)-dist(b,e))[0]; if(ot===offT()) PL.hum[0]=mine; else PL.hum[1]=mine; } }
 function tackleCheck(dt){
@@ -1113,7 +1110,7 @@ function tackleCheck(dt){
       if(fxf==='Run Stopper') p+=.07;
       if(Math.random()<p){ sfx.hit(); bx(G,f.pl,f.team).tk++;
         const big=f.dive>0||spdF>.85||f.hs>0;
-        if(big&&!G.ffast){ G.shake=f.hs>0?.5:.35; say(f.hs>0?'HIT STICK!':'BIG HIT!','#f87171'); noise(.25,.6,400); if(!PL.hl) PL.hl={t:PL.t,k:'hit'}; G.hype=Math.max(G.hype||0,.5); }
+        if(big&&!G.ffast){ G.shake=f.hs>0?.5:.35; say(f.hs>0?'HIT STICK!':'BIG HIT!','#f87171'); noise(.25,.6,400); if(!PL.hl&&f.hs>0&&spdF>.7) PL.hl={t:PL.t,k:'hit'}; G.hype=Math.max(G.hype||0,.5); }
         if(c.side===0&&!PL.kr&&!PL.pen&&!G.two&&!G.ffast&&Math.random()<.008) PL.pen={k:'fm',x:c.x,y:c.y,e:f};
         const notQB=!(c.slot==='QB'&&!PL.thrown&&c.x<PL.los);
         let fp=.011+(big?.028:0)+(f.hs>0?.05:0)+(f.strip>0?.1+(f.pl.a.str-c.pl.a.han)/600:0)+(c.trk>0?.02:0)+(c.hurdle>0?.04:0)+(f.pl.a.str-c.pl.a.han)/3000+(skyIs('rain')?.01:skyIs('snow')?.006:0);
@@ -1147,9 +1144,12 @@ function liveStep(dt){
     e.hs=Math.max(0,e.hs-dt); e.hsCd=Math.max(0,e.hsCd-dt); e.strip=Math.max(0,e.strip-dt); e.stripCd=Math.max(0,e.stripCd-dt); e.trk=Math.max(0,e.trk-dt); e.trkCd=Math.max(0,e.trkCd-dt); e.hurdle=Math.max(0,e.hurdle-dt); e.hurCd=Math.max(0,e.hurCd-dt); if(e.play){ e.play.t-=dt; if(e.play.t<=0) e.play=null; }
     if(e.diving){ e.diving-=dt; if(e.diving<=0){ e.diving=0; if(carrierOf()===e&&phase==='live'){ dead('tackle','Dove forward'); return; } } } if(e.dive>0){ e.dive-=dt; if(e.dive<=0&&e.diveEnd){ e.diveEnd=false; e.stun=.5; } }
     const team=e.team, hum=humEnt(team)===e;
+    /* a user defender who attacks the line on a pass play becomes a rusher, so the line picks him up */
+    if(hum&&e.side===1&&!e.rush&&!PL.kr&&PL.play.type==='pass'&&!PL.thrown&&e.x<PL.los+2.5) e.rush=true;
     let want; e.prot=false;
     if(hum&&PL.aim&&e.slot==='QB'){ const d=PL.aim.ptr?[0,0]:humanDir(team); PL.aim.t+=dt; PL.aim.x=clamp(PL.aim.x+d[0]*18*dt,e.x-5,e.x+60); PL.aim.y=clamp(PL.aim.y+d[1]*18*dt,.5,FH-.5); want=[0,0]; }
-    else if(hum&&e.stun<=0&&G.car&&e.slot!=='QB'&&carrierOf()!==e&&(()=>{ const d=humanDir(team); return !d[0]&&!d[1]; })()) want=aiMove(e);
+    /* until the user touches the stick, his player runs the called assignment (the QB takes his drop); after that it is all his */
+    else if(hum&&e.stun<=0&&(()=>{ const d=humanDir(team); if(d[0]||d[1]){ e.touched=true; return false; } const c=carrierOf(); return G.car?e.slot!=='QB'&&c!==e:!e.touched&&(c!==e||e.slot==='QB'&&!PL.thrown&&!PL.scramble&&e.x<=PL.los+.5); })()) want=aiMove(e);
     else if(hum&&e.stun<=0){ const d=humanDir(team), s=sch(team), spr=s&&held(s.spr); if(s&&carrierOf()===e&&held(s.prot)) e.prot=true; const m=e.max*(spr?1:.86)*(e.dive>0?1.25:1)*(e.prot?.92:1)*(e.hurdle>0?.9:1); want=[d[0]*m,d[1]*m]; }
     else want=aiMove(e);
     const k=Math.min(1,(e.juke>0||e.hs>0?3:7)*dt); e.vx+=(want[0]-e.vx)*k; e.vy+=(want[1]-e.vy)*k;
@@ -1284,7 +1284,9 @@ function dead(kind,txt){
   else { G.togo-=gain; G.down++; if(G.down>4){ tod=true; say(gainTxt+' · Turnover on downs','#f87171'); changePoss(G.los); G.run=0; } else say(gainTxt,'#dbe3f5'); }
   if(DBG&&c&&PL.caught&&kind!=='sack'){ dbg('cN'); dbg('air',PL.airY); dbg('yac',gain-PL.airY); if(gain>=20){ dbg('big20'); dbg('bD:'+DEF_PLAYS[PL.dp].c); dbg('bR:'+c.spec); dbg('bA',PL.airY); } } if(DBG&&c&&!PL.caught&&kind!=='sack'){ dbg('rN'); dbg('ryds',gain); if(gain>=15) dbg('rbig'); }
   narrate(kind,gain,c,fd,tod);
-  if(PL.hl&&!G.ffast){ G.nextT=null; later(1.1,()=>startReplay(()=>{ PL=null; startCall(); })); }
+  /* replays only for the plays worth seeing again: big gains, hit sticks, contested grabs that move the chains */
+  const worth=PL.hl&&(PL.hl.k==='hit'||PL.hl.k==='run'||gain>=20||PL.hl.k==='catch'&&(gain>=12||fd&&d0>=3));
+  if(worth&&!G.ffast){ G.nextT=null; later(1.1,()=>startReplay(()=>{ PL=null; startCall(); })); }
   else nextPlay(1.5);
 }
 function startReplay(then){
@@ -1453,7 +1455,7 @@ function renderKeysHelp(){
   const k=$('keysHelp');
   if(phase==='menu'){ k.innerHTML='<div><b>Call plays</b> 1-6 formation, then play · Space coach pick · Q back</div><div><b>At the line</b> 1-5 hot routes · R audible · Space hike</div><div><b>Pass</b> hold 1-5 to aim, let go · Shift bullet · C lob</div><div><b>Run</b> Space juke · E spin · F stiff arm · R truck · G hurdle · C dive · hold B protect ball</div><div><b>Defense</b> Q switch · Space dive / go for the pick · F hit stick · E strip · C swat</div><div><b>View</b> V cycles behind-the-play 3D, broadcast 3D, 2D</div><div><b>Full screen</b> Z</div>'; return; }
   if(G&&G.kind==='2p') k.innerHTML='<div><b>Player 1</b> WASD · Space hike/juke/dive · plays 1-6 (Space coach pick, Q back) · 1-5 hot routes, R audible · hold 1-5 throw (left Shift bullet, C lob) · E spin · F stiff arm/hit stick · R truck · G hurdle · C dive/swat · B protect · Q switch · T timeout · B spike · G kneel · F field goal · R onside</div><div><b>Player 2</b> arrows · Enter hike/juke/dive · plays 7 8 9 0 - = (Enter coach pick, / back) · 7-0 and - hot routes, O audible · hold 7 8 9 0 - throw (right Shift bullet, L lob) · . spin · , stiff arm/hit stick · O truck · K hurdle · L dive/swat · J protect · / switch · I timeout · J spike · K kneel · H field goal · O onside</div>';
-  else k.innerHTML=(G&&G.car?`<div><b>Career</b> you are the yellow-ring player. Play your side of the ball; the other side is simmed. Don't touch the keys and you'll run your assignment automatically.</div>`:'')+'<div><b>Move</b> WASD or arrows (in the behind-the-play view, up is downfield)</div><div><b>Play call</b> 1-6 formation, then play · Space coach pick · Q back</div><div><b>At the line</b> 1-5 hot routes · R audible · Q switch defender · Space hike</div><div><b>Pass</b> hold 1-5 (or hold the mouse on the field) to aim, let go to throw · Shift bullet · C lob</div><div><b>Ball carrier</b> Space juke · E spin · F stiff arm · R truck · G hurdle · C dive · hold B protect ball</div><div><b>Defense</b> Space dive tackle / go for the pick · F hit stick · E strip · C swat · Q switch</div><div><b>Clock</b> T timeout · B spike · K kneel · F field goal (on the play screen)</div><div><b>Kickoff</b> O onside</div><div><b>View</b> V</div><div><b>Sim rest</b> X</div><div><b>Pause</b> P</div>';
+  else k.innerHTML=(G&&G.car?`<div><b>Career</b> you are the yellow-ring player. Play your side of the ball; the other side is simmed. Don't touch the keys and you'll run your assignment automatically.</div>`:'')+'<div><b>Move</b> WASD or arrows (in the behind-the-play view, up is downfield)</div><div><b>Play call</b> 1-6 formation, then play · Space coach pick · Q back</div><div><b>At the line</b> 1-5 hot routes · R audible · Q switch defender · Space hike</div><div><b>Pass</b> hold 1-5 (or hold the mouse on the field) to aim, let go to throw · Shift bullet · C lob</div><div><b>Ball carrier</b> Space juke · E spin · F stiff arm · R truck · G hurdle · C dive · hold B protect ball</div><div><b>Defense</b> Space dive tackle / go for the pick · F hit stick · E strip · C swat · Q switch · move before the snap to adjust (hands off and he plays the call)</div><div><b>Clock</b> T timeout · B spike · K kneel · F field goal (on the play screen)</div><div><b>Kickoff</b> O onside</div><div><b>View</b> V</div><div><b>Sim rest</b> X</div><div><b>Pause</b> P</div>';
 }
 function startGame(){
   audio();
@@ -1631,6 +1633,8 @@ function step(dt){
     else cpuClock(dt);
   }
   if(G.tmwStop&&phase!=='live'&&phase!=='replay'){ G.tmwStop=false; G.run=0; if(!G.ffast) announce('Two-minute warning',`${G.q===2?'End of the half':'Fourth quarter'} · ${fmtClock(G.clock)} to play`,'#000',1.8); }
+  /* pre-snap: the user's defender can walk to a new spot (staying onside); his assignment starts from there */
+  if(phase==='pre'&&PL&&!PL.kr&&G.ctrl[defT()]){ const hd=PL.hum[1]; if(hd){ const d=humanDir(defT()); if(d[0]||d[1]){ hd.x=clamp(hd.x+d[0]*4.5*dt,PL.los+1,Math.min(109.5,PL.los+22)); hd.y=clamp(hd.y+d[1]*4.5*dt,1,FH-1); hd.face=Math.atan2(d[1],d[0]); } } }
   if(phase==='pre'){ if(PL&&PL.kr){ const kh=G.ctrl[defT()]&&!G.ffast; if(kh?phT>8:phT>(PL.onside?1.6:1)) kickLaunch(); }
     else if(G.ctrl[offT()]){ PL.pc-=dt; if(PL.pc<=0) delayOfGame(); }
     else { if(PL.snapAt==null) PL.snapAt=G.ctrl[defT()]?rnd(1.6,2.6):.9; if(phT>PL.snapAt&&!(finalPeriod()&&G.run>0&&G.score[offT()]>G.score[defT()])) snap(); } }
