@@ -204,19 +204,29 @@ const rnd=(a,b)=>a+(b-a)*Math.random(), pick=a=>a[Math.floor(Math.random()*a.len
 function gauss(){ let u=0; while(!u) u=Math.random(); return Math.sqrt(-2*Math.log(u))*Math.cos(2*Math.PI*Math.random()); }
 
 /* ---------- World Archery outdoor recurve: 70 m, 122 cm face, 10 rings of 6.1 cm, centre 1.30 m high ---------- */
-const DIST=70, FACE=1.22, RING=.061, CY=1.30, EYE=1.55, V0=58, KD=.0035;
+let DIST=70, FACE=1.22, RING=.061, V0=58, KD=.0035; const CY=1.30, EYE=1.55;
+/* recurve: 70 m on the 122 cm ten-ring face. compound: 50 m on the 80 cm six-ring face (rings 5 to 10), only the inner 10 scores 10, arrows at about 92 m/s off a release aid and a magnified scope */
+const BOWS={r:{n:'Recurve',dist:70,face:1.22,ring:.061,v0:58,kd:.0035},c:{n:'Compound',dist:50,face:.80,ring:.04,v0:92,kd:.0026}};
+let bowSel='r'; const CMP=()=>bowSel==='c';
 /* archers (game ratings; group size at 70 m comes from the rating) */
+const ARCHERS_C={m:[['Mike Schloesser','NED',97],['Mathias Fullerton','DEN',95],['Kris Schaff','USA',93],['Nico Wiener','AUT',92],['James Lutz','USA',92],['Choi Yong-hee','KOR',91],['Abhishek Verma','IND',90],['Braden Gellenthien','USA',90]],
+  w:[['Sara López','COL',97],['Ella Gibson','GBR',96],['Tanja Gellenthien','DEN',93],['Jyothi Surekha Vennam','IND',93],['Alexis Ruiz','USA',92],['Andrea Becerra','MEX',91],['Oh Yoo-hyun','KOR',91],['Sophie Dodemont','FRA',89]]};
 const ARCHERS={m:[['Kim Woo-jin','KOR',97],['Lee Woo-seok','KOR',95],['Brady Ellison','USA',94],['Mete Gazoz','TUR',92],['Marcus D\'Almeida','BRA',92],['Florian Unruh','GER',90],['Dhiraj Bommadevara','IND',89],['Baptiste Addis','FRA',88]],
   w:[['Lim Si-hyeon','KOR',97],['Nam Su-hyeon','KOR',95],['Jeon Hun-young','KOR',94],['Casey Kaufhold','USA',91],['Lisa Barbelin','FRA',91],['Deepika Kumari','IND',89],['Michelle Kroppen','GER',88],['Ana Luiza Caetano','BRA',86]]};
-const FLAG={KOR:'🇰🇷',USA:'🇺🇸',TUR:'🇹🇷',BRA:'🇧🇷',GER:'🇩🇪',IND:'🇮🇳',FRA:'🇫🇷',GBR:'🇬🇧'};
+const FLAG={KOR:'🇰🇷',USA:'🇺🇸',TUR:'🇹🇷',BRA:'🇧🇷',GER:'🇩🇪',IND:'🇮🇳',FRA:'🇫🇷',GBR:'🇬🇧',NED:'🇳🇱',DEN:'🇩🇰',AUT:'🇦🇹',COL:'🇨🇴',MEX:'🇲🇽'};
 
 /* arrow flight with drag relative to the moving air; returns where it crosses the target plane */
 function flight(yaw,pitch,v0,wind,steps){ let x=0,y=EYE,z=0,vx=v0*Math.sin(yaw)*Math.cos(pitch),vy=v0*Math.sin(pitch),vz=v0*Math.cos(yaw)*Math.cos(pitch),t=0; const dt=1/600, path=[];
   while(z<DIST&&t<3){ const w=wind(t,z), rx=vx-w, v=Math.hypot(rx,vy,vz); vx+=-KD*v*rx*dt; vy+=(-KD*v*vy-9.81)*dt; vz+=-KD*v*vz*dt; x+=vx*dt; y+=vy*dt; z+=vz*dt; t+=dt; if(steps&&path.length<4000) path.push([x,y,z,t]); if(y<0) break; }
   return {x,y,t,path}; }
 /* the sight is set for 70 m: the extra elevation it puts in */
-const SIGHT=(()=>{ let lo=0,hi=.3; for(let i=0;i<40;i++){ const m=(lo+hi)/2; if(flight(0,m,V0,()=>0).y<CY) lo=m; else hi=m; } return (lo+hi)/2-Math.atan2(CY-EYE,DIST); })();
-function scoreOf(dx,dy){ const r=Math.hypot(dx,dy)-.0028; if(r<RING/2) return {s:10,x:true}; const ring=10-Math.floor(r/RING); return {s:ring>=1?ring:0,x:false}; }
+const calcSight=()=>{ let lo=0,hi=.3; for(let i=0;i<40;i++){ const m=(lo+hi)/2; if(flight(0,m,V0,()=>0).y<CY) lo=m; else hi=m; } return (lo+hi)/2-Math.atan2(CY-EYE,DIST); };
+let SIGHT=calcSight(); const SIGHTS={};
+function setBow(b){ bowSel=b; const B=BOWS[b]; DIST=B.dist; FACE=B.face; RING=B.ring; V0=B.v0; KD=B.kd; SIGHT=SIGHTS[b]??(SIGHTS[b]=calcSight()); }
+/* line cutters score the higher ring (the arrow shaft is about 5.6 mm across) */
+function scoreOf(dx,dy){ const r=Math.hypot(dx,dy)-.0028;
+  if(CMP()){ if(r<RING/2) return {s:10,x:r<RING/4}; const ring=10-Math.floor(r/RING); return {s:ring>=5?Math.min(9,ring):0,x:false}; }
+  if(r<RING/2) return {s:10,x:true}; const ring=10-Math.floor(r/RING); return {s:ring>=1?ring:0,x:false}; }
 
 /* ---------- audio ---------- */
 let AC=null, muted=false;
@@ -229,35 +239,38 @@ let lastSay=0; function speak(t,pri){ if(muted||!window.speechSynthesis) return;
 
 /* ---------- match state ---------- */
 let M=null, phase='menu', paused=false;
-let gSel='m', modeSel='tour', oppSel=0, diff=1;
+let gSel='m', modeSel='tour', oppSel=0, diff=1, rankN=36;
 const DIFF=[{n:'Club',sig:1.6},{n:'National',sig:1.15},{n:'Olympic',sig:.85}];
 const keys=new Set(); const held=a=>a.some(k=>keys.has(k));
-const SKEY='rinkRivalsArcheryV1'; let SV=(()=>{ try{ return JSON.parse(localStorage.getItem(SKEY)||'null')||{medals:{},best72:0,arrows:0,tens:0,xs:0}; }catch(e){ return {medals:{},best72:0,arrows:0,tens:0,xs:0}; } })();
+const SKEY='rinkRivalsArcheryV1'; let SV=(()=>{ try{ return JSON.parse(localStorage.getItem(SKEY)||'null')||{medals:{},best72:0,arrows:0,tens:0,xs:0}; }catch(e){ return {medals:{},best72:0,arrows:0,tens:0,xs:0}; } })(); SV.rank=SV.rank||{};
 const saveSV=()=>{ try{ localStorage.setItem(SKEY,JSON.stringify(SV)); }catch(e){} };
-const roster=()=>ARCHERS[gSel].map(([name,nat,rat])=>({name,nat,rat}));
+const roster=()=>(CMP()?ARCHERS_C:ARCHERS)[gSel].map(([name,nat,rat])=>({name,nat,rat}));
 const YOU={name:'You',nat:'GBR',rat:90};
 /* wind: a steady breeze that drifts in strength and direction, with gusts; + blows left to right (m/s across the range) */
 function newWind(){ const base=rnd(-2.6,2.6); return {base,amp:rnd(.4,1.4),f1:rnd(.13,.28),f2:rnd(.4,.8),ph:rnd(0,9),drift:rnd(-.04,.04)}; }
 function windAt(t){ const w=M.wind; return w.base+w.drift*t+w.amp*Math.sin(t*w.f1+w.ph)+w.amp*.45*Math.sin(t*w.f2*2.1+w.ph*1.7); }
-function newMatch(opp,o){ o=o||{}; M={opp,mode:o.mode||'match',tour:o.tour||null,t:0,wind:newWind(),sets:[],setPts:[0,0],cur:{a:[[],[]]},turn:0,first:0,n:0,hits:[[],[]],shot:null,
-    me:{yaw:0,pitch:Math.atan2(CY-EYE,DIST),draw:0,drawing:false,hold:0,fat:0,breath:0,breathHeld:false,breathLeft:1,wob:[0,0],nz:[0,0,0,0]},timer:20,phase:'aim',phT:0,msg:null,msgT:0,shootoff:false,practice:o.mode==='practice',ends:[],endA:[],view:0,camYaw:0};
+function newMatch(opp,o){ o=o||{}; setBow(bowSel); M={rank:o.mode==='rank'?(o.n||72):0,bow:bowSel,tot:[0,0],opp,mode:o.mode||'match',tour:o.tour||null,t:0,wind:newWind(),sets:[],setPts:[0,0],cur:{a:[[],[]]},turn:0,first:0,n:0,hits:[[],[]],shot:null,
+    me:{yaw:0,pitch:Math.atan2(CY-EYE,DIST),draw:0,drawing:false,hold:0,fat:0,breath:0,breathHeld:false,breathLeft:1,wob:[0,0],nz:[0,0,0,0]},timer:20,phase:'aim',phT:0,msg:null,msgT:0,shootoff:false,practice:o.mode==='practice'||o.mode==='rank',ends:[],endA:[],view:0,camYaw:0};
   phase='play'; $('menu').classList.add('hidden'); $('result').classList.add('hidden'); paused=false; built3=false;
-  if(M.practice) banner('Practice','70 m · 6-arrow ends · no clock','#facc15',2); else banner(o.label||'Match',`${YOU.name} vs ${FLAG[opp.nat]||''} ${opp.name} · set system, first to 6`,'#facc15',2.4);
+  if(M.rank) banner(`${M.rank}-arrow ranking round`,`${BOWS[bowSel].n} · ${DIST} m · ends of 6 · 40 s an arrow`,'#facc15',2.6);
+  else if(M.practice) banner('Practice',`${BOWS[bowSel].n} · ${DIST} m · 6-arrow ends · no clock`,'#facc15',2);
+  else banner(o.label||'Match',`${YOU.name} vs ${FLAG[opp.nat]||''} ${opp.name} · ${CMP()?'15 arrows, highest total wins':'set system, first to 6'}`,'#facc15',2.4);
   startTurn(); renderKeysHelp(); updateBoard(); }
-function startTurn(){ M.phase=M.turn===0||M.practice?'aim':'opp'; M.phT=0; M.timer=M.practice?99:20; M.shot=null; const me=M.me; me.draw=0; me.drawing=false; me.hold=0; me.breathLeft=1; me.breathHeld=false;
+function startTurn(){ M.phase=M.turn===0||M.practice?'aim':'opp'; M.phT=0; M.timer=M.rank?40:M.practice?99:20; M.shot=null; const me=M.me; me.draw=0; me.drawing=false; me.hold=0; me.breathLeft=1; me.breathHeld=false;
   M.camYaw=M.turn===1&&!M.practice?Math.atan2(3,DIST):0; if(M.phase==='opp') M.oppDelay=rnd(4,9); }
 /* ---------- your shot ---------- */
-function wobble(dt){ const me=M.me; me.nz=me.nz.map((v,i)=>v+(gauss()*.9-v*1.4)*dt*(i<2?3:9));
-  const t=me.hold, settle=me.draw>=1?clamp(1-t/1.2,0,1):1, tire=me.draw>=1?Math.max(0,t-4.5)*.35:0;
-  let amp=.00042*(1+settle*2.5+tire+me.fat*.6); if(me.breathHeld) amp*=.55; else amp*=1+.25*Math.max(0,Math.sin(M.t*1.5));
+/* a compound's let-off means you hold a fraction of the weight: it settles faster and you can hold far longer */
+function wobble(dt){ const me=M.me, c=CMP(); me.nz=me.nz.map((v,i)=>v+(gauss()*.9-v*1.4)*dt*(i<2?3:9));
+  const t=me.hold, settle=me.draw>=1?clamp(1-t/(c?.8:1.2),0,1):1, tire=me.draw>=1?Math.max(0,t-(c?9:4.5))*.35:0;
+  let amp=(c?.00031:.00042)*(1+settle*2.5+tire+me.fat*.6); if(me.breathHeld) amp*=.55; else amp*=1+.25*Math.max(0,Math.sin(M.t*1.5));
   me.wob=[me.nz[0]*amp+me.nz[2]*amp*.35,me.nz[1]*amp*1.15+me.nz[3]*amp*.4+(me.breathHeld?0:Math.sin(M.t*1.5)*.00025)]; }
 function loose(){ const me=M.me; if(me.draw<.15){ me.draw=0; me.drawing=false; return; }
-  const power=me.draw>=1?1:.55+.45*me.draw, relErr=(me.draw>=1?.00018:.0012)*(1+me.fat*.5);
+  const power=me.draw>=1?1:.55+.45*me.draw, relErr=(me.draw>=1?(CMP()?.00008:.00018):.0012)*(1+me.fat*.5);
   const yaw=me.yaw+me.wob[0]+gauss()*relErr, pitch=me.pitch+me.wob[1]+gauss()*relErr+SIGHT-(1-power)*.0;
   const t0=M.t, f=flight(yaw,pitch,V0*power,t=>windAt(t0+t),true);
   M.shot={who:0,f,t:0,ox:0}; M.phase='flight'; M.phT=0; me.drawing=false; me.draw=0; me.fat=Math.min(1,me.fat+.08); sfx.release(); }
 /* ---------- the opponent's shot: their skill sets the group size; they read the wind but not perfectly ---------- */
-function oppShoot(){ const o=M.opp, sk=clamp((o.rat-80)/18,0,1), sig=(.052-.026*sk)*DIFF[diff].sig, t0=M.t;
+function oppShoot(){ const o=M.opp, sk=clamp((o.rat-80)/18,0,1), sig=(CMP()?.025-.0145*sk:.052-.026*sk)*DIFF[diff].sig, t0=M.t;
   const noWind=flight(Math.atan2(3,DIST),Math.atan2(CY-EYE,DIST)+SIGHT,V0,()=>0), withW=flight(Math.atan2(3,DIST),Math.atan2(CY-EYE,DIST)+SIGHT,V0,t=>windAt(t0+t)), drift=withW.x-noWind.x;
   const aimX=-drift*(1+gauss()*.18*(1.2-sk)), yaw=Math.atan2(3+aimX+gauss()*sig,DIST), pitch=Math.atan2(CY-EYE+gauss()*sig,DIST)+SIGHT;
   const f=flight(yaw,pitch,V0*(1+gauss()*.003),t=>windAt(t0+t),true); M.shot={who:1,f,t:0,ox:3}; M.phase='flight'; M.phT=0; sfx.release(); }
@@ -265,12 +278,17 @@ function arrowLanded(){ const S=M.shot, f=S.f, dx=f.x-S.ox, dy=f.y-CY, sc=Math.a
   M.hits[S.who].push({x:dx,y:dy,s:sc.s,X:sc.x,boss:inBoss,set:M.sets.length}); if(inBoss) sfx.thud(); else sfx.miss(); if(sc.s===10){ sfx.ten(); if(S.who===0){ SV.tens++; if(sc.x) SV.xs++; } } if(S.who===0) SV.arrows++;
   const lab=sc.s===0?'M':sc.x?'X':String(sc.s); M.msg={t:lab,who:S.who}; M.msgT=1.8; if(sc.s>=10&&S.who===0) sfx.crowd(.1);
   M.last={s:sc.s,x:sc.x,lab,dx,dy}; if(!M.practice) speak(sc.s===0?'Miss':sc.x?'X, ten':String(sc.s));
-  if(M.practice){ M.endA.push({...sc,lab}); if(M.endA.length>=6){ M.ends.push(M.endA); M.endA=[]; } M.phase='show'; M.phT=0; return; }
+  if(M.practice){ M.endA.push({...sc,lab}); if(M.endA.length>=6){ M.ends.push(M.endA); M.endA=[]; if(M.rank&&Math.random()<.35) M.wind=newWind(); } M.phase='show'; M.phT=0; return; }
   if(M.shootoff){ M.so=M.so||[]; M.so[S.who]={s:sc.s,d:Math.hypot(dx,dy),lab}; M.phase='show'; M.phT=0; return; }
   M.cur.a[S.who].push({s:sc.s,x:sc.x,lab}); M.phase='show'; M.phT=0; }
-function nextAfterShow(){ if(M.practice){ M.n++; startTurn(); return; }
-  if(M.shootoff){ const so=M.so||[]; if(so[0]&&so[1]){ const w=so[0].s!==so[1].s?(so[0].s>so[1].s?0:1):(so[0].d<=so[1].d?0:1); M.setPts[w]++; banner('Shoot-off',`${w?M.opp.name:'You'} ${w?'win':'win'}: ${so[0].lab} vs ${so[1].lab}${so[0].s===so[1].s?' (closest to centre)':''}`,'#facc15',2.6); return matchOver(w); } M.turn=1-M.turn; startTurn(); return; }
-  const a=M.cur.a; if(a[0].length===3&&a[1].length===3){ const s0=a[0].reduce((s,q)=>s+q.s,0), s1=a[1].reduce((s,q)=>s+q.s,0); const p=s0>s1?[2,0]:s1>s0?[0,2]:[1,1]; M.setPts[0]+=p[0]; M.setPts[1]+=p[1]; M.sets.push({s:[s0,s1],p,a:a.map(x=>x.map(q=>q.lab))});
+function nextAfterShow(){ if(M.practice){ M.n++; if(M.rank&&M.hits[0].length>=M.rank) return rankOver(); startTurn(); return; }
+  if(M.shootoff){ const so=M.so||[]; if(so[0]&&so[1]){ const w=so[0].s!==so[1].s?(so[0].s>so[1].s?0:1):(so[0].d<=so[1].d?0:1); if(!CMP()) M.setPts[w]++; banner('Shoot-off',`${w?M.opp.name:'You'} ${w?'win':'win'}: ${so[0].lab} vs ${so[1].lab}${so[0].s===so[1].s?' (closest to centre)':''}`,'#facc15',2.6); return matchOver(w); } M.turn=1-M.turn; startTurn(); return; }
+  const a=M.cur.a; if(a[0].length===3&&a[1].length===3&&CMP()){ /* compound: five ends of three, cumulative score */
+    const s0=a[0].reduce((s,q)=>s+q.s,0), s1=a[1].reduce((s,q)=>s+q.s,0); M.setPts[0]+=s0; M.setPts[1]+=s1; M.sets.push({s:[s0,s1],p:[s0,s1],a:a.map(x=>x.map(q=>q.lab))});
+    banner(`End ${M.sets.length}: ${s0} – ${s1}`,`Total ${M.setPts[0]} – ${M.setPts[1]}`,s0>s1?'#16a34a':s1>s0?'#dc2626':'#94a3b8',2); sfx.crowd(.12);
+    if(M.sets.length>=5){ if(M.setPts[0]!==M.setPts[1]) return matchOver(M.setPts[0]>M.setPts[1]?0:1); M.shootoff=true; M.so=[]; M.turn=0; banner('Shoot-off!','Tied on total · one arrow each, closest to the centre wins','#facc15',2.4); M.cur={a:[[],[]]}; startTurn(); return; }
+    M.first=s0<s1?0:s1<s0?1:1-M.first; M.turn=M.first; M.cur={a:[[],[]]}; M.wind=Math.random()<.4?newWind():M.wind; startTurn(); return; }
+  if(a[0].length===3&&a[1].length===3){ const s0=a[0].reduce((s,q)=>s+q.s,0), s1=a[1].reduce((s,q)=>s+q.s,0); const p=s0>s1?[2,0]:s1>s0?[0,2]:[1,1]; M.setPts[0]+=p[0]; M.setPts[1]+=p[1]; M.sets.push({s:[s0,s1],p,a:a.map(x=>x.map(q=>q.lab))});
     banner(`Set ${M.sets.length}: ${s0} – ${s1}`,`Set points ${M.setPts[0]} – ${M.setPts[1]}`,s0>s1?'#16a34a':s1>s0?'#dc2626':'#94a3b8',2); sfx.crowd(.12);
     if(M.setPts[0]>=6||M.setPts[1]>=6) return matchOver(M.setPts[0]>=6?0:1);
     if(M.sets.length>=5&&M.setPts[0]===5&&M.setPts[1]===5){ M.shootoff=true; M.so=[]; M.turn=s0<=s1?0:1; banner('Shoot-off!','One arrow each · closest to the centre wins','#facc15',2.4); M.cur={a:[[],[]]}; startTurn(); return; }
@@ -281,7 +299,16 @@ function matchOver(w){ M.phase='over'; phase='over'; if(document.pointerLockElem
   if(M.tour) return tourAfter(w===0);
   $('resultIn').innerHTML=`<h2>${w===0?'You win!':`${esc(M.opp.name)} wins`}</h2><div class="rs">${M.setPts[0]} – ${M.setPts[1]}</div>${setTable()}<p>Enter for the menu, R for a rematch.</p>`;
   setTimeout(()=>{ if(phase==='over') $('result').classList.remove('hidden'); },1200); }
-function setTable(){ return `<table class="ls"><tr><th>Set</th><th>You</th><th></th><th>${esc(M.opp.name)}</th><th></th></tr>${M.sets.map((s,i)=>`<tr><td>${i+1}</td><td>${s.a[0].join(' ')}</td><td><b>${s.s[0]}</b></td><td>${s.a[1].join(' ')}</td><td><b>${s.s[1]}</b></td></tr>`).join('')}${M.so?`<tr><td>Shoot-off</td><td colspan="2">${M.so[0]?M.so[0].lab:'-'}</td><td colspan="2">${M.so[1]?M.so[1].lab:'-'}</td></tr>`:''}</table>`; }
+/* ranking round over: end-by-end card, 10s and Xs, personal best */
+function rankOver(){ M.phase='over'; phase='over'; if(document.pointerLockElement) document.exitPointerLock(); if(M.endA.length){ M.ends.push(M.endA); M.endA=[]; }
+  const h=M.hits[0], tot=h.reduce((s,q)=>s+q.s,0), tens=h.filter(q=>q.s===10).length, xs=h.filter(q=>q.X).length, key=bowSel+M.rank, prev=SV.rank[key]||0, pb=tot>prev;
+  if(pb) SV.rank[key]=tot; if(M.rank===72&&bowSel==='r') SV.best72=Math.max(SV.best72||0,tot); saveSV(); sfx.crowd(.2);
+  try{ lbPost(key,tot,`${tot} · ${tens}×10 · ${xs}X`); }catch(e){}
+  let run=0; const rows=M.ends.map((e,i)=>{ const s=e.reduce((a,q)=>a+q.s,0); run+=s; return `<tr><td>${i+1}</td><td>${e.map(q=>q.lab).join(' ')}</td><td><b>${s}</b></td><td>${run}</td></tr>`; }).join('');
+  const wr={r72:702,c72:720,r36:351,c36:360}[key];
+  $('resultIn').innerHTML=`<h2>${tot} / ${M.rank*10}</h2><div class="rs" style="font-size:20px">${BOWS[bowSel].n} ${DIST} m · ${tens} tens · ${xs} X${pb?' · personal best!':prev?` · best ${prev}`:''}</div><p style="margin:4px 0">World-class mark: ${wr}</p><table class="ls"><tr><th>End</th><th>Arrows</th><th>End</th><th>Total</th></tr>${rows}</table><p>Enter for the menu, R to shoot again.</p>`;
+  setTimeout(()=>{ if(phase==='over') $('result').classList.remove('hidden'); },900); }
+function setTable(){ return `<table class="ls"><tr><th>${CMP()?'End':'Set'}</th><th>You</th><th></th><th>${esc(M.opp.name)}</th><th></th></tr>${M.sets.map((s,i)=>`<tr><td>${i+1}</td><td>${s.a[0].join(' ')}</td><td><b>${s.s[0]}</b></td><td>${s.a[1].join(' ')}</td><td><b>${s.s[1]}</b></td></tr>`).join('')}${M.so?`<tr><td>Shoot-off</td><td colspan="2">${M.so[0]?M.so[0].lab:'-'}</td><td colspan="2">${M.so[1]?M.so[1].lab:'-'}</td></tr>`:''}</table>`; }
 /* ---------- Olympic table of 8 with a bronze match ---------- */
 let TOUR=null;
 function newTour(){ const R=roster().sort((a,b)=>b.rat-a.rat).slice(0,7); R.splice(4,0,YOU); TOUR={field:[0,7,3,4,1,6,2,5].map(k=>R[k]),round:0}; tourNext(); }
@@ -293,7 +320,7 @@ function tourAfter(won){ const T=TOUR, F=T.field; let txt='', done=false;
   if(T.round===0){ if(!won){ T.place='5th–8th'; done=true; } else { const w=[]; for(let k=0;k<8;k+=2){ const a=F[k], b=F[k+1]; w.push(a===YOU||b===YOU?YOU:simM(a,b)); } const mi=w.indexOf(YOU), mine=mi<2?[0,1]:[2,3], oth=mi<2?[2,3]:[0,1]; T.sf=w[mine[0]]===YOU?w[mine[1]]:w[mine[0]]; T.of=simM(w[oth[0]],w[oth[1]]); T.ol=T.of===w[oth[0]]?w[oth[1]]:w[oth[0]]; T.round=1; txt=`Into the semi-finals against ${T.sf.name}.`; } }
   else if(T.round===1){ T.round=2; T.bronze=!won; T.fin=won?T.of:T.ol; txt=won?`Into the gold medal match against ${T.fin.name}!`:`Bronze medal match next, against ${T.fin.name}.`; }
   else { done=true; T.place=T.bronze?(won?'Bronze':'4th'):(won?'Gold':'Silver'); }
-  if(done){ if(['Gold','Silver','Bronze'].includes(T.place)){ SV.medals[gSel]=SV.medals[gSel]||{Gold:0,Silver:0,Bronze:0}; SV.medals[gSel][T.place]++; saveSV(); }
+  if(done){ const mk=gSel+(CMP()?'c':''); if(['Gold','Silver','Bronze'].includes(T.place)){ SV.medals[mk]=SV.medals[mk]||{Gold:0,Silver:0,Bronze:0}; SV.medals[mk][T.place]++; saveSV(); }
     $('resultIn').innerHTML=`<h2>${({Gold:'🥇',Silver:'🥈',Bronze:'🥉'})[T.place]||''} ${T.place}</h2><div class="rs">${M.setPts[0]} – ${M.setPts[1]}</div>${setTable()}<p>Enter for the menu.</p>`; TOUR=null; }
   else $('resultIn').innerHTML=`<h2>${won?'Won':'Lost'} ${M.setPts[0]}–${M.setPts[1]}</h2>${setTable()}<p>${esc(txt)} Enter for the next match.</p>`;
   setTimeout(()=>{ if(phase==='over') $('result').classList.remove('hidden'); },1200); }
@@ -307,8 +334,8 @@ function step(dt){
   /* aim: mouse, arrow keys or touch drag; slower and finer at full draw */
   const sens=me.draw>.9?.00009:.0006; me.yaw+=look.dx*sens; me.pitch-=look.dy*sens; look.dx=look.dy=0;
   const kx=(held(['ArrowRight','KeyD'])?1:0)-(held(['ArrowLeft','KeyA'])?1:0), ky=(held(['ArrowUp','KeyW'])?1:0)-(held(['ArrowDown','KeyS'])?1:0); me.yaw+=kx*dt*(me.draw>.9?.0035:.03); me.pitch+=ky*dt*(me.draw>.9?.0035:.03);
-  me.yaw=clamp(me.yaw,-.05,.09); me.pitch=clamp(me.pitch,-.06,.04);
-  if(M.phase==='aim'){ if(!M.practice){ M.timer-=dt; if(M.timer<=0){ M.timer=0; /* out of time: the arrow scores 0 */ sfx.buzzer(); M.shot={who:0,f:{x:9,y:-1,t:.01,path:[]},t:0,ox:0}; M.phase='flight'; me.draw=0; me.drawing=false; } }
+  me.yaw=clamp(me.yaw,-.05,.09); me.pitch=clamp(me.pitch,-.08,.04);
+  if(M.phase==='aim'){ if(!M.practice||M.rank){ M.timer-=dt; if(M.timer<=0){ M.timer=0; /* out of time: the arrow scores 0 */ sfx.buzzer(); M.shot={who:0,f:{x:9,y:-1,t:.01,path:[]},t:0,ox:0}; M.phase='flight'; me.draw=0; me.drawing=false; } }
     const pull=mouseDown||held(['Space']); if(pull&&!me.drawing&&me.draw<.05){ me.drawing=true; sfx.draw(); }
     if(me.drawing){ if(pull){ me.draw=Math.min(1,me.draw+dt/1.3); if(me.draw>=1) me.hold+=dt; } else loose(); }
     const bh=held(['ShiftLeft','ShiftRight','KeyB']); if(bh&&me.breathLeft>0&&me.draw>.5){ me.breathHeld=true; me.breathLeft=Math.max(0,me.breathLeft-dt/4); } else { me.breathHeld=false; if(!bh) me.breathLeft=Math.min(1,me.breathLeft+dt/6); }
@@ -326,13 +353,14 @@ function hudText(t,x,y,size=18,col='#fff',align='left'){ ctx.font=`800 ${size}px
 function rr(x,y,w,h,r,col){ ctx.fillStyle=col; ctx.beginPath(); ctx.roundRect(x,y,w,h,r); ctx.fill(); }
 const RINGC=['#f8fafc','#f8fafc','#111827','#111827','#2b7bd8','#2b7bd8','#e0322f','#e0322f','#f6d32d','#f6d32d'];
 /* a target face with the arrows on it (spotting scope view) */
-function face(cx,cy,R,hits,last){ for(let k=0;k<10;k++){ ctx.fillStyle=RINGC[k]; ctx.beginPath(); ctx.arc(cx,cy,R*(10-k)/10,0,Math.PI*2); ctx.fill(); ctx.strokeStyle=k===2||k===3?'#e5e7eb':'#111'; ctx.lineWidth=.6; ctx.stroke(); }
-  ctx.strokeStyle='#111'; ctx.beginPath(); ctx.arc(cx,cy,R*.05,0,Math.PI*2); ctx.stroke(); const s=R/(FACE/2);
+function face(cx,cy,R,hits,last){ const k0=CMP()?4:0, nR=10-k0; for(let k=k0;k<10;k++){ ctx.fillStyle=RINGC[k]; ctx.beginPath(); ctx.arc(cx,cy,R*(10-k)/nR,0,Math.PI*2); ctx.fill(); ctx.strokeStyle=k===2||k===3?'#e5e7eb':'#111'; ctx.lineWidth=.6; ctx.stroke(); }
+  ctx.strokeStyle='#111'; ctx.beginPath(); ctx.arc(cx,cy,R*.5/nR,0,Math.PI*2); ctx.stroke(); if(CMP()){ ctx.beginPath(); ctx.arc(cx,cy,R*.25/nR,0,Math.PI*2); ctx.stroke(); } const s=R/(nR*RING);
   hits.forEach((h,i)=>{ const x=cx+h.x*s, y=cy-h.y*s; ctx.fillStyle=i===hits.length-1&&last?'#22c55e':'#111827'; ctx.beginPath(); ctx.arc(x,y,Math.max(2.2,.0035*s*1.4),0,Math.PI*2); ctx.fill(); ctx.strokeStyle='#fff'; ctx.lineWidth=1; ctx.stroke(); }); }
 function drawHUD(){ const me=M.me, aiming=M.phase==='aim', zoom=me.draw>.9&&aiming;
   /* bow riser silhouette and the sight */
   if(aiming){ ctx.fillStyle='rgba(15,23,42,.92)'; ctx.beginPath(); ctx.roundRect(W/2-120-(1-me.draw)*40,0,26,H,8); ctx.fill(); ctx.fillRect(W/2-120-(1-me.draw)*40,H/2-6,80,10);
-    ctx.strokeStyle='rgba(15,23,42,.95)'; ctx.lineWidth=3; ctx.beginPath(); ctx.arc(W/2,H/2,16,0,Math.PI*2); ctx.stroke(); ctx.fillStyle='#fde047'; ctx.beginPath(); ctx.arc(W/2,H/2,2.4,0,Math.PI*2); ctx.fill();
+    if(CMP()){ ctx.strokeStyle='rgba(15,23,42,.95)'; ctx.lineWidth=7; ctx.beginPath(); ctx.arc(W/2,H/2,46,0,Math.PI*2); ctx.stroke(); ctx.lineWidth=1; ctx.strokeStyle='rgba(15,23,42,.8)'; ctx.beginPath(); ctx.moveTo(W/2-42,H/2); ctx.lineTo(W/2-8,H/2); ctx.moveTo(W/2+8,H/2); ctx.lineTo(W/2+42,H/2); ctx.stroke(); ctx.fillStyle='#22c55e'; ctx.beginPath(); ctx.arc(W/2,H/2,1.8,0,Math.PI*2); ctx.fill(); const lv=clamp(me.wob[0]*9000,-14,14); rr(W/2-16,H/2+52,32,8,4,'rgba(15,23,42,.9)'); ctx.fillStyle=Math.abs(lv)<4?'#22c55e':'#fbbf24'; ctx.beginPath(); ctx.arc(W/2+lv,H/2+56,3,0,Math.PI*2); ctx.fill(); }
+    else { ctx.strokeStyle='rgba(15,23,42,.95)'; ctx.lineWidth=3; ctx.beginPath(); ctx.arc(W/2,H/2,16,0,Math.PI*2); ctx.stroke(); ctx.fillStyle='#fde047'; ctx.beginPath(); ctx.arc(W/2,H/2,2.4,0,Math.PI*2); ctx.fill(); }
     ctx.strokeStyle='rgba(226,232,240,.75)'; ctx.lineWidth=1.2; ctx.beginPath(); const sx=W/2+30+ (1-me.draw)*160; ctx.moveTo(sx,0); ctx.lineTo(sx,H); ctx.stroke();
     /* draw, stability, breath */
     rr(20,H-104,230,88,12,'rgba(5,8,18,.8)'); hudText(me.draw>=1?(me.hold<1.2?'Settling…':me.hold<4.5?'Steady: shoot now':'Tiring!'):me.drawing?'Drawing…':'Hold Space or the mouse to draw',32,H-80,14,me.draw>=1&&me.hold>=1.2&&me.hold<4.5?'#22c55e':'#fde68a');
@@ -343,9 +371,9 @@ function drawHUD(){ const me=M.me, aiming=M.phase==='aim', zoom=me.draw>.9&&aimi
   const w=windAt(M.t); rr(W/2-70,70,140,44,10,'rgba(5,8,18,.78)'); hudText('WIND',W/2,86,11,'#94a3b8','center'); ctx.save(); ctx.translate(W/2,100); ctx.fillStyle='#e2e8f0'; const L=clamp(Math.abs(w)*14,6,52); ctx.fillRect(w>0?-L/2:-L/2,-2,L,4); ctx.beginPath(); const tip=w>=0?L/2:-L/2; ctx.moveTo(tip+(w>=0?8:-8),0); ctx.lineTo(tip,-6); ctx.lineTo(tip,6); ctx.closePath(); ctx.fill(); ctx.restore(); hudText(`${Math.abs(w).toFixed(1)} m/s ${w>.15?'→':w<-.15?'←':''}`,W/2+64,96,12,'#cbd5e1','right');
   /* match score */
   if(!M.practice){ rr(W/2-230,10,460,54,12,'rgba(5,8,18,.85)'); hudText(`You ${M.setPts[0]}`,W/2-220,44,22,'#86efac'); hudText(`${M.setPts[1]} ${M.opp.name}`,W/2+220,44,22,'#fca5a5','right');
-    hudText(M.shootoff?'SHOOT-OFF':`Set ${M.sets.length+1}`,W/2,30,14,'#94a3b8','center'); hudText(M.phase==='aim'||M.phase==='opp'?`${Math.ceil(M.timer)}s`:'',W/2,56,20,M.timer<6?'#f87171':'#fde047','center');
+    hudText(M.shootoff?'SHOOT-OFF':`${CMP()?'End':'Set'} ${M.sets.length+1}${CMP()?' / 5':''}`,W/2,30,14,'#94a3b8','center'); hudText(M.phase==='aim'||M.phase==='opp'?`${Math.ceil(M.timer)}s`:'',W/2,56,20,M.timer<6?'#f87171':'#fde047','center');
     const cur=M.cur.a; hudText(cur[0].map(q=>q.lab).join(' '),W/2-70,56,14,'#e2e8f0','right'); hudText(cur[1].map(q=>q.lab).join(' '),W/2+70,56,14,'#e2e8f0'); if(M.phase==='opp') hudText(`${M.opp.name} is shooting…`,W/2,140,18,'#fca5a5','center'); }
-  else { rr(W/2-200,10,400,46,12,'rgba(5,8,18,.85)'); const tot=M.ends.flat().concat(M.endA).reduce((s,q)=>s+q.s,0), n=M.ends.flat().length+M.endA.length; hudText(`End ${M.ends.length+1}: ${M.endA.map(q=>q.lab).join(' ')}`,W/2-188,40,18,'#fff'); hudText(`Total ${tot} / ${n*10}`,W/2+188,40,18,'#fde047','right'); }
+  else { rr(W/2-200,10,400,46,12,'rgba(5,8,18,.85)'); const tot=M.ends.flat().concat(M.endA).reduce((s,q)=>s+q.s,0), n=M.ends.flat().length+M.endA.length; hudText(`End ${M.rank?Math.min(M.ends.length+1,M.rank/6)+'/'+M.rank/6:M.ends.length+1}: ${M.endA.map(q=>q.lab).join(' ')}`,W/2-188,40,18,'#fff'); hudText(`Total ${tot} / ${n*10}`,W/2+188,40,18,'#fde047','right'); if(M.rank&&M.phase==='aim') hudText(`${Math.ceil(M.timer)}s`,W/2,40,18,M.timer<8?'#f87171':'#fde047','center'); }
   /* spotting scopes */
   rr(W-182,74,168,186,12,'rgba(5,8,18,.8)'); hudText('Your target',W-98,92,12,'#94a3b8','center'); face(W-98,174,70,M.practice?M.hits[0].filter((h,i,a)=>i>=a.length-6):M.hits[0].filter(h=>h.set===M.sets.length),M.shot&&M.shot.who===0||M.phase==='show');
   if(!M.practice){ rr(W-182,268,168,120,12,'rgba(5,8,18,.8)'); hudText(M.opp.name,W-98,286,12,'#94a3b8','center'); face(W-98,336,44,M.hits[1].filter(h=>h.set===M.sets.length),true); }
@@ -359,8 +387,8 @@ const setText=(id,t)=>{ const e=$(id); if(e&&e.textContent!==String(t)) e.textCo
 const badgeA=col=>svg(`<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 100 100"><circle cx="50" cy="50" r="46" fill="#f8fafc"/><circle cx="50" cy="50" r="37" fill="#111827"/><circle cx="50" cy="50" r="28" fill="#2b7bd8"/><circle cx="50" cy="50" r="19" fill="#e0322f"/><circle cx="50" cy="50" r="10" fill="#f6d32d"/><path d="M50 50 L86 14" stroke="${col}" stroke-width="5"/></svg>`);
 function updateBoard(){ if(!M) return; const key=M.setPts.join('-')+M.sets.length+M.hits[0].length; if(key===lastBoard) return; lastBoard=key;
   $('logoL').src=badgeA('#22c55e'); setText('nameL','You'); setText('tpL',`${FLAG.GBR}`); setText('scoreL',M.practice?'':M.setPts[0]); $('sideL').style.setProperty('--tc','#16a34a');
-  $('logoR').src=badgeA('#ef4444'); setText('nameR',M.practice?'Practice':M.opp.name); setText('tpR',M.practice?'70 m':`${FLAG[M.opp.nat]||''} ${M.opp.nat}`); setText('scoreR',M.practice?'':M.setPts[1]); $('sideR').style.setProperty('--tc','#dc2626');
-  setText('cntT','Archery'); setText('innT',TOUR?TOUR.label:M.practice?'Practice':'Match'); setText('outsT','70 m recurve'); setText('basesT',''); }
+  $('logoR').src=badgeA('#ef4444'); setText('nameR',M.rank?`${M.rank} arrows`:M.practice?'Practice':M.opp.name); setText('tpR',M.practice?`${DIST} m`:`${FLAG[M.opp.nat]||''} ${M.opp.nat}`); setText('scoreR',M.practice?'':M.setPts[1]); $('sideR').style.setProperty('--tc','#dc2626');
+  setText('cntT','Archery'); setText('innT',TOUR?TOUR.label:M.rank?'Ranking round':M.practice?'Practice':'Match'); setText('outsT',`${DIST} m ${BOWS[bowSel].n.toLowerCase()}`); setText('basesT',''); }
 function toast(t,col='#34d399'){ const e=$('toast'); e.textContent=t; e.style.borderColor=col; e.classList.add('on'); toastT=2.4; }
 function banner(big,sub,glow='#000',dur=2){ const b=$('banner'); b.innerHTML=`<span class="big">${esc(big)}</span>${sub?`<span class="sub">${esc(sub)}</span>`:''}`; b.style.setProperty('--glow',glow); b.classList.add('on'); bannerT=dur; }
 
@@ -378,7 +406,7 @@ addEventListener('keydown',e=>{
   if(e.code==='KeyZ'){ toggleFs(); return; }
   if(e.code==='KeyV'){ setView3(!view3); return; }
   if(phase==='menu'){ menuKey(e.code); return; }
-  if(phase==='over'){ if(e.code==='KeyR'&&!TOUR&&M) newMatch(M.opp,{mode:M.mode}); else if(['Enter','NumpadEnter','Escape','KeyM'].includes(e.code)){ if(TOUR) tourNext(); else toMenu(); } return; }
+  if(phase==='over'){ if(e.code==='KeyR'&&!TOUR&&M) newMatch(M.opp,{mode:M.rank?'rank':M.mode,n:M.rank}); else if(['Enter','NumpadEnter','Escape','KeyM'].includes(e.code)){ if(TOUR) tourNext(); else toMenu(); } return; }
   if(!M) return;
   if(e.code==='Escape'||e.code==='KeyP'){ paused=!paused; if(paused){ if(document.pointerLockElement) document.exitPointerLock(); banner('Paused','Esc to resume · M for menu','#000',1e9); } else { $('banner').classList.remove('on'); bannerT=0; } return; }
   if(e.code==='KeyM'){ if(confirm('Leave this match?')){ TOUR=null; toMenu(); } keys.clear(); return; }
@@ -388,20 +416,23 @@ addEventListener('blur',()=>{ keys.clear(); mouseDown=false; });
 
 /* ---------- menu ---------- */
 const pill=(attr,val,on,label,key)=>`<button data-${attr}="${val}" class="${on?'on':''}" tabindex="-1">${label}${key?` <kbd>${key}</kbd>`:''}</button>`;
-function medalLine(){ const r=Object.entries(SV.medals).map(([g,m])=>`${g==='m'?"Men's":"Women's"}: ${'🥇'.repeat(m.Gold)}${'🥈'.repeat(m.Silver)}${'🥉'.repeat(m.Bronze)}`); return r.length?`Your medals · ${r.join(' · ')}`:''; }
+function medalLine(){ const r=Object.entries(SV.medals).map(([g,m])=>`${g[0]==='m'?"Men's":"Women's"}${g[1]?' compound':''}: ${'🥇'.repeat(m.Gold)}${'🥈'.repeat(m.Silver)}${'🥉'.repeat(m.Bronze)}`); return r.length?`Your medals · ${r.join(' · ')}`:''; }
 function renderMenu(){ const R=roster(); oppSel=clamp(oppSel,0,R.length-1); const op=R[oppSel];
-  let h=`<h1>Rink Rivals: Archery</h1><p>Olympic recurve at 70 metres on the 122 cm face. Arrows leave the bow at about 58 m/s and take 1.4 seconds to land, so the wind moves them about 16 cm for every metre per second: watch the flags and aim off. Draw, settle, hold your breath and release before your arms start to shake. Olympic set system against the world's best.</p>
-  <div class="pills"><span class="lbl">Event</span>${pill('g','m',gSel==='m',"Men's",'')}${pill('g','w',gSel==='w',"Women's",'')}<span class="lbl">Mode</span>${pill('md','tour',modeSel==='tour','Olympic tournament','1')}${pill('md','match',modeSel==='match','Single match','2')}${pill('md','practice',modeSel==='practice','Practice','3')}<a href="./" tabindex="-1">Home</a><a href="golf" tabindex="-1">Golf</a></div>
-  ${modeSel!=='practice'?`<div class="pills"><span class="lbl">Level</span>${DIFF.map((d,i)=>pill('d',i,diff===i,d.n,String(i+5))).join('')}</div>`:''}
+  setBow(bowSel); const C=CMP();
+  let h=`<h1>Rink Rivals: Archery</h1><p>${C?`Compound at 50 metres on the 80 cm six-ring face. A release aid, a magnified scope and the cams' let-off make it far steadier than a recurve, so the margins are tiny: only the inner 10 (4 cm across) scores 10, and the outer 10 counts 9. Matches are 15 arrows, highest total wins.`:`Olympic recurve at 70 metres on the 122 cm face. Arrows leave the bow at about 58 m/s and take 1.4 seconds to land, so the wind moves them about 16 cm for every metre per second: watch the flags and aim off. Draw, settle, hold your breath and release before your arms start to shake. Olympic set system against the world's best.`}</p>
+  <div class="pills"><span class="lbl">Bow</span>${pill('bw','r',!C,'Recurve 70 m','B')}${pill('bw','c',C,'Compound 50 m','B')}<span class="lbl">Event</span>${pill('g','m',gSel==='m',"Men's",'')}${pill('g','w',gSel==='w',"Women's",'')}</div>
+  <div class="pills"><span class="lbl">Mode</span>${pill('md','tour',modeSel==='tour',C?'Elimination bracket':'Olympic tournament','1')}${pill('md','match',modeSel==='match','Single match','2')}${pill('md','rank',modeSel==='rank','Ranking round','3')}${pill('md','practice',modeSel==='practice','Practice','4')}<a href="./" tabindex="-1">Home</a><a href="golf" tabindex="-1">Golf</a></div>
+  ${modeSel==='rank'?`<div class="pills"><span class="lbl">Arrows</span>${pill('rn',36,rankN===36,'36 (half round)','')}${pill('rn',72,rankN===72,'72 (full round)','')}<span class="lbl">Your best</span><span style="align-self:center">${SV.rank[bowSel+rankN]||'none yet'}</span></div>`:''}
+  ${modeSel==='tour'||modeSel==='match'?`<div class="pills"><span class="lbl">Level</span>${DIFF.map((d,i)=>pill('d',i,diff===i,d.n,String(i+5))).join('')}</div>`:''}
   ${modeSel==='match'?`<div class="pickers"><div class="pk p1"><button class="ar" data-o="-1" tabindex="-1">‹</button><div class="mid"><div class="who">Opponent</div><img src="${badgeA('#ef4444')}" alt=""><div class="n">${FLAG[op.nat]||''} ${esc(op.name)}</div><div class="meta">${op.nat} · rating ${op.rat}</div></div><button class="ar" data-o="1" tabindex="-1">›</button></div></div>`:''}
-  <div class="pills"><button class="gold" data-act="start" tabindex="-1">${modeSel==='tour'?'Enter the tournament':modeSel==='match'?'Shoot':'Go to the range'} <kbd>Enter</kbd></button></div><div id="hint">${SV.arrows?`${SV.arrows} arrows shot · ${SV.tens} tens · ${SV.xs} X. `:''}${medalLine()}</div>`;
-  $('menuIn').innerHTML=h; $('logoL').src=badgeA('#22c55e'); setText('nameL','You'); setText('tpL','Recurve'); setText('scoreL',''); $('logoR').src=badgeA('#ef4444'); setText('nameR',modeSel==='match'?op.name:modeSel==='tour'?'Olympic table of 8':'Practice'); setText('tpR','70 m'); setText('scoreR','');
-  setText('cntT','Archery'); setText('innT',gSel==='m'?"Men's":"Women's"); setText('outsT','70 m'); setText('basesT',''); lastBoard=''; renderKeysHelp(); }
+  <div class="pills"><button class="gold" data-act="start" tabindex="-1">${modeSel==='tour'?'Enter the tournament':modeSel==='match'?'Shoot':modeSel==='rank'?'Start the round':'Go to the range'} <kbd>Enter</kbd></button></div><div id="hint">${SV.arrows?`${SV.arrows} arrows shot · ${SV.tens} tens · ${SV.xs} X. `:''}${medalLine()}</div>`;
+  $('menuIn').innerHTML=h; $('logoL').src=badgeA('#22c55e'); setText('nameL','You'); setText('scoreL',''); $('logoR').src=badgeA('#ef4444'); setText('nameR',modeSel==='match'?op.name:modeSel==='tour'?'Table of 8':modeSel==='rank'?`${rankN} arrows`:'Practice'); setText('tpR',`${DIST} m`); setText('tpL',BOWS[bowSel].n); setText('scoreR','');
+  setText('cntT','Archery'); setText('innT',gSel==='m'?"Men's":"Women's"); setText('outsT',`${DIST} m`); setText('basesT',''); lastBoard=''; renderKeysHelp(); }
 $('menuIn').addEventListener('mousedown',e=>{ if(e.target.closest('button')) e.preventDefault(); });
 $('menuIn').addEventListener('click',e=>{ const b=e.target.closest('button'); if(!b) return; const d=b.dataset; audio(); sfx.click();
-  if(d.g) gSel=d.g; else if(d.md) modeSel=d.md; else if(d.d!==undefined) diff=+d.d; else if(d.o) oppSel=(oppSel+ +d.o+8)%8; else if(d.act==='start'){ startGame(); return; } renderMenu(); });
-function menuKey(code){ const dg=code.replace('Numpad','Digit'); if(['Digit1','Digit2','Digit3'].includes(dg)) modeSel=['tour','match','practice'][+dg.slice(5)-1]; else if(['Digit5','Digit6','Digit7'].includes(dg)) diff=+dg.slice(5)-5; else if(code==='ArrowLeft'||code==='KeyA') oppSel=(oppSel+7)%8; else if(code==='ArrowRight'||code==='KeyD') oppSel=(oppSel+1)%8; else if(['Enter','NumpadEnter','Space'].includes(code)){ startGame(); return; } else return; renderMenu(); }
-function startGame(){ audio(); if(modeSel==='tour') newTour(); else if(modeSel==='match') newMatch(roster()[oppSel],{mode:'match'}); else newMatch(YOU,{mode:'practice'}); }
+  if(d.g) gSel=d.g; else if(d.bw) bowSel=d.bw; else if(d.rn) rankN=+d.rn; else if(d.md) modeSel=d.md; else if(d.d!==undefined) diff=+d.d; else if(d.o) oppSel=(oppSel+ +d.o+8)%8; else if(d.act==='start'){ startGame(); return; } renderMenu(); });
+function menuKey(code){ const dg=code.replace('Numpad','Digit'); if(['Digit1','Digit2','Digit3','Digit4'].includes(dg)) modeSel=['tour','match','rank','practice'][+dg.slice(5)-1]; else if(code==='KeyB') setBow(CMP()?'r':'c'); else if(['Digit5','Digit6','Digit7'].includes(dg)) diff=+dg.slice(5)-5; else if(code==='ArrowLeft'||code==='KeyA') oppSel=(oppSel+7)%8; else if(code==='ArrowRight'||code==='KeyD') oppSel=(oppSel+1)%8; else if(['Enter','NumpadEnter','Space'].includes(code)){ startGame(); return; } else return; renderMenu(); }
+function startGame(){ audio(); if(modeSel==='tour') newTour(); else if(modeSel==='match') newMatch(roster()[oppSel],{mode:'match'}); else if(modeSel==='rank') newMatch(YOU,{mode:'rank',n:rankN}); else newMatch(YOU,{mode:'practice'}); }
 function renderKeysHelp(){ $('keysHelp').innerHTML='<div><b>Aim</b> mouse (click the range first) or WASD / arrows</div><div><b>Draw</b> hold Space or the mouse</div><div><b>Shoot</b> let go</div><div><b>Hold breath</b> Shift</div><div><b>View</b> V</div><div><b>Pause</b> Esc</div>'; }
 function toMenu(){ if(document.pointerLockElement) document.exitPointerLock(); phase='menu'; M=null; $('result').classList.add('hidden'); $('menu').classList.remove('hidden'); renderMenu(); }
 
@@ -660,7 +691,7 @@ void main(){vec4 t=texture2D(uTex,vUV*uUVR.zw+uUVR.xy);if(t.a<0.04)discard;gl_Fr
     time+=dt||1/60; resize();
     gl.viewport(0,0,cw,ch); const SK=cam.sky||[.04,.06,.12]; FOGC=SK; gl.clearColor(SK[0],SK[1],SK[2],1); gl.clear(gl.COLOR_BUFFER_BIT|gl.DEPTH_BUFFER_BIT);
     gl.enable(gl.DEPTH_TEST); gl.disable(gl.CULL_FACE); gl.disable(gl.BLEND); gl.depthMask(true);
-    eye=cam.eye; VP=mul(persp(cam.fov*Math.PI/180,cw/ch,cam.near||6,cam.far||14000),lookAt(cam.eye,cam.center,[0,1,0]));
+    eye=cam.eye; VP=mul(persp(cam.fov*Math.PI/180,cw/ch,cam.near||6,cam.far||14000),lookAt(cam.eye,cam.center,cam.up||[0,1,0]));
     cheer=cam.cheer||0;
     useC(); if(world) part(world,I(),[1,1,1]); if(crowdM) part(crowdM,I(),[1,1,1]);
     decals.length=0; shadows.length=0;
@@ -705,8 +736,8 @@ function build3(){ if(built3||!R3.ok) return; built3=true; const K=K3;
     for(const ox of [0,3]){ box(ox,CY,DIST+.28,1.38,1.38,.5,'#d4b483'); for(const sx of [-.55,.55]) G0.add(Bx,mm(T((ox+sx)*K,.55*K,(DIST+.7)*K),RX(-.35),S(.08*K,1.25*K,.08*K)),'#6b4f2a');
       /* the face: flat rings in one plane (no overlapping layers), with thin dividing lines */
       const ann=(r0,r1,col,z)=>{ const n=72, c=hx(col); for(let i=0;i<n;i++){ const a0=i/n*Math.PI*2, a1=(i+1)/n*Math.PI*2, P2=(r,a)=>[(ox+Math.cos(a)*r)*K,(CY+Math.sin(a)*r)*K,z*K]; G0.quad(P2(r0,a0),P2(r1,a0),P2(r1,a1),P2(r0,a1),c); } };
-      for(let k=0;k<10;k++){ const r1=FACE/2*(10-k)/10, r0=FACE/2*(9-k)/10; ann(r0+.0015,r1-.0015,RINGC[k],DIST-.01); ann(r1-.0015,r1,k===2||k===3?'#e5e7eb':'#111111',DIST-.01); }
-      ann(RING/2-.001,RING/2,'#111111',DIST-.011); box(ox,CY,DIST-.005,FACE+.02,FACE+.02,.004,'#f1f5f9'); box(ox,CY+.82,DIST,.3,.18,.02,ox?'#dc2626':'#16a34a'); }
+      for(let k=CMP()?4:0;k<10;k++){ const r1=RING*(10-k), r0=RING*(9-k); ann(r0+.0015,r1-.0015,RINGC[k],DIST-.01); ann(r1-.0015,r1,k===2||k===3?'#e5e7eb':'#111111',DIST-.01); }
+      ann(RING/2-.001,RING/2,'#111111',DIST-.011); if(CMP()) ann(RING/4-.001,RING/4,'#111111',DIST-.011); { const fw=2*RING*(CMP()?6:10)+.02; box(ox,CY,DIST-.005,fw,fw,.004,'#f1f5f9'); } box(ox,CY+.82,DIST,.3,.18,.02,ox?'#dc2626':'#16a34a'); }
     /* stands, a scoreboard, trees */
     for(const sg of [-1,1]) for(let r=0;r<6;r++){ box(1.5+sg*(16+r*.9),.3+r*.45,40,.9,.6,60,'#334155'); for(let z=12;z<68;z+=.9){ if(rng()<.25) continue; G0.add(primSphere(4,6),mm(T((1.5+sg*(16+r*.9))*K,(.95+r*.45)*K,z*K),S(.17*K,.2*K,.17*K)),hx(['#f87171','#60a5fa','#fbbf24','#e2e8f0','#34d399','#f472b6'][Math.floor(rng()*6)])); } }
     box(1.5,10,DIST+16,14,5,.3,'#0f172a'); box(1.5,10,DIST+15.8,13.4,4.6,.05,'#14213d',-1);
@@ -720,8 +751,8 @@ function render3D(dt){
   if(!M||phase==='menu'){ const a=performance.now()/9000; R3.frame({eye:[(1.5+Math.sin(a)*12)*K,3*K,(-6+Math.cos(a)*4)*K],center:[1.5*K,1.4*K,DIST*K],fov:30,sky:[.6,.75,.92]},()=>{},dt); return; }
   const me=M.me, aiming=M.phase==='aim'||(M.phase==='flight'&&M.shot&&M.shot.who===0)||M.phase==='show'&&(!M.shot||M.shot.who===0);
   let yaw, pitch, fov;
-  if(aiming&&!(M.phase==='show'&&M.last&&M.shot&&M.shot.who===1)){ yaw=me.yaw+me.wob[0]; pitch=me.pitch+me.wob[1]; fov=lerp(26,4.6,clamp(me.draw*1.1,0,1)); if(M.phase!=='aim') fov=4.6; }
-  else { yaw=Math.atan2(3,DIST); pitch=Math.atan2(CY-EYE,DIST); fov=4.6; }
+  if(aiming&&!(M.phase==='show'&&M.last&&M.shot&&M.shot.who===1)){ yaw=me.yaw+me.wob[0]; pitch=me.pitch+me.wob[1]; const zf=CMP()?3.4:4.6; fov=lerp(26,zf,clamp(me.draw*1.1,0,1)); if(M.phase!=='aim') fov=zf; }
+  else { yaw=Math.atan2(3,DIST); pitch=Math.atan2(CY-EYE,DIST); fov=CMP()?3.4:4.6; }
   const f=[Math.sin(yaw)*Math.cos(pitch),Math.sin(pitch),Math.cos(yaw)*Math.cos(pitch)], eye=[0,EYE,0];
   R3.frame({eye:[eye[0]*K,eye[1]*K,eye[2]*K],center:[(eye[0]+f[0]*70)*K,(eye[1]+f[1]*70)*K,(eye[2]+f[2]*70)*K],fov,near:2*K,far:2400,sky:[.6,.75,.92]},()=>{
     const w=windAt(M.t);
@@ -744,20 +775,20 @@ $('viewBtn2').addEventListener('click',e=>{ e.stopPropagation(); audio(); setVie
 $('viewBtn2').addEventListener('pointerdown',e=>e.stopPropagation());
 $('btnSnd').addEventListener('click',()=>{ muted=!muted; $('btnSnd').textContent=muted?'Sound off':'Sound on'; if(!muted){ audio(); sfx.click(); } });
 $('result').addEventListener('click',()=>{ if(phase==='over'){ if(TOUR) tourNext(); else toMenu(); } });
-if(TEST) window.__ar={get M(){return M;},get phase(){return phase;},get TOUR(){return TOUR;},step,newMatch,newTour,loose,keys,roster,YOU,flight,SIGHT,scoreOf,look,set diff(v){diff=v;},set modeSel(v){modeSel=v;},windAt};
+if(TEST) window.__ar={setBow,get bowSel(){return bowSel;},rankOver,get SV(){return SV;},get M(){return M;},get phase(){return phase;},get TOUR(){return TOUR;},step,newMatch,newTour,loose,keys,roster,YOU,flight,SIGHT,scoreOf,look,set diff(v){diff=v;},set modeSel(v){modeSel=v;},windAt};
 setView3(view3);
 renderMenu();
 requestAnimationFrame(frame);
 
 /* ---------- world records ---------- */
 const LBG=((location.pathname.split('/').pop()||'').replace(/\.html$/,'')||'game').toLowerCase(), lbPost=(id,s,t)=>{ try{ window.RRL&&RRL.post(id,s,t); }catch(e){} }, lbBoards=l=>{ try{ window.RRL&&RRL.boards(LBG,l); }catch(e){} };
-lbBoards([{id:'wins',name:'Matches won',mode:'sum'},{id:'avg',name:'Best arrow average (match)',mode:'max'}]);
-{ const _f=matchOver; matchOver=function(w){ const r=_f.apply(this,arguments); try{ if(M.mode==='practice') return r; const h=M.hits[0]||[], tot=h.reduce((a,x)=>a+(x.s||0),0); if(w===0) lbPost('wins',1); if(h.length>=9){ const avg=tot/h.length; lbPost('avg',+avg.toFixed(3),avg.toFixed(2)+' ('+tot+'/'+h.length+')'); } }catch(e){} return r; }; }
+lbBoards([{id:'wins',name:'Matches won',mode:'sum'},{id:'avg',name:'Best arrow average (recurve match)',mode:'max'},{id:'cavg',name:'Best arrow average (compound match)',mode:'max'},{id:'r72',name:'Recurve 72-arrow round',mode:'max'},{id:'r36',name:'Recurve 36-arrow round',mode:'max'},{id:'c72',name:'Compound 72-arrow round',mode:'max'},{id:'c36',name:'Compound 36-arrow round',mode:'max'}]);
+{ const _f=matchOver; matchOver=function(w){ const r=_f.apply(this,arguments); try{ if(M.mode==='practice') return r; const h=M.hits[0]||[], tot=h.reduce((a,x)=>a+(x.s||0),0); if(w===0) lbPost('wins',1); if(h.length>=9){ const avg=tot/h.length; lbPost(CMP()?'cavg':'avg',+avg.toFixed(3),avg.toFixed(2)+' ('+tot+'/'+h.length+')'); } }catch(e){} return r; }; }
 
 
 /* ---------- online score battle ---------- */
 const NETV=window.RRV?RRV.attach({game:'archery',title:'arrow total',blurb:'Shoot the same match at the same time (same opponent, same wind). Highest arrow total wins.',
-  opts:()=>({gSel,oppSel,diff}), start(o){ if(o.gSel) gSel=o.gSel; if(o.oppSel!=null) oppSel=o.oppSel; if(o.diff!=null) diff=o.diff; modeSel='match'; newMatch(roster()[oppSel]||roster()[0],{mode:'match'}); },
+  opts:()=>({gSel,oppSel,diff,bowSel}), start(o){ if(o.gSel) gSel=o.gSel; setBow(o.bowSel||'r'); if(o.oppSel!=null) oppSel=o.oppSel; if(o.diff!=null) diff=o.diff; modeSel='match'; newMatch(roster()[oppSel]||roster()[0],{mode:'match'}); },
   state(){ if(!M||!M.hits) return null; const h=M.hits[0]||[], tot=h.reduce((a,x)=>a+(x.s||0),0), x10=h.filter(x=>x.X).length;
     return {v:tot*100+x10,txt:`${tot} (${h.length} arrows)`,done:phase==='over'}; }}):null;
 
