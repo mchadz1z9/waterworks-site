@@ -237,6 +237,9 @@ const SP={
  moose:{n:'Alaska-Yukon moose',m:'Bull',f:'Cow',h:1.95,L:2.9,w:[[480,720],[360,480]],col:'#3a2a1f',col2:'#6b5a4a',herd:[1,2],mf:.55,walk:1.3,run:15,sight:.6,hear:1.3,smell:1.3,tr:{n:'Spread',u:'in',a:38,b:74},minE:2000,pts:620,legal:'moose',call:'Cow call',ant:'moose',shy:.9},
  caribou:{n:'Barren-ground caribou',m:'Bull',f:'Cow',h:1.2,L:2.0,w:[[160,210],[80,120]],col:'#6e5d4c',col2:'#ece6dc',herd:[4,12],mf:.4,walk:1.5,run:17,sight:.8,hear:1,smell:1.2,tr:{n:'B&C',u:'in',a:300,b:445},minE:1600,pts:460,legal:'male',ant:'caribou',shy:.9},
  grizzly:{n:'Grizzly bear',m:'Boar',f:'Sow',h:1.15,L:2.1,w:[[200,360],[120,200]],col:'#5a4130',col2:'#8a6a4c',herd:[1,1],mf:.6,walk:1.2,run:15,sight:.7,hear:1.1,smell:1.8,tr:{n:'Skull',u:'in',a:20,b:26.5},minE:2700,pts:720,legal:'any',bear:1,danger:2,shy:.7},
+ reddeer:{n:'Red deer',m:'Stag',f:'Hind',h:1.2,L:2.0,w:[[90,190],[60,100]],col:'#7a4a32',col2:'#c9a27a',herd:[3,10],mf:.35,walk:1.3,run:14,sight:1.1,hear:1.1,smell:1.3,tr:{n:'CIC',u:'pts',a:150,b:230},minE:1600,pts:480,legal:'any',call:'Roar',ant:'elk',shy:1},
+ roe:{n:'Roe deer',m:'Buck',f:'Doe',h:.72,L:1.15,w:[[20,32],[18,28]],col:'#9a6a40',col2:'#f2ece0',herd:[1,3],mf:.45,walk:1.2,run:12,sight:1,hear:1.3,smell:1.2,tr:{n:'CIC',u:'pts',a:90,b:160},minE:1000,pts:240,legal:'any',call:'Grunt',ant:'deer',shy:1.2},
+ fox:{n:'Red fox',m:'Dog fox',f:'Vixen',h:.4,L:.9,w:[[5,9],[4,7.5]],col:'#c2410c',col2:'#f5f5f4',herd:[1,1],mf:.5,walk:1.5,run:14,sight:1.1,hear:1.4,smell:1.5,tr:{n:'Weight',u:'kg'},minE:300,pts:90,legal:'any',canid:1,shy:1.2},
  wolf:{n:'Gray wolf',m:'Male',f:'Female',h:.8,L:1.4,w:[[40,60],[32,45]],col:'#6b6560',col2:'#c9c2b8',herd:[2,5],mf:.5,walk:1.6,run:16,sight:1.1,hear:1.3,smell:1.5,tr:{n:'Weight',u:'kg'},minE:800,pts:260,legal:'any',canid:1,shy:1.1}};
 
 /* ---------- the reserves ---------- */
@@ -246,7 +249,9 @@ const RES=[
  {id:'co',name:'Elk Basin',where:'San Juan Mountains, Colorado',season:'September bugle · aspen, spruce and high meadows',sky:[.62,.76,.93],water:.02,
   sp:{elk:6,mule:5,pronghorn:3,blackbear:3},calls:['Bugle','Grunt','Predator'],trees:'mtn'},
  {id:'ak',name:'Yukon Flats',where:'Interior Alaska',season:'September · spruce, willow and kettle lakes under the Brooks Range',sky:[.66,.74,.84],water:.09,
-  sp:{moose:5,caribou:4,grizzly:2,wolf:2},calls:['Cow call','Predator'],trees:'boreal'}];
+  sp:{moose:5,caribou:4,grizzly:2,wolf:2},calls:['Cow call','Predator'],trees:'boreal'},
+ {id:'sc',name:'Glen Affric Estate',where:'Scottish Highlands',season:'October rut · heather moor, a loch, Caledonian pines and birch',sky:[.62,.68,.77],water:.07,
+  sp:{reddeer:9,roe:5,fox:3},calls:['Roar','Grunt','Predator'],trees:'highland'}];
 
 /* ---------- the guns: real loads (muzzle speed, bullet mass) and a drag constant from published retained velocities ---------- */
 const GUNS=[
@@ -286,10 +291,12 @@ let HG=null, VG=null, HN=0, WL=0, WORLD=null, resI=0;
 function rawH(x,z){ const R=RES[resI], d=Math.hypot(x,z);
   if(R.id==='mo'){ let h=16*fbm(x/260,z/260,11)+5*fbm(x/90,z/90,12,3)+12*ridge(x/420,z/420,13); const cz=Math.sin(x/140)*90+Math.sin(x/53)*25-60, dc=z-cz; h-=7*Math.exp(-dc*dc/160); return h; }
   if(R.id==='co'){ return sstep(220,580,d)*160+38*fbm(x/300,z/300,21)+26*ridge(x/170,z/170,22)*sstep(120,420,d)+7*fbm(x/70,z/70,23,3); }
+  if(R.id==='sc'){ /* a glen with a loch, heather slopes rising to a ridge of hills */ const gl=z-Math.sin(x/230)*110; return 55*sstep(80,520,Math.abs(gl))+22*fbm(x/260,z/260,61)+14*ridge(x/200,z/200,62)*sstep(60,300,Math.abs(gl))+3*fbm(x/50,z/50,63,3); }
   let h=6*fbm(x/200,z/200,31)+2.5*fbm(x/55,z/55,32,3)+4*fbm(x/90,z/90,35,2); const nz=-z+fbm(x/300,7,33)*90; return h+230*sstep(230,620,nz)*(.55+.45*ridge(x/150,z/150,34)); }
 function vegRaw(x,z,h){ const R=RES[resI]; if(h<WL+.4) return 0;
   if(R.id==='mo') return sstep(-.08,.2,fbm(x/200,z/200,41,3));
   if(R.id==='co') return sstep(8,30,h)*(1-sstep(150,178,h))*sstep(-.3,.12,fbm(x/150,z/150,42,3));
+  if(R.id==='sc') return .55*sstep(-.05,.4,fbm(x/170,z/170,64,3))*(1-sstep(22,48,h-WL));
   return .6*sstep(-.1,.35,fbm(x/160,z/160,43,3))*(1-sstep(50,100,h)); }
 function gridAt(A,x,z){ const c=WD.cell, fx=(x+WD.half)/c, fz=(z+WD.half)/c; if(fx<0||fz<0||fx>=HN-1||fz>=HN-1) return A===HG?60:0; const i=Math.floor(fx), j=Math.floor(fz), u=fx-i, v=fz-j;
   return lerp(lerp(A[i*HN+j],A[(i+1)*HN+j],u),lerp(A[i*HN+j+1],A[(i+1)*HN+j+1],u),v); }
@@ -308,9 +315,10 @@ function mkWorld(ri){ if(WORLD&&WORLD.ri===ri) return; resI=ri; const R=RES[ri],
     if(rng()<v*(R.id==='ak'?.6:.8)){ let kind, s=.8+rng()*.45;
       if(R.id==='mo') kind=rng()<.15?'cedar':rng()<.3?'hickory':'oak';
       else if(R.id==='co') kind=h<70&&rng()<.75?'aspen':h>135?'fir':rng()<.5?'spruce':'aspen';
+      else if(R.id==='sc') kind=rng()<.42?'birch':'fir';
       else kind=rng()<.22?'birch':'bspruce';
       const t={x:tx,z:tz,y:h,kind,s,r:(kind==='bspruce'?.12:kind==='aspen'||kind==='birch'?.16:kind==='cedar'?.2:.28)*s,col:rng()}; TR.push(t); const k=tkey(Math.floor(tx/TGc),Math.floor(tz/TGc)); if(!TG.has(k)) TG.set(k,[]); TG.get(k).push(t); }
-    else if(rng()<(R.id==='ak'?.32:.1)+v*.25){ BU.push({x:tx+rng()*3,z:tz+rng()*3,y:h,s:.6+rng()*.9,kind:R.id==='ak'&&h-WL<6?'willow':R.id==='co'&&h>60?'sage':'brush',col:rng()}); }
+    else if(rng()<(R.id==='ak'?.32:R.id==='sc'?.22:.1)+v*.25){ BU.push({x:tx+rng()*3,z:tz+rng()*3,y:h,s:.6+rng()*.9,kind:R.id==='ak'&&h-WL<6?'willow':R.id==='co'&&h>60?'sage':'brush',col:rng()}); }
     else if(rng()<.012+slopeAt(tx,tz)*.02) RK.push({x:tx,z:tz,y:h,s:.5+rng()*1.4,col:rng()}); }
   /* tree stands and ground blinds at forest edges looking over open ground */
   for(let k=0;k<500&&ST.length<6;k++){ const x=(rng()*2-1)*430, z=(rng()*2-1)*430, h=terrainH(x,z), v=vegAt(x,z); if(h<WL+1||v<.25||v>.7||slopeAt(x,z)>.25) continue;
@@ -352,11 +360,11 @@ for(const g of GUNS){ let lo=-.02, hi=.08; for(let i=0;i<40;i++){ const m=(lo+hi
 /* ---------- the animals ---------- */
 function hab(sp,x,z){ const h=terrainH(x,z), v=vegAt(x,z), wet=sstep(6,0,h-WL), sl=slopeAt(x,z); if(h<WL+.3||sl>.7||Math.abs(x)>WD.half-60||Math.abs(z)>WD.half-60) return -1;
   const edge=1-Math.abs(v-.4)*2;
-  return {whitetail:edge,turkey:edge*(1-sl),hog:wet*.6+v*.6,coyote:1-v,elk:edge+(h>30&&h<140?.5:0),mule:1-v*.8+sl,pronghorn:(v<.06?1.5:0)-sl*2,blackbear:v,moose:wet+edge*.5,caribou:(1-v*2)*(1-sl),grizzly:.5+wet*.5,wolf:.6}[sp]+Math.random()*.6; }
+  return {whitetail:edge,turkey:edge*(1-sl),hog:wet*.6+v*.6,coyote:1-v,elk:edge+(h>30&&h<140?.5:0),mule:1-v*.8+sl,pronghorn:(v<.06?1.5:0)-sl*2,blackbear:v,moose:wet+edge*.5,caribou:(1-v*2)*(1-sl),grizzly:.5+wet*.5,wolf:.6,reddeer:(1-v*.7)+sl*.3,roe:edge,fox:edge*.8+.2}[sp]+Math.random()*.6; }
 function mkAnimal(sp,male,rng,x,z){ const S=SP[sp], q=Math.pow(rng(),1.7)*(male?1:.5), W=S.w[male?0:1], wt=lerp(W[0],W[1],male?.25*rng()+.75*q:rng()), sc=Math.cbrt(wt/((S.w[0][0]+S.w[0][1])/2))*(male?1:1.0);
   const a={sp,S,male,q,wt,sc:clamp(sc,.75,1.15),x,z,y:terrainH(x,z),yaw:rng()*6.283,v:0,vt:0,st:'graze',t:rnd(2,12),tgt:[x,z],alarm:0,head:.8,ph:rng()*6,src:null,wound:null,dead:false,fall:0,tagged:false,spot:0,hits:[],sense:rng()*.25,lastSeen:-99,blood:0,dist:0};
   /* the trophy */ const tr=S.tr; if(tr.u==='kg') a.meas=+wt.toFixed(1); else if(male) a.meas=Math.round(lerp(tr.a,tr.b,q)*8)/8; else a.meas=0;
-  if(sp==='whitetail') a.tines=male?2+Math.round(q*4):0; else if(sp==='mule') a.tines=male?2+Math.round(q*3):0; else if(sp==='elk') a.tines=male?4+Math.round(q*3):0; else if(sp==='moose'){ a.tines=male?2+Math.round(q*3.4):0; } else if(sp==='caribou') a.tines=2+Math.round(q*4); else a.tines=0;
+  if(sp==='whitetail') a.tines=male?2+Math.round(q*4):0; else if(sp==='mule') a.tines=male?2+Math.round(q*3):0; else if(sp==='elk') a.tines=male?4+Math.round(q*3):0; else if(sp==='moose'){ a.tines=male?2+Math.round(q*3.4):0; } else if(sp==='caribou') a.tines=2+Math.round(q*4); else if(sp==='reddeer') a.tines=male?3+Math.round(q*4):0; else if(sp==='roe') a.tines=male?2+Math.round(q):0; else a.tines=0;
   if(sp==='turkey'&&male){ a.beard=+(4+q*7.5).toFixed(1); a.spur=+(.4+q*1.1).toFixed(2); a.meas=Math.round(wt*2.2046+a.beard*2+a.spur*20); }
   return a; }
 function isLegal(a,g){ const S=a.S; if(S.legal==='male'&&!a.male) return {ok:false,why:`Only ${S.m.toLowerCase()}s are legal: ${S.f.toLowerCase()}s are protected`};
@@ -515,7 +523,7 @@ function mauled(a){ const m=H.me, dmg=a.S.danger===2?62:a.sp==='hog'?24:38; m.hp
 
 /* ---------- calls ---------- */
 function blowCall(){ const m=H.me, R=RES[resI], c=R.calls[m.callSel%R.calls.length]; if(H.t-m.callT<2.5) return; m.callT=H.t; m.calls=m.calls.filter(t=>H.t-t<40); m.calls.push(H.t); const over=m.calls.length>2;
-  ({Grunt:sfx.grunt,Yelp:sfx.yelp,Bugle:sfx.bugle,'Cow call':sfx.cow,Predator:sfx.predator})[c]();
+  ({Grunt:sfx.grunt,Yelp:sfx.yelp,Bugle:sfx.bugle,Roar:()=>{ sfx.grunt(); setTimeout(()=>sfx.grunt(),380); setTimeout(()=>sfx.grunt(),820); },'Cow call':sfx.cow,Predator:sfx.predator})[c]();
   feed(`You blew the ${c.toLowerCase()} call${over?' · too often: it sounds wrong':''}`,'#93c5fd',3); let resp=0;
   for(const a of H.A){ if(a.dead||a.wound) continue; const S=a.S, d=Math.hypot(a.x-m.x,a.z-m.z); if(d>420) continue;
     if(over){ a.alarm+=.35*(1-d/420); a.src=[m.x,m.z]; continue; }
@@ -986,12 +994,13 @@ function groundCol(x,z,h,n){ const R=RES[resI], v=vegAt(x,z), sl=slopeAt(x,z), w
   if(wet<.6) return mixC([.36,.31,.22],[.44,.4,.3],clamp(wet,0,1));
   if(R.id==='mo'){ const field=v<.12, c=field?(p>0?[.63,.58,.38]:[.52,.53,.32]):mixC([.45,.5,.28],[.38,.32,.22],sstep(.2,.6,v)); return sl>.9?[.5,.47,.43]:c.map(q=>q+n); }
   if(R.id==='co'){ if(h>205) return [.93,.94,.97]; if(sl>.95||h>178) return [.52,.5,.48].map(q=>q+n); const c=h>150?[.55,.53,.36]:mixC(p>.1?[.58,.56,.3]:[.46,.53,.27],[.3,.33,.2],sstep(.15,.6,v)); return c.map(q=>q+n); }
+  if(R.id==='sc'){ if(sl>.85||h-WL>58) return [.5,.49,.47].map(q=>q+n); const heather=p>-.05, c=mixC(heather?[.42,.3,.36]:[.47,.5,.3],[.27,.32,.2],sstep(.15,.5,v)); return (wet<3?mixC([.3,.24,.18],c,wet/3):c).map(q=>q+n); }
   if(h>170) return [.92,.93,.96]; if(sl>.9||h>110) return [.5,.48,.46].map(q=>q+n); const c=mixC(p>.15?[.62,.4,.24]:p<-.2?[.6,.55,.32]:[.5,.48,.28],[.32,.33,.22],sstep(.15,.5,v)); return c.map(q=>q+n); }
 function build3(){ if(!R3.ok||!WORLD||builtRi===WORLD.ri) return; builtRi=WORLD.ri; mapImg=null; const K=K3, rng=mulberry32(5+WORLD.ri), R=RES[resI];
   R3.setStatic((G0,cr,P)=>{ const {primBox,primCyl,primSphere,T,S,mm,RY,RX,RZ}=P, Bx=primBox(), Cy=primCyl(4), Co=primCyl(5,0), Sp=primSphere(3,5), Sp2=primSphere(2,5), V=(x,y,z)=>[x*K,y*K,z*K];
     /* the land */ const c=WD.cell; for(let i=0;i<HN-1;i++) for(let j=0;j<HN-1;j++){ const x=-WD.half+i*c, z=-WD.half+j*c, h=[HG[i*HN+j],HG[(i+1)*HN+j],HG[(i+1)*HN+j+1],HG[i*HN+j+1]]; const hm=(h[0]+h[1]+h[2]+h[3])/4;
       G0.quad(V(x,h[0],z),V(x,h[3],z+c),V(x+c,h[2],z+c),V(x+c,h[1],z),groundCol(x+c/2,z+c/2,hm,(rng()-.5)*.035),0); }
-    /* beyond the fence: the land runs on into the haze */ const fc=R.id==='co'?[.45,.47,.4]:R.id==='ak'?[.5,.47,.33]:[.45,.42,.25]; for(const [a,b] of [[[-3000,-3000],[3000,-WD.half]],[[-3000,WD.half],[3000,3000]],[[-3000,-WD.half],[-WD.half,WD.half]],[[WD.half,-WD.half],[3000,WD.half]]]){ const y=R.id==='co'?150:R.id==='ak'?20:8; G0.quad(V(a[0],y,a[1]),V(a[0],y,b[1]),V(b[0],y,b[1]),V(b[0],y,a[1]),fc,0); }
+    /* beyond the fence: the land runs on into the haze */ const fc=R.id==='co'?[.45,.47,.4]:R.id==='ak'?[.5,.47,.33]:R.id==='sc'?[.4,.33,.34]:[.45,.42,.25]; for(const [a,b] of [[[-3000,-3000],[3000,-WD.half]],[[-3000,WD.half],[3000,3000]],[[-3000,-WD.half],[-WD.half,WD.half]],[[WD.half,-WD.half],[3000,WD.half]]]){ const y=R.id==='co'?150:R.id==='ak'?20:8; G0.quad(V(a[0],y,a[1]),V(a[0],y,b[1]),V(b[0],y,b[1]),V(b[0],y,a[1]),fc,0); }
     /* water */ G0.quad(V(-WD.half,WL,-WD.half),V(-WD.half,WL,WD.half),V(WD.half,WL,WD.half),V(WD.half,WL,-WD.half),R.id==='ak'?[.2,.32,.38]:[.24,.36,.38],0);
     /* trees */ const AUT=[[.78,.38,.1],[.7,.22,.1],[.85,.6,.15],[.55,.4,.15],[.4,.45,.18],[.62,.5,.2]];
     for(const t of WORLD.TR){ const s=t.s, y=t.y-.2;
@@ -1080,7 +1089,7 @@ function banner(big,sub,glow='#000',dur=2){ const b=$('banner'); b.innerHTML=`<s
 /* ---------- input ---------- */
 addEventListener('keydown',e=>{ const tag=document.activeElement&&document.activeElement.tagName; if(tag==='INPUT'||tag==='SELECT'||tag==='TEXTAREA') return;
   if(['Space','ArrowUp','ArrowDown','ArrowLeft','ArrowRight','Tab'].includes(e.code)) e.preventDefault(); if(e.repeat) return; keys.add(e.code); audio();
-  if(phase==='menu'){ if(['Enter','NumpadEnter'].includes(e.code)) startGame(); else if(/^Digit[1-3]$/.test(e.code)){ resSel=+e.code.slice(5)-1; savePrefs(); mkWorld(resSel); renderMenu(); } return; }
+  if(phase==='menu'){ if(['Enter','NumpadEnter'].includes(e.code)) startGame(); else if(/^Digit[1-4]$/.test(e.code)){ resSel=+e.code.slice(5)-1; savePrefs(); mkWorld(resSel); renderMenu(); } return; }
   if(phase==='over'){ if(e.code==='KeyR'&&!(window.RRV&&RRV.on)) newHunt(); else if(['Enter','NumpadEnter','Escape'].includes(e.code)) toMenu(); return; }
   if(!H) return; const m=H.me;
   if(e.code==='KeyP'||(e.code==='Escape'&&!document.pointerLockElement)){ if(window.RRV&&RRV.on&&!paused) return; paused=!paused; if(paused) banner('Paused','P to resume · Enter ends the hunt','#000',1e9); else { $('banner').classList.remove('on'); bannerT=0; } return; }
