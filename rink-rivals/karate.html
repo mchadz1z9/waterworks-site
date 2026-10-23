@@ -283,7 +283,7 @@ const AREA=4, START=1.5;
 
 /* ---------- a bout (shobu sanbon rules as the WKF runs them now: 3 minutes, an 8-point lead ends it, senshu breaks ties) ---------- */
 function mkF(i,info,ctl){ return {i,s:i===0?1:-1,x:i===0?-START:START,z:0,name:info.name,nat:info.nat,rat:info.rat,style:info.style||'punch',ctl,st:'idle',t:0,tech:null,lvl:'chudan',stam:1,hitDone:false,bob:Math.random()*6,hist:[],ai:{cool:.6,dec:0,want:1.6},techs:0,parryT:-9,lastAtt:-9,pose:null}; }
-function newBout(a,b,o){ o=o||{}; KT=null; B={f:[mkF(0,a,o.two?'p1':'p1'),mkF(1,b,o.two?'p2':'ai')],t:0,dur:180,score:[0,0],senshu:-1,pen:[{c1:0,c2:0},{c1:0,c2:0}],phase:'rei',phT:0,call:null,flags:null,two:!!o.two,tour:o.tour||null,ev:[],aiuchi:null,lastPts:-9};
+function newBout(a,b,o){ o=o||{}; KT=null; B={f:[mkF(0,a,o.two?'p1':'p1'),mkF(1,b,o.two?'p2':'ai')],t:0,dur:180,score:[0,0],senshu:-1,pen:[{c1:0,c2:0},{c1:0,c2:0}],phase:'rei',phT:0,call:null,flags:null,two:!!o.two,tour:o.tour||null,ev:[],aiuchi:null,lastPts:-9,vr:[1,1],vrCand:null};
   phase='play'; paused=false; $('menu').classList.add('hidden'); $('result').classList.add('hidden'); camE=null; updateBoard(); renderKeysHelp(); }
 const other=f=>B.f[1-f.i];
 const PEN=['','Chui 1','Chui 2','Chui 3','Hansoku-chui','Hansoku'];
@@ -310,12 +310,22 @@ function landCheck(f){ const o=other(f), T=TECH[f.tech], d=(o.x-f.x)*f.s, dz=Mat
   const q=clamp(1-Math.max(0,opt[0]-d,d-opt[1])*3,0,1)*(downed?1:1)*(f.stam<.15?.8:1);
   const seen=[0,1,2,3].map(()=>Math.random()<.2+.6*q), n=seen.filter(Boolean).length; sfx.hit(T.kick?1:.7);
   if(o.st!=='down'){ o.st='hit'; o.t=0; }
-  if(n>=2) award(f,pts,seen); else { B.ev.push({who:f.i,k:'noflag'}); msg('No score: only '+n+' flag'+(n===1?'':'s'),'#94a3b8',.9); } }
+  if(n>=2) award(f,pts,seen); else { B.ev.push({who:f.i,k:'noflag'}); B.vrCand={i:f.i,pts,q,t:B.t,lvl:f.lvl,jp:T.jp};
+    if(f.ctl==='ai'&&B.vr[f.i]&&q>=.45&&Math.random()<.55+q*.3){ B.vrAI=B.t+.5+Math.random()*.6; } msg('No score: only '+n+' flag'+(n===1?'':'s'),'#94a3b8',.9); } }
 function award(f,pts,seen){ const i=f.i; if(B.pending){ /* both landed together: aiuchi, both score */ B.pending.push({i,pts,seen}); return; } B.pending=[{i,pts,seen}]; B.pendT=0; }
 function settle(){ const P=B.pending; B.pending=null; const lead=B.score[0]-B.score[1];
   for(const p of P){ if(B.senshu<0&&B.score[1-p.i]===0&&P.length===1&&B.score[p.i]===0) B.senshu=p.i; B.score[p.i]+=p.pts; if(p.pts===3&&B.f[p.i].ctl==='p1'){ SV.ippons++; saveSV(); } }
   const p=P[0], f=B.f[p.i], T=TECH[f.tech]||TECH.gyaku, word=p.pts===3?'Ippon':p.pts===2?'Waza-ari':'Yuko', tech=(f.tech==='gyaku'||f.tech==='kizami')&&B.f[1-p.i].st==='down'?'tsuki after the sweep':`${f.lvl} ${T.jp}`;
   B.call={i:p.i,pts:p.pts,word,tech,flags:p.seen,both:P.length>1?P[1]:null,t:0}; B.phase='yame'; B.phT=0; sfx.whistle(); speak(`Yame! ${COLN(p.i)}, ${tech}, ${word}`,true); sfx.crowd(.18); void lead; updateBoard(); }
+/* ---------- WKF video review: a coach who thinks a scoring technique was missed raises the VR card. If the replay shows it, the points
+   are given and the card is kept; if not, the card is gone for the rest of the bout. The replay judges what really happened. */
+function requestVR(i){ if(!B||B.phase!=='fight'||!B.vr[i]) return false; const c=B.vrCand&&B.vrCand.i===i&&B.t-B.vrCand.t<3?B.vrCand:null;
+  B.phase='vr'; B.phT=0; B.vrReq={i,c,t:0}; B.call={i,word:'Video review',tech:'coach requests a review',t:0,pen:'vr'}; sfx.whistle(); speak(`Yame! ${COLN(i)}, video review`,true); B.vrCand=null; return true; }
+function vrResolve(){ const R=B.vrReq, i=R.i, c=R.c, ok=!!(c&&c.q>=.5); B.vrReq=null; B.phase='yame'; B.phT=0;
+  if(ok){ const word=c.pts===3?'Ippon':c.pts===2?'Waza-ari':'Yuko'; if(B.senshu<0&&B.score[0]===0&&B.score[1]===0) B.senshu=i; B.score[i]+=c.pts; B.vrOK=(B.vrOK||[0,0]); B.vrOK[i]++;
+    B.call={i,pts:c.pts,word,tech:`video review: ${c.lvl} ${c.jp}`,flags:null,t:0}; speak(`${COLN(i)}, ${word}`,true); sfx.crowd(.22); msg(`Review upheld: ${COLN(i)} keeps the VR card`,'#86efac',1.8); }
+  else { B.vr[i]=0; B.call={i,word:'Review rejected',tech:'no score',pen:'vr',t:0}; speak(`${COLN(i)}, no score`,true); msg(`Review rejected: ${COLN(i)} loses the VR card`,'#f87171',1.8); }
+  updateBoard(); }
 function penalty(f,cat,why){ const P=B.pen[f.i]; P[cat]++; const n=P[cat], name=PEN[Math.min(5,n)]; B.call={i:f.i,pen:cat,word:name,tech:why,t:0}; B.phase='yame'; B.phT=0; sfx.whistle(); speak(`Yame! ${COLN(f.i)}, ${why}, ${name}`,true); msg(`${COLN(f.i)}: ${name} (${why})`,'#f87171',1.6);
   if(n>=5){ B.dq=f.i; } updateBoard(); }
 function msg(t,col,d){ B.msg={t,col,T:d||1.2}; }
@@ -333,7 +343,7 @@ function humanTick(f,dt){ const K=f.ctl==='p2'?K2:K1; if(!['idle','move'].includ
   if(fw||sd){ f.st='move'; f.x+=f.s*fw*2.3*dt; f.z+=sd*1.6*dt; if(Math.random()<dt*3) sfx.step(); } else if(f.st==='move'){ f.st='idle'; } }
 const K1={fwd:['KeyD'],back:['KeyA'],high:['KeyW'],sideL:['KeyQ'],sideR:['KeyE'],kizami:['KeyJ'],gyaku:['KeyK'],mawashi:['KeyL'],maegeri:['KeyI'],ura:['KeyU'],sweep:['KeyH'],parry:['Space','KeyS']};
 const K2={fwd:['ArrowLeft'],back:['ArrowRight'],high:['ArrowUp'],sideL:['BracketLeft'],sideR:['ArrowDown'],kizami:['Comma'],gyaku:['Period'],mawashi:['Slash'],maegeri:['Quote'],ura:['BracketRight'],sweep:['Semicolon'],parry:['ShiftRight','Backslash']};
-function humanKey(code){ if(!B||B.phase!=='fight') return; for(const f of B.f){ if(f.ctl==='ai') continue; const K=f.ctl==='p2'?K2:K1; const hi=held(K.high);
+function humanKey(code){ if(!B||B.phase!=='fight') return; if(code==='KeyR'||code==='Backslash'){ const f=B.f.find(q=>q.ctl===(code==='KeyR'?'p1':'p2')); if(f){ if(!B.vr[f.i]) msg(`${COLN(f.i)} has no video review card left`,'#94a3b8',1); else requestVR(f.i); } return; } for(const f of B.f){ if(f.ctl==='ai') continue; const K=f.ctl==='p2'?K2:K1; const hi=held(K.high);
   for(const k of ['kizami','gyaku','mawashi','maegeri','ura','sweep']) if(K[k].includes(code)){ act(f,k,hi?'jodan':'chudan'); return; } if(K.parry.includes(code)) parry(f); } }
 
 /* ---------- the AI: reads what it saw a reaction-time ago, holds its distance, counters, attacks into the gaps ---------- */
@@ -364,7 +374,9 @@ function step(dt){ if(toastT>0){ toastT-=dt; if(toastT<=0) $('toast').classList.
   if(B.phase==='rei'){ if(B.phT>2.2){ B.phase='fight'; B.phT=0; sfx.whistle(); speak('Shobu hajime!',true); banner('Shobu hajime!','',"#ef4444",1.2); } return; }
   if(B.phase==='yame'){ if(B.call) B.call.t+=dt; for(const f of B.f){ f.st='idle'; f.tech=null; f.x=lerp(f.x,f.i===0?-START:START,Math.min(1,dt*2.5)); f.z=lerp(f.z,0,Math.min(1,dt*2.5)); }
     if(B.phT>2.4){ if(B.dq!=null) return boutOver(1-B.dq,'Hansoku'); const lead=Math.abs(B.score[0]-B.score[1]); if(lead>=8) return boutOver(B.score[0]>B.score[1]?0:1,'8-point lead'); if(B.t>=B.dur) return timeUp(); B.phase='fight'; B.phT=0; speak('Tsuzukete hajime',false); } return; }
+  if(B.phase==='vr'){ if(B.call) B.call.t+=dt; for(const f of B.f){ f.st='idle'; f.tech=null; } if(B.phT>3.2) vrResolve(); return; }
   if(B.phase!=='fight') return;
+  if(B.vrAI&&B.t>=B.vrAI){ B.vrAI=0; const c=B.vrCand; if(c&&B.f[c.i].ctl==='ai') requestVR(c.i); if(B.phase!=='fight') return; }
   B.t+=dt; for(const f of B.f){ if(f.ctl==='ai') aiThink(f,dt); else humanTick(f,dt); } for(const f of B.f) upd(f,dt);
   if(B.pending){ B.pendT+=dt; if(B.pendT>.06) settle(); return; }
   /* jogai: a foot out of the area */ for(const f of B.f) if(Math.abs(f.x)>AREA||Math.abs(f.z)>AREA){ penalty(f,'c2','jogai'); return; }
@@ -419,8 +431,10 @@ function rr(x,y,w,h,r,col){ ctx.fillStyle=col; ctx.beginPath(); ctx.roundRect(x,
 function drawHUD(){ if(KT) return kataHUD(); const left=Math.max(0,B.dur-B.t);
   rr(W/2-150,12,300,60,12,'rgba(5,10,24,.85)'); hudText(`${Math.floor(left/60)}:${String(Math.floor(left%60)).padStart(2,'0')}`,W/2,52,30,left<15?'#f87171':'#fff','center');
   for(const i of [0,1]){ const x=i?W/2+160:W/2-160, al=i?'left':'right', col=i?'#3b82f6':'#ef4444'; rr(i?W/2+152:W/2-412,12,260,60,12,'rgba(5,10,24,.85)'); hudText(`${B.f[i].name}${B.senshu===i?'  ◆':''}`,i?x:x,36,18,col,al); hudText(`${B.score[i]}`,i?W/2+400:W/2-400,56,30,'#fff',i?'right':'left');
-    const P=B.pen[i]; hudText(`C1 ${PEN[Math.min(5,P.c1)]||'-'} · C2 ${PEN[Math.min(5,P.c2)]||'-'}`,x,62,12,'#94a3b8',al);
+    const P=B.pen[i]; hudText(`C1 ${PEN[Math.min(5,P.c1)]||'-'} · C2 ${PEN[Math.min(5,P.c2)]||'-'} · ${B.vr[i]?'VR card':'no VR'}`,x,62,12,'#94a3b8',al);
     /* stamina */ const bx=i?W/2+160:W/2-410; rr(bx,76,250,6,3,'rgba(255,255,255,.15)'); rr(bx,76,250*B.f[i].stam,6,3,col); }
+  if(B.phase==='vr'&&B.call){ rr(W/2-220,96,440,70,12,'rgba(5,10,24,.88)'); hudText(`${COLN(B.call.i)} coach · VIDEO REVIEW`,W/2,126,24,B.call.i?'#60a5fa':'#f87171','center'); hudText(`The panel watches the replay${'.'.repeat(1+Math.floor(B.phT*2)%3)}`,W/2,152,16,'#e2e8f0','center'); }
+  if(B.phase==='fight'&&B.vrCand&&B.t-B.vrCand.t<3&&B.f[B.vrCand.i].ctl!=='ai'&&B.vr[B.vrCand.i]&&Math.floor(B.t*4)%2) hudText(`Think that scored? ${B.f[B.vrCand.i].ctl==='p2'?'\\':'R'} for video review`,W/2,H-90,18,'#fde047','center');
   if(B.phase==='yame'&&B.call){ const c=B.call; rr(W/2-220,96,440,c.pen?54:88,12,'rgba(5,10,24,.85)'); hudText(`${COLN(c.i)} · ${c.pen?c.tech:c.tech} · ${c.word}`,W/2,126,24,c.i?'#60a5fa':'#f87171','center');
     if(c.flags){ c.flags.forEach((up,k)=>{ const x=W/2-90+k*60, y=172; ctx.fillStyle='#e5e7eb'; ctx.fillRect(x,y-22,3,26); if(up){ ctx.save(); ctx.translate(x+1,y-22); ctx.rotate(c.pts===3?0:c.pts===2?-Math.PI/2:-Math.PI/4); ctx.fillStyle=c.i?'#3b82f6':'#ef4444'; ctx.fillRect(0,-14,22,14); ctx.restore(); } }); } }
   if(B.msg) hudText(B.msg.t,W/2,H-60,22,B.msg.col,'center');
@@ -471,7 +485,7 @@ function renderMenu(){ const ros=roster(); if(oppSel>=ros.length) oppSel=0; cons
 $('menuIn').addEventListener('mousedown',e=>{ if(e.target.closest('button')) e.preventDefault(); });
 $('menuIn').addEventListener('click',e=>{ const b=e.target.closest('button'); if(!b) return; const d=b.dataset; audio(); sfx.click(); if(d.mode) modeSel=d.mode; else if(d.g) gSel=d.g; else if(d.diff!==undefined) diff=+d.diff; else if(d.opp!==undefined) oppSel=+d.opp; else if(d.act==='start'){ startGame(); return; } savePrefs(); renderMenu(); });
 function startGame(){ audio(); savePrefs(); KT=null; TOUR=null; if(modeSel==='kata') return startKata(); if(modeSel==='tour') return newTour(); if(modeSel==='two') return newBout({name:'Player 1',nat:'GBR',rat:90},{name:'Player 2',nat:'FRA',rat:90},{two:true}); newBout(YOU,roster()[oppSel]); }
-function renderKeysHelp(){ $('keysHelp').innerHTML=KT?'<div><b>Techniques</b> J K I L U H on the beat</div><div><b>Kiai</b> Space</div><div><b>Hold</b> the long ones</div><div><b>Camera</b> C</div><div><b>Pause</b> Esc</div>':'<div><b>Move</b> A D · side-step Q E</div><div><b>Jab</b> J</div><div><b>Reverse punch</b> K</div><div><b>Roundhouse</b> L (W: head)</div><div><b>Front kick</b> I</div><div><b>Hook kick</b> U</div><div><b>Sweep</b> H</div><div><b>Parry</b> Space</div><div><b>P2</b> arrows , . / \' ; ] Shift</div><div><b>Camera</b> C</div>'; }
+function renderKeysHelp(){ $('keysHelp').innerHTML=KT?'<div><b>Techniques</b> J K I L U H on the beat</div><div><b>Kiai</b> Space</div><div><b>Hold</b> the long ones</div><div><b>Camera</b> C</div><div><b>Pause</b> Esc</div>':'<div><b>Move</b> A D · side-step Q E</div><div><b>Jab</b> J</div><div><b>Reverse punch</b> K</div><div><b>Roundhouse</b> L (W: head)</div><div><b>Front kick</b> I</div><div><b>Hook kick</b> U</div><div><b>Sweep</b> H</div><div><b>Parry</b> Space</div><div><b>Video review</b> R (P2 \\)</div><div><b>P2</b> arrows , . / \' ; ] Shift</div><div><b>Camera</b> C</div>'; }
 function toMenu(){ phase='menu'; B=null; KT=null; $('result').classList.add('hidden'); $('menu').classList.remove('hidden'); renderMenu(); }
 
 /* ---------- 3D engine (shared with the other Rink Rivals sports) ---------- */
@@ -837,7 +851,7 @@ lbBoards([{id:'wins',name:'Bout wins vs World class',mode:'sum'},{id:'gold',name
 
 /* ---------- online: a friend or anyone on the site plays the other side ---------- */
 const NETP=window.RRS?RRS.attach({game:'karate',blurb:'Fight anyone online: the host is Aka (red, on the left), the other player is Ao (blue, on the right) and sees the bout live.',
-  map:{KeyA:'ArrowLeft',ArrowLeft:'ArrowLeft',KeyD:'ArrowRight',ArrowRight:'ArrowRight',KeyW:'ArrowUp',ArrowUp:'ArrowUp',KeyQ:'BracketLeft',KeyE:'ArrowDown',ArrowDown:'ArrowDown',KeyJ:'Comma',KeyK:'Period',KeyL:'Slash',KeyI:'Quote',KeyU:'BracketRight',KeyH:'Semicolon',Space:'ShiftRight',KeyS:'ShiftRight'},
+  map:{KeyA:'ArrowLeft',ArrowLeft:'ArrowLeft',KeyD:'ArrowRight',ArrowRight:'ArrowRight',KeyW:'ArrowUp',ArrowUp:'ArrowUp',KeyQ:'BracketLeft',KeyE:'ArrowDown',ArrowDown:'ArrowDown',KeyJ:'Comma',KeyK:'Period',KeyL:'Slash',KeyI:'Quote',KeyU:'BracketRight',KeyH:'Semicolon',Space:'ShiftRight',KeyS:'ShiftRight',KeyR:'Backslash'},
   start:()=>{ const me=NETP&&NETP.me, f=NETP&&NETP.peers[0]; KT=null; TOUR=null; newBout({name:me?me.name:'Aka',nat:'GBR',rat:90},{name:f?f.name:'Ao',nat:'FRA',rat:90},{two:true}); },
   onFriendLeft:()=>{ if(B&&B.f[1]){ B.f[1].ctl='ai'; B.two=false; } toast('Your opponent left: the AI takes over','#fbbf24'); },onGuestEnd:()=>toMenu()}):null;
 
