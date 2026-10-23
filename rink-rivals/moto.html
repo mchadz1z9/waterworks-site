@@ -335,11 +335,24 @@ function vclPre(T){ T.muRef=CARP.mu*T.gk; T.vcl=new Float32Array(T.N); for(let i
 function nearestIdx(T,px,py,hint){ let best=hint, bd=1e18; const N=T.N; const span=hint<0?N:60; const start=hint<0?0:hint-30; for(let j=0;j<span;j++){ const i=((start+j)%N+N)%N, d=(T.x[i]-px)**2+(T.y[i]-py)**2; if(d<bd){ bd=d; best=i; } } return best; }
 const latOf=(T,i,px,py)=>(px-T.x[i])*-T.ty[i]+(py-T.y[i])*T.tx[i];
 
+/* ---------- weather: rain soaks the track; slicks lose grip, intermediates and full wets give it back ---------- */
+Object.assign(COMP,{I:{name:'Intermediate',mu:.97,life:.9,col:'#22c55e',wet:1},W:{name:'Full wet',mu:.96,life:1.1,col:'#3b82f6',wet:2}});
+let weatherSel=(()=>{ try{ return localStorage.getItem('rinkRivalsF1Wx')||'dry'; }catch(e){ return 'dry'; } })();
+function wetGrip(comp,w){ const k=(COMP[comp]&&COMP[comp].wet)||0; if(k===0) return 1-.42*Math.pow(w,.8); if(k===1) return .93-.42*Math.max(0,w-.6)-.1*Math.max(0,.3-w)/.3; return .88-.06*Math.max(0,.75-w)/.75; }
+const idealComp=(w,dry)=>w>.72?'W':w>.21?'I':dry;
+function weatherStep(dt){ const X=R.wx; if(!X) return; X.tick=(X.tick||0)+dt; if(X.tick<1) return; const s=X.tick; X.tick=0;
+  const lead=R.cars.reduce((a,c)=>Math.max(a,c.lap),0);
+  if(X.mode==='mixed'){ if(!X.started&&lead>=X.at){ X.started=true; X.rain=.55+Math.random()*.35; radio('Rain is starting to fall. Box for intermediates when it gets slippery.','#38bdf8'); } if(X.started&&!X.stopped&&lead>=X.stopAt){ X.stopped=true; X.rain=0; radio('The rain has stopped. The track will start to dry.','#facc15'); } }
+  if(X.mode==='wet'&&!X.eased&&lead>=X.easeAt){ X.eased=true; X.rain=.15; radio('Rain easing off. A dry line is coming.','#facc15'); }
+  const was=R.wet; R.wet=clamp(R.wet+s*(X.rain*.012-(X.rain<.2?.0036*(1-X.rain*4):0)),0,1);
+  if(was<.21&&R.wet>=.21&&!R.fast) radio('Track is wet now: slicks are losing grip.','#38bdf8'); if(was>.21&&R.wet<=.21&&!R.fast) radio('The track is dry enough for slicks.','#facc15');
+  for(const c of R.cars){ if(c.human||c.pit||c.done||c.dnf||c.wantPit) continue; const dry=c.comp in {S:1,M:1,H:1}?c.comp:(R.laps-c.lap>8?'M':'S'), want=idealComp(R.wet,dry); if(want!==c.comp&&(COMP[want].wet||0)!==(COMP[c.comp].wet||0)&&wetGrip(want,R.wet)-wetGrip(c.comp,R.wet)>.035+Math.random()*.02&&c.lap<R.laps-1){ c.strat={lap:c.lap,comp:want}; c.wantPit=true; } } }
 /* per-car performance numbers (team car, driver, tyres, fuel, damage) */
 function carPrm(c,T0,lvl0){
   const T=T0||R.T, team=c.team, dlt=(team.car-90)*.0011+(c.d.rat-88)*.0004, lvl=c.human?1:(lvl0||R.lvl);
   const cp=COMP[c.comp], tg=1-.12*Math.min(1,((c.temp-100)/50)**2), wg=1-.06*c.wear-(c.wear>.75?(c.wear-.75)*.6:0);
-  return {m:CARP.m+c.fuel, mu:CARP.mu*(T.gk||1)*(1+dlt*1.3)*lvl*cp.mu*tg*wg, cl:CARP.ClA*T.cl*(1-c.dmg*.35), cd:CARP.CdA*(.55+.45*T.cl)*(1+c.dmg*.08), pw:(1+dlt)*(c.human?1:(.9+.1*lvl))};
+  const wg2=R&&R.wx?wetGrip(c.comp,R.wet||0):1;
+  return {m:CARP.m+c.fuel, mu:CARP.mu*(T.gk||1)*(1+dlt*1.3)*lvl*cp.mu*tg*wg*wg2, cl:CARP.ClA*T.cl*(1-c.dmg*.35), cd:CARP.CdA*(.55+.45*T.cl)*(1+c.dmg*.08), pw:(1+dlt)*(c.human?1:(.9+.1*lvl))};
 }
 /* corner speed for a point-mass on a path of curvature kk */
 /* tyre load sensitivity: grip per unit load falls as downforce piles on, and nothing pulls more than ~6.5 g */
@@ -403,7 +416,9 @@ function newRace(trackIdx,laps,playerDrv,o){
   order.forEach((d,gi)=>{ const owner=hum.get(d.i)||null, isMe=net?owner===net.me.id:d.i===playerDrv; const c=mkCar(d,gi,T,isMe,{laps}); c.owner=owner; c.remote=net?(owner?!isMe:!net.isHost()):false; placeOnGrid(c,gi,T); R.cars.push(c); });
   R.net=net||null; R.me=R.cars.find(c=>c.human)||R.cars[0];
   if(!T.vc0){ const ref=mkCar(DRIVERS[0],0,T,false,{laps:1}); ref.fuel=20; T.vc0=lapSim(T,carPrm(ref,T,1),false).v; }
-  for(const c of R.cars) if(!c.human&&raceStint(laps)){ c.strat={lap:Math.max(1,Math.round(laps*rnd(.35,.6))),comp:c.comp==='H'?'M':'H'}; }
+  /* the weather for this session */ if(!net&&weatherSel!=='dry'){ const wx=weatherSel; R.wx={mode:wx,rain:wx==='wet'?.75:0,at:Math.max(1,Math.round(laps*rnd(.2,.45))),stopAt:Math.round(laps*rnd(.6,.85)),easeAt:Math.round(laps*rnd(.5,.75))}; R.wet=wx==='wet'?.85:0;
+    if(R.wet>.21) for(const c of R.cars){ c.comp=idealComp(R.wet,'M'); c.used={[c.comp]:1}; c.nextComp=c.comp==='W'?'I':'M'; } }
+  for(const c of R.cars) if(!c.human&&raceStint(laps)&&!(R.wet>.21)){ c.strat={lap:Math.max(1,Math.round(laps*rnd(.35,.6))),comp:c.comp==='H'?'M':'H'}; }
   phase='lights'; phT=0; hideHub(); $('menu').classList.add('hidden'); $('result').classList.add('hidden'); paused=false; built3=false; cam3=null;
   banner(T.gp,`${T.name} · ${laps} laps · ${(T.L/1000).toFixed(3)} km`,R.me.team.c1,2.2); renderKeysHelp(); updateBoard();
 }
@@ -523,7 +538,8 @@ function systems(c,dt,P){
   c.fuel=Math.max(.3,c.fuel-dt*(.003+.011*c.thr*sp/90));
   const amb=R.T.night?28:34; c.temp+=dt*(.9*g*(1+sp/60)+c.skid*2.2-.035*(c.temp-amb)*(1+sp/80));
   const life=COMP[c.comp].life*(raceStint(R.laps)?R.laps:R.laps*3.5)*R.T.L;
-  c.wear=Math.min(1,c.wear+sp*dt/life*(.55+.45*g/2.2)*(1+c.skid*.8));
+  const wk=(COMP[c.comp].wet||0)&&R.wx?1+(COMP[c.comp].wet===2?4:2.5)*Math.max(0,.3-(R.wet||0)):1;
+  c.wear=Math.min(1,c.wear+sp*dt/life*(.55+.45*g/2.2)*(1+c.skid*.8)*wk);
   if(c.cut<=0&&c.human){ /* keep auto gear sane for AI too */ }
 }
 function trackLimits(c,i,lat){
@@ -648,6 +664,7 @@ let shake=0;
 function raceStep(dt,aiOn=true){
   if(phase==='race') R.t+=dt; else if(phase==='quali') R.t+=dt;
   if(R.vsc>0){ R.vsc-=dt; if(R.vsc<=0&&!R.fast) radio('VSC ending. Green flag!','#22c55e'); }
+  if(R.wx) weatherStep(dt);
   for(const c of R.cars){
     if(c.dnf){ if(c.wrk) wreckSlide(c,dt); continue; }
     if(c.done){ c.spd*=.995; if(c.human&&!c.pit){ c.u*=.995; c.v*=.9; c.x+=Math.cos(c.h)*c.u*dt; c.y+=Math.sin(c.h)*c.u*dt; } else { const T=R.T; c.s=(c.s+c.spd*dt)%T.L; c.dist+=c.spd*dt; const i=Math.floor(c.s/T.ds)%T.N; c.idx=i; c.x=T.x[i]-T.ty[i]*c.lat; c.y=T.y[i]+T.tx[i]*c.lat; c.h=Math.atan2(T.ty[i],T.tx[i]); } continue; }
@@ -772,6 +789,8 @@ function timingBar(){
 }
 function drawHUD(){
   const me=R.me;
+  if(R.wx&&(R.wx.rain>0||R.wet>.05)){ const a=R.wx.rain; if(a>0){ ctx.save(); ctx.strokeStyle=`rgba(200,220,255,${.18+a*.25})`; ctx.lineWidth=1.2; const t=performance.now()/1000; for(let i=0;i<Math.round(60+a*160);i++){ const x=((i*137.5+t*420)%(W+100))-50, y=((i*71.3+t*(900+i%7*60))%(H+60))-30; ctx.beginPath(); ctx.moveTo(x,y); ctx.lineTo(x-6,y+18); ctx.stroke(); } ctx.fillStyle=`rgba(60,70,90,${a*.18})`; ctx.fillRect(0,0,W,H); ctx.restore(); }
+    rr(W/2-90,8,180,26,8,'rgba(5,8,18,.82)'); hudText(`${R.wx.rain>0?'🌧️ Raining':'⛅ Drying'} · track ${R.wet>.72?'wet':R.wet>.21?'damp':'dry'} ${Math.round(R.wet*100)}%`,W/2,26,14,R.wet>.21?'#7dd3fc':'#e2e8f0','center'); }
   if(!R.qmode) drawTower(); drawMinimap(); dash(); timingBar();
   if(phase==='lights'){ const n=clamp(Math.floor(phT/.8),0,5); rr(W/2-170,140,340,80,12,'rgba(5,8,18,.9)'); for(let i=0;i<5;i++){ ctx.fillStyle=i<n&&phT<4.6+R.goDelay?'#ef4444':'#1f2937'; ctx.beginPath(); ctx.arc(W/2-120+i*60,180,22,0,Math.PI*2); ctx.fill(); } }
   if(R.radio&&R.radioT>0){ rr(W/2-240,96,480,34,8,'rgba(5,8,18,.88)'); ctx.fillStyle=me.team.c1; ctx.fillRect(W/2-240,96,6,34); plain('RADIO',W/2-226,118,11,'#64748b'); plain(R.radio.t,W/2-180,119,15,R.radio.col); }
@@ -807,7 +826,7 @@ function step(dt){
 function showResult(){
   const res=R.results, me=R.me, myPos=res.indexOf(me)+1, win=res[0];
   const pts=res.map((c,k)=>c.dnf?0:(POINTS[k]||0)+(R.fl.code===c.d.code&&k<10?1:0));
-  const two=raceStint(R.laps)&&Object.keys(me.used).length<2&&!me.dnf;
+  const two=raceStint(R.laps)&&Object.keys(me.used).length<2&&!me.dnf&&!(R.wx&&Object.keys(me.used).some(k=>COMP[k].wet));
   $('resultIn').innerHTML=`<h2>${me.dnf?'DNF':myPos===1?'Victory!':myPos<=3?'Podium!':`P${myPos}`}</h2><div class="rs" style="font-size:clamp(22px,3.6vw,34px)">${esc(R.T.gp)} · ${esc(win.d.name)} wins</div>
   <table class="ls"><tr><th>Pos</th><th>Driver</th><th>Team</th><th>Time</th><th>Best lap</th><th>Stops</th><th>Pts</th></tr>${res.map((c,k)=>`<tr${c.human?' style="background:rgba(255,209,102,.18)"':''}><td>${c.dnf?'DNF':k+1}</td><td>${FLAGF[c.d.nat]||''} ${esc(c.d.name)}</td><td><span style="color:${c.team.c1}">■</span> ${esc(c.team.name)}</td><td>${c.dnf?esc(c.dnf):k===0?fmtT(c.time):'+'+(c.time-win.time).toFixed(3)}${c.pen?` <small>(+${c.pen}s pen)</small>`:''}</td><td>${fmtT(c.best)}</td><td>${c.pits}</td><td>${pts[k]||''}</td></tr>`).join('')}</table>
   ${two?'<p style="color:#f87171">You did not use two tyre compounds, so you were given a 30 second penalty.</p>':''}<p>${R.champ?'Enter or click to go back to the championship.':'Enter for the menu, R to race again.'}</p>`;
@@ -857,7 +876,7 @@ addEventListener('keydown',e=>{
   const me=R.me;
   if(KEYS.up1.includes(e.code)){ me.manual=true; if(me.gear<GEARV.length-1){ me.gear++; me.cut=.035; } return; }
   if(KEYS.dn1.includes(e.code)){ me.manual=true; if(me.gear>0&&18000*me.u/GEARV[me.gear-1]<18400){ me.gear--; me.cut=.02; } return; }
-  if(KEYS.tyre.includes(e.code)){ const o=['S','M','H']; me.nextComp=o[(o.indexOf(me.nextComp)+1)%3]; toast(`Next tyres: ${COMP[me.nextComp].name}`,COMP[me.nextComp].col); return; }
+  if(KEYS.tyre.includes(e.code)){ const o=['S','M','H','I','W']; me.nextComp=o[(o.indexOf(me.nextComp)+1)%5]; toast(`Next tyres: ${COMP[me.nextComp].name}`,COMP[me.nextComp].col); return; }
   if(e.code==='KeyX'&&phase==='race'){ if(R.net&&!R.net.isHost()) return; finishRest(); if(R.net) R.net.send({t:'res',list:R.results.map(c=>[c.d.i,c.time,c.best,c.dnf||0,c.pits,c.pen])}); return; }
   if(phase==='race'){ if(KEYS.pit.includes(e.code)&&!me.pit&&!me.done){ me.boxReq=!me.boxReq; radio(me.boxReq?`Box, box. ${COMP[me.nextComp].name}s are ready.`:'Copy, staying out.',me.boxReq?'#38bdf8':'#93c5fd'); }
     if(KEYS.reset.includes(e.code)&&me.spd<12&&!me.pit&&!me.dnf) recover(me); }
@@ -877,7 +896,7 @@ function renderMenu(){
   <div class="pills">${pill('m',1,menuMode===1,'Grand Prix','1')}${pill('m',2,menuMode===2,'Championship','2')}<a href="./" tabindex="-1">Home</a><a href="hockey" tabindex="-1">Hockey</a><a href="skate" tabindex="-1">Skate</a></div>`;
   if(menuMode===1) h+=`<div class="pills">${TRACKS.map((T,i)=>pill('tk',i,trackSel===i,`${FLAGF[T.nat]||''} ${T.name}`,'')).join('')}</div>`;
   h+=`<div class="pills"><span class="lbl">Laps</span>${[3,5,10,20].map(n=>pill('lp',n,lapsSel===n,String(n),'')).join('')}<span class="lbl">Qualifying</span>${pill('q',1,qualiSel,'On','Q')}${pill('q',0,!qualiSel,'Off','')}<span class="lbl">AI</span>${[0,1,2].map(i=>pill('d',i,diff===i,DIFF_NAMES[i],5+i)).join('')}</div>
-  <div class="pills"><span class="lbl">Assists</span>${[0,1,2].map(i=>pill('as',i,assist===i,ASSIST_NAMES[i],'')).join('')}<span class="lbl">Racing line</span>${pill('rl',1,lineSel,'On','L')}${pill('rl',0,!lineSel,'Off','')}</div>
+  <div class="pills"><span class="lbl">Assists</span>${[0,1,2].map(i=>pill('as',i,assist===i,ASSIST_NAMES[i],'')).join('')}<span class="lbl">Racing line</span>${pill('rl',1,lineSel,'On','L')}${pill('rl',0,!lineSel,'Off','')}<span class="lbl">Weather</span>${pill('wx','dry',weatherSel==='dry','☀️ Dry','')}${pill('wx','wet',weatherSel==='wet','🌧️ Wet','')}${pill('wx','mixed',weatherSel==='mixed','🌦️ Changeable','')}</div>
   <div class="pickers"><div class="pk p1"><button class="ar" data-dr="-1" tabindex="-1">‹</button><div class="mid"><div class="who">Your rider</div><img src="${badgeF(t)}" alt=""><div class="n">${FLAGF[d.nat]||''} ${esc(d.name)} #${d.num}</div><div class="meta">${esc(t.name)} · rider ${d.rat} · bike ${t.car}</div></div><button class="ar" data-dr="1" tabindex="-1">›</button></div></div>
   <div class="pills"><button class="gold" data-act="start" tabindex="-1">${menuMode===2?'New championship':qualiSel?'Go to qualifying':'Start race'} <kbd>Enter</kbd></button>${menuMode===1?'<button data-act="online" tabindex="-1">🌐 Race online</button>':''}${menuMode===2&&csv?`<button data-act="cont" tabindex="-1">Continue ${esc(DRIVERS[csv.me].name)}, round ${csv.round+1} <kbd>C</kbd></button>`:''}</div><div id="hint"></div>`;
   $('menuIn').innerHTML=h;
@@ -889,7 +908,7 @@ function renderMenu(){
 }
 $('menuIn').addEventListener('mousedown',e=>{ if(e.target.closest('button')) e.preventDefault(); });
 $('menuIn').addEventListener('click',e=>{ const b=e.target.closest('button'); if(!b) return; const d=b.dataset; audio(); sfx.click();
-  if(d.m){ menuMode=+d.m; } else if(d.tk!==undefined){ trackSel=+d.tk; } else if(d.lp){ lapsSel=+d.lp; } else if(d.q!==undefined){ qualiSel=d.q==='1'; } else if(d.as!==undefined){ assist=+d.as; } else if(d.rl!==undefined){ lineSel=d.rl==='1'; } else if(d.dr){ drvSel=(drvSel+ +d.dr+DRIVERS.length)%DRIVERS.length; } else if(d.d!==undefined){ diff=+d.d; } else if(d.act==='start'){ startGame(); return; } else if(d.act==='online'){ NET&&NET.open(); return; } else if(d.act==='cont'){ continueChamp(); return; }
+  if(d.m){ menuMode=+d.m; } else if(d.tk!==undefined){ trackSel=+d.tk; } else if(d.lp){ lapsSel=+d.lp; } else if(d.q!==undefined){ qualiSel=d.q==='1'; } else if(d.as!==undefined){ assist=+d.as; } else if(d.rl!==undefined){ lineSel=d.rl==='1'; } else if(d.wx){ weatherSel=d.wx; try{ localStorage.setItem('rinkRivalsMotoWx',weatherSel); }catch(e){} } else if(d.dr){ drvSel=(drvSel+ +d.dr+DRIVERS.length)%DRIVERS.length; } else if(d.d!==undefined){ diff=+d.d; } else if(d.act==='start'){ startGame(); return; } else if(d.act==='online'){ NET&&NET.open(); return; } else if(d.act==='cont'){ continueChamp(); return; }
   savePrefs(); renderMenu(); });
 function menuKey(code){ const dg=code.replace('Numpad','Digit'); if(dg==='Digit1'||dg==='Digit2'){ menuMode=+dg.slice(5); renderMenu(); return; } if(['Digit5','Digit6','Digit7'].includes(dg)){ diff=+dg.slice(5)-5; savePrefs(); renderMenu(); return; } if(code==='KeyQ'){ qualiSel=!qualiSel; savePrefs(); renderMenu(); return; } if(code==='KeyL'){ lineSel=!lineSel; savePrefs(); renderMenu(); return; } if(code==='KeyA'||code==='ArrowLeft'){ drvSel=(drvSel-1+DRIVERS.length)%DRIVERS.length; renderMenu(); } else if(code==='KeyD'||code==='ArrowRight'){ drvSel=(drvSel+1)%DRIVERS.length; renderMenu(); } else if(code==='KeyC'&&menuMode===2) continueChamp(); else if(['Enter','NumpadEnter','Space'].includes(code)) startGame(); }
 function renderKeysHelp(){ $('keysHelp').innerHTML='<div><b>Throttle</b> W ↑</div><div><b>Brake</b> S ↓</div><div><b>Lean</b> A D ← →</div><div><b>Box</b> P</div><div><b>Tyres</b> T</div><div><b>Gears</b> Q E (auto by default)</div><div><b>Camera</b> C</div><div><b>Recover</b> R</div><div><b>3D/2D</b> V</div><div><b>Pause</b> Esc</div><div><b>Sim to end</b> X</div>'; }
@@ -1558,7 +1577,7 @@ function toggleFs(){ const st=$('stage'); try{ if(document.fullscreenElement) do
 $('btnFs').addEventListener('click',toggleFs);
 $('btnSnd').addEventListener('click',()=>{ muted=!muted; $('btnSnd').textContent=muted?'Sound off':'Sound on'; if(!muted){ audio(); sfx.click(); } });
 $('result').addEventListener('click',()=>{ if(phase==='qres'){ goGrid(); return; } if(phase==='done'){ if(R&&R.champ) showHub(); else toMenu(); } });
-if(TEST) window.__mo={_show:(c,ang,dist,ht)=>{ const K=K3, p=carPose(c), e=[(c.x+Math.cos(c.h+ang)*dist)*K,(p.y+ht)*K,(c.y+Math.sin(c.h+ang)*dist)*K]; R3.frame({eye:e,center:[c.x*K,(p.y+.5)*K,c.y*K],fov:40,near:.3*K,far:60000,sky:[.76,.84,.93]},()=>{ for(const o of R.cars) drawCar3D(o,true,e); },0); return $('gl').toDataURL('image/png'); },get R(){return R;},get C(){return C;},get phase(){return phase;},step,startGame,newRace,newQuali,goGrid,setMode:m=>{menuMode=m;},TRACKS,getTrack,finishRest,keys,lapSim,carPrm,set qualiSel(v){qualiSel=v;},set trackSel(v){trackSel=v;},set lapsSel(v){lapsSel=v;},set assist(v){assist=v;},set lineSel(v){lineSel=v;}};
+if(TEST) window.__mo={set weatherSel(v){weatherSel=v;},wetGrip,raceStep,_show:(c,ang,dist,ht)=>{ const K=K3, p=carPose(c), e=[(c.x+Math.cos(c.h+ang)*dist)*K,(p.y+ht)*K,(c.y+Math.sin(c.h+ang)*dist)*K]; R3.frame({eye:e,center:[c.x*K,(p.y+.5)*K,c.y*K],fov:40,near:.3*K,far:60000,sky:[.76,.84,.93]},()=>{ for(const o of R.cars) drawCar3D(o,true,e); },0); return $('gl').toDataURL('image/png'); },get R(){return R;},get C(){return C;},get phase(){return phase;},step,startGame,newRace,newQuali,goGrid,setMode:m=>{menuMode=m;},TRACKS,getTrack,finishRest,keys,lapSim,carPrm,set qualiSel(v){qualiSel=v;},set trackSel(v){trackSel=v;},set lapsSel(v){lapsSel=v;},set assist(v){assist=v;},set lineSel(v){lineSel=v;}};
 const NET=window.RRO?RRO.init({game:'moto',maxPlayers:4,minPlayers:1,blurb:'Race your friends on the same MotoGP grid. The host picks the circuit and laps; the rest of the field is AI.',getOpts:netOpts,onStart:netStart,onMsg:netMsg,onPeers:netPeers,onEnd:why=>{ if(R&&R.net&&why!=='left') toast('Online race ended: '+why,'#f87171'); }}):null;
 setView3(view3);
 renderMenu();
