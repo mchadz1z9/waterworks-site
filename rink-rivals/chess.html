@@ -436,6 +436,31 @@ function engineThink(o,cb){ const id=++wSeq, moves=G.moves.map(m=>m.key), game=G
   if(worker){ wCb[id]=cb; worker.postMessage({id,game,moves,o}); return; }
   setTimeout(()=>{ const X=game==='chess'?CE:KE; const r=X.think(o); cb(r); },30); }
 
+/* ---------- game review: the engine scores every position, and each of your moves is graded by how much winning chance it gave away ---------- */
+function thinkAt(moves,o,cb){ const id=++wSeq; if(worker){ wCb[id]=cb; worker.postMessage({id,game:'chess',moves,o}); return; }
+  setTimeout(()=>{ const X=CHESS_ENGINE(); X.setFen(X.START); for(const u of moves) X.make(X.fromUci(u)); cb(X.think(o)); },20); }
+const winPct=cp=>50+50*(2/(1+Math.exp(-.00368208*cp))-1);
+const CLS=[['Best','#22c55e','★'],['Excellent','#4ade80','!'],['Good','#a3e635','✓'],['Inaccuracy','#facc15','?!'],['Mistake','#fb923c','?'],['Blunder','#ef4444','??']];
+function startReview(){ if(!G||!G.over||!isChess()||G.review) return; const keys=G.moves.map(m=>m.key), n=keys.length; if(n<4){ toast('Play a few more moves first','#fbbf24'); return; }
+  const R={i:0,n:n+1,sc:[],best:[],gen:G.gen,keys}; G.review=R; toast('Reviewing your game...','#93c5fd');
+  const next=()=>{ if(!G||G.review!==R) return; if(R.i>=R.n) return finishReview(); const k=R.i; thinkAt(keys.slice(0,k),{ms:220},r=>{ if(!G||G.review!==R) return; R.sc[k]=r?clamp(r.score,-1500,1500):(k%2===0?-1500:1500)*(G.over.win===0?-1:1); R.best[k]=r&&r.move; R.i++; next(); }); };
+  next(); }
+function finishReview(){ const R=G.review, me=G.mode==='local'?0:G.me, A=CHESS_ENGINE(); A.setFen(A.START); const rows=[], cnt=[0,0,0,0,0,0]; let accS=0, accN=0, accH=0;
+  for(let k=0;k<R.keys.length;k++){ const side=k%2; if(side===me){
+      const before=R.sc[k], after=-R.sc[k+1], drop=Math.max(0,winPct(before)-winPct(after)), same=R.best[k]===R.keys[k];
+      const c=same||drop<1?0:drop<3?1:drop<6?2:drop<11?3:drop<20?4:5; cnt[c]++; const acc=clamp(103.1668*Math.exp(-.04354*drop)-3.1669,0,100); accS+=acc; accH+=1/Math.max(1,acc); accN++;
+      let bestSan=''; if(!same&&R.best[k]){ const m=A.fromUci(R.best[k]); if(m) bestSan=A.san(m); }
+      rows.push({k,san:G.moves[k].san,c,drop,bestSan,before,after}); }
+    A.make(A.fromUci(R.keys[k])); }
+  /* the blend of the plain and harmonic means punishes a few big blunders the way a coach would */ const acc=accN?(accS/accN+accN/accH)/2:0; R.done=true; R.acc=acc; SV.bestAcc=Math.max(SV.bestAcc||0,Math.round(acc*10)/10); saveSV(); try{ if(G.mode==='ai') lbPost('acc',+acc.toFixed(1),`${acc.toFixed(1)}% vs ${LV.chess[G.lvl]?LV.chess[G.lvl].name:'computer'}`); }catch(e){}
+  const worst=rows.filter(r=>r.c>=3).sort((a,b)=>b.drop-a.drop).slice(0,4), mv=k=>`${Math.floor(k/2)+1}${k%2?'...':'.'}`;
+  const ev=cp=>(cp>0?'+':'')+(cp/100).toFixed(1);
+  $('resultIn').innerHTML=`<h2>Game review</h2><div class="rs">${acc.toFixed(1)}% accuracy</div>
+  <div style="display:flex;flex-wrap:wrap;gap:8px;justify-content:center;margin:8px 0">${CLS.map((c,i)=>`<div style="background:#0f172a;border:2px solid ${c[1]};border-radius:10px;padding:4px 10px;min-width:92px"><b style="color:${c[1]};font-size:20px">${cnt[i]}</b><br><span style="font-size:14px">${c[2]} ${c[0]}</span></div>`).join('')}</div>
+  ${worst.length?`<table class="ls"><tr><th>Move</th><th>You played</th><th></th><th>Better was</th><th>Eval</th></tr>${worst.map(r=>`<tr><td>${mv(r.k)}</td><td>${esc(r.san)}</td><td style="color:${CLS[r.c][1]}">${CLS[r.c][2]} ${CLS[r.c][0]}</td><td><b>${esc(r.bestSan)}</b></td><td>${ev(r.before*(me?-1:1))} → ${ev(r.after*(me?-1:1))}</td></tr>`).join('')}</table>`:'<p>No mistakes worth mentioning. Clean game!</p>'}
+  <p style="font-size:14px;color:#94a3b8">Graded by the change in winning chances after each of your moves (engine depth is modest, so treat it as a coach, not gospel). Evals from White's side.</p><p><button id="revClose" tabindex="-1" style="font:inherit;font-size:18px;font-weight:800;padding:8px 18px;border-radius:999px;border:0;background:#fbbf24;color:#111;cursor:pointer">Back to the board</button></p>`;
+  $('result').classList.remove('hidden'); const b=$('revClose'); if(b) b.onclick=e=>{ e.stopPropagation(); $('result').classList.add('hidden'); }; }
+
 /* ---------- a game ---------- */
 let G=null;
 const isChess=()=>G.game==='chess', ENG=()=>isChess()?CE:KE;
@@ -500,7 +525,7 @@ function finish(result,why){ if(G.over) return; const winSide=result==='1-0'?0:r
   sfx.end(youWin||G.mode==='local'); speak(why==='Checkmate'?'Checkmate':why,true);
   const head=G.mode==='local'?(winSide<0?'Draw':`${sideName(winSide)} wins`):youWin?'You win!':youLose?'You lost':'Draw';
   banner(head,why,'#fbbf24',3); updateBoard(); }
-function takeback(){ if(G.online||G.over&&G.mode!=='ai') return; if(G.anim) return; const E=ENG(); let n=G.mode==='ai'?(E.side===G.me?2:1):1; if(G.over) G.over=null;
+function takeback(){ if(G.online||G.over&&G.mode!=='ai') return; if(G.anim) return; G.review=null; const E=ENG(); let n=G.mode==='ai'?(E.side===G.me?2:1):1; if(G.over) G.over=null;
   n=Math.min(n,G.moves.length); for(let i=0;i<n;i++){ const r=G.moves.pop(); E.unmake(); if(isChess()){ if(r.capP) G.capt[r.side].pop(); } else { const c=G.anim; } }
   if(!isChess()){ G.capt=[[],[]]; KE.setStart(); const keep=G.moves.splice(0); for(const r of keep){ const b0=KE.board(), m=KE.fromId(r.key); for(const s of m.caps) G.capt[r.side].push(b0[s]); KE.make(m); G.moves.push(r); } }
   G.gen++; G.thinking=false; G.sel=-1; G.hint=null; legalCache=null; const r=G.moves[G.moves.length-1]; G.last=r?{from:r.from,to:r.to}:null; sfx.click(); updateBoard(); maybeAI(); }
@@ -560,7 +585,7 @@ function drawPanel(){ const x=W-268, w=252; const E=ENG(), stm=E.side, top=1-G.m
   else if(G.aiInfo&&G.mode==='ai'&&!G.over) hudText(G.aiInfo.book?'Computer: book move':`Computer searched ${G.aiInfo.depth||'?'} ply`,x+12,H-146,13,'#64748b'); }
 function drawButtons(){ BTN=[]; const y=H-46; let x=view3?16:B2.x-14; const bw=96;
   if(!G.online) button('undo','↶ Takeback',x,y,bw,34), x+=bw+6; if(!G.online&&G.mode!=='local') button('hint','💡 Hint',x,y,80,34), x+=86;
-  button('flip','⇅ Flip',x,y,70,34), x+=76; if(!G.over){ button('resign','🏳 Resign',x,y,90,34); x+=96; button('draw','½ Draw',x,y,78,34); x+=84; } else { button('again','⟲ New game',x,y,110,34,true); x+=116; }
+  button('flip','⇅ Flip',x,y,70,34), x+=76; if(!G.over){ button('resign','🏳 Resign',x,y,90,34); x+=96; button('draw','½ Draw',x,y,78,34); x+=84; } else { button('again','⟲ New game',x,y,110,34,true); x+=116; if(isChess()&&!G.online){ button('review',G.review&&!G.review.done?`📊 ${Math.round(G.review.i/G.review.n*100)}%`:'📊 Review',x,y,96,34); x+=102; } }
   if(isChess()) button('pgn','📋 PGN',x,y,72,34); }
 function drawHUD(){ drawPanel(); drawButtons();
   const E=ENG(); if(!G.over){ const st=isChess()&&CE.inCheck()?'Check!':!isChess()&&KE.status().forced&&myTurn()?'You must capture':''; if(st) hudText(st,(view3?W/2-130:B2.x+B2.s*4),32,24,'#f87171','center'); }
@@ -584,6 +609,7 @@ cv.addEventListener('pointerdown',e=>{ if(!G||phase!=='play') return; audio(); c
 cv.addEventListener('pointermove',e=>{ if(!G||phase!=='play'||!view3) return; const [px,py]=canvasXY(e); G.hover=pickSquare(px,py); });
 function hudButton(id){ sfx.click();
   if(id==='undo') takeback(); else if(id==='hint') askHint(); else if(id==='flip'){ G.flip=!G.flip; } else if(id==='resign'){ if(confirm('Resign this game?')) resign(); } else if(id==='draw') offerDraw();
+  else if(id==='review'){ if(G.review&&G.review.done) finishReview(); else startReview(); }
   else if(id==='again'){ if(G.online) toMenu(); else newGame({}); } else if(id==='pgn'){ const t=isChess()?pgn():G.moves.map((m,i)=>(i%2?'':`${i/2+1}. `)+m.san).join(' '); try{ navigator.clipboard.writeText(t); toast('Game copied (PGN)','#22c55e'); }catch(e){ prompt('Copy the game:',t); } }
   else if(id.startsWith('pr')&&G.promo){ const t=+id.slice(2), mv=G.promo.list.find(m=>m.promo===t); G.promo=null; if(mv){ applyMove(mv.key); setTimeout(maybeAI,50); } } }
 
@@ -996,14 +1022,14 @@ $('viewBtn2').addEventListener('click',e=>{ e.stopPropagation(); audio(); setVie
 $('viewBtn2').addEventListener('pointerdown',e=>e.stopPropagation());
 $('btnSnd').addEventListener('click',()=>{ muted=!muted; $('btnSnd').textContent=muted?'Sound off':'Sound on'; if(!muted){ audio(); sfx.click(); } });
 $('result').addEventListener('click',()=>{ if(phase==='over') toMenu(); });
-if(TEST) window.__ch={get G(){return G;},get phase(){return phase;},step,newGame,applyMove,legalUI,tryUserMove,CE,KE,pickSquare,takeback,set oppSel(v){oppSel=v;},set gameSel(v){gameSel=v;},set lvlSel(v){lvlSel=v;},set colorSel(v){colorSel=v;},set clockSel(v){clockSel=v;},get worker(){return worker;}};
+if(TEST) window.__ch={startReview,hudButton,get G(){return G;},get phase(){return phase;},step,newGame,applyMove,legalUI,tryUserMove,CE,KE,pickSquare,takeback,set oppSel(v){oppSel=v;},set gameSel(v){gameSel=v;},set lvlSel(v){lvlSel=v;},set colorSel(v){colorSel=v;},set clockSel(v){clockSel=v;},get worker(){return worker;}};
 setView3(view3);
 renderMenu();
 requestAnimationFrame(frame);
 
 /* ---------- world records ---------- */
 const LBG=((location.pathname.split('/').pop()||'').replace(/\.html$/,'')||'game').toLowerCase(), lbPost=(id,s,t)=>{ try{ window.RRL&&RRL.post(id,s,t); }catch(e){} }, lbBoards=l=>{ try{ window.RRL&&RRL.boards(LBG,l); }catch(e){} };
-lbBoards([{id:'chess_master',name:'Chess: wins vs Master',mode:'sum'},{id:'chess_ai',name:'Chess: wins vs Club or better',mode:'sum'},{id:'chess_online',name:'Chess: online wins',mode:'sum'},{id:'chess_mate',name:'Chess: fastest win vs Club+ (moves)',mode:'min'},
+lbBoards([{id:'acc',name:'Chess: best game-review accuracy vs the computer (%)',mode:'max'},{id:'chess_master',name:'Chess: wins vs Master',mode:'sum'},{id:'chess_ai',name:'Chess: wins vs Club or better',mode:'sum'},{id:'chess_online',name:'Chess: online wins',mode:'sum'},{id:'chess_mate',name:'Chess: fastest win vs Club+ (moves)',mode:'min'},
   {id:'checkers_master',name:'Checkers: wins vs Master',mode:'sum'},{id:'checkers_ai',name:'Checkers: wins vs Club or better',mode:'sum'},{id:'checkers_online',name:'Checkers: online wins',mode:'sum'}]);
 { const _f=finish; finish=function(result,why){ const was=G&&G.over; const r=_f.apply(this,arguments); try{ if(!was&&G&&G.over&&G.over.win===G.me&&G.mode!=='local'){ const g=G.game;
   if(G.online) lbPost(g+'_online',1,why); else if(G.lvl>=2){ lbPost(g+'_ai',1,`${LV[g][G.lvl].name}: ${why}`); if(G.lvl===4) lbPost(g+'_master',1,why); if(g==='chess'){ const n=Math.ceil(G.moves.length/2); lbPost('chess_mate',n,`${n} moves vs ${LV[g][G.lvl].name}`); } } } }catch(e){} return r; }; }
