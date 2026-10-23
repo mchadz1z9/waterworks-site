@@ -448,13 +448,14 @@ function bigKit(M,rng){ const B=[], T=[], C=[], BU=[], D=[], V=[], keep=[];
 
 /* ---------- the big fields ---------- */
 const BIGSPEC={
-  forest:{w:260,d:180,ground:'#41602c',sky:[.66,.75,.83],fence:'#6b4f2a',fog:[70,250,.82],spawn:[[-121,0],[121,0]]},
-  town:{w:200,d:150,ground:'#77735f',sky:[.7,.74,.78],fence:'#57534e',fog:[60,210,.8],spawn:[[-93,0],[93,0]]},
-  factory:{w:230,d:160,ground:'#7d7b74',sky:[.62,.66,.72],fence:'#4b5563',fog:[60,220,.82],spawn:[[-107,0],[107,0]]},
-  airfield:{w:280,d:190,ground:'#647a45',sky:[.7,.79,.88],fence:'#6b7280',fog:[90,300,.78],spawn:[[-131,0],[131,0]]},
-  outpost:{w:250,d:180,ground:'#c8a66c',sky:[.84,.82,.76],fence:'#a1866a',fog:[80,280,.8],spawn:[[-116,0],[116,0]]}};
+  forest:{w:260,d:180,ground:'#41602c',sky:[.66,.75,.83],fence:'#6b4f2a',fog:[70,250,.82],spawn:[[-121,0],[121,0]],flag:[[-66,0],[66,0]]},
+  town:{w:200,d:150,ground:'#77735f',sky:[.7,.74,.78],fence:'#57534e',fog:[60,210,.8],spawn:[[-93,0],[93,0]],flag:[[-60,0],[60,0]]},
+  factory:{w:230,d:160,ground:'#7d7b74',sky:[.62,.66,.72],fence:'#4b5563',fog:[60,220,.82],spawn:[[-107,0],[107,0]],flag:[[-66,0],[66,0]]},
+  airfield:{w:280,d:190,ground:'#647a45',sky:[.7,.79,.88],fence:'#6b7280',fog:[90,300,.78],spawn:[[-131,0],[131,0]],flag:[[-85,-8],[85,-8]]},
+  outpost:{w:250,d:180,ground:'#c8a66c',sky:[.84,.82,.76],fence:'#a1866a',fog:[80,280,.8],spawn:[[-116,0],[116,0]],flag:[[-72,0],[72,0]]}};
+/* on the big fields the flag stations stand forward of the bases (about halfway to the centre), so a capture is a fight, not a 250 m march */
 function buildBig(id){ const S=BIGSPEC[id], rng=mulberry32({forest:1101,town:2203,factory:3307,airfield:4409,outpost:5501}[id]||9);
-  const M=Object.assign({id,name:MAPDEF[id].name,big:true,cqb:false},S,{spawn:S.spawn.map(p=>p.slice())});
+  const M=Object.assign({id,name:MAPDEF[id].name,big:true,cqb:false},S,{spawn:S.spawn.map(p=>p.slice()),flag:S.flag.map(p=>p.slice())});
   const K=bigKit(M,rng);
   ({forest:mapForest,town:mapTown,factory:mapFactory,airfield:mapAirfield,outpost:mapOutpost})[id](M,K,rng);
   M.boxes=K.B; M.trees=K.T; M.bush=K.BU; M.cyl=K.C; M.deco=K.D; M.vis=K.V;
@@ -860,11 +861,11 @@ function spawnPoint(team,k){ const M=A.M, [sx,sz]=M.spawn[team]; const n=A.ents.
 function resetEnt(e,x,z){ e.spawnN=(e.spawnN||0)+1; Object.assign(e,{x,z,y:0,vy:0,vx:0,vz:0,onG:true,use:false,yaw:e.team?Math.PI:0,pitch:0,crouch:0,out:false,outT:0,down:false,downT:0,reloadT:0,cycT:0,nades:PB?0:2,smokes:PB?0:1,carry:null,splats:[]}); if(e.ai){ Object.assign(e.ai,{path:null,goal:null,target:null,cover:null,mem:{},pend:false,outPlan:false,stuckN:0}); } }
 function placeAll(){ const per=[0,0]; for(const e of A.ents){ const k=per[e.team]++; const [x,z]=spawnPoint(e.team,k); resetEnt(e,x,z); e.ammo=e.w.map((id,k)=>{ const g=gunOf(e,k); return {mag:g.mag,res:g.mag*(g.mags-1)}; }); }
   A.nades=[]; SMOKES=A.smokes=[]; A.intel=[{},{}]; resetFlags(); if(A.mode==='bomb') resetBomb(); }
-function resetFlags(){ const M=A.M; A.flags=[]; if(A.mode==='ctf'){ for(let t=0;t<2;t++){ const [sx,sz]=M.spawn[t]; const hx=sx+(t?-3:3)*(M.big?1.4:1); A.flags.push({team:t,home:[hx,sz],x:hx,z:sz,carrier:null,dropT:0}); } }
+function resetFlags(){ const M=A.M; A.flags=[]; if(A.mode==='ctf'){ for(let t=0;t<2;t++){ const [sx,sz]=M.spawn[t]; const [hx,hz]=M.flag?M.flag[t]:[sx+(t?-3:3),sz]; A.flags.push({team:t,home:[hx,hz],x:hx,z:hz,carrier:null,dropT:0}); } }
   if(A.mode==='race') A.flags.push({team:-1,home:[0,0],x:0,z:0,carrier:null,dropT:0}); }
 function newGame(){ const M=getMap(mapSel); let pri=priSel; if(M.cqb&&!WEAPONS[pri].cqb) pri='m4';
   const timed=modeSel==='tdm'||modeSel==='dom'||modeSel==='ctf', ts=M.big?teamSize:Math.min(7,teamSize);
-  A={M,mode:modeSel,ts,ents:[],bbs:[],fx:[],feed:[],splats:[],nades:[],smokes:[],flags:[],points:[],intel:[{},{}],t:0,clock:modeSel==='ctf'?(M.big?900:600):timed?(M.big?600:480):0,score:[0,0],limit:modeSel==='tdm'?ts*6:modeSel==='dom'?(M.big?220:150):modeSel==='ctf'?3:modeSel==='race'?raceTo:4,round:1,roundT:0,over:false,msg:null,msgT:0,dmgDir:[],marker:0,spect:null,introT:2.5,domT:0};
+  A={M,mode:modeSel,ts,ents:[],bbs:[],fx:[],feed:[],splats:[],nades:[],smokes:[],flags:[],points:[],intel:[{},{}],t:0,clock:modeSel==='ctf'?(M.big?900:600):timed?(M.big?600:480):0,score:[0,0],limit:modeSel==='tdm'?ts*6:modeSel==='dom'?(M.big?220:150):modeSel==='ctf'?3:modeSel==='race'?raceTo:4,round:1,roundT:0,over:false,msg:null,msgT:0,dmgDir:[],marker:0,spect:null,introT:2.5,domT:0,push:[0,0],rallyT:[0,0]};
   SMOKES=A.smokes;
   if(modeSel==='dom') A.points=(M.points||[[0,0]]).map((p,k)=>({name:'ABCDE'[k],x:p[0],z:p[1],own:-1,prog:0,by:-1}));
   const names=CALLSIGNS.slice().sort(()=>Math.random()-.5); let n=0;
@@ -872,6 +873,8 @@ function newGame(){ const M=getMap(mapSel); let pri=priSel; if(M.cqb&&!WEAPONS[p
   const pool=PB?['cs3','cs3','cs3','t98','tmc','pump']:M.cqb?['m4','m4','ak','mp5','mp5','g36','p90','m870']:M.big?['m4','m4','ak','ak','g36','mp5','p90','vsr','vsr','sr25','sr25','m249','m870']:['m4','m4','ak','ak','g36','mp5','p90','vsr','sr25','m249','m870'];
   for(let t=0;t<2;t++) for(let k=(t?0:1);k<ts;k++){ const wp=pick(pool), ba=WEAPONS[wp].att?{optic:pick(['iron','dot','dot','acog']),muzzle:pick(['none','none','supp','tracer']),mag:pick(['mid','hi']),grip:pick(['none','fore'])}:null;
     A.ents.push(mkEnt(A.ents.length,t,names[n++],true,wp,PB?'tipx':Math.random()<.2?'m203':'glock',ba)); }
+  /* big-field CTF: a third of each team holds the flag station, the rest attack */
+  if(M.big&&modeSel==='ctf') for(const t of [0,1]) A.ents.filter(e=>e.team===t&&e.ai).forEach((e,k)=>{ e.ai.role=k%3===1?'def':'att'; });
   placeAll(); if(M.big&&!M.warm){ M.warm=true; perches(M); for(let k=0;k<6;k++) findPath(M,M.spawn[k%2][0],M.spawn[k%2][1],(k-2.5)*M.w*.12,(k%3-1)*M.d*.3); }
   phase='play'; $('menu').classList.add('hidden'); $('result').classList.add('hidden'); paused=false; built3=false;
   banner(M.name,`${MODES[modeSel]} · ${ts} v ${ts} · you are on ${TEAMS[0].name}`,TEAMS[0].col,2.4); sfx.whistle(); speak(PB?'Ten seconds! Five! Game on!':'Game on!',true); renderKeysHelp(); updateBoard(); }
@@ -1039,10 +1042,19 @@ function objectiveGoal(e){ const M=A.M, ai=e.ai;
     if(enemyFlag&&enemyFlag.carrier&&enemyFlag.carrier.team===e.team) return [enemyFlag.carrier.x+rnd(-3,3),enemyFlag.carrier.z+rnd(-3,3)];
     if(ai.role==='att'||A.mode==='race'){ if(!enemyFlag) return null;
       /* big fields: attackers split over the north, centre and south lanes until they are close */
-      if(M.big&&!enemyFlag.carrier&&Math.abs(enemyFlag.x-e.x)>55){ const lane=[-.3,0,.3][e.i%3]*M.d, sd=Math.sign(enemyFlag.x-e.x); return [clamp(e.x+sd*45,-M.w/2+4,M.w/2-4),lane+((e.i*13)%9-4)]; }
-      return [enemyFlag.x,enemyFlag.z]; } if(myFlag) return [myFlag.home[0]+rnd(-6,6)*(e.team?-1:1)*(M.big?2:1),myFlag.home[1]+rnd(-6,6)*(M.big?2:1)]; }
+      /* big-field CTF: the attackers form up at a rally point short of the enemy flag station and go in together, not one by one */
+      if(M.big&&A.mode==='ctf'&&!enemyFlag.carrier&&!(A.push[e.team]>A.t)){ const rp=rallyOf(e.team,enemyFlag);
+        if(Math.hypot(rp[0]-e.x,rp[1]-e.z)<14){ const att=A.ents.filter(o=>o.team===e.team&&!o.out&&!o.down&&o.ai&&o.ai.role==='att'), near=att.filter(o=>Math.hypot(rp[0]-o.x,rp[1]-o.z)<16).length;
+          if(near>=Math.min(3,att.length)||A.t-(A.rallyT[e.team]||A.t)>25){ A.push[e.team]=A.t+40; A.rallyT[e.team]=0; } else if(!A.rallyT[e.team]) A.rallyT[e.team]=A.t; }
+        if(!(A.push[e.team]>A.t)){ const a=e.i*2.39; if(Math.abs(rp[0]-e.x)<=55) return [rp[0]+Math.cos(a)*4,rp[1]+Math.sin(a)*4]; } }
+      if(M.big&&!enemyFlag.carrier&&Math.abs(enemyFlag.x-e.x)>55){ const lane=A.mode==='ctf'?(e.team?-1:1)*.27*M.d:[-.3,0,.3][e.i%3]*M.d, sd=Math.sign(enemyFlag.x-e.x); return [clamp(e.x+sd*45,-M.w/2+4,M.w/2-4),lane+((e.i*13)%9-4)]; }
+      return [enemyFlag.x,enemyFlag.z]; }
+    if(myFlag&&M.big){ const gs=guardSpots({x:myFlag.home[0],z:myFlag.home[1],gs:myFlag.gs}); myFlag.gs=gs; if(gs.length){ const g=gs[(e.i*7)%gs.length]; return [g[0],g[1]]; } }
+    if(myFlag) return [myFlag.home[0]+rnd(-6,6)*(e.team?-1:1)*(M.big?2:1),myFlag.home[1]+rnd(-6,6)*(M.big?2:1)]; }
   if(A.mode==='dom'){ const P=A.points; let best=null, bd=1e9; for(const p of P){ const want=p.own!==e.team; const d=Math.hypot(p.x-e.x,p.z-e.z)+(want?0:M.big?130:25)+(ai.role==='def'&&p.own===e.team?(M.big?-60:-18):0)+(want&&p.own>=0?(M.big?-10:0):0)+((e.i*7+P.indexOf(p)*3)%5)*(M.big?6:0); if(d<bd){ bd=d; best=p; } } return best?[best.x+rnd(-2,2),best.z+rnd(-2,2)]:null; }
   return null; }
+/* where a big-field CTF assault forms up: on its own flank (blue to the north, red to the south, so the two assaults don't simply meet head-on), short of the enemy flag station */
+function rallyOf(t,f){ if(f.rally&&f.rally[2]===t) return f.rally; const M=A.M, sd=Math.sign(M.spawn[t][0]-f.home[0])||1, fl=t?-1:1, n=navLocate(M,f.home[0]+sd*30,f.home[1]+fl*.2*M.d,0,null,16), p=n>=0?navXZ(M.nav,n):[f.home[0]+sd*30,f.home[1]+fl*.2*M.d]; return f.rally=[p[0],p[1],t]; }
 /* spots beside solid cover around a bomb site (computed once per site) */
 function guardSpots(s){ if(s.gs) return s.gs; const M=A.M, out=[]; for(const b of nearRect(M,'b',s.x-15,s.z-15,s.x+15,s.z+15)){ if(b.y0>0||b.h<1||b.kind==='fence') continue; const cx=(b.x0+b.x1)/2, cz=(b.z0+b.z1)/2;
     for(const [px,pz] of [[b.x0-.7,cz],[b.x1+.7,cz],[cx,b.z0-.7],[cx,b.z1+.7]]){ const d=Math.hypot(px-s.x,pz-s.z); if(d<3||d>15||blockedAt(M,px,pz,.4)) continue; const n=navLocate(M,px,pz,0,null,2); if(n<0||M.nav.comp[n]!==M.nav.comp[navLocate(M,s.x,s.z,0,null,6)]) continue; out.push([px,pz]); } }
@@ -1056,8 +1068,8 @@ function botThink(e,dt){ const ai=e.ai, D=DIFF[diff], w=gunOf(e), M=A.M;
   if(tgt&&tgt!==ai.target){ ai.react=(.28+Math.random()*.35)*D.react; ai.burst=0; }
   ai.target=tgt;
   const B=A.mode==='bomb'?A.bomb:null, defusing=B&&B.planted&&e.team!==B.att&&Math.hypot(B.x-e.x,B.z-e.z)<4;
-  const ef=A.mode==='ctf'&&ai.role==='att'?A.flags.find(f=>f.team!==e.team&&!f.carrier):null, rush=ef&&(Math.hypot(ef.x-e.x,ef.z-e.z)<(M.big?50:22)&&Math.random()<.85||M.big&&td>28&&Math.random()<.75);
-  if(rush){ ai.cover=null; const g=objectiveGoal(e)||[ef.x,ef.z]; if(!ai.goal||Math.hypot(ai.goal[0]-g[0],ai.goal[1]-g[1])>3||ai.plan<=0) goTo(e,g[0],g[1]); return; }
+  const ef=A.mode==='ctf'&&ai.role==='att'?A.flags.find(f=>f.team!==e.team&&!f.carrier):null, rush=ef&&(M.big?(A.push[e.team]>A.t&&Math.hypot(ef.x-e.x,ef.z-e.z)<60&&Math.random()<.85||td>28&&Math.random()<.75):Math.hypot(ef.x-e.x,ef.z-e.z)<22&&Math.random()<.85);
+  if(rush){ ai.cover=null; const g=objectiveGoal(e)||[ef.x,ef.z]; if(tgt&&e.smokes>0&&M.big&&td>8&&td<40&&Math.hypot(ef.x-e.x,ef.z-e.z)<45&&Math.random()<.25) throwNade(e,'smoke',lerp(e.x,tgt.x,.45),lerp(e.z,tgt.z,.45)); if(!ai.goal||Math.hypot(ai.goal[0]-g[0],ai.goal[1]-g[1])>3||ai.plan<=0) goTo(e,g[0],g[1]); return; }
   if(tgt&&!carrying(e)&&!defusing){ const R=RANGE[w.kind];
     /* high up (a window, a tower, a roof) with a target in range: hold the position */
     if(e.y>1.2&&td<R){ if(!ai.cover||!ai.cover.hold){ ai.cover={x:e.x,z:e.z,low:false,dT:td,hold:true}; ai.path=null; ai.pend=false; } }
@@ -1082,12 +1094,12 @@ function botThink(e,dt){ const ai=e.ai, D=DIFF[diff], w=gunOf(e), M=A.M;
 function botStep(e,dt){ const ai=e.ai, D=DIFF[diff], w=gunOf(e); ai.think-=dt; ai.plan-=dt; ai.sup=Math.max(0,ai.sup-dt);
   if(ai.think<=0){ ai.think=.22+Math.random()*.12; botThink(e,dt); }
   navPend(e);
-  const t=ai.target; let mx=0, mz=0, spd=(t?2.6:3.6)*(w.heavy?.85:1)*(carrying(e)?1.15:1), crouchWant=0;
+  const t=ai.target; let mx=0, mz=0, spd=(e.carry?(t?3.8:4.8):(t?2.6:3.6)*(carrying(e)?1.15:1))*(w.heavy?.85:1), crouchWant=0; /* a flag runner sprints */
   if(ai.path&&ai.pi<ai.path.length){ const q=ai.path[ai.pi], [px,pz]=q, dx=px-e.x, dz=pz-e.z, d=Math.hypot(dx,dz), nx=ai.path[ai.pi+1], tight=Math.abs((q[2]||0)-e.y)>.15||nx&&Math.abs((nx[2]||0)-(q[2]||0))>.15; if(d<(tight?.22:.45)) ai.pi++; else { mx=dx/d; mz=dz/d; } }
   const atCover=ai.cover&&Math.hypot(ai.cover.x-e.x,ai.cover.z-e.z)<.8;
   if(t&&!ai.cover&&!carrying(e)&&(!ai.path||ai.pi>=ai.path.length)){ const ang=Math.atan2(t.z-e.z,t.x-e.x)+Math.PI/2*ai.strafe; mx=Math.cos(ang)*.7; mz=Math.sin(ang)*.7; if(Math.random()<dt*.6) ai.strafe*=-1; }
   if(atCover){ mx=mz=0; crouchWant=(ai.cover.low&&(e.reloadT>0||ai.sup>0||ai.peekT>0))?1:0; ai.peekT=(ai.peekT||0)-dt; if(ai.peekT<-1.6-Math.random()*1.5) ai.peekT=.7+Math.random(); }
-  if(ai.sup>0&&!atCover) crouchWant=.6;
+  if(ai.sup>0&&!atCover&&!carrying(e)) crouchWant=.6;
   /* planting or defusing the bomb */
   const B=A.mode==='bomb'?A.bomb:null;
   if(B&&B.carrier===e&&!B.planted&&A.sites.some(s=>Math.hypot(s.x-e.x,s.z-e.z)<2.6)){ mx=mz=0; crouchWant=1; }
@@ -1119,6 +1131,8 @@ function stepOuts(dt){ for(const e of A.ents){
     if(e.bot&&e.outT>1.4){ const [sx,sz]=A.M.spawn[e.team]; if(!e.ai.outPlan){ e.ai.outPlan=true; goTo(e,sx,sz); } navPend(e); if(e.ai.path&&e.ai.pi<e.ai.path.length){ const [px,pz]=e.ai.path[e.ai.pi], dx=px-e.x, dz=pz-e.z, d=Math.hypot(dx,dz); if(d<.45) e.ai.pi++; else moveEnt(e,dx/d*3,dz/d*3,dt); } }
     if(e.outT>(e.bot?7:4.5)){ let [x,z]=spawnPoint(e.team,Math.floor(Math.random()*(A.ts||teamSize))); x+=rnd(-1,1);
       /* big fields, domination: respawn at a point your team holds when no enemy is close to it */
+      /* big fields, CTF: back in behind your own flag station */
+      if(A.M.big&&A.mode==='ctf'&&A.M.flag){ const [fx,fz]=A.M.flag[e.team], sd=Math.sign(A.M.spawn[e.team][0]-fx)||1, n=navLocate(A.M,fx+sd*rnd(10,16),fz+rnd(-7,7),0,null,10); if(n>=0) [x,z]=navXZ(A.M.nav,n); }
       if(A.M.big&&A.mode==='dom'){ const own=A.points.filter(p=>p.own===e.team&&!A.ents.some(o=>o.team!==e.team&&!o.out&&Math.hypot(o.x-p.x,o.z-p.z)<28)); if(own.length&&Math.random()<.7){ const p=pick(own), n=navLocate(A.M,p.x+rnd(-6,6),p.z+rnd(-6,6),0,null,10); if(n>=0) [x,z]=navXZ(A.M.nav,n); } }
       resetEnt(e,x,z); const g=gunOf(e); e.ammo[e.cur].mag=Math.max(e.ammo[e.cur].mag,Math.min(g.mag,e.ammo[e.cur].mag+e.ammo[e.cur].res)); if(!e.bot) toast('Back in the game!','#34d399'); } } }
 function endGame(){ if(A.over) return; A.over=true; phase='over'; if(document.pointerLockElement) document.exitPointerLock(); const me=ME(), win=A.score[0]>A.score[1]?0:A.score[1]>A.score[0]?1:-1;
