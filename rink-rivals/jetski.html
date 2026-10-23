@@ -224,6 +224,7 @@ const VENUES={
 const MODES={
  race:{name:'Pro Runabout Race',venue:'havasu',sub:'Six riders, deep-water start, three laps of a buoy course on Lake Havasu. Keep the red buoys on your left and the yellow on your right; miss one and you have to go back.'},
  free:{name:'Freestyle on the Swell',venue:'maui',sub:"Two minutes on the open-ocean swell at Ho'okipa. Ride out into the sets and launch off the faces: barrel rolls, backflips, supermans, can-cans."},
+ slalom:{name:'Slalom Time Trial',venue:'havasu',sub:'IJSBA-style closed course: weave ten buoys 28 m apart (red on your left, yellow on your right), round the white turn buoy keeping it on your left and run home. A missed buoy costs 5 s. Two runs, the best one counts.'},
  wake:{name:'Wakeboarding',venue:'havasu',sub:'Two passes behind a tow boat at 36 km/h on a 22 m rope. Edge out, cut hard at the wake and pop: spins, backrolls, tantrums, raleys and grabs.'}};
 
 let VEN=null, WT=0;
@@ -383,6 +384,7 @@ function newRun(){ const M=MODES[modeSel]; VEN=VENUES[M.venue]; WT=0; CRAFT.leng
       if(i===my){ const s=mkSki(x,z,Math.PI/2); Object.assign(s,{me:true,name:'You',num:SV.num||1,team:TEAMS[0],lap:0,next:0,prog:0,sHint:null,done:false,time:0,best:null,lapStart:0,lastXZ:[x,z]}); mkTrail(s); JS.me=s; JS.riders.push(s); }
       else { const r=mkAIski(x,z,names.pop(),2+((i*7)%97),TEAMS[(JS.riders.filter(q=>!q.me).length+1)%TEAMS.length],LVLK[lvl]*(.94+Math.random()*.07)); JS.riders.push(r); } }
     buildSpeedProfile(); banner('Lake Havasu','Deep-water start · three laps · watch the lights','#f59e0b',2.2); }
+  else if(modeSel==='slalom'){ const s=mkSki(0,SLZ,Math.PI/2); Object.assign(s,{me:true,name:'You',num:SV.num||1,team:TEAMS[0]}); mkTrail(s); JS.me=s; JS.riders.push(s); JS.sl={run:1,times:[],best:null}; slReset(s); banner('Slalom','Run 1 of 2 · flying start through the green gate','#f59e0b',2.4); }
   else if(modeSel==='free'){ JS.clock=120; const s=mkSki(-110,0,-Math.PI/2); Object.assign(s,{me:true,name:'You',num:1,team:TEAMS[0]}); mkTrail(s); JS.me=s; JS.riders.push(s); banner("Ho'okipa",'Two minutes · launch off the swell · land it straight','#38bdf8',2.4); }
   else { JS.pass=1; JS.passT=0; JS.wake=[]; setupPass(); banner('Wakeboarding','Pass 1 of 2 · edge out, cut in, pop off the wake','#a78bfa',2.4); }
   phase='play'; paused=false; $('menu').classList.add('hidden'); $('result').classList.add('hidden'); built3=false; renderKeysHelp(); updateBoard(); }
@@ -479,6 +481,26 @@ function raceTick(b){ if(b.done||b.crash>0) return; const N=CRS.L, B=CRS.B, cur=
 const aiP=r=>r.prog+(r.s0-CRS.sFin)/CRS.L, riderP=r=>r.ai?aiP(r):(r.P||0);
 function aiLap(r){ if(r.done) return; const P=aiP(r); r.lap=Math.max(0,Math.floor(P)); if(P>=LAPS){ r.done=true; r.time=JS.t-JS.goT; finishRider(r); } }
 function finishRider(r){ JS.finish.push(r); const pos=JS.finish.length; if(pos===1) feed(`${r.name} wins!`,'#fde047'); if(r.me){ banner(pos===1?'WINNER!':`P${pos}`,`${fmtT(r.time)}${r.best?` · best lap ${fmtT(r.best)}`:''}`,pos===1?'#22c55e':'#38bdf8',3); sfx.crowd(pos===1?.3:.15); JS.endT=JS.t+4; } }
+/* ---------- slalom: an IJSBA-style closed-course time trial ----------
+   A line of ten buoys 28 m apart, then a turn buoy and a straight run home. Red buoys stay on your left, yellow on your right,
+   so you weave; round the white turn buoy keeping it on your left, then cross the finish. Each missed buoy adds 5 s. Two runs, best one counts. */
+const SLZ=-250, SLX0=-200, SLTX=150, SLB=Array.from({length:10},(_,i)=>({x:-165+i*28,z:SLZ,red:i%2===0}));
+function slReset(b){ const n=mkSki(SLX0-55,SLZ,Math.PI/2); for(const k of ['p','v','hd','th','om','roll','rr','yr','sub']) b[k]=n[k]; b.crash=0; b.swim=null; b.air=0; b.trick=null; b.lastXZ=[b.p[0],b.p[2]];
+  Object.assign(JS.sl,{next:0,pen:0,t0:null,turned:false,miss:[],wait:0}); }
+function slalomTick(b,dt){ const L=JS.sl; if(L.wait>0){ L.wait-=dt; if(L.wait<=0){ if(L.run>=2) endRun(); else { L.run=2; slReset(b); banner('Run 2 of 2',`Run 1: ${L.times[0]==null?'DNF':fmtT(L.times[0])}`,'#f59e0b',2); } } return; }
+  if(b.crash>0) return; const cur=[b.p[0],b.p[2]], prev=b.lastXZ||cur; b.lastXZ=cur;
+  if(L.t0==null){ if(prev[0]<SLX0&&cur[0]>=SLX0&&Math.abs(cur[1]-SLZ)<22){ L.t0=JS.t; sfx.beep(); feed('Through the start gate: clock running','#22c55e'); } return; }
+  const el=JS.t-L.t0;
+  if(L.next<SLB.length){ const g=SLB[L.next]; if(prev[0]<g.x&&cur[0]>=g.x){ const dz=cur[1]-g.z, ok=Math.abs(dz)<30&&(g.red?dz>0:dz<0); if(ok){ sfx.buoy(); } else { L.pen+=5; L.miss.push(L.next+1); feed(`Missed buoy ${L.next+1}: +5 s`,'#f87171'); } L.next++; } }
+  if(!L.turned&&segX(prev,cur,[SLTX,SLZ],[SLTX+90,SLZ])){ if(L.next<SLB.length){ L.pen+=5*(SLB.length-L.next); L.next=SLB.length; } L.turned=true; sfx.buoy(); feed('Round the turn buoy: now home!','#93c5fd'); }
+  if(L.turned&&prev[0]>SLX0&&cur[0]<=SLX0&&cur[1]<SLZ-4&&cur[1]>SLZ-70){ const t=el+L.pen; L.times.push(t); L.best=L.best==null||t<L.best?t:L.best; sfx.go(); sfx.crowd(.15);
+    banner(fmtT(t),`${L.pen?`includes ${L.pen} s of penalties · `:'clean run · '}${L.run===1?'one more run':L.best===t?'your best run':`best ${fmtT(L.best)}`}`,L.pen?'#f59e0b':'#22c55e',2.5); L.wait=3.2; }
+  else if(el>120){ L.times.push(null); feed('Run timed out','#f87171'); L.wait=2; } }
+function drawSlalom(){ const K=K3, {T,S,RX,RZ,mm,UC,UB}=R3, me=JS&&JS.me, L=JS&&JS.sl;
+  SLB.forEach((b,i)=>{ const h=waveH(b.x,b.z,WT), tl=Math.sin(WT*1.3+i)*.08, M=mm(T(b.x*K,h*K,b.z*K),RX(tl),RZ(tl*.7));
+    R3.part(UC,mm(M,T(0,.7*K,0),S(.6*K,1.5*K,.6*K)),b.red?[.92,.16,.12]:[.98,.8,.1]); if(L&&L.next===i&&L.t0!=null&&Math.floor(WT*3)%2) R3.part(UB,mm(M,T(0,2.4*K,0),S(.35*K,.35*K,.35*K)),[1,1,1]); });
+  { const h=waveH(SLTX,SLZ,WT), M=T(SLTX*K,h*K,SLZ*K); R3.part(UC,mm(M,T(0,1.1*K,0),S(1*K,2.3*K,1*K)),[.97,.97,.97]); R3.part(UC,mm(M,T(0,2.35*K,0),S(.7*K,.3*K,.7*K)),[.95,.35,.1]); }
+  for(const [x,z1,z2,c] of [[SLX0,SLZ-22,SLZ+22,[.15,.75,.3]],[SLX0,SLZ-70,SLZ-4,[.95,.95,.95]]]) for(const z of [z1,z2]){ const h=waveH(x,z,WT); R3.part(UC,mm(T(x*K,(h+1.2)*K,z*K),S(.6*K,2.4*K,.6*K)),c); } }
 function standings(){ return JS.riders.slice().sort((a,b)=>(b.done?1e9-(b.time||0):0)-(a.done?1e9-(a.time||0):0)||riderP(b)-riderP(a)); }
 
 /* ---------- wakeboarding: the rider, tricks, landings ---------- */
@@ -528,6 +550,7 @@ function step(dt){ if(toastT>0){ toastT-=dt; if(toastT<=0) $('toast').classList.
     for(const r of JS.riders){ if(r.ai){ aiStep(r,dt); if(JS.state==='run') aiLap(r); } else { skiTick(r,dt); if(JS.state==='run') raceTick(r); } }
     if(JS.state==='run'){ if(!JS.holeshot){ const lead=standings()[0]; if(JS.t-JS.goT>6){ JS.holeshot=lead; feed(`Holeshot: ${lead.name}`,'#fde047'); } }
       JS.me.pos=standings().indexOf(JS.me)+1; if(JS.me.done&&JS.t>JS.endT||JS.t-JS.goT>420) endRun(); } }
+  else if(JS.mode==='slalom'){ skiTick(JS.me,dt); slalomTick(JS.me,dt); }
   else if(JS.mode==='free'){ skiTick(JS.me,dt); JS.clock-=dt; if(JS.clock<=0&&!JS.jump) endRun(); }
   else { const B=JS.boat, dir=Math.sign(Math.sin(B.hd)); B.p[0]+=dir*B.v*dt; B.p[1]=waveH(B.p[0],B.p[2],WT)*.3; trailPush(B,B.p[0],B.p[2],B.v,dt); JS.passT+=dt; wbTick(JS.me,dt);
     if(dir*B.p[0]>WX&&!JS.jump){ JS.passes.push(JS.passScore); if(JS.pass>=2) endRun(); else { JS.pass=2; setupPass(); banner('Pass 2 of 2',`Pass 1: ${JS.passes[0].toLocaleString()} pts`,'#a78bfa',2.4); } } }
@@ -538,6 +561,9 @@ function endRun(){ if(JS.over) return; JS.over=true; phase='over'; const me=JS.m
     const st=JS.finish.concat(standings().filter(r=>!r.done)), pos=st.indexOf(me)+1; SV.races++; if(pos===1&&me.done) SV.wins++; if(me.done&&(!SV.race||me.time<SV.race)) SV.race=me.time; if(me.best&&(!SV.lap||me.best<SV.lap)) SV.lap=me.best; saveSV(); JS.place=pos;
     h=`<h2>${pos===1&&me.done?'Victory!':me.done?`P${pos}`:'DNF'}</h2><div class="rs">${me.done?fmtT(me.time):'-'}</div><p>Lake Havasu · ${LAPS} laps · ${LVL[lvl]}${me.best?` · best lap ${fmtT(me.best)}`:''} · top speed ${Math.round(JS.topSpeed*3.6)} km/h</p>
       <table class="ls"><tr><th>Pos</th><th>Rider</th><th>#</th><th>Time</th></tr>${st.map((r,i)=>`<tr${r.me?' style="background:rgba(255,209,102,.2)"':''}><td>${i+1}</td><td style="text-align:left">${esc(r.name)}</td><td>${r.num}</td><td>${r.done?(i?'+'+(r.time-st[0].time).toFixed(2):fmtT(r.time)):r.estT&&st[0].done?'~+'+(r.estT-st[0].time).toFixed(1):'DNF'}</td></tr>`).join('')}</table>`; }
+  else if(JS.mode==='slalom'){ const L=JS.sl, b=L.best, old=SV.slalom; if(b!=null&&(!old||b<old)) SV.slalom=b; saveSV();
+    h=`<h2>${b==null?'No time':!old||b<old?'New personal best!':'Slalom complete'}</h2><div class="rs">${b==null?'-':fmtT(b)}</div><p>Lake Havasu slalom · best of two runs${old?` · your best ${fmtT(old)}`:''} · top speed ${Math.round(JS.topSpeed*3.6)} km/h</p>
+      <table class="ls"><tr><th>Run</th><th>Time</th></tr>${[0,1].map(i=>`<tr${L.times[i]!=null&&L.times[i]===b?' style="background:rgba(255,209,102,.2)"':''}><td>${i+1}</td><td>${L.times[i]==null?'DNF':fmtT(L.times[i])}</td></tr>`).join('')}</table>`; }
   else { const sc=Math.round(JS.score), k=JS.mode, best=SV[k]||0; if(sc>best) SV[k]=sc; SV.air=Math.max(SV.air||0,JS.bestAir); saveSV();
     h=`<h2>${sc>best?'New personal best!':JS.mode==='wake'?'Run complete':'Time!'}</h2><div class="rs">${sc.toLocaleString()} pts</div><p>${MODES[k].name}${JS.mode==='wake'&&JS.passes.length?` · passes ${JS.passes.map(p=>p.toLocaleString()).join(' + ')}`:''} · biggest air ${JS.bestAir.toFixed(1)} s${best?` · your best ${best.toLocaleString()}`:''}</p>`; }
   $('resultIn').innerHTML=h+'<p>Enter for the menu, R to go again.</p>'; setTimeout(()=>{ if(phase==='over') $('result').classList.remove('hidden'); },700); sfx.crowd(.2); }
@@ -547,12 +573,13 @@ const cv=$('cv'), ctx=cv.getContext('2d'); cv.width=W*DPR; cv.height=H*DPR; ctx.
 function hudText(t,x,y,size=18,col='#fff',align='left'){ ctx.font=`800 ${size}px 'Big Shoulders Display','Arial Narrow',sans-serif`; ctx.textAlign=align; ctx.lineWidth=Math.max(3,size/6); ctx.strokeStyle='rgba(0,0,0,.7)'; ctx.strokeText(t,x,y); ctx.fillStyle=col; ctx.fillText(t,x,y); }
 function rr(x,y,w,h,r,col){ ctx.fillStyle=col; ctx.beginPath(); ctx.roundRect(x,y,w,h,r); ctx.fill(); }
 function drawMap(x0,y0,w,h){ const me=JS.me; let cx=0, cz=0, sc;
-  if(JS.mode==='race'){ sc=Math.min(w/560,h/280); } else if(JS.mode==='wake'){ sc=w/760; cx=0; cz=WZ; } else { sc=w/500; cx=-200; cz=me.p[2]; }
+  if(JS.mode==='race'){ sc=Math.min(w/560,h/280); } else if(JS.mode==='slalom'){ sc=Math.min(w/460,h/200); cx=-20; cz=SLZ-20; } else if(JS.mode==='wake'){ sc=w/760; cx=0; cz=WZ; } else { sc=w/500; cx=-200; cz=me.p[2]; }
   const X=x=>x0+w/2-(x-cx)*sc, Y=z=>y0+h/2-(z-cz)*sc;
   rr(x0-6,y0-6,w+12,h+12,8,'rgba(5,10,24,.6)'); ctx.save(); ctx.beginPath(); ctx.rect(x0-6,y0-6,w+12,h+12); ctx.clip();
   if(JS.mode==='race'){ ctx.strokeStyle='rgba(147,197,253,.5)'; ctx.lineWidth=2; ctx.beginPath(); CRS.S.forEach((p,i)=>{ if(i%3) return; i?ctx.lineTo(X(p.x),Y(p.z)):ctx.moveTo(X(p.x),Y(p.z)); }); ctx.closePath(); ctx.stroke();
     CRS.B.forEach((b,i)=>{ ctx.fillStyle=b.left?'#ef4444':'#facc15'; ctx.beginPath(); ctx.arc(X(b.x),Y(b.z),i===me.next?5:3.5,0,7); ctx.fill(); if(i===me.next){ ctx.strokeStyle='#fff'; ctx.lineWidth=2; ctx.stroke(); } });
     ctx.strokeStyle='#fff'; ctx.beginPath(); ctx.moveTo(X(FINX),Y(COURSE[0][1]-12)); ctx.lineTo(X(FINX),Y(COURSE[0][1]+12)); ctx.stroke(); }
+  if(JS.mode==='slalom'){ SLB.forEach((b,i)=>{ ctx.fillStyle=b.red?'#ef4444':'#facc15'; ctx.beginPath(); ctx.arc(X(b.x),Y(b.z),i===JS.sl.next?4.5:3,0,7); ctx.fill(); }); ctx.fillStyle='#fff'; ctx.beginPath(); ctx.arc(X(SLTX),Y(SLZ),4.5,0,7); ctx.fill(); ctx.strokeStyle='#22c55e'; ctx.lineWidth=2; ctx.beginPath(); ctx.moveTo(X(SLX0),Y(SLZ-22)); ctx.lineTo(X(SLX0),Y(SLZ+22)); ctx.stroke(); ctx.strokeStyle='#fff'; ctx.beginPath(); ctx.moveTo(X(SLX0),Y(SLZ-70)); ctx.lineTo(X(SLX0),Y(SLZ-4)); ctx.stroke(); }
   if(JS.mode==='free'){ ctx.fillStyle='rgba(255,255,255,.35)'; ctx.fillRect(Math.min(X(-55),X(0)),y0-6,Math.abs(X(0)-X(-55)),h+12); ctx.fillStyle='#e7d3a1'; ctx.fillRect(Math.min(X(0),X(60)),y0-6,Math.abs(X(60)-X(0)),h+12); }
   if(JS.mode==='wake'){ ctx.strokeStyle='rgba(255,255,255,.35)'; ctx.beginPath(); ctx.moveTo(X(-WX),Y(WZ)); ctx.lineTo(X(WX),Y(WZ)); ctx.stroke(); const B=JS.boat; ctx.fillStyle='#f8fafc'; ctx.fillRect(X(B.p[0])-4,Y(B.p[2])-2,8,4); }
   for(const r of JS.riders){ ctx.fillStyle=r.team.c; ctx.beginPath(); ctx.arc(X(r.p[0]),Y(r.p[2]),r.me?5:3.5,0,7); ctx.fill(); if(r.me){ ctx.strokeStyle='#fff'; ctx.lineWidth=2; ctx.stroke(); } }
@@ -565,6 +592,9 @@ function drawHUD(){ const b=JS.me, sp=Math.hypot(b.v[0],b.v[2])*3.6;
     const st=standings(); st.slice(0,6).forEach((r,i)=>{ rr(14,124+i*24,220,21,5,r.me?'rgba(250,204,21,.3)':'rgba(5,10,24,.65)'); ctx.fillStyle=r.team.c; ctx.fillRect(14,124+i*24,6,21); hudText(`${i+1}  #${r.num} ${r.name}`,26,140+i*24,14,'#fff'); });
     if(JS.state==='start'){ const n=Math.ceil(JS.cd); for(let i=0;i<3;i++){ ctx.fillStyle=JS.cd<3.2&&i>=n-1+0?'#ef4444':'#1f2937'; ctx.beginPath(); ctx.arc(W/2-50+i*50,H/2-80,18,0,7); ctx.fill(); } hudText(JS.cd>3.2?'Riders ready':'Hold...',W/2,H/2-30,34,'#fde047','center'); }
     if(b.next<CRS.B.length&&!b.done){ const g=CRS.B[b.next]; hudText(`Next: ${g.left?'red buoy · keep it on your LEFT':'yellow buoy · keep it on your RIGHT'}`,W/2,H-46,16,g.left?'#fca5a5':'#fde68a','center'); if(b.missed&&Math.floor(JS.t*3)%2) hudText('MISSED A BUOY: GO BACK AROUND IT',W/2,H/2+40,28,'#f87171','center'); } }
+  else if(JS.mode==='slalom'){ const L=JS.sl; rr(14,14,270,100,10,'rgba(5,10,24,.8)'); hudText(L.t0==null?'Ready':fmtT(JS.t-L.t0+L.pen),28,50,32,'#fde047'); hudText(`Run ${L.run} of 2`,180,46,18,'#e2e8f0');
+    hudText(L.pen?`+${L.pen} s penalties`:'no penalties',28,76,15,L.pen?'#fca5a5':'#86efac'); hudText(L.best!=null?`best ${fmtT(L.best)}`:'',150,76,15,'#93c5fd'); hudText(`Buoy ${Math.min(L.next+1,10)} / 10`,28,102,15,'#e2e8f0');
+    if(L.wait<=0&&!(b.crash>0)){ const g=SLB[L.next]; hudText(L.t0==null?'Line up and go through the green start gate':g?`Next: ${g.red?'red buoy · keep it on your LEFT':'yellow buoy · keep it on your RIGHT'}`:L.turned?'Home to the finish (white posts)':'Round the white turn buoy, keep it on your LEFT',W/2,H-46,16,g?(g.red?'#fca5a5':'#fde68a'):'#e2e8f0','center'); } }
   else if(JS.mode==='free'){ rr(14,14,250,74,10,'rgba(5,10,24,.8)'); hudText(`${Math.round(JS.score).toLocaleString()} pts`,28,50,32,'#fde047'); hudText(`${Math.ceil(Math.max(0,JS.clock))} s left`,28,76,16,'#e2e8f0'); }
   else { rr(14,14,270,74,10,'rgba(5,10,24,.8)'); hudText(`${Math.round(JS.score).toLocaleString()} pts`,28,50,32,'#fde047'); hudText(`Pass ${JS.pass} of 2 · ${Math.max(0,Math.round((WX-Math.sign(Math.sin(JS.boat.hd))*JS.boat.p[0])/10))} s`,28,76,16,'#e2e8f0');
     /* edge meter: how hard you are loading the line */ const e=b.edge||0; rr(W/2-90,H-60,180,14,6,'rgba(5,10,24,.7)'); ctx.fillStyle=Math.abs(e)>.8?'#22c55e':'#38bdf8'; ctx.fillRect(W/2,H-57,e*-86,8); hudText('edge',W/2,H-64,12,'#94a3b8','center'); }
@@ -582,9 +612,9 @@ function draw(){ ctx.clearRect(0,0,W,H); if(view3) render3D(frameDtG); if(!JS||p
 let toastT=0, bannerT=0;
 const setText=(id,t)=>{ const e=$(id); if(e&&e.textContent!==String(t)) e.textContent=t; };
 const badgeJ=(c,c2)=>svg(`<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 100 100"><circle cx="50" cy="50" r="46" fill="${c}"/><path d="M18 62 Q50 72 82 60 L74 48 L52 46 L44 36 L36 36 L40 48 L22 52 Z" fill="${c2}"/><path d="M14 74 Q30 68 46 74 T80 74" stroke="${c2}" stroke-width="5" fill="none"/></svg>`);
-function updateBoard(){ if(!JS) return; const b=JS.me; $('logoL').src=badgeJ(b.team.c,b.team.c2); setText('nameL',JS.mode==='wake'?'You':`#${b.num||1} You`); setText('tpL',JS.mode==='wake'?'Wakeboard':SKI.name); setText('scoreL',JS.mode==='race'?(b.pos?`P${b.pos}`:'-'):Math.round(JS.score)); $('sideL').style.setProperty('--tc',b.team.c);
-  const lead=JS.mode==='race'?standings().find(r=>!r.me):null; $('logoR').src=badgeJ(lead?lead.team.c:'#475569','#fff'); setText('nameR',lead?`#${lead.num} ${lead.name}`:'Your best'); setText('tpR',lead?'Leader':MODES[JS.mode].name); setText('scoreR',lead?`P${standings().indexOf(lead)+1}`:(SV[JS.mode]||'-'));
-  setText('cntT',JS.mode==='race'?(JS.state==='run'?fmtT(JS.t-JS.goT).slice(0,-3):'Start'):JS.mode==='free'?`${Math.ceil(Math.max(0,JS.clock))}s`:`Pass ${JS.pass}`); setText('innT',VEN.name); setText('outsT',JS.mode==='race'?`Lap ${Math.min(LAPS,b.lap+1)}/${LAPS}`:MODES[JS.mode].name); setText('basesT',''); }
+function updateBoard(){ if(!JS) return; const b=JS.me; $('logoL').src=badgeJ(b.team.c,b.team.c2); setText('nameL',JS.mode==='wake'?'You':`#${b.num||1} You`); setText('tpL',JS.mode==='wake'?'Wakeboard':SKI.name); setText('scoreL',JS.mode==='race'?(b.pos?`P${b.pos}`:'-'):JS.mode==='slalom'?`${JS.sl.next}/10`:Math.round(JS.score)); $('sideL').style.setProperty('--tc',b.team.c);
+  const lead=JS.mode==='race'?standings().find(r=>!r.me):null; $('logoR').src=badgeJ(lead?lead.team.c:'#475569','#fff'); setText('nameR',lead?`#${lead.num} ${lead.name}`:'Your best'); setText('tpR',lead?'Leader':MODES[JS.mode].name); setText('scoreR',lead?`P${standings().indexOf(lead)+1}`:JS.mode==='slalom'?(SV.slalom?fmtT(SV.slalom):'-'):(SV[JS.mode]||'-'));
+  setText('cntT',JS.mode==='race'?(JS.state==='run'?fmtT(JS.t-JS.goT).slice(0,-3):'Start'):JS.mode==='slalom'?`Run ${JS.sl.run}`:JS.mode==='free'?`${Math.ceil(Math.max(0,JS.clock))}s`:`Pass ${JS.pass}`); setText('innT',VEN.name); setText('outsT',JS.mode==='race'?`Lap ${Math.min(LAPS,b.lap+1)}/${LAPS}`:MODES[JS.mode].name); setText('basesT',''); }
 function toast(t,col='#34d399'){ const e=$('toast'); e.textContent=t; e.style.borderColor=col; e.classList.add('on'); toastT=2.2; }
 function banner(big,sub,glow='#000',dur=2){ const b=$('banner'); b.innerHTML=`<span class="big">${esc(big)}</span>${sub?`<span class="sub">${esc(sub)}</span>`:''}`; b.style.setProperty('--glow',glow); b.classList.add('on'); bannerT=dur; }
 
@@ -606,10 +636,10 @@ addEventListener('keyup',e=>keys.delete(e.code)); addEventListener('blur',()=>ke
 const pill=(attr,val,on,label,key)=>`<button data-${attr}="${val}" class="${on?'on':''}" tabindex="-1">${label}${key?` <kbd>${key}</kbd>`:''}</button>`;
 function renderMenu(){ const M=MODES[modeSel];
   let h=`<h1>Rink Rivals: Jet Ski & Wakeboard</h1><p>A supercharged race runabout (about 115 km/h) that floats, planes and steers with its jet, on a lake with real wakes; ocean swell to launch off; and a wakeboard behind a ski boat with a wake you can go wake-to-wake on.</p>
-  <div class="pills"><span class="lbl">Mode</span>${pill('m','race',modeSel==='race','🏁 Jet ski race','')}${pill('m','free',modeSel==='free','🌊 Freestyle','')}${pill('m','wake',modeSel==='wake','🏄 Wakeboard','')}</div>
+  <div class="pills"><span class="lbl">Mode</span>${pill('m','race',modeSel==='race','🏁 Jet ski race','')}${pill('m','slalom',modeSel==='slalom','⛳ Slalom','')}${pill('m','free',modeSel==='free','🌊 Freestyle','')}${pill('m','wake',modeSel==='wake','🏄 Wakeboard','')}</div>
   ${modeSel==='race'?`<div class="pills"><span class="lbl">Riders</span>${LVL.map((l,i)=>pill('l',i,lvl===i,l,String(i+1))).join('')}</div>`:''}
-  <div class="pills"><button class="gold" data-act="start" tabindex="-1">${modeSel==='race'?'To the start':modeSel==='wake'?'Hit it!':'Ride out'} <kbd>Enter</kbd></button><a href="./" tabindex="-1">Home</a><a href="surf" tabindex="-1">Surfing</a><a href="fishing" tabindex="-1">Fishing</a></div>
-  <div id="hint">${M.sub}${modeSel==='race'&&SV.race?` · your best ${fmtT(SV.race)}`:''}${modeSel==='race'&&SV.lap?` · best lap ${fmtT(SV.lap)}`:''}${modeSel!=='race'&&SV[modeSel]?` · best score ${SV[modeSel].toLocaleString()}`:''}</div>`;
+  <div class="pills"><button class="gold" data-act="start" tabindex="-1">${modeSel==='race'?'To the start':modeSel==='wake'?'Hit it!':modeSel==='slalom'?'To the course':'Ride out'} <kbd>Enter</kbd></button><a href="./" tabindex="-1">Home</a><a href="surf" tabindex="-1">Surfing</a><a href="fishing" tabindex="-1">Fishing</a></div>
+  <div id="hint">${M.sub}${modeSel==='race'&&SV.race?` · your best ${fmtT(SV.race)}`:''}${modeSel==='race'&&SV.lap?` · best lap ${fmtT(SV.lap)}`:''}${modeSel==='slalom'&&SV.slalom?` · your best ${fmtT(SV.slalom)}`:''}${modeSel!=='race'&&modeSel!=='slalom'&&SV[modeSel]?` · best score ${SV[modeSel].toLocaleString()}`:''}</div>`;
   $('menuIn').innerHTML=h; $('logoL').src=badgeJ(TEAMS[0].c,TEAMS[0].c2); setText('nameL','You'); setText('tpL',modeSel==='wake'?'Wakeboard':SKI.name); setText('scoreL',''); $('logoR').src=badgeJ('#475569','#fff'); setText('nameR',modeSel==='race'?`${LVL[lvl]} field`:'Solo'); setText('tpR',M.name); setText('scoreR','');
   setText('cntT',modeSel==='wake'?'WAKE':'SKI'); setText('innT',VENUES[M.venue].name); setText('outsT',M.name); setText('basesT',''); renderKeysHelp(); }
 $('menuIn').addEventListener('mousedown',e=>{ if(e.target.closest('button')) e.preventDefault(); });
@@ -1062,7 +1092,7 @@ function render3D(dt){ if(!VEN) VEN=VENUES[MODES[modeSel].venue]; if(phase==='me
   const fd=norm([c[0]-e[0],0,c[2]-e[2]]);
   R3.frame(cam(e,c,fov),()=>{
     drawWater(e[0],e[2],fd[0],fd[2]);
-    if(JS.mode==='race') drawBuoys();
+    if(JS.mode==='race') drawBuoys(); else if(JS.mode==='slalom') drawSlalom();
     if(wb){ drawBoat(JS.boat); if(me.crash>0) drawSwimmer(me.p,JS.boat.hd,JS.t,me.team); else drawBoarder(me);
       if(!(me.crash>0)&&me.air<=0&&Math.hypot(me.v[0],me.v[2])>4&&Math.random()<dt*30){ const l=leftOf(me.yaw||0), sg=-Math.sign(me.edge||1); FX.push({p:[me.p[0]+l[0]*sg*.3,me.p[1]+.05,me.p[2]+l[2]*sg*.3],v:[l[0]*sg*rnd(1.5,3.5),rnd(1,2.5)*Math.min(1,Math.abs(me.edge||0)+.3),l[2]*sg*rnd(1.5,3.5)],t:0,L:rnd(.4,.8),s:rnd(.08,.16),g:me.p[1]}); }
       { const B=JS.boat, bf=fwd(B.hd); if(Math.random()<dt*40) FX.push({p:[B.p[0]-bf[0]*3.2+rnd(-.8,.8),B.p[1]+.2,B.p[2]-bf[2]*3.2+rnd(-.8,.8)],v:[-bf[0]*rnd(1,3),rnd(.8,2),-bf[2]*rnd(1,3)],t:0,L:rnd(.5,1),s:rnd(.15,.3),g:B.p[1]}); } }
@@ -1090,9 +1120,10 @@ requestAnimationFrame(frame);
 
 /* ---------- world records ---------- */
 const LBG=((location.pathname.split('/').pop()||'').replace(/\.html$/,'')||'game').toLowerCase(), lbPost=(id,s,t)=>{ try{ window.RRL&&RRL.post(id,s,t); }catch(e){} }, lbBoards=l=>{ try{ window.RRL&&RRL.boards(LBG,l); }catch(e){} };
-lbBoards([{id:'race',name:'Lake Havasu race (3 laps)',mode:'min'},{id:'lap',name:'Lake Havasu best lap',mode:'min'},{id:'free',name:"Ho'okipa freestyle score",mode:'max'},{id:'wake',name:'Wakeboard score (2 passes)',mode:'max'},{id:'air',name:'Biggest air (s)',mode:'max'},{id:'speed',name:'Top speed (km/h)',mode:'max'},{id:'wins',name:'Races won',mode:'sum'}]);
+lbBoards([{id:'race',name:'Lake Havasu race (3 laps)',mode:'min'},{id:'lap',name:'Lake Havasu best lap',mode:'min'},{id:'slalom',name:'Slalom time trial (best run)',mode:'min'},{id:'free',name:"Ho'okipa freestyle score",mode:'max'},{id:'wake',name:'Wakeboard score (2 passes)',mode:'max'},{id:'air',name:'Biggest air (s)',mode:'max'},{id:'speed',name:'Top speed (km/h)',mode:'max'},{id:'wins',name:'Races won',mode:'sum'}]);
 { const _e=endRun; endRun=function(){ const was=JS&&JS.over; const r=_e.apply(this,arguments); try{ if(!was&&JS){ const b=JS.me;
   if(JS.mode==='race'){ if(b.done){ lbPost('race',+b.time.toFixed(3),`${fmtT(b.time)} · P${JS.place} vs ${LVL[lvl]}`); if(JS.place===1) lbPost('wins',1); } if(b.best) lbPost('lap',+b.best.toFixed(3),fmtT(b.best)); }
+  else if(JS.mode==='slalom'){ if(JS.sl.best!=null) lbPost('slalom',+JS.sl.best.toFixed(3),`${fmtT(JS.sl.best)} · best of 2 runs`); }
   else if(JS.score>0) lbPost(JS.mode,Math.round(JS.score),`${Math.round(JS.score).toLocaleString()} pts`);
   if(JS.bestAir>.5) lbPost('air',+JS.bestAir.toFixed(2),`${JS.bestAir.toFixed(2)} s ${JS.mode==='wake'?'on the wakeboard':'on the jet ski'}`);
   if(JS.mode!=='wake'&&JS.topSpeed>10) lbPost('speed',Math.round(JS.topSpeed*3.6),`${Math.round(JS.topSpeed*3.6)} km/h`); } }catch(e){} return r; }; }
@@ -1100,10 +1131,11 @@ lbBoards([{id:'race',name:'Lake Havasu race (3 laps)',mode:'min'},{id:'lap',name
 
 /* ---------- online score battle ---------- */
 const NETV=window.RRV?RRV.attach({game:'jetski',title:'jet ski & wakeboard battle',blurb:'Jet ski & wakeboard battle: everyone rides the same mode at the same time and sees the others as ghosts. Race: fastest time wins. Freestyle and wakeboarding: the biggest trick score wins.',
-  get better(){ return modeSel==='race'?'low':'high'; },
+  get better(){ return modeSel==='race'||modeSel==='slalom'?'low':'high'; },
   opts:()=>({modeSel,lvl}), start(o){ if(o.modeSel&&MODES[o.modeSel]) modeSel=o.modeSel; if(o.lvl!=null) lvl=o.lvl; newRun(); },
   state(){ if(!JS) return null; const b=JS.me, done=!!JS.over; let v=null, txt='';
-    if(JS.mode==='race'){ v=b.done?+b.time.toFixed(3):null; txt=b.done?fmtT(b.time):(JS.state==='run'?`lap ${Math.min(LAPS,b.lap+1)} · P${b.pos||'-'} · ${fmtT(JS.t-JS.goT)}`:'on the start line'); }
+    if(JS.mode==='slalom'){ const L=JS.sl; v=done&&L.best!=null?+L.best.toFixed(3):null; txt=L.best!=null?`best ${fmtT(L.best)} · run ${L.run}`:L.t0!=null?`run ${L.run} · ${fmtT(JS.t-L.t0+L.pen)}`:`run ${L.run} · lining up`; }
+    else if(JS.mode==='race'){ v=b.done?+b.time.toFixed(3):null; txt=b.done?fmtT(b.time):(JS.state==='run'?`lap ${Math.min(LAPS,b.lap+1)} · P${b.pos||'-'} · ${fmtT(JS.t-JS.goT)}`:'on the start line'); }
     else { v=Math.round(JS.score); txt=`${v.toLocaleString()} pts${done?'':JS.mode==='free'?` · ${Math.ceil(Math.max(0,JS.clock))} s left`:` · pass ${JS.pass}`}`; }
     const r2=x=>+(+x||0).toFixed(2); return {v,txt,done,pos:JS.mode==='wake'?[r2(b.p[0]),r2(b.p[1]),r2(b.p[2]),r2(b.yaw+(b.spin||0)),r2(b.roll),r2(b.flip),1]:[r2(b.p[0]),r2(b.p[1]),r2(b.p[2]),r2(b.hd),r2(b.th),r2(b.roll),0]}; }}):null;
 function drawGhosts(){ if(!window.RRV||!RRV.on||!JS) return;
