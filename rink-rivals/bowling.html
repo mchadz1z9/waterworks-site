@@ -216,10 +216,14 @@ const OILS=[{name:'House shot',len:12.2,dry:1,mid:.35},{name:'Sport shot',len:13
 
 /* ---------- ball and pin physics ---------- */
 function newPins(stand){ return PIN_POS.map((p,i)=>({i,x:p[0],z:p[1],vx:0,vz:0,up:stand?stand[i]:true,tilt:0,tdx:0,tdz:0,gone:!(stand?stand[i]:true),hitT:0})); }
-function laneFric(z,oil){ return z<oil.len?.04:z<oil.len+2?lerp(.04,.2*oil.dry,(z-oil.len)/2):.2*oil.dry; }
+/* lane transition: every ball pushes oil out of its path, so the track dries and hooks earlier as a block goes on (bd: per-board oil length factor) */
+const boardOf=x=>clamp(Math.round(19-x/(LANE_W/39)),0,38);
+function laneFric(z,oil,x){ const len=oil.bd&&x!=null?oil.len*oil.bd[boardOf(x)]:oil.len; return z<len?.04:z<len+2?lerp(.04,.2*oil.dry,(z-len)/2):.2*oil.dry; }
+/* the arsenal: a reactive resin strike ball, a smoother urethane ball, and a plastic spare ball that goes straight */
+const BALLS=[{n:'Resin',k:1,sp:1},{n:'Urethane',k:.7,sp:1},{n:'Plastic spare',k:.08,sp:1.03}];
 function stepBall(b,dt,oil){
   if(b.gutter){ b.z+=b.vz*dt; b.vz=Math.max(.5,b.vz-.3*dt); b.roll+=b.vz*dt/BALL_R; return; }
-  const mu=laneFric(b.z,oil);
+  const mu=laneFric(b.z,oil,b.x);
   /* side rotation turns into hook once the ball reaches the dry back end */
   if(b.revs>0){ const a=b.hook*mu/.2*2.1; b.vx+=a*b.dir*dt; b.revs=Math.max(0,b.revs-mu*dt*1.6); }
   b.vz=Math.max(.5,b.vz-mu*9.81*.012*dt);
@@ -276,20 +280,21 @@ function speak(t,pri){ if(muted||!window.speechSynthesis) return; const now=perf
 
 /* ---------- game state ---------- */
 let GM=null, phase='menu', phT=0, paused=false;
-let menuMode=1, proSel=0, oppN=1, oilSel=0, lvlSel=1;
+let menuMode=1, proSel=0, oppN=1, oilSel=0, lvlSel=1, LADDER=null;
 const LVL_NAMES=['Casual','Pro','Legend'], LVL_K=[1.7,1,.7];
 const keys=new Set(); const held=a=>a.some(k=>keys.has(k));
 const SAVEK='rinkRivalsBowlingV1';
 let SV=(()=>{ try{ return JSON.parse(localStorage.getItem(SAVEK)||'null')||{high:0,games:0,strikes:0,perfect:0}; }catch(e){ return {high:0,games:0,strikes:0,perfect:0}; } })();
 function saveSV(){ try{ localStorage.setItem(SAVEK,JSON.stringify(SV)); }catch(e){} }
 const HOOKS=['Straight','Small hook','Medium hook','Big hook'], HOOKK=[.04,.28,.5,.72];
-function mkPlayer(pro,cpu,name,k){ return {pro,cpu,name:name||pro.name,rolls:[],col:BALLC[(pro.i+k)%BALLC.length],x:pro.lefty?-.18:.18,ang:pro.lefty?.012:-.012,hook:2,strikes:0}; }
+function mkPlayer(pro,cpu,name,k){ return {ball:0,pro,cpu,name:name||pro.name,rolls:[],col:BALLC[(pro.i+k)%BALLC.length],x:pro.lefty?-.18:.18,ang:pro.lefty?.012:-.012,hook:2,strikes:0}; }
 function newGame(){
   const me=PROS[proSel], others=PROS.filter(p=>p!==me).sort(()=>Math.random()-.5);
   const pl=[mkPlayer(me,false,null,0)];
+  if(menuMode===4&&LADDER){ const o=LADDER.seeds[LADDER.round]; pl.push(mkPlayer(o,true,null,1)); }
   if(menuMode===1) for(let k=0;k<oppN;k++) pl.push(mkPlayer(others[k],true,null,k+1));
   if(menuMode===2) pl.push(mkPlayer(others[0],false,'Player 2',1));
-  GM={players:pl,cur:0,oil:OILS[oilSel],pins:newPins(),ball:null,charge:0,msg:null,msgT:0,lvl:LVL_K[lvlSel]};
+  GM={players:pl,cur:0,oil:Object.assign({},OILS[oilSel],{bd:new Array(39).fill(1)}),pins:newPins(),ball:null,charge:0,msg:null,msgT:0,lvl:LVL_K[lvlSel]};
   $('menu').classList.add('hidden'); $('result').classList.add('hidden'); paused=false; built3=false; cam3=null;
   startTurn(true); renderKeysHelp();
 }
@@ -326,9 +331,9 @@ function throwBall(p,power,extraErr){
   const pr=p.pro, acc=pr.acc/100, lv=p.cpu?GM.lvl:1, dir=pr.lefty?1:-1;
   const over=Math.max(0,power-1);
   const angErr=gauss()*(.0022+(1-acc)*.06)*lv*(p.cpu?1:.6)+gauss()*over*.05+(extraErr||0);
-  const sp=(6.2+Math.min(power,1.05)*3.4)*(.92+pr.pow*.0009)*(1+gauss()*.01*lv), a=p.ang+angErr;
-  const hk=HOOKK[p.hook]*(.35+pr.rev/100*.8)*(pr.two?1.1:1);
-  GM.ball={x:p.x+(pr.lefty?-.12:.12)*0,z:.2,vx:Math.sin(a)*sp,vz:Math.cos(a)*sp,revs:1,hook:hk,dir,roll:0,gutter:false,done:false,spd:sp,col:p.col};
+  const sp=(6.2+Math.min(power,1.05)*3.4)*(.92+pr.pow*.0009)*(1+gauss()*.01*lv)*BALLS[p.ball||0].sp, a=p.ang+angErr;
+  const BL=BALLS[p.ball||0], hk=HOOKK[p.hook]*(.35+pr.rev/100*.8)*(pr.two?1.1:1)*BL.k;
+  GM.ball={track:[],x:p.x+(pr.lefty?-.12:.12)*0,z:.2,vx:Math.sin(a)*sp,vz:Math.cos(a)*sp,revs:1,hook:hk,dir,roll:0,gutter:false,done:false,spd:sp,col:p.col};
   phase='roll'; phT=0; sfx.release(); GM.hitSound=false;
 }
 /* CPU aiming: search the release angle that brings the ball into the target with its hook */
@@ -338,16 +343,18 @@ function planCpu(p){
   let tx, tz=HEAD_Z, hook=2, x0=pr.lefty?-.2:.2;
   if(standing.length===10||st.ball===0){ tx=-dir*.065; hook=pr.rev>90?3:2; x0=-dir*(pr.rev>90?.3:.2); }
   else { let sx=0, sz=0; for(const q of standing){ sx+=q.x; sz+=q.z; } tx=sx/standing.length; tz=sz/standing.length; hook=1; x0=-tx*.6; if(standing.length===1) hook=0; }
-  p.hook=hook; p.x=clamp(x0,-.45,.45);
-  const sp=(6.2+.9*3.4)*(.92+pr.pow*.0009), hk=HOOKK[hook]*(.35+pr.rev/100*.8)*(pr.two?1.1:1);
+  p.ball=standing.length<=2&&st.ball>0?2:0; p.hook=hook; p.x=clamp(x0,-.45,.45);
+  const sp=(6.2+.9*3.4)*(.92+pr.pow*.0009)*BALLS[p.ball].sp, hk=HOOKK[hook]*(.35+pr.rev/100*.8)*(pr.two?1.1:1)*BALLS[p.ball].k;
   let lo=-.09, hi=.09; for(let k=0;k<26;k++){ const m=(lo+hi)/2, xe=simX(p.x,m,sp,hk,dir,GM.oil,tz-.05); if(xe<tx) lo=m; else hi=m; } p.ang=(lo+hi)/2;
   p.cpuPow=.9+gauss()*.02;
 }
 /* ---------- after each ball ---------- */
 const ADJ=[[1,2],[0,2,3,4],[0,1,4,5],[1,4,6,7],[1,2,3,5,7,8],[2,4,8,9],[3,7],[3,4,6,8],[4,5,7,9],[5,8]];
 function isSplit(stand){ if(stand[0]) return false; const s=stand.map((v,i)=>v?i:-1).filter(i=>i>=0); if(s.length<2) return false; const seen=new Set([s[0]]), q=[s[0]]; while(q.length){ const a=q.pop(); for(const n of ADJ[a]) if(stand[n]&&!seen.has(n)){ seen.add(n); q.push(n); } } return seen.size<s.length; }
+function burnOil(){ const b=GM.ball; if(!b||!b.track||GM.net||!GM.oil.bd) return; const bd=GM.oil.bd, seen=new Set(b.track); for(const i of seen) for(const j of [i-1,i,i+1]) if(j>=0&&j<39) bd[j]=Math.max(.8,bd[j]-(j===i?.0045:.0025));
+  const mn=Math.min(...bd); if(mn<.93&&!GM.warned){ GM.warned=true; toast(`Lane transition: the track around board ${bd.indexOf(mn)+1} is drying up, the ball will hook earlier. Move left or switch balls (B).`,'#fde047'); } }
 function finishBall(){
-  const p=curP(), before=GM.standBefore.filter(Boolean).length, after=GM.pins.filter(q=>!q.gone&&q.up).length, down=before-after, st=frameState(p.rolls);
+  burnOil(); const p=curP(), before=GM.standBefore.filter(Boolean).length, after=GM.pins.filter(q=>!q.gone&&q.up).length, down=before-after, st=frameState(p.rolls);
   p.rolls.push(down); const st2=frameState(p.rolls);
   let msg=String(down), col='#fff';
   const first=st.ball===0||(st.f===9&&before===10);
@@ -370,6 +377,10 @@ function endGame(){
   SV.games++; if(sc>SV.high) SV.high=sc; if(sc===300) SV.perfect++; saveSV();
   $('resultIn').innerHTML=`<h2>${sc===300?'PERFECT GAME!':ord[0]===me&&GM.players.length>1?'You win!':GM.players.length>1?`${esc(ord[0].name)} wins`:`You bowled ${sc}`}</h2><div class="rs">${sc}</div><p>${GM.oil.name} · best ever ${SV.high}</p>
   <table class="ls"><tr><th>Bowler</th>${[1,2,3,4,5,6,7,8,9,10].map(f=>`<th>${f}</th>`).join('')}<th>Total</th></tr>${GM.players.map(q=>{ const m=frameMarks(q.rolls), s=frameScores(q.rolls); return `<tr${q===me?' style="background:rgba(255,209,102,.18)"':''}><td>${esc(q.name)}</td>${m.map((mk,i)=>`<td>${mk.join(' ')}<br><b>${s[i]??''}</b></td>`).join('')}<td class="tot">${total(q.rolls)}</td></tr>`; }).join('')}</table><p>Enter for the menu, R to bowl again.</p>`;
+  if(menuMode===4&&LADDER&&!LADDER.done&&GM.players.length===2){ const won=total(GM.players[0].rolls)>total(GM.players[1].rolls), tie=total(GM.players[0].rolls)===total(GM.players[1].rolls); let t='';
+    if(tie) t='Tied: the match is rolled again.'; else if(won&&LADDER.round<3){ LADDER.round++; t=`On to the next match: ${esc(LADDER.seeds[LADDER.round].name)}, the ${['4th','3rd','2nd','top'][LADDER.round]} seed. Enter to bowl it.`; }
+    else { LADDER.done=true; const place=won?'Champion! 🏆':['5th','4th','3rd','Runner-up'][LADDER.round]; if(won){ SV.titles=(SV.titles||0)+1; saveSV(); try{ lbPost('titles',1,me.name); }catch(e){} } t=`Stepladder finals: ${place}`; }
+    $('resultIn').innerHTML=$('resultIn').innerHTML.replace('<p>Enter for the menu, R to bowl again.</p>',`<p style="color:#fde68a;font-size:20px">${t}</p><p>${LADDER.done?'Enter for the menu.':'Enter for the next match.'}</p>`); }
   if(sc===300) speak('A perfect game! Three hundred!',true);
   setTimeout(()=>{ if(phase==='over') $('result').classList.remove('hidden'); },900);
 }
@@ -386,7 +397,7 @@ function step(dt){
   else if(phase==='cpuaim'){ if(phT>(GM.fastCpu?.2:1.1)){ throwBall(p,p.cpuPow); } }
   else if(phase==='roll'||phase==='settle'){
     const b=GM.ball, sub=4;
-    for(let i=0;i<sub;i++){ const h=dt/sub; if(b&&!b.done){ stepBall(b,h,GM.oil); if(b.z>PIT_Z+.3){ b.done=true; } } const hits=collidePins(b||{done:true},GM.pins,h); if(hits&&!GM.hitSound){ GM.hitSound=true; sfx.crash(GM.pins.filter(q=>!q.up).length); } }
+    for(let i=0;i<sub;i++){ const h=dt/sub; if(b&&!b.done){ stepBall(b,h,GM.oil); if(b.track&&!b.gutter&&b.z<GM.oil.len*1.1) b.track.push(boardOf(b.x)); if(b.z>PIT_Z+.3){ b.done=true; } } const hits=collidePins(b||{done:true},GM.pins,h); if(hits&&!GM.hitSound){ GM.hitSound=true; sfx.crash(GM.pins.filter(q=>!q.up).length); } }
     rollSound(b&&!b.done?clamp(b.spd/9,0,1)*.12:0);
     if(b&&b.gutter&&!GM.gs){ GM.gs=true; sfx.gutter(); } if(b&&!b.gutter) GM.gs=false;
     if(phase==='roll'&&b.done){ phase='settle'; phT=0; }
@@ -424,7 +435,7 @@ function drawHUD(){
   GM.pins.forEach((q,i)=>{ const P=PIN_POS[i], up=!q.gone&&q.up; ctx.fillStyle=up?'#fff':'#334155'; ctx.beginPath(); ctx.arc(px+P[0]*130,py+72-(P[1]-HEAD_Z)*170,8,0,Math.PI*2); ctx.fill(); });
   const p=curP();
   if(phase==='aim'||phase==='charge'){ rr(20,H-120,250,104,10,'rgba(8,10,16,.82)'); const board=Math.round(20-p.x/(LANE_W/39)); hudText(`${p.name}`,32,H-94,17,p.col);
-    hudText(`Stand: board ${clamp(board,1,39)}   Aim: ${(p.ang*180/Math.PI).toFixed(1)}°`,32,H-70,14,'#e2e8f0'); hudText(`${HOOKS[p.hook]} (W/S)`,32,H-48,14,'#93c5fd'); hudText(phase==='aim'?'Hold Space, let go to bowl':'Let go!',32,H-26,14,'#fde68a');
+    hudText(`Stand: board ${clamp(board,1,39)}   Aim: ${(p.ang*180/Math.PI).toFixed(1)}°`,32,H-70,14,'#e2e8f0'); hudText(`${HOOKS[p.hook]} (W/S) · ${BALLS[p.ball||0].n} ball (B)`,32,H-48,14,'#93c5fd'); hudText(phase==='aim'?'Hold Space, let go to bowl':'Let go!',32,H-26,14,'#fde68a');
     if(phase==='charge'){ const bw=320, bx=W/2-bw/2, by=H-46; rr(bx-8,by-8,bw+16,34,8,'rgba(8,10,16,.85)'); ctx.fillStyle='#1f2937'; ctx.fillRect(bx,by,bw,18); ctx.fillStyle='rgba(34,197,94,.35)'; ctx.fillRect(bx+bw*.85/1.25,by,bw*.1/1.25,18); ctx.fillStyle=GM.charge>1?'#ef4444':GM.charge>.85&&GM.charge<.95?'#22c55e':'#fbbf24'; ctx.fillRect(bx,by,bw*Math.min(1,GM.charge/1.25),18); ctx.fillStyle='#fff'; ctx.fillRect(bx+bw*(1/1.25)-1,by-4,2,26); } }
   if(phase==='roll'||phase==='settle'){ const b=GM.ball; if(b) hudText(`${(b.spd*2.237).toFixed(1)} mph`,W-140,H-30,18,'#e2e8f0','right'); }
   if(GM.msg&&phase==='show'){ const a=Math.min(1,GM.msgT*2); ctx.globalAlpha=a; hudText(GM.msg.t,W/2,H/2,GM.msg.t.length>8?60:72,GM.msg.col,'center'); ctx.globalAlpha=1; }
@@ -450,11 +461,12 @@ addEventListener('keydown',e=>{
   if(e.code==='KeyZ'){ toggleFs(); return; }
   if(e.code==='KeyV'){ setView3(!view3); return; }
   if(phase==='menu'){ menuKey(e.code); return; }
-  if(phase==='over'){ if(e.code==='KeyR') newGame(); else if(['Enter','NumpadEnter','Space','Escape','KeyM'].includes(e.code)) toMenu(); return; }
+  if(phase==='over'){ if(menuMode===4&&LADDER&&!LADDER.done&&['Enter','NumpadEnter','Space'].includes(e.code)){ newGame(); return; } if(e.code==='KeyR'&&!(menuMode===4)) newGame(); else if(['Enter','NumpadEnter','Space','Escape','KeyM'].includes(e.code)) toMenu(); return; }
   if(!GM) return;
   if(e.code==='Escape'){ paused=!paused; if(paused) banner('Paused','Esc to resume · M for menu','#000',1e9); else { $('banner').classList.remove('on'); bannerT=0; } return; }
   if(e.code==='KeyM'){ if(confirm('Quit this game?')) toMenu(); keys.clear(); return; }
   const p=curP();
+  if(phase==='aim'&&e.code==='KeyB'){ p.ball=((p.ball||0)+1)%BALLS.length; sfx.click(); toast(`${BALLS[p.ball].n} ball`,'#93c5fd'); }
   if(phase==='aim'){ if(['KeyW','ArrowUp'].includes(e.code)){ p.hook=Math.min(3,p.hook+1); sfx.click(); } if(['KeyS','ArrowDown'].includes(e.code)){ p.hook=Math.max(0,p.hook-1); sfx.click(); } }
   if(e.code==='KeyF') GM.fastCpu=!GM.fastCpu;
 });
@@ -466,20 +478,22 @@ const pill=(attr,val,on,label,key)=>`<button data-${attr}="${val}" class="${on?'
 function renderMenu(){
   const p=PROS[proSel];
   let h=`<h1>Rink Rivals: Bowling</h1><p>Ten-pin bowling with real lane sizes, oil patterns that make the ball hook on the dry back end, pin action off the kickbacks, splits, and official scoring. Bowl against PBA stars and legends.</p>
-  <div class="pills">${pill('m',1,menuMode===1,'Vs CPU','1')}${pill('m',2,menuMode===2,'2 Players','2')}${pill('m',3,menuMode===3,'Practice','3')}<a href="./" tabindex="-1">Home</a><a href="golf" tabindex="-1">Golf</a></div>
+  <div class="pills">${pill('m',1,menuMode===1,'Vs CPU','1')}${pill('m',2,menuMode===2,'2 Players','2')}${pill('m',3,menuMode===3,'Practice','3')}${pill('m',4,menuMode===4,'🏆 PBA stepladder finals','4')}<a href="./" tabindex="-1">Home</a><a href="golf" tabindex="-1">Golf</a></div>
+  ${menuMode===4?`<p style="max-width:760px;margin:4px auto">TV finals: you are the 5th seed. Beat the 4 seed, then the 3, the 2 and the top seed, one game each, to win the title.${LADDER?` Next: ${esc(LADDER.seeds[LADDER.round].name)} (${['4th','3rd','2nd','top'][LADDER.round]} seed).`:''}</p><div class="pills"><span class="lbl">CPU</span>${[0,1,2].map(i=>pill('l',i,lvlSel===i,LVL_NAMES[i],5+i)).join('')}</div>`:''}
   ${menuMode===1?`<div class="pills"><span class="lbl">Opponents</span>${[1,2,3].map(n=>pill('o',n,oppN===n,String(n),'')).join('')}<span class="lbl">CPU</span>${[0,1,2].map(i=>pill('l',i,lvlSel===i,LVL_NAMES[i],5+i)).join('')}</div>`:''}
   <div class="pills"><span class="lbl">Oil</span>${OILS.map((o,i)=>pill('oil',i,oilSel===i,o.name,'')).join('')}</div>
   <div class="pickers"><div class="pk p1"><button class="ar" data-pr="-1" tabindex="-1">‹</button><div class="mid"><div class="who">Your bowler</div><img src="${badgeB(p)}" alt=""><div class="n">${FLAGB[p.nat]||''} ${esc(p.name)}</div><div class="meta">${p.lefty?'Left':'Right'}-handed${p.two?' · two-handed':''} · accuracy ${p.acc} · power ${p.pow} · revs ${p.rev}</div></div><button class="ar" data-pr="1" tabindex="-1">›</button></div></div>
-  <div class="pills"><button class="gold" data-act="start" tabindex="-1">Bowl <kbd>Enter</kbd></button><button data-act="online" tabindex="-1">🌐 Play online</button></div><div id="hint">Best game ${SV.high} · ${SV.strikes} strikes · ${SV.perfect} perfect games</div>`;
+  <div class="pills"><button class="gold" data-act="start" tabindex="-1">Bowl <kbd>Enter</kbd></button><button data-act="online" tabindex="-1">🌐 Play online</button></div><div id="hint">${SV.titles?`PBA titles ${SV.titles} · `:''}Best game ${SV.high} · ${SV.strikes} strikes · ${SV.perfect} perfect games</div>`;
   $('menuIn').innerHTML=h; $('logoL').src=badgeB(p); setText('nameL',p.name); setText('tpL',`${p.lefty?'Lefty':'Righty'}`); setText('scoreL',''); $('logoR').src=badgeB(p); setText('nameR',menuMode===1?`${oppN} CPU`:menuMode===2?'Player 2':'Practice'); setText('tpR',OILS[oilSel].name); setText('scoreR',''); setText('cntT','Bowling'); setText('innT','10 frames'); setText('outsT','Lane 7'); setText('basesT',''); lastBoard='';
   renderKeysHelp();
 }
 $('menuIn').addEventListener('mousedown',e=>{ if(e.target.closest('button')) e.preventDefault(); });
 $('menuIn').addEventListener('click',e=>{ const b=e.target.closest('button'); if(!b) return; const d=b.dataset; audio(); sfx.click();
-  if(d.m) menuMode=+d.m; else if(d.o) oppN=+d.o; else if(d.l!==undefined) lvlSel=+d.l; else if(d.oil!==undefined) oilSel=+d.oil; else if(d.pr) proSel=(proSel+ +d.pr+PROS.length)%PROS.length; else if(d.act==='start'){ newGame(); return; } else if(d.act==='online'){ NET&&NET.open(); return; }
+  if(d.m) menuMode=+d.m; else if(d.o) oppN=+d.o; else if(d.l!==undefined) lvlSel=+d.l; else if(d.oil!==undefined) oilSel=+d.oil; else if(d.pr) proSel=(proSel+ +d.pr+PROS.length)%PROS.length; else if(d.act==='start'){ startLadderOr(); return; } else if(d.act==='online'){ NET&&NET.open(); return; }
   renderMenu(); });
-function menuKey(code){ const dg=code.replace('Numpad','Digit'); if(['Digit1','Digit2','Digit3'].includes(dg)){ menuMode=+dg.slice(5); renderMenu(); return; } if(['Digit5','Digit6','Digit7'].includes(dg)){ lvlSel=+dg.slice(5)-5; renderMenu(); return; } if(code==='KeyA'||code==='ArrowLeft'){ proSel=(proSel-1+PROS.length)%PROS.length; renderMenu(); } else if(code==='KeyD'||code==='ArrowRight'){ proSel=(proSel+1)%PROS.length; renderMenu(); } else if(['Enter','NumpadEnter','Space'].includes(code)) newGame(); }
-function renderKeysHelp(){ $('keysHelp').innerHTML='<div><b>Move</b> A D</div><div><b>Aim</b> Q E</div><div><b>Hook</b> W S</div><div><b>Bowl</b> hold Space, let go in the green zone (aim is set for the pocket; adjust it if you like)</div><div><b>Fast CPU</b> F</div><div><b>View</b> V</div><div><b>Pause</b> Esc</div>'; }
+function menuKey(code){ const dg=code.replace('Numpad','Digit'); if(['Digit1','Digit2','Digit3','Digit4'].includes(dg)){ menuMode=+dg.slice(5); renderMenu(); return; } if(['Digit5','Digit6','Digit7'].includes(dg)){ lvlSel=+dg.slice(5)-5; renderMenu(); return; } if(code==='KeyA'||code==='ArrowLeft'){ proSel=(proSel-1+PROS.length)%PROS.length; renderMenu(); } else if(code==='KeyD'||code==='ArrowRight'){ proSel=(proSel+1)%PROS.length; renderMenu(); } else if(['Enter','NumpadEnter','Space'].includes(code)) startLadderOr(); }
+function startLadderOr(){ if(menuMode===4&&(!LADDER||LADDER.done)){ const me=PROS[proSel], top=PROS.filter(p=>p!==me).sort((a,b)=>b.ovr-a.ovr).slice(0,4).reverse(); LADDER={seeds:top,round:0,done:false}; } newGame(); }
+function renderKeysHelp(){ $('keysHelp').innerHTML='<div><b>Move</b> A D</div><div><b>Aim</b> Q E</div><div><b>Hook</b> W S</div><div><b>Ball</b> B (resin, urethane, plastic spare ball)</div><div><b>Bowl</b> hold Space, let go in the green zone (aim is set for the pocket; adjust it if you like)</div><div><b>Fast CPU</b> F</div><div><b>View</b> V</div><div><b>Pause</b> Esc</div>'; }
 function toMenu(){ if(GM&&GM.net&&GM.net.on) GM.net.leave(); phase='menu'; GM=null; $('result').classList.add('hidden'); $('menu').classList.remove('hidden'); rollSound(0); renderMenu(); }
 
 /* ---------- 3D engine (shared with the other Rink Rivals sports) ---------- */
@@ -736,7 +750,7 @@ void main(){vec4 t=texture2D(uTex,vUV*uUVR.zw+uUVR.xy);if(t.a<0.04)discard;gl_Fr
     time+=dt||1/60; resize();
     gl.viewport(0,0,cw,ch); const SK=cam.sky||[.04,.06,.12]; FOGC=SK; gl.clearColor(SK[0],SK[1],SK[2],1); gl.clear(gl.COLOR_BUFFER_BIT|gl.DEPTH_BUFFER_BIT);
     gl.enable(gl.DEPTH_TEST); gl.disable(gl.CULL_FACE); gl.disable(gl.BLEND); gl.depthMask(true);
-    eye=cam.eye; VP=mul(persp(cam.fov*Math.PI/180,cw/ch,cam.near||6,cam.far||14000),lookAt(cam.eye,cam.center,[0,1,0]));
+    eye=cam.eye; VP=mul(persp(cam.fov*Math.PI/180,cw/ch,cam.near||6,cam.far||14000),lookAt(cam.eye,cam.center,cam.up||[0,1,0]));
     cheer=cam.cheer||0;
     useC(); if(world) part(world,I(),[1,1,1]); if(crowdM) part(crowdM,I(),[1,1,1]);
     decals.length=0; shadows.length=0;
@@ -833,7 +847,7 @@ $('viewBtn2').addEventListener('click',e=>{ e.stopPropagation(); audio(); setVie
 $('viewBtn2').addEventListener('pointerdown',e=>e.stopPropagation());
 $('btnSnd').addEventListener('click',()=>{ muted=!muted; $('btnSnd').textContent=muted?'Sound off':'Sound on'; if(!muted){ audio(); sfx.click(); } else rollSound(0); });
 $('result').addEventListener('click',()=>{ if(phase==='over') toMenu(); });
-if(TEST) window.__bw={get GM(){return GM;},get phase(){return phase;},step,newGame,throwBall,planCpu,curP,keys,frameScores,frameMarks,frameState,total,newPins,stepBall,collidePins,setMode:m=>{menuMode=m;},setOpp:n=>{oppN=n;}};
+if(TEST) window.__bw={startLadderOr,get LADDER(){return LADDER;},get GM(){return GM;},get phase(){return phase;},step,newGame,throwBall,planCpu,curP,keys,frameScores,frameMarks,frameState,total,newPins,stepBall,collidePins,setMode:m=>{menuMode=m;},setOpp:n=>{oppN=n;}};
 const NET=window.RRO?RRO.init({game:'bowling',maxPlayers:4,minPlayers:1,blurb:'Bowl a game against friends. Everyone takes turns, frame by frame.',getOpts:()=>({oil:oilSel}),onStart:(m,net)=>startOnline(m,net),onMsg:onlineMsg,onPeers:onlinePeers,onEnd:why=>{ if(GM&&GM.net&&why!=='left'){ toast('Online game ended: '+why,'#f87171'); } }}):null;
 setView3(view3);
 renderMenu();
@@ -841,7 +855,7 @@ requestAnimationFrame(frame);
 
 /* ---------- world records ---------- */
 const LBG=((location.pathname.split('/').pop()||'').replace(/\.html$/,'')||'game').toLowerCase(), lbPost=(id,s,t)=>{ try{ window.RRL&&RRL.post(id,s,t); }catch(e){} }, lbBoards=l=>{ try{ window.RRL&&RRL.boards(LBG,l); }catch(e){} };
-lbBoards([{id:'high',name:'High game',mode:'max'},{id:'perfect',name:'Perfect 300 games',mode:'sum'}]);
+lbBoards([{id:'titles',name:'PBA stepladder titles',mode:'sum'},{id:'high',name:'High game',mode:'max'},{id:'perfect',name:'Perfect 300 games',mode:'sum'}]);
 { const _f=endGame; endGame=function(){ const r=_f.apply(this,arguments); try{ const me=GM.net?GM.players.find(q=>q.owner===GM.net.me.id)||GM.players[0]:GM.players[0], sc=total(me.rolls); lbPost('high',sc,String(sc)); if(sc===300) lbPost('perfect',1); }catch(e){} return r; }; }
 
 })();
