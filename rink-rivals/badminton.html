@@ -259,7 +259,7 @@ const sfx={ click:()=>tone(700,.04,'square',.03), hit:v=>{ noise(.04,.08+v*.004,
   floor:()=>noise(.06,.06,1200), net:()=>noise(.18,.1,500), squeak:()=>tone(2400+Math.random()*600,.05,'sine',.012,1800), crowd:v=>noise(1.4,v||.12,900), whistle:()=>{ tone(2900,.25,'sine',.05); }, point:()=>{ tone(660,.1,'sine',.05); tone(880,.14,'sine',.05,null,.1); } };
 
 /* ---------- state ---------- */
-let M=null, phase='menu', paused=false, evtSel='ms', p0Sel=0, p1Sel=1, lvl=1, gamesSel=3, assist=true, camMode=0, twoP=false;
+let M=null, phase='menu', paused=false, evtSel='ms', p0Sel=0, p1Sel=1, lvl=1, gamesSel=3, assist=true, camMode=0, twoP=false, tourSel=false, TOUR=null;
 const LVL=['Club','International','World Tour Finals'], LVLK=[.8,.9,1];
 const keys=new Set(); const held=a=>a.some(k=>keys.has(k));
 const SKEY='rinkRivalsBadmintonV1'; let SV=(()=>{ try{ return Object.assign({wins:0,games:0,smash:0,rally:0},JSON.parse(localStorage.getItem(SKEY)||'null')||{}); }catch(e){ return {wins:0,games:0,smash:0,rally:0}; } })();
@@ -277,13 +277,13 @@ const rightX=t=>t===0?-1:1;         /* a player's right-hand court, facing the n
 
 /* ---------- a match ---------- */
 function mkPlayer(team,i,name,code,rt,o){ const k=team===1&&!twoP?LVLK[lvl]:1; return {team,i,name,code,sk:clamp(rt/100*k,.5,1),smash:o.smash||.85,net:o.net||.85,def:o.def||.85,sp:(5.4+rt/100)*(.85+.15*k),x:0,z:0,vx:0,vz:0,y:0,vy:0,face:0,pose:'ready',poseT:9,run:0,q:null,h:o.h||1.8}; }
-function newMatch(){ const dbl=isDbl(evtSel), L=PROS[evtSel], mk=(t,e)=>{ if(dbl){ const [names,code,rt]=e; return {code,name:names.map(n=>sur(n,code)).join(' / '),players:names.map((n,i)=>mkPlayer(t,i,n,code,rt,{h:evtSel==='wd'||evtSel==='xd'&&i===1?1.7:1.84})),score:0,games:0,right:0}; }
-    const [n,code,rt,sm,nt,df]=e; return {code,name:n,players:[mkPlayer(t,0,n,code,rt,{smash:sm,net:nt,def:df,h:evtSel==='ws'?1.7:1.86})],score:0,games:0,right:0}; };
+function newMatch(){ const dbl=isDbl(evtSel), L=PROS[evtSel], mk=(t,e)=>{ if(dbl){ const [names,code,rt]=e; return {code,name:names.map(n=>sur(n,code)).join(' / '),players:names.map((n,i)=>mkPlayer(t,i,n,code,rt,{h:evtSel==='wd'||evtSel==='xd'&&i===1?1.7:1.84})),score:0,games:0,right:0,chal:2}; }
+    const [n,code,rt,sm,nt,df]=e; return {code,name:n,players:[mkPlayer(t,0,n,code,rt,{smash:sm,net:nt,def:df,h:evtSel==='ws'?1.7:1.86})],score:0,games:0,right:0,chal:2}; };
   if(p1Sel===p0Sel) p1Sel=(p0Sel+1)%L.length;
   M={evt:evtSel,dbl,teams:[mk(0,L[p0Sel]),mk(1,L[p1Sel])],sh:{x:0,y:1,z:0,vx:0,vy:0,vz:0},state:'serve',serveT:0,serving:Math.random()<.5?0:1,rally:0,t:0,feed:[],game:1,last:null,maxRally:0,mySmash:0,trail:[]};
   for(const T of M.teams) for(const p of T.players) p.T=T;
   phase='play'; paused=false; $('menu').classList.add('hidden'); $('result').classList.add('hidden'); setupServe();
-  banner(`${M.teams[0].name} v ${M.teams[1].name}`,`${EVT[evtSel]} · ${gamesSel===1?'one game':'best of three'} to 21 · ${LVL[lvl]}`,'#22c55e',2.6); updateBoard(); }
+  banner(TOUR?`${TOUR.name} · ${RND[TOUR.round]}`:`${M.teams[0].name} v ${M.teams[1].name}`,TOUR?`${M.teams[0].name} v ${M.teams[1].name} · best of three to 21`:`${EVT[evtSel]} · ${gamesSel===1?'one game':'best of three'} to 21 · ${LVL[lvl]}`,'#22c55e',2.6); updateBoard(); }
 const HW=()=>M.dbl?HWD:HWS;
 /* who serves, from which court, and where everyone stands */
 function setupServe(){ const S=M.teams[M.serving], R=M.teams[1-M.serving], even=S.score%2===0;
@@ -359,6 +359,7 @@ function tick(dt){ M.t+=dt; const s=M.sh, all=M.teams[0].players.concat(M.teams[
     /* the AI serves after a breath; you serve with SPACE (short) or J (a high serve) */ if(!isHuman(srv.team)&&M.serveT>1.4){ const lng=!M.dbl&&Math.random()<(M.evt==='ws'?.4:.18); srv.qual=.9+.1*Math.random(); hit(srv,lng?'lserve':'sserve',{lx:Math.random()*2-1,dz:1}); M.serveHit=true; }
     if(isHuman(srv.team)&&M.serveT>8&&assist){ srv.qual=1; hit(srv,'sserve',{lx:0,dz:1}); }
     for(const p of all) stepBody(p,dt); return; }
+  if(M.state==='call'){ for(const p of all){ moveTo(p,p.x,p.z,0,dt); stepBody(p,dt); } return reviewTick(dt); }
   if(M.state==='dead'){ M.deadT+=dt; for(const p of all){ moveTo(p,p.x,p.z,0,dt); stepBody(p,dt); } if(M.over){ if(M.deadT>2.6&&phase==='play') endMatch(); return; } if(M.deadT>2.2) setupServe(); return; }
   /* the shuttle in flight */ const pz=s.z, py=s.y; shStep(s,dt); if(M.trail.length===0||Math.hypot(s.x-M.trail[M.trail.length-1][0],s.z-M.trail[M.trail.length-1][2])>.4) { M.trail.push([s.x,s.y,s.z]); if(M.trail.length>14) M.trail.shift(); }
   /* the net: a shuttle that crosses below the tape is caught in it */ if(Math.sign(s.z)!==Math.sign(pz)&&pz!==0){ const ny=lerp(py,s.y,Math.abs(pz)/(Math.abs(pz)+Math.abs(s.z))); if(ny<netH(s.x)&&Math.abs(s.x)<HWD+.1){ sfx.net(); return point(1-M.lastTeam,'Into the net'); } }
@@ -381,8 +382,27 @@ function humanMove(p,dt){ const t=p.team, f=(hk(t,'up')?1:0)-(hk(t,'dn')?1:0), s
 function humanSwing(t,kind){ if(!M||phase!=='play') return; if(M.state==='serve'&&M.server.team===t&&isHuman(t)){ M.server.qual=1; const lng=kind==='hi'; hit(M.server,lng?'lserve':'sserve',{lx:(hk(t,'rt')?1:0)-(hk(t,'lt')?1:0),dz:1}); return; }
   const p=ctlOf(t); p.q={kind,t:M.t}; p.pose=kind==='hard'?'over':p.pose; }
 /* ---------- the rally ends ---------- */
-function landed(){ const s=M.sh, lt=M.lastTeam, side=s.z<0?0:1, hw=HW(); let inC=Math.abs(s.x)<=hw+.02&&Math.abs(s.z)<=HL+.02;
-  if(M.rally===1){ /* the serve must land in the diagonal service court */ const ok=Math.abs(s.z)>=SSL-.02&&Math.abs(s.z)<=(M.dbl?LSD:HL)+.02&&Math.sign(s.x)===Math.sign(M.svCourt.x)&&Math.abs(s.x)<=hw+.02; inC=ok; if(!ok) return point(1-lt,Math.abs(s.z)<SSL?'Service fault: short':'Service fault: out'); }
+/* line calls: a shuttle touching the line is in (the lines are 40 mm wide, measured to their outer edge). On a close one the
+   line judge can get it wrong; each side has two challenges a game for Hawk-Eye, and keeps a challenge that is upheld */
+function margin(){ const s=M.sh, hw=HW(), ax=Math.abs(s.x), az=Math.abs(s.z), L=[hw+.02-ax,HL+.02-az];
+  if(M.rally===1){ L[1]=(M.dbl?LSD:HL)+.02-az; L.push(az-(SSL-.02)); L.push(Math.sign(s.x)===Math.sign(M.svCourt.x)?ax+.02:-(ax-.02)); }
+  const inside=L.every(v=>v>=0); return inside?Math.min(...L):-Math.min(...L.filter(v=>v<0).map(v=>-v)); }
+const noReview=()=>!!(window.RRS&&RRS.on);
+function landed(){ const s=M.sh, lt=M.lastTeam, side=s.z<0?0:1; if(side===lt&&M.rally>1) return settle(true);
+  const m=margin(), truth=m>=0, close=Math.abs(m)<.1;
+  let called=truth; if(close&&!noReview()&&Math.random()<.3*(1-Math.abs(m)/.1)) called=!truth;
+  if(!close||noReview()) return settle(truth);
+  /* the team the call goes against may challenge */ const loser=called?(side===lt?lt:1-lt):lt; M.review={truth,called,m,loser,T:0,hawk:false,x:s.x,z:s.z};
+  M.state='call'; M.nCall=(M.nCall||0)+1; if(called!==truth) M.nWrong=(M.nWrong||0)+1; feed(`Line judge: ${called?'IN':'OUT'}`,'#fde68a'); sfx.floor();
+  if(isHuman(loser)&&M.teams[loser].chal>0) toast(`Close call! H to challenge (${M.teams[loser].chal} left)`,'#fde047'); }
+function challenge(t){ const R=M&&M.review; if(!R||M.state!=='call'||R.hawk||R.loser!==t||M.teams[t].chal<=0) return; R.hawk=true; R.T=0; sfx.whistle(); M.nHawk=(M.nHawk||0)+1;
+  const mm=Math.round(Math.abs(R.m)*1000); banner('Hawk-Eye',`${R.truth?'IN':'OUT'} · ${mm<1?'touching the line':mm+' mm '+(R.truth?'inside':'outside')}`,R.truth===R.called?'#94a3b8':'#22c55e',2);
+  if(R.truth===R.called){ M.teams[t].chal--; feed(`Challenge lost · ${M.teams[t].chal} left`,'#fca5a5'); } else feed('Challenge upheld: call overturned!','#86efac'); }
+function reviewTick(dt){ const R=M.review; R.T+=dt;
+  if(!R.hawk&&!isHuman(R.loser)&&R.T>.7&&!R.aiDone){ R.aiDone=true; if(M.teams[R.loser].chal>0&&Math.random()<(R.truth!==R.called?.7:.1)) challenge(R.loser); }
+  if(R.hawk?R.T>2.1:R.T>(isHuman(R.loser)&&M.teams[R.loser].chal>0?2.2:.9)){ M.review=null; M.state='flight'; settle(R.hawk?R.truth:R.called); } }
+function settle(inC){ const s=M.sh, lt=M.lastTeam, side=s.z<0?0:1;
+  if(M.rally===1){ if(!inC) return point(1-lt,Math.abs(s.z)<SSL?'Service fault: short':'Service fault: out'); }
   if(side===lt) return point(1-lt,'Hit into their own court');
   if(inC) return point(lt,M.lastKind==='smash'?'Smash winner!':M.lastKind==='net'?'Net kill':M.lastKind==='drop'?'Drop shot winner':'Point');
   return point(1-lt,'Out'); }
@@ -391,11 +411,13 @@ function point(t,why){ if(M.state==='dead') return; const T=M.teams[t], O=M.team
   /* doubles rotation: the serving side that wins swaps courts; the receiving side that wins takes the serve */ if(M.dbl&&M.serving===t) T.right=1-T.right; M.serving=t;
   const pts=21, cap=30, won=T.score>=pts&&T.score-O.score>=2||T.score>=cap;
   if(won){ T.games++; const need=gamesSel===1?1:2; banner(T.games>=need?`${T.name} win!`:`Game ${M.game} to ${T.name}`,`${M.teams[0].score}-${M.teams[1].score}`,t===0?'#22c55e':'#ef4444',2.6); speak(`Game, ${T.name}`,true);
-    if(T.games>=need){ M.over=true; } else { M.game++; for(const X of M.teams){ X.score=0; X.right=0; } M.deadT=-1.5; } }
+    if(T.games>=need){ M.over=true; } else { M.game++; for(const X of M.teams){ X.score=0; X.right=0; X.chal=2; } M.deadT=-1.5; } }
   else if(T.score>=pts-1&&T.score>O.score) speak(T.score===pts-1?'Game point':'',false);
   updateBoard(); }
 function endMatch(){ phase='over'; const A=M.teams[0], B=M.teams[1], won=A.games>B.games; SV.games++; if(won) SV.wins++; SV.smash=Math.max(SV.smash,Math.round(M.mySmash)); SV.rally=Math.max(SV.rally,M.maxRally); saveSV(); sfx.crowd(.3);
-  $('resultIn').innerHTML=`<h2>${won?'Victory! 🏸':'Defeat'}</h2><div class="rs">${A.games} - ${B.games}</div><p>${esc(A.name)} v ${esc(B.name)} · ${EVT[M.evt]} · ${LVL[lvl]}</p><p>Longest rally ${M.maxRally} shots${M.mySmash?` · your fastest smash ${Math.round(M.mySmash)} km/h`:''}</p><p>Career ${SV.wins}-${SV.games-SV.wins} · fastest smash ${SV.smash} km/h · longest rally ${SV.rally}</p><p>Enter for the menu, R to play again.</p>`; $('result').classList.remove('hidden'); }
+  let tH=''; if(TOUR){ const rd=RND[TOUR.round]; if(won&&TOUR.round<2){ TOUR.round++; p1Sel=TOUR.opps[TOUR.round]; tH=`<p style="color:#fde68a">${TOUR.name}: through to the ${RND[TOUR.round].toLowerCase()} against ${esc(nm(PROS[evtSel][p1Sel]))}. Enter for the next match.</p>`; }
+    else { const res=won?'Champion! 🏆':rd==='Final'?'Runner-up 🥈':rd==='Semi-final'?'Semi-finalist 🥉':'Quarter-finalist'; if(won){ SV.titles=(SV.titles||0)+1; try{ lbPost('titles',1,`${TOUR.name} ${EVT[evtSel]}`); }catch(e){} } saveSV(); tH=`<p style="color:#fde68a;font-size:22px">${TOUR.name}: ${res}</p>`; TOUR.done=true; } }
+  $('resultIn').innerHTML=`<h2>${won?'Victory! 🏸':'Defeat'}</h2>${tH}<div class="rs">${A.games} - ${B.games}</div><p>${esc(A.name)} v ${esc(B.name)} · ${EVT[M.evt]} · ${LVL[lvl]}</p><p>Longest rally ${M.maxRally} shots${M.mySmash?` · your fastest smash ${Math.round(M.mySmash)} km/h`:''}</p><p>Career ${SV.wins}-${SV.games-SV.wins} · fastest smash ${SV.smash} km/h · longest rally ${SV.rally}</p><p>Enter for the menu, R to play again.</p>`; $('result').classList.remove('hidden'); }
 
 /* ---------- 3D engine (shared with the other Rink Rivals sports) ---------- */
 function makeR3(glc,stage){
@@ -749,13 +771,13 @@ function toast(t,col='#34d399'){ const e=$('toast'); e.textContent=t; e.style.bo
 function banner(big,sub,glow='#000',dur=2){ const b=$('banner'); b.innerHTML=`<span class="big">${esc(big)}</span>${sub?`<span class="sub">${esc(sub)}</span>`:''}`; b.style.setProperty('--glow',glow); b.classList.add('on'); bannerT=dur; }
 
 /* ---------- input ---------- */
-function onPress(code){ if(!M||phase!=='play'||paused) return; const t=code.startsWith('P2')?1:0; if(!isHuman(t)) return; const K=KS[t];
+function onPress(code){ if(!M||phase!=='play'||paused) return; if(code==='KeyH'){ challenge(0); return; } const t=code.startsWith('P2')?1:0; if(!isHuman(t)) return; const K=KS[t];
   if(K.hi.includes(code)) humanSwing(t,'hi'); else if(K.soft.includes(code)) humanSwing(t,'soft'); else if(K.hard.includes(code)) humanSwing(t,'hard'); else if(K.auto.includes(code)) humanSwing(t,'auto'); }
 addEventListener('keydown',e=>{ const tag=document.activeElement&&document.activeElement.tagName; if(tag==='INPUT'||tag==='SELECT'||tag==='TEXTAREA') return;
   if(['Space','ArrowUp','ArrowDown','ArrowLeft','ArrowRight'].includes(e.code)) e.preventDefault(); if(e.repeat) return; keys.add(e.code); audio();
   if(e.code==='KeyZ'){ toggleFs(); return; }
   if(phase==='menu'){ if(['Enter','NumpadEnter'].includes(e.code)) startGame(); return; }
-  if(phase==='over'){ if(e.code==='KeyR'&&!(window.RRS&&RRS.on)) newMatch(); else if(['Enter','NumpadEnter','Escape','KeyM'].includes(e.code)) toMenu(); return; }
+  if(phase==='over'){ if(TOUR&&!TOUR.done&&['Enter','NumpadEnter','Space'].includes(e.code)){ newMatch(); return; } if(e.code==='KeyR'&&!(window.RRS&&RRS.on)&&!TOUR) newMatch(); else if(['Enter','NumpadEnter','Escape','KeyM'].includes(e.code)){ TOUR=null; toMenu(); } return; }
   if(!M) return;
   if(e.code==='Escape'||e.code==='KeyP'){ paused=!paused; if(paused) banner('Paused','Esc to resume · M for the menu','#000',1e9); else { $('banner').classList.remove('on'); bannerT=0; } return; }
   if(e.code==='KeyM'&&paused){ paused=false; toMenu(); return; }
@@ -772,15 +794,19 @@ function renderMenu(){ const L=PROS[evtSel]; if(p0Sel>=L.length) p0Sel=0; if(p1S
   <div class="pills"><span class="lbl">You</span>${L.map((e,i)=>pill('a',i,p0Sel===i,`${FLAG[e[1]]||''} ${nm(e)}`,'')).join('')}</div>
   <div class="pills"><span class="lbl">Opponent</span>${L.map((e,i)=>i===p0Sel?'':pill('b',i,p1Sel===i,`${FLAG[e[1]]||''} ${nm(e)}`,'')).join('')}</div>
   <div class="pills"><span class="lbl">Level</span>${LVL.map((l,i)=>pill('l',i,lvl===i,l,String(i+1))).join('')}<span class="lbl">Match</span>${pill('g',1,gamesSel===1,'One game to 21','')}${pill('g',3,gamesSel===3,'Best of three','')}</div>
+  <div class="pills"><span class="lbl">Format</span>${pill('tr',0,!tourSel,'Single match','')}${pill('tr',1,tourSel,'🏆 World Tour Super 1000 (quarter-final to final)','')}</div>
   <div class="pills"><span class="lbl">Controls</span>${pill('as',1,assist,'Assisted (auto footwork)','')}${pill('as',0,!assist,'Full control','')}</div>
   <div class="pills"><button class="gold" data-act="start" tabindex="-1">Play <kbd>Enter</kbd></button><a href="./" tabindex="-1">Home</a><a href="tennis" tabindex="-1">Tennis</a><a href="tabletennis" tabindex="-1">Table Tennis</a></div>
-  <div id="hint">Your record ${SV.wins}-${SV.games-SV.wins}${SV.smash?` · fastest smash ${SV.smash} km/h`:''}${SV.rally?` · longest rally ${SV.rally}`:''}</div>`;
+  <div id="hint">${SV.titles?`World Tour titles ${SV.titles} · `:''}Your record ${SV.wins}-${SV.games-SV.wins}${SV.smash?` · fastest smash ${SV.smash} km/h`:''}${SV.rally?` · longest rally ${SV.rally}`:''}</div>`;
   $('menuIn').innerHTML=h; const a=L[p0Sel], b=L[p1Sel], ca=NCOL[a[1]]||['#334155','#fff'], cb=NCOL[b[1]]||['#334155','#fff']; $('logoL').src=badge(ca[0],ca[1]); setText('nameL',nm(a)); setText('tpL','You'); setText('scoreL',''); $('logoR').src=badge(cb[0],cb[1]); setText('nameR',nm(b)); setText('tpR',LVL[lvl]); setText('scoreR',''); setText('cntT','BWF'); setText('innT',EVT[evtSel]); setText('outsT',gamesSel===1?'1 game':'Best of 3'); setText('basesT',''); renderKeysHelp(); }
 $('menuIn').addEventListener('mousedown',e=>{ if(e.target.closest('button')) e.preventDefault(); });
-$('menuIn').addEventListener('click',e=>{ const b=e.target.closest('button'); if(!b) return; const d=b.dataset; audio(); sfx.click(); if(d.e){ evtSel=d.e; p0Sel=0; p1Sel=1; } else if(d.a!==undefined) p0Sel=+d.a; else if(d.b!==undefined) p1Sel=+d.b; else if(d.l!==undefined) lvl=+d.l; else if(d.g) gamesSel=+d.g; else if(d.as!==undefined) assist=d.as==='1'; else if(d.act==='start'){ startGame(); return; } savePrefs(); renderMenu(); });
+$('menuIn').addEventListener('click',e=>{ const b=e.target.closest('button'); if(!b) return; const d=b.dataset; audio(); sfx.click(); if(d.e){ evtSel=d.e; p0Sel=0; p1Sel=1; } else if(d.a!==undefined) p0Sel=+d.a; else if(d.b!==undefined) p1Sel=+d.b; else if(d.l!==undefined) lvl=+d.l; else if(d.g) gamesSel=+d.g; else if(d.as!==undefined) assist=d.as==='1'; else if(d.tr!==undefined) tourSel=d.tr==='1'; else if(d.act==='start'){ startGame(); return; } savePrefs(); renderMenu(); });
 addEventListener('keydown',e=>{ if(phase!=='menu') return; if(['Digit1','Digit2','Digit3'].includes(e.code)){ lvl=+e.code.slice(5)-1; savePrefs(); renderMenu(); } });
-function startGame(){ audio(); savePrefs(); twoP=false; newMatch(); }
-function renderKeysHelp(){ $('keysHelp').innerHTML='<div><b>Move</b> W A S D</div><div><b>Clear / lift</b> J</div><div><b>Drop / net shot</b> K</div><div><b>Smash / drive</b> L</div><div><b>Best shot</b> SPACE</div><div><b>Aim</b> hold a direction as you hit</div><div><b>Serve</b> SPACE short · J high</div><div><b>Camera</b> C · <b>Pause</b> Esc</div>'; }
+const TOURS=['All England Open','Indonesia Open','China Open','Malaysia Open'];
+function startGame(){ audio(); savePrefs(); twoP=false; if(tourSel){ const L=PROS[evtSel], pool=L.map((e,i)=>i).filter(i=>i!==p0Sel).sort((a,b)=>(L[a][2]-L[b][2])+(Math.random()-.5)*4);
+    gamesSel=3; TOUR={name:TOURS[Math.floor(Math.random()*TOURS.length)],opps:[pool[0],pool[Math.floor(pool.length/2)],pool[pool.length-1]],round:0}; p1Sel=TOUR.opps[0]; } else TOUR=null; newMatch(); }
+const RND=['Quarter-final','Semi-final','Final'];
+function renderKeysHelp(){ $('keysHelp').innerHTML='<div><b>Move</b> W A S D</div><div><b>Clear / lift</b> J</div><div><b>Drop / net shot</b> K</div><div><b>Smash / drive</b> L</div><div><b>Best shot</b> SPACE</div><div><b>Aim</b> hold a direction as you hit</div><div><b>Serve</b> SPACE short · J high</div><div><b>Challenge a line call</b> H</div><div><b>Camera</b> C · <b>Pause</b> Esc</div>'; }
 function toMenu(){ phase='menu'; M=null; $('result').classList.add('hidden'); $('menu').classList.remove('hidden'); renderMenu(); }
 
 /* ---------- loop ---------- */
@@ -790,14 +816,14 @@ function toggleFs(){ const st=$('stage'); try{ if(document.fullscreenElement) do
 $('btnFs').addEventListener('click',toggleFs);
 $('btnSnd').addEventListener('click',()=>{ muted=!muted; $('btnSnd').textContent=muted?'Sound off':'Sound on'; if(!muted){ audio(); sfx.click(); } });
 $('result').addEventListener('click',()=>{ if(phase==='over') toMenu(); });
-if(TEST) window.__bd={get M(){return M;},get phase(){return phase;},step,newMatch,keys,onPress,set evtSel(v){evtSel=v;},set lvl(v){lvl=v;},set gamesSel(v){gamesSel=v;},set assist(v){assist=v;},set camMode(v){camMode=v;},humanSwing,solveShot,flyOut,launchS};
+if(TEST) window.__bd={startGame,get TOUR(){return TOUR;},set tourSel(v){tourSel=v;},challenge,get M(){return M;},get phase(){return phase;},step,newMatch,keys,onPress,set evtSel(v){evtSel=v;},set lvl(v){lvl=v;},set gamesSel(v){gamesSel=v;},set assist(v){assist=v;},set camMode(v){camMode=v;},humanSwing,solveShot,flyOut,launchS};
 $('btnView').style.display='none'; $('viewBtn2').style.display='none'; setView3(true);
 renderMenu();
 requestAnimationFrame(frame);
 
 /* ---------- world records ---------- */
 const LBG=((location.pathname.split('/').pop()||'').replace(/\.html$/,'')||'game').toLowerCase(), lbPost=(id,s,t)=>{ try{ window.RRL&&RRL.post(id,s,t); }catch(e){} }, lbBoards=l=>{ try{ window.RRL&&RRL.boards(LBG,l); }catch(e){} };
-lbBoards([{id:'wins',name:'Match wins',mode:'sum'},{id:'smash',name:'Fastest smash (km/h)',mode:'max'},{id:'rally',name:'Longest rally (shots)',mode:'max'},{id:'tour',name:'Wins at World Tour Finals level',mode:'sum'}]);
+lbBoards([{id:'titles',name:'World Tour titles',mode:'sum'},{id:'wins',name:'Match wins',mode:'sum'},{id:'smash',name:'Fastest smash (km/h)',mode:'max'},{id:'rally',name:'Longest rally (shots)',mode:'max'},{id:'tour',name:'Wins at World Tour Finals level',mode:'sum'}]);
 { const _e=endMatch; endMatch=function(){ const r=_e.apply(this,arguments); try{ if(M&&!twoP){ const A=M.teams[0], B=M.teams[1]; if(A.games>B.games){ lbPost('wins',1); if(lvl===2) lbPost('tour',1); } if(M.mySmash>100) lbPost('smash',Math.round(M.mySmash),`${A.name} v ${B.name}`); if(M.maxRally>5) lbPost('rally',M.maxRally,`${A.name} v ${B.name}`); } }catch(e){} return r; }; }
 
 
