@@ -297,7 +297,7 @@ const other=f=>B.f[1-f.i];
 function mkF(i,info,ctl){ const s=i===0?1:-1; return {i,s,x:-s*(EG+.40),w:B.w,name:info.name,nat:info.nat,rat:info.rat,style:info.style||'att',ctl,st:'guard',t:0,x0:0,
   p:{l:0,e:0,pa:0,pl:1,fl:0,ph:0,dir:0,bend:0,knock:0,knockDir:1,run:0},crouch:1,line:0,aim:null,aimLine:0,aimErr:[0,0],hold:false,attacking:false,attId:0,cut:false,cutLine:0,stuck:false,prevMin:9,parryOK:-9,endT:-9,ai:{cool:.4,handled:-1},hist:[]}; }
 function newBout(a,b,o){ o=o||{};
-  B={w:wSel,target:o.touches||touchSel,f:[],score:[0,0],clock:180,period:1,periods:(o.touches||touchSel)>=15?3:(o.touches||touchSel)>=10?2:1,phase:'egarde',phT:0,t:0,lights:[null,null],firstHit:null,ev:[],hist:[],halt:null,attSeq:0,
+  B={relay:o.relay||null,w:wSel,target:o.touches||touchSel,f:[],score:o.score?o.score.slice():[0,0],clock:180,period:1,periods:o.relay?1:(o.touches||touchSel)>=15?3:(o.touches||touchSel)>=10?2:1,phase:'egarde',phT:0,t:0,lights:[null,null],firstHit:null,ev:[],hist:[],halt:null,attSeq:0,
     prioMin:false,prioTo:-1,call:null,callT:0,msg:null,msgT:0,sabreBreak:false,tour:o.tour||null,two:!!o.two,replay:null,cards:[0,0]};
   B.f=[mkF(0,a,'p1'),mkF(1,b,o.two?'p2':'ai')]; phase='bout'; $('menu').classList.add('hidden'); $('result').classList.add('hidden'); paused=false; built3=false; cam3=null;
   enGarde(true); banner(`${WEAPONS[B.w].name} · ${B.target} touches`,`${a.name} vs ${b.name}`,'#facc15',1.8); renderKeysHelp(); updateBoard(); }
@@ -472,6 +472,7 @@ function snap(){ B.hist.push({f:B.f.map(f=>({x:f.x,s:f.s,w:f.w,i:f.i,nat:f.nat,c
 function afterCall(){ const s=B.score, T=B.target, h=B.halt;
   if(s[0]>=T||s[1]>=T) return boutOver(s[0]>s[1]?0:1);
   if(B.prioMin&&(B.res.pts[0]||B.res.pts[1])) return boutOver(B.res.pts[0]?0:1);
+  if(h.why==='time'&&B.relay&&!B.prioMin&&(B.relay.leg<8||s[0]!==s[1])){ return boutOver(s[0]>=s[1]?0:1); }
   if(h.why==='time'){ if(B.prioMin) return boutOver(B.prioTo);
     if(B.period<B.periods){ B.period++; B.clock=180; toast(`Period ${B.period}`,'#93c5fd'); banner(`Period ${B.period}`,'One-minute break taken','#93c5fd',1.6); }
     else if(s[0]!==s[1]) return boutOver(s[0]>s[1]?0:1);
@@ -482,10 +483,29 @@ function afterCall(){ const s=B.score, T=B.target, h=B.halt;
   else { const mid=(B.f[0].x+B.f[1].x)/2, gap=Math.max(h.why==='corps'||h.why==='pass'?4:0,B.f[1].x-B.f[0].x); B.f[0].x=clamp(mid-gap/2,-PISTE+.6,PISTE-4.6); B.f[1].x=B.f[0].x+gap; if(B.f[1].x>PISTE-.6){ B.f[1].x=PISTE-.6; B.f[0].x=B.f[1].x-gap; } enGarde(false); }
   updateBoard(); }
 function boutOver(win){ B.phase='over'; phase='over'; const me=B.f[0], youWon=win===0; sfx.crowd(.25); speak(`${B.f[win].name} gagne`,true);
-  if(!B.two){ SV.bouts++; if(youWon) SV.wins++; saveSV(); }
+  if(!B.two&&!B.relay){ SV.bouts++; if(youWon) SV.wins++; saveSV(); }
   if(B.tour) return tourAfter(youWon);
+  if(B.relay) return relayAfter();
   $('resultIn').innerHTML=`<h2>${B.two?`${esc(B.f[win].name)} wins!`:youWon?'Victory!':'Defeat'}</h2><div class="rs">${B.score[0]} – ${B.score[1]}</div><p>${esc(WEAPONS[B.w].name)} · ${esc(B.f[0].name)} vs ${FLAG[B.f[1].nat]||''} ${esc(B.f[1].name)}</p><p>Career: ${SV.wins} wins in ${SV.bouts} bouts</p><p>Enter for the menu, R for a rematch.</p>`;
   setTimeout(()=>{ if(phase==='over') $('result').classList.remove('hidden'); },900); }
+
+/* ---------- team relay (Olympic team event): three a side, nine legs, each to the next multiple of 5, first to 45 ---------- */
+let RELAY=null; const RORDER=[[2,2],[0,1],[1,0],[0,2],[2,1],[1,2],[2,0],[1,1],[0,0]];
+function newRelay(){ const ros=roster(), by={}; for(const f of ros) (by[f.nat]=by[f.nat]||[]).push(f);
+  const nats=Object.keys(by).sort((a,b)=>by[b].length-by[a].length||Math.max(...by[b].map(f=>f.rat))-Math.max(...by[a].map(f=>f.rat))), pool=nats.filter(n=>by[n].length>=2), nat=(pool.length?pool:nats)[Math.floor(Math.random()*Math.min(3,(pool.length?pool:nats).length))];
+  const opp=by[nat].slice().sort((a,b)=>b.rat-a.rat).slice(0,3); while(opp.length<3) opp.push({name:`${nat} reserve ${opp.length+1}`,nat,rat:Math.max(...opp.map(f=>f.rat))-5,style:['att','def','counter'][opp.length]});
+  const mine=[{name:'You',nat:'GBR',rat:90,style:'att'},{name:'You',nat:'GBR',rat:90,style:'att'},{name:'You',nat:'GBR',rat:90,style:'att'}];
+  RELAY={nat,opp,mine,leg:0,score:[0,0],legs:[]}; relayLeg(); }
+function relayLeg(){ const Rl=RELAY, k=Rl.leg, [a,b]=RORDER[k], o=Rl.opp[b], tgt=5*(k+1);
+  newBout({name:'You',nat:'GBR',rat:90},o,{relay:Rl,touches:tgt,score:Rl.score}); B.relay.legStart=Rl.score.slice();
+  banner(`Team relay · leg ${k+1} of 9`,`GBR v ${Rl.nat} · ${o.name} · to ${tgt} (score ${Rl.score[0]}–${Rl.score[1]})`,'#facc15',2.4); }
+function relayAfter(){ const Rl=RELAY, s=B.score; Rl.legs.push({o:Rl.opp[RORDER[Rl.leg][1]].name,a:s[0]-Rl.score[0],b:s[1]-Rl.score[1]}); Rl.score=s.slice();
+  const done=Rl.leg>=8||s[0]>=45||s[1]>=45, won=s[0]>s[1];
+  if(done){ if(won){ SV.teamW=(SV.teamW||0)+1; saveSV(); try{ lbPost('team',1,`${WEAPONS[wSel].name} v ${Rl.nat} ${s[0]}-${s[1]}`); }catch(e){} }
+    $('resultIn').innerHTML=`<h2>${won?'🏆 Your team wins!':`${Rl.nat} win the team event`}</h2><div class="rs">${s[0]} – ${s[1]}</div>${relayTable()}<p>Enter for the menu.</p>`; RELAY=null; }
+  else { Rl.leg++; $('resultIn').innerHTML=`<h2>Leg ${Rl.leg} done: ${s[0]} – ${s[1]}</h2>${relayTable()}<p>Next leg: you v ${esc(Rl.opp[RORDER[Rl.leg][1]].name)}, to ${5*(Rl.leg+1)}. Press Enter.</p>`; }
+  setTimeout(()=>{ if(phase==='over') $('result').classList.remove('hidden'); },900); }
+function relayTable(){ const Rl=RELAY; let run=[0,0]; return `<table class="ls" style="font-size:14px"><tr><th>Leg</th><th>Opponent</th><th>Leg score</th><th>Total</th></tr>${Rl.legs.map((L,i)=>{ run=[run[0]+L.a,run[1]+L.b]; return `<tr><td>${i+1}</td><td>${esc(L.o)}</td><td>${L.a}–${L.b}</td><td><b>${run[0]}–${run[1]}</b></td></tr>`; }).join('')}</table>`; }
 
 /* ---------- Olympic tournament: table of 8, bronze medal bout, final ---------- */
 let TOUR=null;
@@ -567,7 +587,8 @@ addEventListener('keydown',e=>{
   if(e.code==='KeyZ'){ toggleFs(); return; }
   if(e.code==='KeyV'){ setView3(!view3); return; }
   if(phase==='menu'){ menuKey(e.code); return; }
-  if(phase==='over'){ if(e.code==='KeyR'&&!TOUR&&B){ const a=B.f[0], b=B.f[1]; newBout({name:a.name,nat:a.nat,rat:a.rat},{name:b.name,nat:b.nat,rat:b.rat,style:b.style},{two:B.two}); } else if(['Enter','NumpadEnter','Space','Escape','KeyM'].includes(e.code)){ if(TOUR) tourNext(); else toMenu(); } return; }
+  if(phase==='over'&&RELAY&&['Enter','NumpadEnter','Space'].includes(e.code)){ relayLeg(); return; }
+  if(phase==='over'){ if(e.code==='KeyR'&&!TOUR&&!RELAY&&B){ const a=B.f[0], b=B.f[1]; newBout({name:a.name,nat:a.nat,rat:a.rat},{name:b.name,nat:b.nat,rat:b.rat,style:b.style},{two:B.two}); } else if(['Enter','NumpadEnter','Space','Escape','KeyM'].includes(e.code)){ if(TOUR) tourNext(); else toMenu(); } return; }
   if(!B) return;
   if(e.code==='Escape'){ paused=!paused; if(paused) banner('Paused','Esc to resume · M for menu','#000',1e9); else { $('banner').classList.remove('on'); bannerT=0; } return; }
   if(e.code==='KeyM'){ if(confirm('Leave this bout?')){ TOUR=null; toMenu(); } keys.clear(); return; }
@@ -583,19 +604,19 @@ const pill=(attr,val,on,label,key)=>`<button data-${attr}="${val}" class="${on?'
 function renderMenu(){ const R=roster(); oppSel=clamp(oppSel,0,R.length-1); const op=R[oppSel], Wd=WEAPONS[wSel];
   let h=`<h1>Rink Rivals: Fencing</h1><p>Olympic fencing with the real rules: right of way, lockout timing and the scoring box, target areas, the 14 m piste and its back line, three-minute periods and the priority minute. Footwork, lunges, parries and ripostes, beats, feints, points in line, flèches and counter-attacks against real Olympic fencers, with a replay of every touch.</p>
   <div class="pills">${['foil','epee','sabre'].map((w,k)=>pill('w',w,wSel===w,WEAPONS[w].name,String(k+1))).join('')}<span class="lbl">Event</span>${pill('g','m',gSel==='m',"Men's",'')}${pill('g','w',gSel==='w',"Women's",'')}<a href="./" tabindex="-1">Home</a><a href="ufc" tabindex="-1">UFC</a></div>
-  <div class="pills"><span class="lbl">Mode</span>${pill('md',1,modeSel===1,'Olympic tournament','')}${pill('md',2,modeSel===2,'Quick bout','')}${pill('md',3,modeSel===3,'2 players','')}${modeSel!==1?`<span class="lbl">Touches</span>${[5,10,15].map(n=>pill('tc',n,touchSel===n,String(n),'')).join('')}`:''}</div>
+  <div class="pills"><span class="lbl">Mode</span>${pill('md',1,modeSel===1,'Olympic tournament','')}${pill('md',4,modeSel===4,'Team relay','')}${pill('md',2,modeSel===2,'Quick bout','')}${pill('md',3,modeSel===3,'2 players','')}${modeSel===2||modeSel===3?`<span class="lbl">Touches</span>${[5,10,15].map(n=>pill('tc',n,touchSel===n,String(n),'')).join('')}`:''}</div>
   ${modeSel!==3?`<div class="pills"><span class="lbl">Level</span>${DIFF.map((d,i)=>pill('d',i,diff===i,d.n,String(i+5))).join('')}</div>`:''}
   ${modeSel===2?`<div class="pickers"><div class="pk p1"><button class="ar" data-o="-1" tabindex="-1">‹</button><div class="mid"><div class="who">Opponent</div><img src="${badgeF(op.nat,false)}" alt=""><div class="n">${FLAG[op.nat]||''} ${esc(op.name)}</div><div class="meta">${op.nat} · rating ${op.rat} · ${({att:'attacker',def:'defender',counter:'counter-puncher'})[op.style]}</div></div><button class="ar" data-o="1" tabindex="-1">›</button></div></div>`:''}
   <div class="pills"><button class="gold" data-act="start" tabindex="-1">${modeSel===1?'Enter the tournament':'Fence'} <kbd>Enter</kbd></button></div><div id="hint">${esc(Wd.desc)} ${SV.bouts?`Career: ${SV.wins}/${SV.bouts} bouts won.`:''}</div>${medalLine()}`;
-  $('menuIn').innerHTML=h; $('logoL').src=badgeF('GBR',true); setText('nameL','You'); setText('tpL',Wd.name); setText('scoreL',''); $('logoR').src=badgeF(op.nat,false); setText('nameR',modeSel===1?'Olympic table of 8':modeSel===3?'Player 2':op.name); setText('tpR',gSel==='m'?"Men's":"Women's"); setText('scoreR','');
-  setText('cntT','Fencing'); setText('innT',Wd.name); setText('outsT',['','Tournament','Quick bout','2 players'][modeSel]); setText('basesT',''); lastBoard=''; renderKeysHelp(); }
+  $('menuIn').innerHTML=h; $('logoL').src=badgeF('GBR',true); setText('nameL','You'); setText('tpL',Wd.name); setText('scoreL',''); $('logoR').src=badgeF(op.nat,false); setText('nameR',modeSel===4?'Team relay':modeSel===1?'Olympic table of 8':modeSel===3?'Player 2':op.name); setText('tpR',gSel==='m'?"Men's":"Women's"); setText('scoreR','');
+  setText('cntT','Fencing'); setText('innT',Wd.name); setText('outsT',['','Tournament','Quick bout','2 players','Team relay'][modeSel]); setText('basesT',''); lastBoard=''; renderKeysHelp(); }
 $('menuIn').addEventListener('mousedown',e=>{ if(e.target.closest('button')) e.preventDefault(); });
 $('menuIn').addEventListener('click',e=>{ const b=e.target.closest('button'); if(!b) return; const d=b.dataset; audio(); sfx.click();
   if(d.w) wSel=d.w; else if(d.g) gSel=d.g; else if(d.md) modeSel=+d.md; else if(d.tc) touchSel=+d.tc; else if(d.d!==undefined) diff=+d.d; else if(d.o) oppSel=(oppSel+ +d.o+8)%8; else if(d.act==='start'){ startGame(); return; }
   savePrefs(); renderMenu(); });
 function menuKey(code){ const dg=code.replace('Numpad','Digit'); if(['Digit1','Digit2','Digit3'].includes(dg)){ wSel=['foil','epee','sabre'][+dg.slice(5)-1]; savePrefs(); renderMenu(); return; } if(['Digit5','Digit6','Digit7'].includes(dg)){ diff=+dg.slice(5)-5; savePrefs(); renderMenu(); return; }
   if(code==='ArrowLeft'||code==='KeyA'){ oppSel=(oppSel+7)%8; renderMenu(); } else if(code==='ArrowRight'||code==='KeyD'){ oppSel=(oppSel+1)%8; renderMenu(); } else if(['Enter','NumpadEnter','Space'].includes(code)) startGame(); }
-function startGame(){ audio(); savePrefs(); if(modeSel===1){ newTour(); return; } const op=roster()[oppSel]; if(modeSel===3) newBout({name:'Left',nat:'GBR',rat:90},{name:'Right',nat:'FRA',rat:90},{two:true}); else newBout(YOU,op); }
+function startGame(){ audio(); savePrefs(); if(modeSel===1){ newTour(); return; } if(modeSel===4){ newRelay(); return; } const op=roster()[oppSel]; if(modeSel===3) newBout({name:'Left',nat:'GBR',rat:90},{name:'Right',nat:'FRA',rat:90},{two:true}); else newBout(YOU,op); }
 function renderKeysHelp(){ $('keysHelp').innerHTML=B&&B.two?'<div><b>Left</b> A D move · W S line · F extend · G lunge · H parry · T flèche · R feint</div><div><b>Right</b> ← → move · ↑ ↓ line · . extend · / lunge · Right Shift parry · \' flèche · ; feint</div><div><b>3D/2D</b> V</div><div><b>Pause</b> Esc</div>'
   :'<div><b>Advance / retreat</b> D A</div><div><b>High / low line</b> W S</div><div><b>Extend</b> J (hold: point in line)</div><div><b>Lunge</b> Space</div><div><b>Parry / beat</b> K</div><div><b>Flèche</b> L</div><div><b>Feint</b> Shift</div><div><b>Camera</b> C</div><div><b>3D/2D</b> V</div><div><b>Pause</b> Esc</div>'; }
 function toMenu(){ phase='menu'; B=null; $('result').classList.add('hidden'); $('menu').classList.remove('hidden'); renderMenu(); }
@@ -855,7 +876,7 @@ void main(){vec4 t=texture2D(uTex,vUV*uUVR.zw+uUVR.xy);if(t.a<0.04)discard;gl_Fr
     time+=dt||1/60; resize();
     gl.viewport(0,0,cw,ch); const SK=cam.sky||[.04,.06,.12]; FOGC=SK; gl.clearColor(SK[0],SK[1],SK[2],1); gl.clear(gl.COLOR_BUFFER_BIT|gl.DEPTH_BUFFER_BIT);
     gl.enable(gl.DEPTH_TEST); gl.disable(gl.CULL_FACE); gl.disable(gl.BLEND); gl.depthMask(true);
-    eye=cam.eye; VP=mul(persp(cam.fov*Math.PI/180,cw/ch,cam.near||6,cam.far||14000),lookAt(cam.eye,cam.center,[0,1,0]));
+    eye=cam.eye; VP=mul(persp(cam.fov*Math.PI/180,cw/ch,cam.near||6,cam.far||14000),lookAt(cam.eye,cam.center,cam.up||[0,1,0]));
     cheer=cam.cheer||0;
     useC(); if(world) part(world,I(),[1,1,1]); if(crowdM) part(crowdM,I(),[1,1,1]);
     decals.length=0; shadows.length=0;
@@ -974,16 +995,16 @@ $('btnView').addEventListener('click',()=>setView3(!view3));
 $('viewBtn2').addEventListener('click',e=>{ e.stopPropagation(); audio(); if(view3&&B){ camMode=(camMode+1)%3; savePrefs(); toast(['Broadcast camera','Low side camera','Behind you'][camMode],'#93c5fd'); } else setView3(!view3); });
 $('viewBtn2').addEventListener('pointerdown',e=>e.stopPropagation());
 $('btnSnd').addEventListener('click',()=>{ muted=!muted; $('btnSnd').textContent=muted?'Sound off':'Sound on'; if(!muted){ audio(); sfx.click(); } });
-$('result').addEventListener('click',()=>{ if(phase==='over'){ if(TOUR) tourNext(); else toMenu(); } });
-if(TEST) window.__fe={get B(){return B;},get phase(){return phase;},get TOUR(){return TOUR;},step,newBout,newTour,act,poseOf,keys,ROSTER,WEAPONS,decide,priority,set wSel(v){wSel=v;},set diff(v){diff=v;},set modeSel(v){modeSel=v;},roster,YOU,set camMode(v){camMode=v;}};
+$('result').addEventListener('click',()=>{ if(phase==='over'){ if(RELAY) relayLeg(); else if(TOUR) tourNext(); else toMenu(); } });
+if(TEST) window.__fe={newRelay,relayLeg,get RELAY(){return RELAY;},get B(){return B;},get phase(){return phase;},get TOUR(){return TOUR;},step,newBout,newTour,act,poseOf,keys,ROSTER,WEAPONS,decide,priority,set wSel(v){wSel=v;},set diff(v){diff=v;},set modeSel(v){modeSel=v;},roster,YOU,set camMode(v){camMode=v;}};
 setView3(view3);
 renderMenu();
 requestAnimationFrame(frame);
 
 /* ---------- world records ---------- */
 const LBG=((location.pathname.split('/').pop()||'').replace(/\.html$/,'')||'game').toLowerCase(), lbPost=(id,s,t)=>{ try{ window.RRL&&RRL.post(id,s,t); }catch(e){} }, lbBoards=l=>{ try{ window.RRL&&RRL.boards(LBG,l); }catch(e){} };
-lbBoards([{id:'wins',name:'Bouts won',mode:'sum'}]);
-{ const _f=boutOver; boutOver=function(win){ const two=B&&B.two; const r=_f.apply(this,arguments); if(!two&&win===0) lbPost('wins',1); return r; }; }
+lbBoards([{id:'wins',name:'Bouts won',mode:'sum'},{id:'team',name:'Team relay wins',mode:'sum'}]);
+{ const _f=boutOver; boutOver=function(win){ const two=B&&B.two; const r=_f.apply(this,arguments); if(!two&&win===0&&!(B&&B.relay)) lbPost('wins',1); return r; }; }
 
 
 /* ---------- online: a friend or anyone on the site plays the other side ---------- */
