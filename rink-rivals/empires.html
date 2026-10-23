@@ -675,6 +675,23 @@ function aiAccepts(G,ai,from,k){ const o=opin(G,ai,from), P=PERS[NAT[ai].pers];
   return false; }
 
 /* ---------- the end of the year: money in, upkeep out, research, recovery ---------- */
+/* ---------- world events: booms and busts, disasters and windfalls (decided by the game's own seeded dice, so online games agree) ---------- */
+function news(G,n,txt,good,r){ G.ev.push({id:++G.evN,k:'news',t:G.turn,n,txt,good:!!good,r:r==null?-1:r}); if(G.ev.length>80) G.ev.splice(0,G.ev.length-80); logx(G,txt); }
+function worldEvents(G){ const W=WORLD;
+  /* a global shock now and then */ const g=R01(G);
+  if(g<.035){ for(let n=0;n<NN;n++){ const N=G.na[n]; if(N.alive) N.cash-=Math.round((N.lastInc||10)*.12); } news(G,-1,`🌐 ${G.year}: a global recession hits every economy`,false); }
+  else if(g<.06){ for(let n=0;n<NN;n++){ const N=G.na[n]; if(!N.alive) continue; let oil=0; for(const i of owned(G,n)) oil+=REG[i].o; N.cash+=oil>=4?Math.round(oil*1.5):-4; } news(G,-1,`🛢️ ${G.year}: oil prices spike: producers cash in, importers pay`,true); }
+  for(let n=0;n<NN;n++){ const N=G.na[n]; if(!N.alive||R01(G)>.11) continue; const regs=owned(G,n); if(!regs.length) continue; const nm=NAT[n].n, inc=Math.max(8,N.lastInc||8), r=regs[Math.floor(R01(G)*regs.length)], rn=REG[r].n, k=Math.floor(R01(G)*9);
+    if(k===0){ const v=Math.round(inc*.25); N.cash+=v; news(G,n,`📈 Economic boom in ${nm}: +${money0(v)}`,true); }
+    else if(k===1){ const v=Math.round(inc*.15); N.cash-=v; news(G,n,`📉 Recession in ${nm}: −${money0(v)}`,false); }
+    else if(k===2){ const R=G.rg[r], bs=R.b.map((v,i)=>v>0?i:-1).filter(i=>i>=0); if(bs.length){ const b=bs[Math.floor(R01(G)*bs.length)]; R.b[b]--; news(G,n,`🌋 Earthquake in ${rn} (${nm}): ${BT[b].n.toLowerCase()} damaged`,false,r); } else { N.cash-=5; news(G,n,`🌋 Earthquake in ${rn} (${nm}): rebuilding costs ${money0(5)}`,false,r); } }
+    else if(k===3){ const v=Math.round(6+REG[r].f*2); N.cash+=v; news(G,n,`🌾 Bumper harvest in ${rn} (${nm}): +${money0(v)}`,true,r); }
+    else if(k===4){ N.rp+=25; news(G,n,`🔬 Scientific breakthrough in ${nm}: +25 research`,true); }
+    else if(k===5){ const R=G.rg[r]; if(W.COAST[r]&&W.COAST[r].length&&R.u[FLEET]>0){ R.u[FLEET]--; news(G,n,`🌀 A hurricane wrecks a fleet off ${rn} (${nm})`,false,r); } else { N.cash-=4; news(G,n,`🌀 Storms batter ${rn} (${nm}): −${money0(4)}`,false,r); } }
+    else if(k===6){ for(let m=0;m<NN;m++) if(m!==n) addOp(G,m,n,-6); news(G,n,`📰 Political scandal in ${nm}: the world thinks less of it`,false); }
+    else if(k===7){ for(let m=0;m<NN;m++) if(m!==n) addOp(G,m,n,8); N.cash-=6; news(G,n,`🏅 ${nm} hosts the Olympic Games: goodwill from every nation`,true); }
+    else { const c=N.cap!=null&&G.rg[N.cap]&&G.rg[N.cap].o===n?N.cap:r; G.rg[c].u[INF]++; news(G,n,`🎖️ A wave of volunteers in ${nm}: +1 infantry in ${REG[c].n}`,true,c); } } }
+const money0=v=>`$${Math.round(v)}B`;
 function endYear(G){ const W=WORLD;
   for(let n=0;n<NN;n++){ const N=G.na[n]; if(!N.alive) continue; const I=incomeOf(G,n); N.cash+=I.net; N.rp+=I.rp; N.lastInc=Math.round(I.gdp); N.fuel=I.oilBal<0&&N.cash<0?1:0;
     if(warsOf(G,n).length) N.warT++; else N.warT=Math.max(0,N.warT-2);
@@ -683,6 +700,7 @@ function endYear(G){ const W=WORLD;
   for(let i=0;i<NR;i++){ const R=G.rg[i]; R.mv=[0,0,0,0,0]; R.did=0; R.rec=0; R.airlift=0; if(R.occ>0) R.occ--; }
   for(const k in G.tc){ if(G.tc[k]>0) G.tc[k]--; if(!G.tc[k]) delete G.tc[k]; }
   /* opinions drift back towards normal; trade partners warm up */ for(let a=0;a<NN;a++) for(let b=0;b<NN;b++){ if(a===b) continue; const k=relIdx(a,b); if(hasTrade(G,a,b)) G.op[k]=Math.min(100,G.op[k]+2); if(allied(G,a,b)) G.op[k]=Math.min(100,G.op[k]+1); if(atWar(G,a,b)) G.op[k]=Math.max(-100,G.op[k]-1); }
+  if(G.events!==false) worldEvents(G);
   G.offers=[]; G.na.forEach((N,n)=>{ if(N.alive) N.score=scoreOf(G,n); });
   G.pl.forEach(p=>{ if(p.n>=0&&G.na[p.n].alive){ p.peak=Math.max(p.peak,owned(G,p.n).length); p.peakInc=Math.max(p.peakInc,G.na[p.n].lastInc||0); } });
   G.hist.push(G.na.map(N=>N.alive?Math.round(N.score):0)); if(G.hist.length>120) G.hist.shift();
@@ -856,6 +874,7 @@ function onNewState(){ if(!G) return; const mine=myNations();
     else if(e.k==='war'){ if(mine.includes(e.d)){ banner('War!',`${NAT[e.a].n} declares war on you${e.ally!=null?' (ally of '+NAT[e.ally].n+')':''}`,'#ef4444',2.6); sfx.horn(); } else if(mine.includes(e.a)&&e.ally!=null){ toast(`You join the war against ${NAT[e.d].n} for ${NAT[e.ally].n}`,'#f87171'); } else if(mine.some(m=>allied(G,m,e.d))) toast(`${NAT[e.a].n} declares war on your ally ${NAT[e.d].n}`,'#fbbf24'); }
     else if(e.k==='peace'&&(mine.includes(e.a)||mine.includes(e.b))){ toast(`Peace with ${NAT[mine.includes(e.a)?e.b:e.a].n}`,'#34d399'); sfx.deal(); }
     else if(e.k==='ally'&&(mine.includes(e.a)||mine.includes(e.b))){ toast(`Alliance with ${NAT[mine.includes(e.a)?e.b:e.a].n}!`,'#34d399'); sfx.deal(); }
+    else if(e.k==='news'){ if(e.n<0) toast(e.txt,'#93c5fd'); else if(mine.includes(e.n)){ banner(e.good?'Good news':'Bad news',e.txt.replace(/ \(.*?\)/,''),e.good?'#22c55e':'#f87171',2.6); if(e.r>=0) flashes.push({r:e.r,t:2,win:e.good}); } }
     else if(e.k==='fall'){ if(mine.includes(e.n)) banner('Your nation has fallen',`${NAT[e.by].n} took your last region`,'#ef4444',3); else toast(`${NAT[e.n].n} has fallen to ${NAT[e.by].n}`,'#fbbf24'); } }
   if(G.notes) for(const nt of G.notes){ if(nt.id<=seenNote) continue; seenNote=nt.id; if(iAm(nt.pid)) toast(nt.msg,nt.col||'#34d399'); }
   if(G.year!==yearShown&&G.phase!=='over'){ yearShown=G.year; const n=meN(); const inc=n>=0&&G.na[n].alive?incomeOf(G,n):null; banner(String(G.year),inc?`Income ${sgn(inc.net)} · treasury ${money(G.na[n].cash)}`:'A new year','#38bdf8',1.8); sfx.turn(); }
@@ -1470,7 +1489,7 @@ $('viewBtn2').addEventListener('pointerdown',e=>e.stopPropagation());
 $('btnSnd').addEventListener('click',()=>{ muted=!muted; $('btnSnd').textContent=muted?'Sound off':'Sound on'; if(!muted){ audio(); sfx.click(); } });
 $('result').addEventListener('click',()=>{ if(phase==='over') toMenu(); });
 { const _sg=startGame; startGame=function(){ if(!worldReady) return; return _sg(); }; }
-if(TEST) window.__em={get G(){return G;},set G(v){G=v;},get phase(){return phase;},step,newGame,act,applyAct,onButton,clickMap,setView3,get view3(){return view3;},toScr,fromScr,regionAtScreen,V,get sel(){return sel;},set sel(v){sel=v;},get tab(){return tab;},set tab(v){tab=v;},get moveU(){return moveU;},set moveU(v){moveU=v;},get moveMode(){return moveMode;},set moveMode(v){moveMode=v;},resetMoveU,
+if(TEST) window.__em={worldTurn,endYear,get G(){return G;},set G(v){G=v;},get phase(){return phase;},step,newGame,act,applyAct,onButton,clickMap,setView3,get view3(){return view3;},toScr,fromScr,regionAtScreen,V,get sel(){return sel;},set sel(v){sel=v;},get tab(){return tab;},set tab(v){tab=v;},get moveU(){return moveU;},set moveU(v){moveU=v;},get moveMode(){return moveMode;},set moveMode(v){moveMode=v;},resetMoveU,
   get myPids(){return myPids;},activePid,meN,REG,NAT,RKEY,NKEY,get WORLD(){return WORLD;},worldTurn,incomeOf,owned,moveCheck,seaReach,defEstimate,stackAtk,get anim(){return anim;},get animQ(){return animQ;},get confirmUI(){return confirmUI;},set camMode(v){camMode=v;},get targets(){return targets;},set seats(v){seats=v;},get seats(){return seats;},toMenu,get worldReady(){return worldReady;},
   set turnsSel(v){turnsSel=v;},set domSel(v){domSel=v;},set aiSel(v){aiSel=v;},startGame,get BTN(){return BTN;},get net(){return net;}};
 setView3(view3);
