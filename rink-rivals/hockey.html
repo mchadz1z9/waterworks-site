@@ -1654,7 +1654,7 @@ function puckStep(dt){
     if(pk.owner) break;
   }
   if(!pk.owner){
-    const f=Math.exp(-.32*dt); pk.vx*=f; pk.vy*=f;
+    const f=Math.exp(-(OUTDOOR?.46:.32)*dt); pk.vx*=f; pk.vy*=f;
     const sp=Math.hypot(pk.vx,pk.vy); if(sp>1400){ pk.vx*=1400/sp; pk.vy*=1400/sp; }
   }
 }
@@ -2940,7 +2940,7 @@ void main(){vec4 t=texture2D(uTex,vUV*uUVR.zw+uUVR.xy);if(t.a<0.04)discard;gl_Fr
   let world=null, glassM=null, netM=null, crowdM=null, iceM=null;
   function buildStatic(){
     const g=new Geo();
-    g.add(primBox(),mm(T(0,-4,0),S(4000,2,3000)),'#0b1222');
+    g.add(primBox(),mm(T(0,-4,0),S(4000,2,3000)),OUTDOOR?'#dfe7ef':'#0b1222');
     wallG(g,0,0,4,'#facc15'); wallG(g,0,4,26,'#f8fafc');
     annG(g,0,6,26,'#e2e8f0'); wallG(g,6,0,26,'#cbd5e1');
     annG(g,6,tierD(0),-0.5,'#1e293b');
@@ -2948,7 +2948,9 @@ void main(){vec4 t=texture2D(uTex,vUV*uUVR.zw+uUVR.xy);if(t.a<0.04)discard;gl_Fr
       wallG(g,tierD(r),r?tierY(r-1):0,tierY(r),r%2?'#1f2a44':'#273352');
       annG(g,tierD(r),tierD(r)+15,tierY(r),r%2?'#2c3a5e':'#334670');
     }
-    wallG(g,tierD(TIERS),tierY(TIERS-1),tierY(TIERS-1)+160,'#121a30');
+    if(!OUTDOOR) wallG(g,tierD(TIERS),tierY(TIERS-1),tierY(TIERS-1)+160,'#121a30');
+    else { /* snowbanks behind the boards and four light towers */ annG(g,6,tierD(0),.6,'#f1f5f9');
+      for(const [x,z] of [[-760,-560],[760,-560],[-760,560],[760,560]]){ g.add(primBox(),mm(T(x,260,z),S(14,520,14)),'#475569'); g.add(primBox(),mm(T(x,530,z),RY(Math.atan2(x,z)),S(90,40,8)),'#fef9c3'); } }
     /* penalty boxes */
     for(const s of [-1,1]){
       const x0=W/2+s*64, x1=W/2+s*124;
@@ -2957,9 +2959,9 @@ void main(){vec4 t=texture2D(uTex,vUV*uUVR.zw+uUVR.xy);if(t.a<0.04)discard;gl_Fr
     }
     g.add(primBox(),mm(T(wx(W/2),12,wz(-26)),S(36,24,30)),'#1e293b');
     /* jumbotron */
-    g.add(primBox(),mm(T(0,520,0),S(150,80,110)),'#0f172a');
-    for(const [x,z,w,d] of [[0,55.5,140,1],[0,-55.5,140,1],[75.5,0,1,100],[-75.5,0,1,100]]) g.add(primBox(),mm(T(x,520,z),S(w||1,64,d||1)),'#1d4ed8');
-    g.add(primBox(),mm(T(0,476,0),S(110,10,80)),'#111827');
+    if(!OUTDOOR) g.add(primBox(),mm(T(0,520,0),S(150,80,110)),'#0f172a');
+    if(!OUTDOOR){ for(const [x,z,w,d] of [[0,55.5,140,1],[0,-55.5,140,1],[75.5,0,1,100],[-75.5,0,1,100]]) g.add(primBox(),mm(T(x,520,z),S(w||1,64,d||1)),'#1d4ed8');
+    g.add(primBox(),mm(T(0,476,0),S(110,10,80)),'#111827'); }
     /* nets */
     for(const s of [0,1]){
       const gl0=s?W-GX:GX, back=s?W-GX+ND:GX-ND, red='#d1343f';
@@ -3058,9 +3060,9 @@ void main(){vec4 t=texture2D(uTex,vUV*uUVR.zw+uUVR.xy);if(t.a<0.04)discard;gl_Fr
       banners.push({m:mm(T(X,330,z),RY(left?0:Math.PI),S(1,180,90)),uv:[i*.25,0,.25,1]});
     }
   }
-  let built=false;
+  let built=false, builtOut=false;
   function newGame(){
-    if(!built){ buildStatic(); buildAds(); built=true; }
+    if(!built||builtOut!==OUTDOOR){ buildStatic(); buildAds(); built=true; builtOut=OUTDOOR; }
     buildCrowd(); buildIceTex(); buildBanners();
     setTimeout(()=>{ try{ buildIceTex(); }catch(e){} },300);
   }
@@ -3283,7 +3285,7 @@ void main(){vec4 t=texture2D(uTex,vUV*uUVR.zw+uUVR.xy);if(t.a<0.04)discard;gl_Fr
     frameDt=dt||1/60;
     resize();
     gl.viewport(0,0,cw,ch);
-    gl.clearColor(.04,.06,.12,1); gl.clear(gl.COLOR_BUFFER_BIT|gl.DEPTH_BUFFER_BIT);
+    if(OUTDOOR) gl.clearColor(.05,.08,.17,1); else gl.clearColor(.04,.06,.12,1); gl.clear(gl.COLOR_BUFFER_BIT|gl.DEPTH_BUFFER_BIT);
     gl.enable(gl.DEPTH_TEST); gl.disable(gl.CULL_FACE); gl.disable(gl.BLEND); gl.depthMask(true);
     setupCam(dt,cw/ch);
     useC();
@@ -3336,6 +3338,7 @@ void main(){vec4 t=texture2D(uTex,vUV*uUVR.zw+uUVR.xy);if(t.a<0.04)discard;gl_Fr
   }
   function overlay(){
     hx2.setTransform(1,0,0,1,0,0); hx2.clearRect(0,0,cw,ch);
+    if(OUTDOOR&&G){ const t=performance.now()/1000; hx2.fillStyle='rgba(255,255,255,.8)'; for(let i=0;i<170;i++){ const x=((i*97.3+Math.sin(t*.7+i)*30+t*14)%cw+cw)%cw, y=((i*53.7+t*(38+i%9*6))%ch), r=(1+i%3)*cw/1400; hx2.beginPath(); hx2.arc(x,y,r,0,Math.PI*2); hx2.fill(); } }
     if(!G) return;
     const hid=hideOwn(), s=cw/1100;
     for(const h of humans){
@@ -3551,6 +3554,7 @@ function renderMenu(){
   let h=`<h1>Rink Rivals</h1><p>All 32 teams, real lines and line changes, penalties, goalies who play the puck, franchise and career modes.</p>
   <div class="pills">${pill('m',1,menuMode===1,'Vs CPU','1')}${pill('m',2,menuMode===2,'2 Players','2')}${pill('m',3,menuMode===3,'Franchise','3')}${pill('m',4,menuMode===4,'Career','4')}${pill('m',5,menuMode===5,'Practice','T')}${pill('m',6,menuMode===6,'International','I')}${pill('m',7,menuMode===7,'Skills challenge','H')}<button data-act="online" tabindex="-1">🌐 Online <kbd>N</kbd></button><button data-go="baseball" class="gold" tabindex="-1">Baseball <kbd>B</kbd></button><button data-go="football" class="gold" tabindex="-1">Football <kbd>F</kbd></button><button data-go="soccer" class="gold" tabindex="-1">Soccer <kbd>O</kbd></button><button data-go="basketball" class="gold" tabindex="-1">Basketball <kbd>K</kbd></button><button data-go="ufc" class="gold" tabindex="-1">UFC <kbd>U</kbd></button><button data-go="f1" class="gold" tabindex="-1">F1 <kbd>G</kbd></button><button data-go="skate" class="gold" tabindex="-1">Skate <kbd>Y</kbd></button></div>
   ${menuMode===5||menuMode===7?'':`<div class="pills"><span class="lbl">Teams</span>${pill('l','solo',lineup==='solo','1 on 1','8')}${pill('l','three',lineup==='three','3 on 3','9')}${pill('l','full',lineup==='full','5 on 5','0')}</div>`}`;
+  if(menuMode===1||menuMode===2) h+=`<div class="pills"><span class="lbl">Venue</span>${pill('od','0',!outdoorSel,'🏟️ Arena','')}${pill('od','1',outdoorSel,'❄️ Outdoor classic','')}</div>`;
   if(menuMode===1) h+=`<div class="pills"><span class="lbl">CPU level</span>${[0,1,2].map(d=>pill('d',d,diff===d,DIFF_NAMES[d],5+d)).join('')}</div>`;
   if(menuMode===1||menuMode===3||menuMode===5||menuMode===6) h+=`<div class="pills"><span class="lbl">Play as</span>${pill('pa','skater',playAs==='skater','Skaters','G')}${pill('pa','goalie',playAs==='goalie','Goalie','G')}</div>`;
   if(menuMode===3||menuMode===4) h+=`<div class="pills"><span class="lbl">Season</span>${pill('s',16,frLen===16,'Short, 16 games','5')}${pill('s',31,frLen===31,'Full, 31 games','6')}</div>`;
@@ -3605,6 +3609,7 @@ $('menuIn').addEventListener('click',e=>{
   if(d.m) setMode(+d.m);
   else if(d.l){ lineup=d.l; renderMenu(); }
   else if(d.d!==undefined&&!d.pk){ diff=+d.d; renderMenu(); }
+  else if(d.od!==undefined){ outdoorSel=d.od==='1'; try{ localStorage.setItem('rinkRivalsOutdoor',outdoorSel?'1':'0'); }catch(e){} renderMenu(); }
   else if(d.pa){ playAs=d.pa; renderMenu(); }
   else if(d.two){ carForm.two=d.two==='2'; renderMenu(); }
   else if(d.s){ frLen=+d.s; renderMenu(); }
@@ -3629,8 +3634,10 @@ function setMode(m){
   if(m!==3&&curTeam(0)===curTeam(1)) stepTeam(1,1);
   setView(view); renderMenu();
 }
+/* the outdoor game: an open-air stadium at night, falling snow and slower, choppier ice */
+let outdoorSel=(()=>{ try{ return localStorage.getItem('rinkRivalsOutdoor')==='1'; }catch(e){ return false; } })(), OUTDOOR=false;
 function menuStart(){
-  audio();
+  audio(); OUTDOOR=(menuMode===1||menuMode===2)&&outdoorSel;
   if(menuMode===1||menuMode===2) startExhibition();
   else if(menuMode===5) startPractice();
   else if(menuMode===6) startIntl(curTeam(0));
