@@ -856,7 +856,7 @@ function renderKeysHelp(){
   const k=$('keysHelp');
   if(phase==='menu'){ k.innerHTML='<div><b>Mouse or touch</b> aim and tap to swing or pitch</div><div><b>Full screen</b> Z</div><div><b>Pause</b> P</div><div><b>Menu</b> M</div>'; return; }
   if(G&&G.kind==='2p') k.innerHTML='<div><b>Player 1</b> aim WASD · swing/pitch Space · pitch type Q</div><div><b>Player 2</b> aim arrows · swing/pitch Enter · pitch type /</div><div><b>Bullpen</b> B · <b>Sim rest</b> X · <b>Pause</b> P</div>';
-  else k.innerHTML='<div><b>Aim</b> WASD or arrows (or the mouse)</div><div><b>Swing / pitch</b> Space or click</div><div><b>Pitch type</b> 1-4 or Q</div><div><b>Bullpen</b> B · <b>Pickoff</b> F</div><div><b>Steal</b> R · <b>Extra base</b> G</div><div><b>Fielding</b> WASD run, Space dive, Q switch, 1-4 throw</div><div><b>Career: skip to my turn</b> N</div><div><b>3D view</b> V</div><div><b>Sim rest of game</b> X</div><div><b>Pause</b> P · <b>Menu</b> M</div>';
+  else k.innerHTML='<div><b>Aim</b> WASD or arrows (or the mouse)</div><div><b>Swing / pitch</b> Space or click</div><div><b>Pitch type</b> 1-4 or Q</div><div><b>Bullpen</b> B · <b>Pickoff</b> F</div><div><b>ABS challenge</b> H (after a close call)</div><div><b>Steal</b> R · <b>Extra base</b> G</div><div><b>Fielding</b> WASD run, Space dive, Q switch, 1-4 throw</div><div><b>Career: skip to my turn</b> N</div><div><b>3D view</b> V</div><div><b>Sim rest of game</b> X</div><div><b>Pause</b> P · <b>Menu</b> M</div>';
 }
 
 /* ---------- scoreboard ---------- */
@@ -908,7 +908,7 @@ function startGame(){
   beginGame(o,auto?[null,null]:menuMode===2?['p1','p2']:['solo',null],false);
 }
 function beginGame(o,ctrl,league,career){
-  G=newState(o); setPark(o.t[1]); G.ctrl=ctrl;
+  G=newState(o); setPark(o.t[1]); G.ctrl=ctrl; G.abs=[2,2];
   { const sp=Math.max(0,Math.round(rnd(0,o.t[1]==='chc'?20:11)*(['tb','tor','mia','hou','mil','ari','sea','tex'].includes(o.t[1])?0:1))), a=rnd(-Math.PI,Math.PI); G.wind={s:sp,x:Math.sin(a)*sp,y:Math.cos(a)*sp,a}; } G.career=career||null; G.ast=assistsB(league); G.lvl=DIFF_T[diff]; G.derby=o.kind==='derby'?{outs:0,hr:0,long:0}:null; G.over=false; G.inLeague=league; G.ffast=false; G.day=!G.derby&&Math.random()<.4;
   hideHub(); $('menu').classList.add('hidden'); $('result').classList.add('hidden');
   P=null; F=null; paused=false; lastBoard=''; cur.bat={u:0,v:0}; cur.pit={u:.3,v:-.3}; ptype=0;
@@ -1047,10 +1047,25 @@ function callPitch(){
   if(G.steal){ G.steal=false; if(stealTry()==='end'){ G.balls=G.strikes=0; after(1.2,()=>endHalf()); return; } }
   const inZ=Math.abs(P.fu)<=1.08&&Math.abs(P.fv)<=1.08;
   sfx.pop();
-  trackPitch(P.swung||inZ?'s':'b');
-  if(P.swung){ addStrike('Swing and a miss',true); return; }
-  if(inZ) addStrike('Strike',false); else addBall();
+  if(P.swung){ trackPitch('s'); addStrike('Swing and a miss',true); return; }
+  /* the plate umpire misses some pitches on the edges; each team has two ABS challenges a game (kept when the call is overturned) */
+  const au=Math.abs(P.fu), av=Math.abs(P.fv), d=inZ?Math.min(1.08-au,1.08-av):Math.max(au-1.08,av-1.08), online=!!(window.RRS&&RRS.on);
+  let called=inZ; if(!G.derby&&!online&&d<.2&&Math.random()<.32*(1-d/.2)) called=!inZ;
+  trackPitch(called?'s':'b');
+  if(!G.derby&&!online&&d<.2&&G.abs){ const side=called?batSide():fieldSide(), human=!!ctrlOf(side)&&!G.ffast&&!G.skip;
+    G.absPend={called,truth:inZ,side,d,done:false};
+    if(human&&G.abs[side]>0){ toast(`${called?'Strike':'Ball'} called · close one! H to challenge (ABS, ${G.abs[side]} left)`,'#fde047'); after(1.9,()=>absResolve()); return; }
+    if(!ctrlOf(side)&&G.abs[side]>0&&Math.random()<(called!==inZ?.6:.05)){ absChallenge(); return; }
+    G.absPend=null; }
+  if(called) addStrike('Strike',false); else addBall();
 }
+function absChallenge(){ const A=G.absPend; if(!A||A.done) return; A.done=true; const over=A.called!==A.truth, inch=(A.d*9.2).toFixed(1);
+  if(!over) G.abs[A.side]--; G.absN=(G.absN||0)+1; if(over) G.absOver=(G.absOver||0)+1;
+  const who=ctrlOf(A.side)?(G.kind==='2p'?`Player ${A.side+1}`:'You'):TEAMS[G.t[A.side]]?TEAMS[G.t[A.side]].name:'They';
+  toast(`${who} challenge${ctrlOf(A.side)&&G.kind!=='2p'?'':'s'} · ABS: ${A.truth?'STRIKE':'BALL'} (${inch} in ${A.truth?'inside':'off'} the edge) · ${over?'call overturned!':'call stands'}`,over?'#22c55e':'#f87171');
+  if(!G.ffast) speak(over?(A.truth?'The call is overturned. Strike!':'The call is overturned. Ball!'):'The call stands.',true); sfx.pop();
+  after(1.5,()=>{ const st=A.truth; G.absPend=null; if(st) addStrike('Strike',false); else addBall(); }); }
+function absResolve(){ const A=G.absPend; if(!A||A.done) return; A.done=true; G.absPend=null; if(A.called) addStrike('Strike',false); else addBall(); }
 function addStrike(txt,swung){
   if(G.derby){ derbyOut(swung?'Swing and miss':'Called strike'); return; }
   G.strikes++;
@@ -1458,6 +1473,7 @@ addEventListener('keydown',e=>{
   if(e.code==='KeyR'&&!G.derby&&(phase==='aim'||phase==='wind')&&ctrlOf(batSide())&&(G.bases[0]&&!G.bases[1]||G.bases[1]&&!G.bases[2])){ G.steal=true; toast('Runner going on the pitch!','#ffd166'); return; }
   if(e.code==='KeyG'&&phase==='play'&&F&&ctrlOf(F.side)){ F.aggr=true; toast('Runners: go for the extra base!','#ffd166'); return; }
   if(phase==='play'&&F&&F.humSch){ const sc=SCHEME[F.humSch], nums=F.humSch==='p2'?['Digit7','Digit8','Digit9','Digit0']:['Digit1','Digit2','Digit3','Digit4'], i=nums.indexOf(e.code.replace('Numpad','Digit')); if(i>=0){ humanThrow(i+1); return; } if(sc.act.includes(e.code)){ fieldDive(); return; } if(sc.cyc.includes(e.code)){ fieldSwitch(); return; } }
+  if(e.code==='KeyH'&&G.absPend&&!G.absPend.done&&ctrlOf(G.absPend.side)&&G.abs[G.absPend.side]>0){ absChallenge(); return; }
   if(e.code==='KeyF'&&phase==='aim'&&ctrlOf(fieldSide())){ pickoff(); return; }
   if(e.code==='KeyB'&&!G.derby&&phase==='aim'&&ctrlOf(fieldSide())){ const n=changePitcher(G,fieldSide()); toast(n?`Now pitching: ${n.name}`:'Bullpen is empty','#60a5fa'); return; }
   if(G.kind!=='2p'&&ctrlOf(batSide())&&!ctrlOf(fieldSide())&&(phase==='aim'||phase==='wind')){ const i=['Digit1','Digit2','Digit3','Digit4'].indexOf(e.code.replace('Numpad','Digit')); if(i>=0&&!(G.derby&&i===3)){ bmode=i; sfx.click(); toast(`${BMODES[i][0]} swing`,'#ffd166'); return; } }
