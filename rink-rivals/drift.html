@@ -215,7 +215,10 @@ const RIVALS=[['Vaughn Gittin Jr.','USA'],['Chelsea DeNofa','USA'],['Fredric Aas
 const TRACKS=[
  {id:'docks',name:'Harbor Docks',night:false,theme:'docks',w:15,len:1500,laps:2,pts:[[0,0],[160,0],[220,30],[230,90],[190,130],[120,120],[80,160],[110,220],[200,230],[260,270],[240,340],[150,350],[60,310],[-20,330],[-80,280],[-60,200],[-110,150],[-90,70],[-40,30]],elev:0,medals:[15000,40000,80000],clips:6},
  {id:'touge',name:'Mountain Pass',night:true,theme:'mountain',w:12,len:1900,laps:1,pts:[[0,0],[120,10],[170,60],[150,120],[90,150],[110,210],[180,230],[220,290],[170,340],[90,330],[40,380],[70,450],[150,470],[200,520],[150,580],[60,560],[0,600],[-40,540],[-30,460],[-90,400],[-60,320],[-110,260],[-70,190],[-100,110],[-50,60]],elev:60,medals:[15000,45000,90000],clips:8},
- {id:'stadium',name:'Stadium Showdown',night:true,theme:'stadium',w:16,len:1100,laps:3,pts:[[0,0],[120,0],[170,40],[150,100],[90,110],[60,150],[100,200],[60,250],[-40,250],[-90,200],[-60,140],[-110,90],[-80,30]],elev:0,medals:[15000,40000,80000],clips:5}
+ {id:'stadium',name:'Stadium Showdown',night:true,theme:'stadium',w:16,len:1100,laps:3,pts:[[0,0],[120,0],[170,40],[150,100],[90,110],[60,150],[100,200],[60,250],[-40,250],[-90,200],[-60,140],[-110,90],[-80,30]],elev:0,medals:[15000,40000,80000],clips:5},
+ {id:'bowl',name:'Speedway Bowl',night:true,theme:'stadium',w:19,len:950,laps:3,pts:[[0,0],[150,0],[215,45],[220,120],[170,170],[90,165],[40,190],[-40,180],[-85,120],[-70,50],[-35,12]],elev:0,medals:[18000,48000,95000],clips:4},
+ {id:'ebisu',name:'Ebisu Hillside',night:false,theme:'mountain',w:12,len:1400,laps:2,pts:[[0,0],[90,-10],[140,30],[120,90],[60,100],[70,160],[140,180],[170,240],[120,290],[40,270],[-10,310],[-70,270],[-50,200],[-110,160],[-90,90],[-130,40],[-80,0]],elev:28,medals:[16000,42000,85000],clips:7},
+ {id:'ice',name:'Frozen Lake',night:false,theme:'snow',mu:.42,w:22,len:1200,laps:2,pts:[[0,0],[130,-20],[200,30],[190,110],[120,140],[150,210],[90,270],[0,250],[-40,190],[-110,200],[-150,130],[-100,60],[-60,20]],elev:0,medals:[12000,32000,65000],clips:6}
 ];
 function buildTrack(TD){
   const P=TD.pts, n=P.length, raw=[];
@@ -252,7 +255,7 @@ function carStep(c,inp,dt,T){
   c.steer=lerp(c.steer,target,Math.min(1,dt*7)); const dl=c.steer;
   c.thr=lerp(c.thr,inp.thr,Math.min(1,dt*6)); c.brk=inp.brk; c.hb=inp.hb;
   const dFz=m*(c.ax||0)*CP.hcg/CP.L, Fzf=Math.max(800,m*G*CP.wf-dFz), Fzr=Math.max(800,m*G*(1-CP.wf)+dFz);
-  const mu=car.mu*(c.off?.6:1), Ff=mu*Fzf, Fr=mu*Fzr*1.08;
+  const mu=car.mu*(c.off?.6:1)*(T.mu||1), Ff=mu*Fzf, Fr=mu*Fzr*1.08;
   /* engine and 6-speed box */
   const gv=car.gv; if(!c.manual){ if(c.gear<5&&Math.abs(c.u)>gv[c.gear]*.97) c.gear++; else if(c.gear>0&&Math.abs(c.u)<gv[c.gear-1]*.72) c.gear--; }
   const rpm0=8200*Math.abs(c.u)/gv[c.gear]; c.rpm=clamp(rpm0,1100,8600); if(c.thr>.5&&(c.spin||c.hb)) c.rpm=Math.min(8600,c.rpm+2500);
@@ -318,7 +321,7 @@ const saveSV=()=>{ try{ localStorage.setItem(SKEY,JSON.stringify(SV)); }catch(e)
 const starsTotal=()=>Object.values(SV.stars).reduce((a,b)=>a+b,0);
 const trackOpen=i=>i===0||starsTotal()>=i*2;
 const TRK={}; const getT=i=>TRK[i]||(TRK[i]=buildTrack(TRACKS[i]));
-function newRun(){
+function newRun(){ lastBoard='';
   const T=getT(trackSel), car=CARS[carSel], i0=T.N-12;
   const c={car,x:T.x[i0],y:T.y[i0],h:Math.atan2(T.ty[i0],T.tx[i0]),u:0,v:0,r:0,steer:0,thr:0,brk:0,hb:false,gear:0,rpm:1000,idx:i0,assist:assistOn,manual:manualOn,spd:0,beta:0,slide:0,ax:0,lat:0};
   D={T,car,c,t:0,laps:T.laps,lap:0,dist:-24,score:0,chain:{pts:0,mult:1,t:0,idle:0},best:0,clips:new Set(),clipN:0,msg:null,msgT:0,skids:[],smoke:[],maxAngle:0,cam:0};
@@ -710,7 +713,7 @@ void main(){vec4 t=texture2D(uTex,vUV*uUVR.zw+uUVR.xy);if(t.a<0.04)discard;gl_Fr
     time+=dt||1/60; resize();
     gl.viewport(0,0,cw,ch); const SK=cam.sky||[.04,.06,.12]; FOGC=SK; gl.clearColor(SK[0],SK[1],SK[2],1); gl.clear(gl.COLOR_BUFFER_BIT|gl.DEPTH_BUFFER_BIT);
     gl.enable(gl.DEPTH_TEST); gl.disable(gl.CULL_FACE); gl.disable(gl.BLEND); gl.depthMask(true);
-    eye=cam.eye; VP=mul(persp(cam.fov*Math.PI/180,cw/ch,cam.near||6,cam.far||14000),lookAt(cam.eye,cam.center,[0,1,0]));
+    eye=cam.eye; VP=mul(persp(cam.fov*Math.PI/180,cw/ch,cam.near||6,cam.far||14000),lookAt(cam.eye,cam.center,cam.up||[0,1,0]));
     cheer=cam.cheer||0;
     useC(); if(world) part(world,I(),[1,1,1]); if(crowdM) part(crowdM,I(),[1,1,1]);
     decals.length=0; shadows.length=0;
@@ -754,15 +757,16 @@ function build3(){
     const quad=(A,Bv,C,Dv,col,ph)=>{ tri(A,Bv,C,col,ph); tri(A,C,Dv,col,ph); };
     const P3=(i,lat,dh=0)=>[(T.x[i]-T.ty[i]*lat)*K,(T.e[i]+dh)*K,(T.y[i]+T.tx[i]*lat)*K];
     const box=(x,h,y,sx,sy,sz,ang,col,ph=0)=>G0.add(B,mm(Tr(x*K,h*K,y*K),RY(-ang),S(sx*K,sy*K,sz*K)),col,ph);
-    const asph=hx(night?'#2b2e35':'#3f434b'), line=hx('#e5e7eb'), grass=hx(T.theme==='docks'?'#5b5f66':T.theme==='stadium'?'#3a3f47':'#2f4f2a'), kerbR=hx('#dc2626'), kerbW=hx('#f1f5f9');
+    const snow=T.theme==='snow', asph=hx(snow?'#c9dde8':night?'#2b2e35':'#3f434b'), line=hx('#e5e7eb'), grass=hx(snow?'#eef4f8':T.theme==='docks'?'#5b5f66':T.theme==='stadium'?'#3a3f47':'#2f4f2a'), kerbR=hx('#dc2626'), kerbW=hx('#f1f5f9');
     /* ground skirt and track */
     for(let i=0;i<N;i+=2){ const j=(i+2)%N, hw=T.w/2;
-      quad(P3(i,-hw),P3(i,hw),P3(j,hw),P3(j,-hw),hx(i%40<20?(night?'#2b2e35':'#3f434b'):(night?'#2e3138':'#42464e')));
+      quad(P3(i,-hw),P3(i,hw),P3(j,hw),P3(j,-hw),hx(snow?(i%40<20?'#c6dbe6':'#cfe2ec'):i%40<20?(night?'#2b2e35':'#3f434b'):(night?'#2e3138':'#42464e')));
       for(const sg of [-1,1]){ quad(P3(i,sg*(hw-.35)),P3(i,sg*hw,.01),P3(j,sg*hw,.01),P3(j,sg*(hw-.35)),line); quad(P3(i,sg*hw,.01),P3(i,sg*(hw+1.2),.02),P3(j,sg*(hw+1.2),.02),P3(j,sg*hw,.01),Math.abs(T.k[i])>.012?((i>>1)%2?kerbR:kerbW):hx('#6b7280'));
         quad(P3(i,sg*(hw+1.2),.02),P3(i,sg*(hw+40),-1.5),P3(j,sg*(hw+40),-1.5),P3(j,sg*(hw+1.2),.02),grass); } }
     /* walls: concrete with tyre walls at the clipping points, guardrails on the mountain */
     for(let i=0;i<N;i+=3){ const j=(i+3)%N; for(const sg of [-1,1]){ const A=P3(i,sg*(T.w/2+1.6)), Bp=P3(j,sg*(T.w/2+1.6)), mx=(A[0]+Bp[0])/2/K, mz=(A[2]+Bp[2])/2/K, my=(A[1]+Bp[1])/2/K, len=Math.hypot(Bp[0]-A[0],Bp[2]-A[2])/K+.05, ang=Math.atan2(Bp[2]-A[2],Bp[0]-A[0]);
-      if(T.theme==='mountain'){ box(mx,my+.6,mz,len,.3,.12,ang,'#cbd5e1'); if(i%9===0) box(mx,my+.35,mz,.12,.7,.12,ang,'#64748b'); }
+      if(T.theme==='snow'){ if(i%2===0) box(mx,my+.35,mz,len*.9,.7,.9,ang,'#f8fafc'); }
+      else if(T.theme==='mountain'){ box(mx,my+.6,mz,len,.3,.12,ang,'#cbd5e1'); if(i%9===0) box(mx,my+.35,mz,.12,.7,.12,ang,'#64748b'); }
       else box(mx,my+.55,mz,len,1.1,.5,ang,(i/3)%8<4?'#e5e7eb':(T.theme==='stadium'?'#dc2626':'#f59e0b')); } }
     for(const cp of T.clipsAt){ const lat=cp.side*(T.w/2-1.4); for(let d=-6;d<=6;d+=2){ const i=(cp.i+d+N)%N, A=P3(i,cp.side*(T.w/2+1.2)); box(A[0]/K,A[1]/K+.5,A[2]/K,.9,1,.9,0,d%4?'#111111':'#1d4ed8'); }
       const Z=P3(cp.i,lat,.03); for(let d=-4;d<=4;d++){ const i=(cp.i+d+N)%N, a=P3(i,lat-1.6,.03), b=P3(i,lat+1.6,.03), i2=(i+1)%N; quad(a,b,P3(i2,lat+1.6,.03),P3(i2,lat-1.6,.03),hx(cp.inner?'#0ea5e9':'#facc15')); }
@@ -773,7 +777,7 @@ function build3(){
     const nearT=(x,y)=>{ let bi=0, bd=1e18; for(let i=0;i<N;i+=5){ const d=(T.x[i]-x)**2+(T.y[i]-y)**2; if(d<bd){ bd=d; bi=i; } } return {i:bi,d:Math.sqrt(bd)}; };
     const terr=(x,y)=>{ const q=nearT(x,y); return T.e[q.i]-1.6+(T.theme==='mountain'?Math.max(0,q.d-T.w/2-30)*.35:0); };
     { const gx0=T.minx-500, gy0=T.miny-500, GN=48, stx=(T.maxx-T.minx+1000)/GN, sty=(T.maxy-T.miny+1000)/GN, HG=[]; for(let a=0;a<=GN;a++){ HG[a]=[]; for(let b=0;b<=GN;b++) HG[a][b]=terr(gx0+b*stx,gy0+a*sty); }
-      const gc=hx(T.theme==='docks'?'#55595f':T.theme==='stadium'?'#2d3238':night?'#16301a':'#2f4f2a');
+      const gc=hx(T.theme==='snow'?'#e8f0f5':T.theme==='docks'?'#55595f':T.theme==='stadium'?'#2d3238':night?'#16301a':'#2f4f2a');
       for(let a=0;a<GN;a++) for(let b=0;b<GN;b++){ const xa=gx0+b*stx, ya=gy0+a*sty; quad([xa*K,HG[a][b]*K,ya*K],[(xa+stx)*K,HG[a][b+1]*K,ya*K],[(xa+stx)*K,HG[a+1][b+1]*K,(ya+sty)*K],[xa*K,HG[a+1][b]*K,(ya+sty)*K],gc); } }
     /* scenery */
     const rng=(()=>{ let s=99; return ()=>{ s=(s*16807)%2147483647; return s/2147483647; }; })();
@@ -782,7 +786,7 @@ function build3(){
     if(T.theme==='docks'){ const CC=['#b91c1c','#1d4ed8','#15803d','#f59e0b','#6b7280','#0e7490','#7c2d12'];
       for(let n=0,t=0;n<220&&t<3000;t++){ const x=cx+(rng()*2-1)*ex, y=cy+(rng()*2-1)*ey; if(!away(x,y,9)) continue; n++; const st=1+Math.floor(rng()*3), a=rng()<.5?0:Math.PI/2; for(let s=0;s<st;s++) box(x,1.3+s*2.6,y,12,2.6,2.5,a,pick(CC)); }
       for(let k=0;k<5;k++){ const x=cx+(rng()*2-1)*ex*1.1, y=cy+ey*1.05; box(x,20,y,2,40,2,0,'#f59e0b'); box(x,40,y-15,2,2,40,0,'#f59e0b'); } }
-    if(T.theme==='mountain'){ for(let n=0,t=0;n<900&&t<6000;t++){ const x=cx+(rng()*2-1)*ex, y=cy+(rng()*2-1)*ey; if(!away(x,y,6)) continue; n++; let ni=0, bd=1e9; for(let i=0;i<N;i+=8){ const d=Math.hypot(T.x[i]-x,T.y[i]-y); if(d<bd){ bd=d; ni=i; } } const hh=7+rng()*10, base=terr(x,y); G0.add(CN,mm(Tr(x*K,(base+hh/2)*K,y*K),S(hh*.3*K,hh*K,hh*.3*K)),night?'#12301a':'#1f4d22'); }
+    if(T.theme==='mountain'||T.theme==='snow'){ for(let n=0,t=0;n<(T.theme==='snow'?300:900)&&t<6000;t++){ const x=cx+(rng()*2-1)*ex, y=cy+(rng()*2-1)*ey; if(!away(x,y,6)) continue; n++; let ni=0, bd=1e9; for(let i=0;i<N;i+=8){ const d=Math.hypot(T.x[i]-x,T.y[i]-y); if(d<bd){ bd=d; ni=i; } } const hh=7+rng()*10, base=terr(x,y); G0.add(CN,mm(Tr(x*K,(base+hh/2)*K,y*K),S(hh*.3*K,hh*K,hh*.3*K)),night?'#12301a':'#1f4d22'); }
       for(let i=0;i<N;i+=18){ const sg=(i/18)%2?1:-1, A=P3(i,sg*(T.w/2+2.4)); box(A[0]/K,A[1]/K+4,A[2]/K,.18,8,.18,0,'#475569'); box(A[0]/K-T.ty[i]*-sg*.8,A[1]/K+7.9,A[2]/K+T.tx[i]*-sg*.8,1.4,.3,.6,Math.atan2(T.ty[i],T.tx[i]),'#fff2c4',-1); } }
     if(T.theme==='stadium'){ for(const [a,b] of [[[T.minx-30,T.miny-30],[T.maxx+30,T.miny-30]],[[T.maxx+30,T.maxy+30],[T.minx-30,T.maxy+30]],[[T.minx-30,T.maxy+30],[T.minx-30,T.miny-30]],[[T.maxx+30,T.miny-30],[T.maxx+30,T.maxy+30]]]) R3.crowdRow(G0,cr,[a[0]*K,0,a[1]*K],[b[0]*K,0,b[1]*K],.5*K,2*K,10,1.8*K);
       for(const [x,y] of [[T.minx-36,T.miny-36],[T.maxx+36,T.miny-36],[T.minx-36,T.maxy+36],[T.maxx+36,T.maxy+36]]){ box(x,22,y,1.5,44,1.5,0,'#64748b'); box(x,44,y,8,3,8,0,'#fffbe6',-1); } }
