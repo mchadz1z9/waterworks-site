@@ -546,7 +546,8 @@ function finish(){ if(phase!=='play') return; phase='over'; ST='idle'; const me=
   if(w===myIdx||!two) sfx.win();
   const rows=X01?[['3-dart average',p=>avg3(p.st).toFixed(2)],['First 9 average',p=>p.st.f9d?(p.st.f9s/p.st.f9d*3).toFixed(2):'-'],['180s',p=>p.st.n180],['140+',p=>p.st.n140],['100+',p=>p.st.n100],['Checkout %',p=>p.st.coAtt?`${coPct(p.st).toFixed(1)}% (${p.st.coHit}/${p.st.coAtt})`:'-'],['Highest checkout',p=>p.st.hiCO||'-'],['Best leg',p=>p.st.best?p.st.best+' darts':'-'],['Darts thrown',p=>p.st.darts]]
     :G.game==='cricket'?[['Marks per round',p=>p.st.darts?(p.st.marks/p.st.darts*3).toFixed(2):'-'],['Legs',p=>p.st.legsWon],['Darts thrown',p=>p.st.darts]]:[['Darts thrown',p=>p.st.darts],['Legs',p=>p.st.legsWon],['Points',p=>p.st.scored]];
-  $('resultIn').innerHTML=`<h2>${esc(title)}</h2><div class="rs">${esc(big)}</div><p>${esc(sub)}</p><table class="ls"><tr><th></th>${G.pl.map(p=>`<th>${esc(p.name)}</th>`).join('')}</tr>${rows.map(r=>`<tr><td>${r[0]}</td>${G.pl.map(p=>`<td>${r[1](p)}</td>`).join('')}</tr>`).join('')}</table><p>Enter or click for the menu.</p>`;
+  let tH=''; if(G.tour&&TOUR&&!TOUR.done&&two&&w>=0){ tourAdvance(w===myIdx); tH=`<p style="color:#fde68a;font-size:20px">${esc(G.tour)}: ${w===myIdx?(TOUR.done?'you are the champion!':'through!'):'knocked out'}</p>`+tourHTML(); }
+  $('resultIn').innerHTML=`<h2>${esc(title)}</h2><div class="rs">${esc(big)}</div><p>${esc(sub)}</p>${tH}<table class="ls"><tr><th></th>${G.pl.map(p=>`<th>${esc(p.name)}</th>`).join('')}</tr>${rows.map(r=>`<tr><td>${r[0]}</td>${G.pl.map(p=>`<td>${r[1](p)}</td>`).join('')}</tr>`).join('')}</table><p>Enter or click for the menu.</p>`;
   setTimeout(()=>{ if(phase==='over') $('result').classList.remove('hidden'); },900); }
 
 /* ---------- HUD ---------- */
@@ -653,20 +654,33 @@ const pill=(attr,val,on,label)=>`<button data-${attr}="${val}" class="${on?'on':
 function renderMenu(){ const g=gameSel, oppOK=g!=='prac';
   const pros=PROS.map((p,i)=>({p,i})).filter(o=>!o.p.amateur), ams=PROS.map((p,i)=>({p,i})).filter(o=>o.p.amateur);
   $('menuIn').innerHTML=`<h1>Rink Rivals: Darts</h1><p>A regulation board at 2.37 m and 1.73 m, a real ballistic flight, and the PDC's best tuned to their real averages and checkout rates. Aim, steady your hand, and time the release.</p>
-  <div class="pills"><span class="lbl">Game</span>${GAMES.map(x=>pill('game',x.k,gameSel===x.k,x.n)).join('')}</div>
-  <p style="margin:2px 0 4px;font-size:15px">${GAMES.find(x=>x.k===g).d}</p>
-  ${oppOK?`<div class="pills"><span class="lbl">Opponent</span>${pros.map(o=>pill('opp','p'+o.i,oppSel==='p'+o.i,`${o.p.name} <small>${o.p.legend?'legend · ':''}${o.p.avg}</small>`)).join('')}</div>
+  <div class="pills"><span class="lbl">Mode</span>${pill('tour',0,!tourSel,'Match')}${pill('tour',1,tourSel,'🏆 World Matchplay (knockout)')}</div>
+  ${tourSel?`<p style="margin:2px 0 4px;font-size:15px">Eight of the best: quarter-final first to 5 legs, semi-final first to 7, the final first to 3 sets. 501, double out.</p>${tourHTML()}${SV.titles?`<p>Titles: ${'🏆'.repeat(Math.min(10,SV.titles))}</p>`:''}`:`<div class="pills"><span class="lbl">Game</span>${GAMES.map(x=>pill('game',x.k,gameSel===x.k,x.n)).join('')}</div>
+  <p style="margin:2px 0 4px;font-size:15px">${GAMES.find(x=>x.k===g).d}</p>`}
+  ${tourSel?'':oppOK?`<div class="pills"><span class="lbl">Opponent</span>${pros.map(o=>pill('opp','p'+o.i,oppSel==='p'+o.i,`${o.p.name} <small>${o.p.legend?'legend · ':''}${o.p.avg}</small>`)).join('')}</div>
   <div class="pills"><span class="lbl">or</span>${ams.map(o=>pill('opp','p'+o.i,oppSel==='p'+o.i,`${o.p.name} <small>${o.p.avg}</small>`)).join('')}${pill('opp','friend',oppSel==='friend','👥 Friend (same screen)')}${pill('opp','solo',oppSel==='solo','Solo')}</div>
   <div class="pills"><span class="lbl">Format</span>${FMTS.map((f,i)=>pill('fmt',i,fmtSel===i,f.n)).join('')}</div>`
   :`<div class="pills"><span class="lbl">Drill</span>${pill('prac','free',pracSel==='free','Free throwing')}${pill('prac','doubles',pracSel==='doubles','Round the doubles')}</div>`}
   <div class="pills"><span class="lbl">Venue</span>${VENUES.map(v=>pill('venue',v.k,venueSel===v.k,v.n)).join('')}<span class="lbl">Hand</span>${STEADY.map((s,i)=>pill('steady',i,steadySel===i,s.n)).join('')}</div>
   <div class="pills"><span class="lbl">Pace</span>${PACE.map((s,i)=>pill('pace',i,paceSel===i,s.n)).join('')}<span class="lbl">Caller</span>${pill('caller',1,callerOn,'On')}${pill('caller',0,!callerOn,'Off')}</div>
-  <div class="pills"><button class="gold" data-act="start" tabindex="-1">Step up to the oche <kbd>Enter</kbd></button><a href="./" tabindex="-1">Home</a><a href="pool" tabindex="-1">Pool</a><a href="bowling" tabindex="-1">Bowling</a></div>
+  <div class="pills"><button class="gold" data-act="start" tabindex="-1">${tourSel?(TOUR&&!TOUR.done?`Play the ${TRND[TOUR.r].n.toLowerCase()}`:'Enter the tournament'):'Step up to the oche'} <kbd>Enter</kbd></button><a href="./" tabindex="-1">Home</a><a href="pool" tabindex="-1">Pool</a><a href="bowling" tabindex="-1">Bowling</a></div>
   <div id="hint">Matches ${SV.m} · won ${SV.w} · beat a pro ${SV.proW}${SV.bestAvg?` · best average ${SV.bestAvg.toFixed(2)}`:''}${SV.n180?` · 180s ${SV.n180}`:''}${SV.hiCO?` · high checkout ${SV.hiCO}`:''}${SV.bestLeg?` · best leg ${SV.bestLeg} darts`:''}${SV.nine?` · nine-darters ${SV.nine}`:''}</div>`; updateBoard(); renderKeysHelp(); }
 $('menuIn').addEventListener('mousedown',e=>{ if(e.target.closest('button')) e.preventDefault(); });
 $('menuIn').addEventListener('click',e=>{ const b=e.target.closest('button'); if(!b||b.dataset.rro!==undefined) return; const d=b.dataset; audio(); sfx.click();
-  if(d.game) gameSel=d.game; else if(d.opp) oppSel=d.opp; else if(d.fmt!==undefined) fmtSel=+d.fmt; else if(d.prac) pracSel=d.prac; else if(d.venue){ venueSel=d.venue; buildVenue(); } else if(d.steady!==undefined) steadySel=+d.steady; else if(d.pace!==undefined) paceSel=+d.pace; else if(d.caller!==undefined) callerOn=d.caller==='1'; else if(d.act==='start'){ startGame(); return; } else return; savePrefs(); renderMenu(); });
-function startGame(){ audio(); savePrefs(); newGame(); }
+  if(d.tour!==undefined) tourSel=d.tour==='1'; else if(d.game) gameSel=d.game; else if(d.opp) oppSel=d.opp; else if(d.fmt!==undefined) fmtSel=+d.fmt; else if(d.prac) pracSel=d.prac; else if(d.venue){ venueSel=d.venue; buildVenue(); } else if(d.steady!==undefined) steadySel=+d.steady; else if(d.pace!==undefined) paceSel=+d.pace; else if(d.caller!==undefined) callerOn=d.caller==='1'; else if(d.act==='start'){ startGame(); return; } else return; savePrefs(); renderMenu(); });
+/* ---------- the tournament: an eight-player knockout, quarter-finals first to 5 legs, semi-finals first to 7, the final in sets ---------- */
+let tourSel=false, TOUR=null; const TRND=[{n:'Quarter-final',fmt:2},{n:'Semi-final',fmt:3},{n:'Final',fmt:5}];
+function tourNew(){ const pros=PROS.map((p,i)=>i).filter(i=>!PROS[i].amateur).sort(()=>Math.random()-.5).slice(0,7); const field=[-1].concat(pros); /* -1 is you */
+  const seeded=field.slice().sort((a,b)=>(b<0?95:PROS[b].avg)-(a<0?95:PROS[a].avg)); const order=[0,7,3,4,1,6,2,5].map(k=>seeded[k]);
+  TOUR={name:'World Matchplay',r:0,draw:order,res:[],done:false,place:null}; }
+function tourOpp(){ const D=TOUR.draw, i=D.indexOf(-1); return D[i%2?i-1:i+1]; }
+function tourSimPair(a,b){ if(a<0||b<0) return null; const r=simDuel(PROS[a],PROS[b],9,Math.floor(Math.random()*1e9)); return r[0].legs>r[1].legs||r[0].legs===r[1].legs&&Math.random()<.5?a:b; }
+function tourAdvance(won){ const D=TOUR.draw, next=[], lines=[]; for(let k=0;k<D.length;k+=2){ const a=D[k], b=D[k+1]; let w; if(a<0||b<0){ w=won?-1:(a<0?b:a); } else w=tourSimPair(a,b); next.push(w); lines.push(`${a<0?'You':PROS[a].name} v ${b<0?'You':PROS[b].name}: ${w<0?'You':PROS[w].name}`); }
+  TOUR.res.push({n:TRND[TOUR.r].n,lines}); TOUR.draw=next; TOUR.r++;
+  if(!won){ TOUR.done=true; TOUR.place=['Quarter-finalist','Semi-finalist','Runner-up 🥈'][TOUR.r-1]; }
+  else if(next.length===1){ TOUR.done=true; TOUR.place='Champion 🏆'; SV.titles=(SV.titles||0)+1; saveSV(); try{ lbPost('titles',1,TOUR.name); }catch(e){} } }
+function tourHTML(){ if(!TOUR) return ''; return `<div style="max-width:640px;margin:6px auto;text-align:left;font-size:14px"><div style="color:#fde68a;font-weight:800;font-size:16px">${TOUR.name} · ${TOUR.done?TOUR.place:`${TRND[TOUR.r].n} next v ${esc(PROS[tourOpp()].name)}`}</div>${TOUR.res.map(R=>`<div><b>${R.n}s</b> · ${R.lines.map(esc).join(' · ')}</div>`).join('')}</div>`; }
+function startGame(){ audio(); savePrefs(); if(tourSel){ if(!TOUR||TOUR.done) tourNew(); const keep=oppSel; oppSel='p'+tourOpp(); newGame({game:'501',fmt:TRND[TOUR.r].fmt}); oppSel=keep; G.tour=TRND[TOUR.r].n; banner(`${TOUR.name} · ${G.tour}`,`${G.pl[0].name} v ${G.pl[1].name} · ${legsLabel(G)}`,'#facc15',2.4); return; } newGame(); }
 function renderKeysHelp(){ $('keysHelp').innerHTML='<div><b>Aim</b> mouse · WASD / arrows</div><div><b>Throw</b> hold Space or the mouse, release in the green</div><div><b>Steady</b> hold Shift (one breath)</div><div><b>Camera</b> C · zoom wheel</div><div><b>View</b> V</div><div><b>Pause</b> P</div><div><b>Leave</b> Esc</div>'; }
 function toMenu(){ const wasOn=online(); phase='menu'; G=null; ST='idle'; FL=null; BD=[]; FALL=[]; $('result').classList.add('hidden'); $('menu').classList.remove('hidden'); ambience(false); try{ speechSynthesis.cancel(); }catch(e){} if(wasOn) try{ net.leave(); }catch(e){} renderMenu(); }
 
@@ -1120,7 +1134,7 @@ $('viewBtn2').addEventListener('pointerdown',e=>e.stopPropagation());
 $('btnSnd').addEventListener('click',()=>{ muted=!muted; $('btnSnd').textContent=muted?'Sound off':'Sound on'; if(muted){ try{ speechSynthesis.cancel(); }catch(e){} } else { audio(); sfx.click(); } ambience(phase==='play',venueSel==='arena'?.05:.025); });
 $('result').addEventListener('click',()=>{ if(phase==='over') toMenu(); });
 function throwAt(x,y,o){ if(!G||phase!=='play') return false; o=o||{}; if(FL){ FL.t=FL.T; land(); } pFn=null; launch({x,y,bo:o.bo?1:0,df:o.df?1:0}); if(o.instant){ FL.t=FL.T; land(); } return true; }
-if(TEST) window.__dt={get G(){return G;},get ST(){return ST;},get phase(){return phase;},get BD(){return BD;},get FL(){return FL;},step,stepWrap,newGame,throwAt,startDraw,release,land,beginTurn,finish,toMenu,segAt,wireDist,bestRoute,policy,ai501Aim,aiCricketAim,simStats,simLeg,simDuel,scatter,aiPoint,aimPt,applyDart,nextVisit,newMatch,avg3,coPct,PROS,CAMS,b2s,s2b,resolveLanding,
+if(TEST) window.__dt={set tourSel(v){tourSel=v;},get TOUR(){return TOUR;},startGame,simStats,PROS,get G(){return G;},get ST(){return ST;},get phase(){return phase;},get BD(){return BD;},get FL(){return FL;},step,stepWrap,newGame,throwAt,startDraw,release,land,beginTurn,finish,toMenu,segAt,wireDist,bestRoute,policy,ai501Aim,aiCricketAim,simStats,simLeg,simDuel,scatter,aiPoint,aimPt,applyDart,nextVisit,newMatch,avg3,coPct,PROS,CAMS,b2s,s2b,resolveLanding,
   get aim(){return aim;},set aim(v){aim=v;},get meter(){return meter;},set meter(v){meter=v;},get wob(){return wob;},set camMode(v){camMode=v;},get camMode(){return camMode;},set gameSel(v){gameSel=v;},set oppSel(v){oppSel=v;},set fmtSel(v){fmtSel=v;},set pracSel(v){pracSel=v;},set venueSel(v){venueSel=v;},set steadySel(v){steadySel=v;},set paceSel(v){paceSel=v;},set camBoard(v){camBoard=v;},get view3(){return view3;},setView3,get SV(){return SV;},keys,remQ,get net(){return net;},onNetMsg:m=>{ remQ[m.k]=m; tryRemote(); }};
 setView3(view3);
 renderMenu();
@@ -1128,7 +1142,7 @@ requestAnimationFrame(frame);
 
 /* ---------- world records ---------- */
 const LBG=((location.pathname.split('/').pop()||'').replace(/\.html$/,'')||'game').toLowerCase(), lbPost=(id,s,t)=>{ try{ window.RRL&&RRL.post(id,s,t); }catch(e){} }, lbBoards=l=>{ try{ window.RRL&&RRL.boards(LBG,l); }catch(e){} };
-lbBoards([{id:'avg',name:'Best 3-dart average in a 501 match',mode:'max'},{id:'n180',name:'Most 180s in a match',mode:'max'},{id:'nine',name:'Nine-dart finishes',mode:'sum'},{id:'hco',name:'Highest checkout',mode:'max'},{id:'leg',name:'Best 501 leg (fewest darts)',mode:'min'},{id:'wins',name:'Match wins vs the pros',mode:'sum'},{id:'online',name:'Online match wins',mode:'sum'},{id:'atc',name:'Around the Clock (fewest darts)',mode:'min'},{id:'dbl',name:'Round the doubles (fewest darts)',mode:'min'}]);
+lbBoards([{id:'titles',name:'World Matchplay titles',mode:'sum'},{id:'avg',name:'Best 3-dart average in a 501 match',mode:'max'},{id:'n180',name:'Most 180s in a match',mode:'max'},{id:'nine',name:'Nine-dart finishes',mode:'sum'},{id:'hco',name:'Highest checkout',mode:'max'},{id:'leg',name:'Best 501 leg (fewest darts)',mode:'min'},{id:'wins',name:'Match wins vs the pros',mode:'sum'},{id:'online',name:'Online match wins',mode:'sum'},{id:'atc',name:'Around the Clock (fewest darts)',mode:'min'},{id:'dbl',name:'Round the doubles (fewest darts)',mode:'min'}]);
 { const _f=finish; finish=function(){ const was=phase, g=G; const r=_f.apply(this,arguments);
   try{ if(was==='play'&&g){ const me=g.pl[myIdx], st=me.st, two=g.pl.length>1, hot=two&&g.pl.every(p=>p.kind==='human')&&!g.online, opp=two?g.pl[1-myIdx]:null, vs=opp?` vs ${opp.name}`:'';
     if(!hot&&me.kind==='human'){
