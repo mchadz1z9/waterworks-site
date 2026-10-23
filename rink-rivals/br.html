@@ -343,7 +343,7 @@ function shotSfx(g,dist){ const v=Math.max(.02,.3/(1+(dist||0)/25)); if(g==='pum
 const sfx={ click:()=>tone(700,.04,'square',.03), hit:()=>tone(1500,.05,'square',.04), head:()=>{ tone(2200,.06,'square',.05); tone(1700,.06,'square',.04,null,.05); }, shield:()=>tone(900,.08,'sine',.05), pick:()=>tone(880,.06,'sine',.04), chest:()=>{ tone(660,.1,'sine',.05); tone(990,.14,'sine',.05,null,.1); tone(1320,.2,'sine',.05,null,.22); },
   build:()=>noise(.08,.08,700), harvest:()=>{ noise(.06,.08,1200); tone(240,.05,'square',.03); }, boom:()=>{ noise(1.2,.5,300); tone(50,.6,'sine',.2,30); }, elim:()=>{ tone(523,.12,'square',.05); tone(784,.18,'square',.05,null,.12); }, storm:()=>noise(.5,.06,300), bus:()=>tone(330,.4,'sine',.04,260), win:()=>{ [523,659,784,1047].forEach((f,i)=>tone(f,.3,'square',.06,null,i*.15)); }, reload:()=>{ tone(400,.05,'square',.03); tone(300,.05,'square',.03,null,.25); } };
 /* ---------- state ---------- */
-let BR=null, phase='menu', paused=false, lvl=1, nPlayers=30, sens=1, camSide=1;
+let squadSel=1, BR=null, phase='menu', paused=false, lvl=1, nPlayers=30, sens=1, camSide=1;
 const LVL=['Casual','Normal','Sweaty'], LVLK=[.55,.8,1];
 const keys=new Set(); const held=a=>a.some(k=>keys.has(k));
 const SKEY='rinkRivalsStormV1'; let SV=(()=>{ try{ return Object.assign({wins:0,games:0,kills:0,best:99,top:0},JSON.parse(localStorage.getItem(SKEY)||'null')||{}); }catch(e){ return {wins:0,games:0,kills:0,best:99,top:0}; } })();
@@ -364,6 +364,9 @@ function newMatch(){ const rng=mulberry32(window.RRV&&RRV.on?(RRV.seed||1):Math.
   const me=mkEnt(0,(localStorage.getItem('rrOnlineName')||'You').slice(0,16)||'You',false,SKINS[0]); me.me=true; BR.me=me; BR.ents.push(me);
   /* online opponents ride the same bus as ghosts that play their own match: we add the AI players */
   for(let i=1;i<nPlayers;i++){ const e=mkEnt(i,names[i%names.length]+(i>=names.length?i:''),true,SKINS[i%SKINS.length]); e.sk=LVLK[lvl]*(.75+rng()*.35); e.target=pickTown(rng); e.jumpAt=.12+rng()*.76; BR.ents.push(e); }
+  /* duos and squads: you and AI teammates on team 0, everyone else in teams of the same size that jump together */
+  const TS=window.RRV&&RRV.on?1:squadSel; BR.ts=TS; BR.ents.forEach((e,i)=>{ e.team=Math.floor(i/TS); if(TS>1&&e.team===0&&!e.me){ e.mate=true; e.skin=SKINS[1]; e.sk=Math.max(e.sk||.8,.85); } });
+  if(TS>1) for(const e of BR.ents){ const L=BR.ents[e.team*TS]; if(e!==L&&e.ai&&L.ai){ e.jumpAt=L.jumpAt; e.target={x:L.target.x+rnd(-12,12),z:L.target.z+rnd(-12,12),name:L.target.name}; } }
   /* the storm: the first circle is announced after the bus */ BR.storm={ph:-1,t:0,c:[0,0],r:ISL.R+120,nc:[rnd(-90,90),rnd(-90,90)],nr:STORM[0].r,moving:false,c0:[0,0],r0:ISL.R+120,wait:60};
   phase='play'; paused=false; $('menu').classList.add('hidden'); $('result').classList.add('hidden'); built3=false; renderKeysHelp(); sfx.bus(); toast('Press Space to jump from the bus','#a78bfa'); }
 function pickTown(rng){ const t=TOWNS[Math.floor(rng()*TOWNS.length)]; return {x:t.x+rnd(-t.r*.6,t.r*.6),z:t.z+rnd(-t.r*.6,t.r*.6)}; }
@@ -395,10 +398,18 @@ function moveEnt(e,dt,mv){ /* mv: {f, s, jump, sprint, crouch} in the entity's y
   e.ph+=Math.hypot(e.vx,e.vz)*dt*1.6; }
 
 /* ---------- damage ---------- */
-function hurt(e,dmg,by,how,head,dist){ if(e.dead||dmg<=0||BR.over) return; let d=dmg; const hadSh=e.sh>0; if(e.sh>0&&how!=='storm'&&how!=='fall'){ const a=Math.min(e.sh,d); e.sh-=a; d-=a; } e.hp-=d; e.lastHit=BR.t; if(by) e.dmgBy=by; if(e.heal){ e.heal=null; }
+function hurt(e,dmg,by,how,head,dist){ if(e.dead||dmg<=0||BR.over) return; if(by&&by!==e&&BR.ts>1&&by.team===e.team) return; let d=dmg; const hadSh=e.sh>0; if(e.sh>0&&how!=='storm'&&how!=='fall'){ const a=Math.min(e.sh,d); e.sh-=a; d-=a; } e.hp-=d; e.lastHit=BR.t; if(by) e.dmgBy=by; if(e.heal){ e.heal=null; }
   if(by&&by.me){ BR.nums.push({x:e.x,y:e.y+2,z:e.z,v:Math.round(dmg),t:0,head,sh:hadSh}); head?sfx.head():hadSh?sfx.shield():sfx.hit(); BR.hitT=.18; }
   if(e.me&&by){ BR.dmgDir={x:by.x,z:by.z,t:1.2}; BR.shake=Math.min(.6,(BR.shake||0)+dmg/150); }
-  if(e.hp<=0) kill(e,by||e.dmgBy,how,dist); }
+  if(e.hp<=0){ if(BR.ts>1&&!e.down&&how!=='storm'&&BR.ents.some(q=>q!==e&&q.team===e.team&&!q.dead&&!q.down)) return knock(e,by||e.dmgBy,how,dist); kill(e,by||e.dmgBy,how,dist); } }
+/* knocked down: crawl, bleed out, or get revived by a teammate holding E for 5 seconds */
+function knock(e,by,how,dist){ e.down=true; e.hp=100; e.sh=0; e.heal=null; e.rev=0; e.ads=0; BR.alive=BR.ents.filter(q=>!q.dead).length;
+  feed(`${by&&by!==e?by.name+' knocked '+e.name:e.name+' is down'}`,e.team===0?'#fca5a5':by&&by.me?'#fde047':'#cbd5e1'); if(by&&by.me){ sfx.hit(); BR.elimT=1.2; BR.lastElim=e.name+' (knocked)'; } if(e.me) toast('You are down! Crawl to cover: a teammate can revive you','#f87171'); }
+function downTick(e,dt){ e.hp-=dt*(BR.storm&&Math.hypot(e.x-BR.storm.c[0],e.z-BR.storm.c[1])>BR.storm.r?6:2.2); if(e.hp<=0){ kill(e,e.dmgBy,'bleed'); return; }
+  if(e.me){ const f=(held(['KeyW'])?1:0)-(held(['KeyS'])?1:0), s=(held(['KeyD'])?1:0)-(held(['KeyA'])?1:0); e.yaw-=look.dx*.0026*sens; look.dx=look.dy=0; const c=Math.cos(e.yaw), sn=Math.sin(e.yaw); e.x+=(sn*f+c*-s)*dt*1.4; e.z+=(c*f-sn*-s)*dt*1.4; collide(e); e.y=groundAt(e.x,e.y+.5,e.z,.4); }
+  else if(e.foeNear){ e.x+=Math.sin(e.yaw)*dt*1; e.z+=Math.cos(e.yaw)*dt*1; collide(e); e.y=groundAt(e.x,e.y+.5,e.z,.4); } }
+/* a teammate standing next to a downed player revives them */
+function reviveTick(r,dt,wants){ const d=BR.ents.find(q=>q.down&&!q.dead&&q.team===r.team&&q!==r&&Math.hypot(q.x-r.x,q.z-r.z)<2.2); if(!d||!wants){ if(r.reviving){ r.reviving.rev=0; r.reviving=null; } return false; } r.reviving=d; d.rev+=dt; if(d.rev>=5){ d.down=false; d.hp=30; d.rev=0; r.reviving=null; feed(`${r.name} revived ${d.name}`,'#86efac'); if(d.me||r.me) sfx.pick(); } return true; }
 function kill(e,by,how,dist){ if(e.dead) return; e.dead=true; e.hp=0; BR.alive=BR.ents.filter(q=>!q.dead).length; e.place=BR.alive+1;
   /* drop everything */ let k=0; for(const it of e.inv) if(it){ BR.items.push(Object.assign({},it,{x:e.x+Math.cos(k)*1.2,y:e.y+.1,z:e.z+Math.sin(k)*1.2,id:BR.items.length})); k++; }
   for(const a in e.ammo) if(e.ammo[a]>0){ BR.items.push({kind:'ammo',a,n:e.ammo[a],x:e.x+Math.cos(k)*1.2,y:e.y+.1,z:e.z+Math.sin(k)*1.2,id:BR.items.length}); k++; }
@@ -406,6 +417,14 @@ function kill(e,by,how,dist){ if(e.dead) return; e.dead=true; e.hp=0; BR.alive=B
   const wn=how==='storm'?'the storm':how==='fall'?'a big fall':how==='rocket'?'a rocket':how==='pick'?'a pickaxe':how&&GUNS[how]?GUNS[how].name:'';
   if(by&&by!==e){ by.kills++; feed(`${by.name} eliminated ${e.name}${wn?' · '+wn:''}${dist>100?` (${Math.round(dist)} m)`:''}`,by.me?'#fde047':e.me?'#f87171':'#e2e8f0'); if(by.me){ sfx.elim(); BR.elimT=2; BR.lastElim=e.name; if(dist>(BR.longShot||0)&&how==='sniper') BR.longShot=dist; } }
   else feed(`${e.name} ${how==='storm'?'was taken by the storm':how==='fall'?'fell to their death':'was eliminated'}`,e.me?'#f87171':'#94a3b8');
+  if(BR.ts>1){ /* a team with nobody left standing is out: the downed are finished off */
+    if(!BR.ents.some(q=>q.team===e.team&&!q.dead&&!q.down)) for(const q of BR.ents) if(q.team===e.team&&!q.dead&&q.down){ q.down=false; kill(q,by,'bleed'); }
+    const teams=new Set(BR.ents.filter(q=>!q.dead).map(q=>q.team)); BR.teamsLeft=teams.size; if(BR.over) return;
+    const mine=BR.ents.filter(q=>q.team===0&&!q.dead);
+    if(!mine.length){ BR.me.place=teams.size+1; BR.spec=by&&!by.dead?by:null; endMatch(false); }
+    else if(e.me){ BR.spec=mine[0]; toast(`You are out · spectating ${mine[0].name}. Your team can still win!`,'#fbbf24'); }
+    else if(teams.size===1) endMatch(true);
+    return; }
   if(e.me){ BR.spec=by&&!by.dead?by:null; endMatch(false); } else if(BR.alive===1&&!BR.me.dead) endMatch(true); }
 
 /* ---------- shooting ---------- */
@@ -489,10 +508,11 @@ function routeTo(e,t){ const P=[], H=t.hs; if(H){ const inside=e.x>H.x0+.2&&e.x<
 function autoPick(e){ for(const it of BR.items){ if(it.taken||(it.kind!=='ammo'&&it.kind!=='mat')) continue; if(Math.abs(it.x-e.x)<1.4&&Math.abs(it.z-e.z)<1.4&&Math.abs(it.y-e.y)<1.5){ giveItem(e,it); it.taken=true; if(e.me) sfx.pick(); } } }
 /* ---------- the AI ---------- */
 function aiTick(e,dt){ const S=BR.storm; let mv={f:0,s:0,jump:false,sprint:false,crouch:false}; e.think=(e.think||0)-dt;
-  if(e.state==='bus'){ if(BR.bus.t/BR.bus.dur>e.jumpAt||BR.bus.t>BR.bus.dur-1) jump(e); return; }
+  if(e.state==='bus'){ if(e.mate?BR.me.state!=='bus':(BR.bus.t/BR.bus.dur>e.jumpAt||BR.bus.t>BR.bus.dur-1)) jump(e); return; }
+  if(e.mate&&(e.state==='fall'||e.state==='glide')&&BR.me.state!=='bus'&&!BR.me.dead){ e.target={x:BR.me.x+(e.id%2?6:-6),z:BR.me.z+(e.id%3?5:-5)}; }
   if(e.state==='fall'||e.state==='glide'){ const dx=e.target.x-e.x, dz=e.target.z-e.z; e.yaw=Math.atan2(dx,dz); mv.f=Math.hypot(dx,dz)>8?1:0; mv.jump=e.y-groundAt(e.x,e.y,e.z,.4)<100; moveEnt(e,dt,mv); return; }
   /* who can I see? (one line-of-sight test every so often) */
-  if(e.think<=0){ e.think=.25+Math.random()*.25; let best=null, bd=1e9; for(const q of BR.ents){ if(q===e||q.dead||q.state!=='ground') continue; const d=Math.hypot(q.x-e.x,q.z-e.z); if(d<bd&&d<(e.inv.some(x=>x&&x.kind==='gun'&&x.g==='sniper')?220:120)){ bd=d; best=q; } }
+  if(e.think<=0){ e.think=.25+Math.random()*.25; let best=null, bd=1e9; for(const q of BR.ents){ if(q===e||q.dead||q.state!=='ground'||BR.ts>1&&q.team===e.team) continue; const d=Math.hypot(q.x-e.x,q.z-e.z)+(q.down?25:0); if(d<bd&&d<(e.inv.some(x=>x&&x.kind==='gun'&&x.g==='sniper')?220:120)){ bd=d; best=q; } }
     e.foe=null; if(best){ const o=headPos(e), t=[best.x,best.y+1.3,best.z], d=sub(t,o), L=len(d); if(rayWorld(o,mul(d,1/L),L).t>=L-.6) { e.foe=best; e.seenT=BR.t; } }
     if(!e.foe&&BR.t-e.lastHit<2&&e.dmgBy&&!e.dmgBy.dead) e.alert=e.dmgBy;
     /* loot target */ if(!e.loot||e.loot.taken||e.loot.open) e.loot=null; if(!e.loot){ let bl=null, bd2=55; for(const c of WORLD.CH){ if(c.open||c.tower||c.lv>0||c.claim&&c.claim!==e&&!c.claim.dead||e.skip&&e.skip.has(c)) continue; const d=Math.hypot(c.x-e.x,c.z-e.z)+(c.lv||0)*6; if(d<bd2&&safeSpot(c)){ bd2=d; bl=c; } } for(const it of BR.items){ if(it.taken||it.kind==='ammo'||it.kind==='mat'||it.lv>0||e.skip&&e.skip.has(it)) continue; const want=it.kind==='gun'?(e.inv.filter(x=>x&&x.kind==='gun').length<3||it.rar>Math.min(...e.inv.filter(x=>x&&x.kind==='gun').map(x=>x.rar))):it.kind!=='heal'||e.inv.includes(null); if(!want) continue; const d=Math.hypot(it.x-e.x,it.z-e.z); if(d<bd2*.8&&safeSpot(it)){ bd2=d; bl=it; } } e.loot=bl; if(bl){ e.route=routeTo(e,bl); if(bl.open===false) bl.claim=e; } }
@@ -505,7 +525,10 @@ function aiTick(e,dt){ const S=BR.storm; let mv={f:0,s:0,jump:false,sprint:false
   if(!foe&&!e.heal&&BR.t-e.lastHit>4){ const want=e.sh<50?e.inv.findIndex(s=>s&&s.kind==='heal'&&HEALS[s.h].sh&&e.sh<HEALS[s.h].cap):-1, wantH=e.hp<70?e.inv.findIndex(s=>s&&s.kind==='heal'&&HEALS[s.h].hp&&e.hp<HEALS[s.h].cap):-1; if(want>=0) useHeal(e,want); else if(wantH>=0) useHeal(e,wantH); }
   /* where to go: the storm first, then loot, then the next circle */
   const sc=S.ph<0?[0,0]:S.nc, sr=S.ph<0?400:S.nr, outside=Math.hypot(e.x-sc[0],e.z-sc[1])>sr*.85-6, cur=Math.hypot(e.x-S.c[0],e.z-S.c[1])>S.r-4;
-  let goal=null; if(cur||outside&&(S.moving||S.t>S.wait*.4)) goal=[sc[0],sc[1]]; else if(e.loot&&!foe){ const R=e.route&&e.route.length?e.route:[[e.loot.x,e.loot.z]]; goal=R[0]; if(R.length>1&&Math.hypot(goal[0]-e.x,goal[1]-e.z)<1.7){ R.shift(); goal=R[0]; } e.wp=R.length>1; } else if(e.tree&&!foe){ goal=[e.tree.x,e.tree.z]; if(Math.hypot(e.tree.x-e.x,e.tree.z-e.z)<1.9){ e.yaw=Math.atan2(e.tree.x-e.x,e.tree.z-e.z); e.pitch=0; e.aim=fwd3(e.yaw,-.05); const sel=e.sel; e.sel=-1; swing(e); e.sel=sel; goal=null; } } else if(!foe){ if(!e.wander||Math.hypot(e.wander[0]-e.x,e.wander[1]-e.z)<4) e.wander=[sc[0]+rnd(-.5,.5)*sr,sc[1]+rnd(-.5,.5)*sr]; goal=e.wander; }
+  let goal=null; const dmate=BR.ts>1&&!foe?BR.ents.find(q=>q.down&&!q.dead&&q.team===e.team&&q!==e&&Math.hypot(q.x-e.x,q.z-e.z)<60):null;
+  if(dmate){ if(Math.hypot(dmate.x-e.x,dmate.z-e.z)<1.8){ reviveTick(e,dt,true); moveEnt(e,dt,{f:0,s:0,jump:false,sprint:false,crouch:true}); return; } goal=[dmate.x,dmate.z]; }
+  else if(e.mate&&!foe&&!BR.me.dead&&BR.me.state==='ground'&&Math.hypot(BR.me.x-e.x,BR.me.z-e.z)>(e.loot?45:16)&&!cur){ e.loot=null; goal=[BR.me.x+(e.id%2?3:-3),BR.me.z+(e.id%3?3:-3)]; }
+  else if(cur||outside&&(S.moving||S.t>S.wait*.4)) goal=[sc[0],sc[1]]; else if(e.loot&&!foe){ const R=e.route&&e.route.length?e.route:[[e.loot.x,e.loot.z]]; goal=R[0]; if(R.length>1&&Math.hypot(goal[0]-e.x,goal[1]-e.z)<1.7){ R.shift(); goal=R[0]; } e.wp=R.length>1; } else if(e.tree&&!foe){ goal=[e.tree.x,e.tree.z]; if(Math.hypot(e.tree.x-e.x,e.tree.z-e.z)<1.9){ e.yaw=Math.atan2(e.tree.x-e.x,e.tree.z-e.z); e.pitch=0; e.aim=fwd3(e.yaw,-.05); const sel=e.sel; e.sel=-1; swing(e); e.sel=sel; goal=null; } } else if(!foe){ if(!e.wander||Math.hypot(e.wander[0]-e.x,e.wander[1]-e.z)<4) e.wander=[sc[0]+rnd(-.5,.5)*sr,sc[1]+rnd(-.5,.5)*sr]; goal=e.wander; }
   if(foe){ const d=Math.hypot(foe.x-e.x,foe.z-e.z), o=headPos(e), t=[foe.x+foe.vx*.15*e.sk,foe.y+(Math.random()<.18*e.sk?1.6:1.15),foe.z+foe.vz*.15*e.sk], aim=norm(sub(t,o));
     /* aim error: worse far away, worse for weaker players, worse when they move */ const err=(.06+.02*d/30)*(1.25-e.sk)*(1+Math.hypot(foe.vx,foe.vz)/8)*(e.react>0?3:1); e.react=(e.react??.5)-dt;
     e.aim=norm(add(aim,[gauss()*err*.4,gauss()*err*.25,gauss()*err*.4])); e.yaw=Math.atan2(aim[0],aim[2]); e.pitch=Math.asin(clamp(aim[1],-1,1)); e.ads=d>25?1:0;
@@ -539,6 +562,7 @@ function playerTick(e,dt){ if(e.dead) return;
   else { const g=gunOf(e); if(g){ if(mouse.l&&(GUNS[g.g].auto||!mouse.used)){ if(g.mag<=0&&e.ammo[GUNS[g.g].ammo]<=0){ if(!mouse.used){ toast(`Out of ${GUNS[g.g].ammo} ammo`,'#f87171'); mouse.used=true; } } else { fire(e); mouse.used=true; } } }
     else if(e.inv[e.sel]&&e.inv[e.sel].kind==='heal'&&mouse.l&&!mouse.used){ useHeal(e,e.sel); mouse.used=true; } }
   /* interact: hold E on a chest, tap E on loot */
+  if(BR.ts>1){ const dm=BR.ents.find(q=>q.down&&!q.dead&&q.team===0&&q!==e&&Math.hypot(q.x-e.x,q.z-e.z)<2.2); BR.revPrompt=dm||null; if(dm&&reviveTick(e,dt,keys.has('KeyE'))) return; }
   const it=nearestInteract(e); BR.prompt=it; if(it&&keys.has('KeyE')){ if(it.chest){ e.open=(e.open||0)+dt; if(e.open>.5){ openChest(e,it.chest); e.open=0; } } else if(!it.item.taken){ keys.delete('KeyE'); if(giveItem(e,it.item)){ it.item.taken=true; sfx.pick(); } else if(it.item.kind==='gun'||it.item.kind==='heal'){ /* swap with the held slot */ const s=e.sel>=0?e.sel:0, old=e.inv[s]; e.inv[s]=null; giveItem(e,it.item); it.item.taken=true; if(old) BR.items.push(Object.assign({},old,{x:e.x,y:e.y+.1,z:e.z,id:BR.items.length})); sfx.pick(); } } } else e.open=0; }
 const mouse={l:false,r:false,used:false};
 
@@ -554,6 +578,7 @@ function step(dt){ if(toastT>0){ toastT-=dt; if(toastT<=0) $('toast').classList.
       if(k>=1&&S.ph<STORM.length-1){ S.ph++; S.moving=false; S.t=0; const N=STORM[S.ph]; S.wait=N.wait; const a=Math.random()*Math.PI*2, m=Math.max(0,S.r-N.r)*Math.random()*.9; S.nc=[S.c[0]+Math.cos(a)*m,S.c[1]+Math.sin(a)*m]; S.nr=N.r; } }
     BR.stormTick=(BR.stormTick||0)+dt; if(BR.stormTick>=1){ BR.stormTick=0; const d=STORM[Math.min(S.ph,STORM.length-1)].d; for(const e of BR.ents) if(!e.dead&&e.state==='ground'&&Math.hypot(e.x-S.c[0],e.z-S.c[1])>S.r) hurt(e,d,null,'storm'); } }
   for(const e of BR.ents){ if(e.dead) continue; e.cool-=dt; e.build-=dt; e.spread=Math.max(0,e.spread-dt*.08); e.swing=Math.max(0,e.swing-dt); if(e.rel>0){ e.rel-=dt; if(e.rel<=0) finishReload(e); } stepHeal(e,dt);
+    if(e.down){ e.foeNear=e.lastHit>BR.t-3; downTick(e,dt); continue; }
     if(e.ai) aiTick(e,dt); else if(e.me) playerTick(e,dt); if(e.state==='ground'&&((BR.t*10|0)+e.id)%5===0) autoPick(e); }
   stepProj(dt); growBuilds(dt);
   for(const f of BR.feed) f.T-=dt; BR.feed=BR.feed.filter(f=>f.T>0); for(const n of BR.nums) n.t+=dt; BR.nums=BR.nums.filter(n=>n.t<1);
@@ -876,7 +901,8 @@ function drawHUD(){ const me=BR.me, S=BR.storm, g=gunOf(me);
       if(BR.buildMode){ ctx.arc(W/2,H/2,4,0,7); } else { ctx.moveTo(W/2-c-7,H/2); ctx.lineTo(W/2-c,H/2); ctx.moveTo(W/2+c,H/2); ctx.lineTo(W/2+c+7,H/2); ctx.moveTo(W/2,H/2-c-7); ctx.lineTo(W/2,H/2-c); ctx.moveTo(W/2,H/2+c); ctx.lineTo(W/2,H/2+c+7); } ctx.stroke();
       if(BR.hitT>0){ ctx.strokeStyle='#fff'; ctx.beginPath(); for(const [a,b] of [[-1,-1],[1,-1],[-1,1],[1,1]]){ ctx.moveTo(W/2+a*5,H/2+b*5); ctx.lineTo(W/2+a*11,H/2+b*11); } ctx.stroke(); } } }
   /* damage numbers */ for(const n of BR.nums){ const p=R3.proj(n.x*K3,(n.y+n.t*.8)*K3,n.z*K3); if(p) hudText(String(n.v),p[0]*W,p[1]*H,n.head?26:20,n.head?'#fde047':n.sh?'#7dd3fc':'#fff','center'); }
-  /* names over nearby players you can see */ for(const e of BR.ents){ if(e.dead||e===me||e.state==='bus') continue; const d=Math.hypot(e.x-me.x,e.z-me.z); if(d>35) continue; const p=R3.proj(e.x*K3,(e.y+2.15)*K3,e.z*K3); if(p&&p[0]>0&&p[0]<1&&p[1]>0&&p[1]<1) hudText(e.name,p[0]*W,p[1]*H,13,e.net?'#7dd3fc':'#e2e8f0','center'); }
+  /* names over nearby players you can see */ for(const e of BR.ents){ if(e.dead||e===me||e.state==='bus') continue; const d=Math.hypot(e.x-me.x,e.z-me.z); if(d>35) continue; const p=R3.proj(e.x*K3,(e.y+2.15)*K3,e.z*K3); if(p&&p[0]>0&&p[0]<1&&p[1]>0&&p[1]<1) hudText(e.name+(e.down?' (down)':''),p[0]*W,p[1]*H,13,e.mate?'#4ade80':e.net?'#7dd3fc':'#e2e8f0','center'); }
+  if(BR.ts>1) for(const e of BR.ents){ if(!e.mate||e.dead||e.state==='bus') continue; const d=Math.hypot(e.x-me.x,e.z-me.z); if(d<=35) continue; const p=R3.proj(e.x*K3,(e.y+2.4)*K3,e.z*K3); if(p&&p[0]>0&&p[0]<1&&p[1]>0&&p[1]<1) hudText(`▼ ${e.name} ${Math.round(d)} m`,p[0]*W,p[1]*H,13,e.down?'#f87171':'#4ade80','center'); }
   /* health and shield */ rr(18,H-86,280,70,12,'rgba(5,10,24,.72)'); hudText('🛡',26,H-58,18,'#7dd3fc'); bar(52,H-74,236,18,me.sh,100,'#38bdf8'); hudText(String(Math.ceil(me.sh)),60,H-60,15,'#fff');
   hudText('✚',27,H-29,18,'#86efac'); bar(52,H-44,236,20,me.hp,100,me.hp>30?'#22c55e':'#ef4444'); hudText(String(Math.ceil(me.hp)),60,H-28,16,'#fff');
   /* materials */ ['wood','stone','metal'].forEach((m,i)=>{ const x=W-300+i*64, on=me.mat===m; rr(x,H-140,58,30,7,on?'rgba(250,204,21,.35)':'rgba(5,10,24,.7)'); hudText(`${m==='wood'?'🪵':m==='stone'?'🧱':'⚙️'} ${me.mats[m]}`,x+6,H-119,15,'#fff'); });
@@ -898,6 +924,9 @@ function drawHUD(){ const me=BR.me, S=BR.storm, g=gunOf(me);
   if(me.state==='bus') hudText('SPACE to jump · pick your landing spot on the map (M)',W/2,H-30,18,'#e2e8f0','center'); else if(me.state==='fall') hudText(`${Math.round(me.y-groundAt(me.x,me.y,me.z,.4))} m · W to dive faster · Space opens the glider`,W/2,H-30,16,'#e2e8f0','center');
   if(!document.pointerLockElement&&view3&&!me.dead&&phase==='play') hudText('Click the game to aim with the mouse (Esc releases it) · or turn with the arrow keys',W/2,H-14,13,'#94a3b8','center');
   if(BR.map){ ctx.fillStyle='rgba(0,0,0,.55)'; ctx.fillRect(0,0,W,H); drawMinimap(W/2-270,H/2-270,540,true); hudText('M to close',W/2,H/2+296,16,'#e2e8f0','center'); }
+  if(BR.ts>1){ const M=BR.ents.filter(q=>q.team===0), y0=H-96; rr(14,y0-M.length*24-26,210,M.length*24+32,9,'rgba(5,10,24,.75)'); hudText(`${BR.ts===2?'Duo':'Squad'} · ${BR.teamsLeft||Math.ceil(BR.ents.length/BR.ts)} teams left`,24,y0-M.length*24-8,13,'#93c5fd'); M.forEach((q,i)=>{ const y=y0-(M.length-1-i)*24; hudText(q.me?'You':q.name,24,y,14,q.dead?'#64748b':q.down?'#f87171':'#e2e8f0'); if(!q.dead){ ctx.fillStyle='#1e293b'; ctx.fillRect(100,y-10,112,8); ctx.fillStyle=q.down?'#ef4444':'#22c55e'; ctx.fillRect(100,y-10,112*clamp(q.hp/100,0,1),8); if(!q.down&&q.sh>0){ ctx.fillStyle='#38bdf8'; ctx.fillRect(100,y-2,112*clamp(q.sh/100,0,1),3); } } else hudText('out',212,y,12,'#64748b','right'); });
+    if(me.down) hudText(`KNOCKED · bleeding out ${Math.ceil(me.hp)} · WASD to crawl${me.rev>0?' · being revived '+Math.round(me.rev/5*100)+'%':''}`,W/2,H/2+70,20,'#f87171','center');
+    if(BR.revPrompt&&!me.dead&&!me.down) hudText(BR.revPrompt.rev>0?`Reviving ${BR.revPrompt.name}… ${Math.round(BR.revPrompt.rev/5*100)}%`:`Hold E · revive ${BR.revPrompt.name}`,W/2,H/2+90,18,'#86efac','center'); }
   if(me.dead&&BR.spec&&!BR.spec.dead) hudText(`Spectating ${BR.spec.name} · ${BR.spec.kills} eliminations`,W/2,70,20,'#fde047','center'); }
 function itemName(it){ return it.kind==='gun'?`${RAR[it.rar].n} ${GUNS[it.g].name}`:it.kind==='heal'?`${HEALS[it.h].name} ×${it.n}`:it.kind==='ammo'?`${it.n} ${it.a} ammo`:`${it.n} ${it.m}`; }
 function draw(){ ctx.clearRect(0,0,W,H); if(view3) render3D(frameDtG); if(!BR||phase==='menu'){ return; } drawHUD(); }
@@ -969,7 +998,7 @@ function drawBus(){ if(BR.bus.t>BR.bus.dur+2) return; const K=K3, b=busPos(BR.bu
   R3.part(R3.UB,R3.mm(M,R3.S(3*K,3*K,9*K)),[.15,.45,.95]); R3.part(R3.UB,R3.mm(M,R3.T(0,.5*K,4.6*K),R3.S(2.8*K,1.2*K,.2*K)),[.75,.9,1]); R3.part(R3.US,R3.mm(M,R3.T(0,9*K,0),R3.S(6*K,6*K,6*K)),[.95,.3,.4]); for(const s of [-1,1]) R3.part(R3.UB,R3.mm(M,R3.T(s*1.2*K,5*K,0),R3.S(.08*K,6*K,.08*K)),[.3,.3,.3]); }
 /* a player: a blocky character in their outfit, with the gun they hold; skydiving flat, or hanging under a glider */
 function drawChar(e){ const K=K3, {T,S,RX,RY,RZ,mm,UB,US}=R3, sk=e.skin, c1=hx3(sk[0]), c2=hx3(sk[1]), c3=hx3(sk[2]), skin=hx3('#e0b48f'), fall=e.state==='fall', glide=e.state==='glide';
-  let M=mm(T(e.x*K,e.y*K,e.z*K),RY(e.yaw)); if(fall) M=mm(M,T(0,1*K,0),RX(1.25),T(0,-1*K,0));
+  let M=mm(T(e.x*K,e.y*K,e.z*K),RY(e.yaw)); if(fall) M=mm(M,T(0,1*K,0),RX(1.25),T(0,-1*K,0)); if(e.down) M=mm(M,T(0,.22*K,0),RX(1.35),T(0,-.2*K,0));
   const sw=Math.sin(e.ph)*(e.on?.6:.1), cr=e.crouch?.35:0, P=(x,y,z,sx,sy,sz,c,ex)=>R3.part(UB,ex?mm(M,T(x*K,y*K,z*K),ex,S(sx*K,sy*K,sz*K)):mm(M,T(x*K,y*K,z*K),S(sx*K,sy*K,sz*K)),c);
   for(const s of [-1,1]){ P(s*.13,.42-cr*.3,0,.17,.82-cr,.2,c2,RX(s*sw*.7)); P(s*.13,.05,.05,.18,.1,.3,[.1,.1,.12]); }
   P(0,1.12-cr,0,.5,.62,.3,c1); P(0,.85-cr,0,.52,.14,.32,c3); R3.part(US,mm(M,T(0,(1.62-cr)*K,0),S(.19*K,.2*K,.19*K)),skin); P(0,1.76-cr,-.02,.36,.12,.38,c3);
@@ -1023,6 +1052,7 @@ addEventListener('keydown',e=>{ if(e.code==='KeyF') mouse.l=true; if(e.code==='K
 /* ---------- menu ---------- */
 const pill=(attr,val,on,label,key)=>`<button data-${attr}="${val}" class="${on?'on':''}" tabindex="-1">${label}${key?` <kbd>${key}</kbd>`:''}</button>`;
 function renderMenu(){ let h=`<h1>Rink Rivals: Storm Royale</h1><p>Jump from the battle bus, land, loot chests for guns and shields, harvest wood, stone and metal and build walls, floors and ramps. The storm keeps closing in. Last one standing wins.</p>
+  <div class="pills"><span class="lbl">Mode</span>${[[1,'Solo'],[2,'Duos'],[4,'Squads']].map(([n,t])=>pill('sq',n,squadSel===n,t,'')).join('')}<span style="align-self:center;font-size:14px;color:#cbd5e1">${squadSel>1?'AI teammates · knocked players can be revived (hold E) · last team standing wins':''}</span></div>
   <div class="pills"><span class="lbl">Players</span>${[16,30,50].map(n=>pill('n',n,nPlayers===n,`${n} players`,'')).join('')}</div>
   <div class="pills"><span class="lbl">Opponents</span>${LVL.map((l,i)=>pill('l',i,lvl===i,l,String(i+1))).join('')}</div>
   <div class="pills"><span class="lbl">Mouse</span>${[.6,1,1.6].map((s,i)=>pill('s',s,sens===s,['Slow','Normal','Fast'][i],'')).join('')}</div>
@@ -1030,7 +1060,7 @@ function renderMenu(){ let h=`<h1>Rink Rivals: Storm Royale</h1><p>Jump from the
   <div id="hint">Your record: ${SV.wins} win${SV.wins===1?'':'s'} in ${SV.games} matches · ${SV.kills} eliminations${SV.best<99?` · best finish #${SV.best}`:''}</div>`;
   $('menuIn').innerHTML=h; $('logoL').src=badgeS(SKINS[0][0]); setText('nameL','You'); setText('tpL','Storm Royale'); setText('scoreL',''); $('logoR').src=badgeS('#7e22ce'); setText('nameR',`${nPlayers} players`); setText('tpR',LVL[lvl]); setText('scoreR',''); setText('cntT','DROP'); setText('innT','Storm Royale'); setText('outsT','Battle royale'); setText('basesT',''); renderKeysHelp(); }
 $('menuIn').addEventListener('mousedown',e=>{ if(e.target.closest('button')) e.preventDefault(); });
-$('menuIn').addEventListener('click',e=>{ const b=e.target.closest('button'); if(!b) return; const d=b.dataset; audio(); sfx.click(); if(d.n) nPlayers=+d.n; else if(d.l!==undefined) lvl=+d.l; else if(d.s) sens=+d.s; else if(d.act==='start'){ startGame(); return; } savePrefs(); renderMenu(); });
+$('menuIn').addEventListener('click',e=>{ const b=e.target.closest('button'); if(!b) return; const d=b.dataset; audio(); sfx.click(); if(d.sq) squadSel=+d.sq; else if(d.n) nPlayers=+d.n; else if(d.l!==undefined) lvl=+d.l; else if(d.s) sens=+d.s; else if(d.act==='start'){ startGame(); return; } savePrefs(); renderMenu(); });
 addEventListener('keydown',e=>{ if(phase!=='menu') return; if(['Digit1','Digit2','Digit3'].includes(e.code)){ lvl=+e.code.slice(5)-1; savePrefs(); renderMenu(); } });
 function startGame(){ audio(); savePrefs(); newMatch(); }
 function renderKeysHelp(){ $('keysHelp').innerHTML='<div><b>Move</b> W A S D</div><div><b>Aim</b> mouse (click the game) · arrows</div><div><b>Shoot</b> left click · <b>Aim down sights</b> right click</div><div><b>Jump / glider</b> Space</div><div><b>Sprint</b> Shift · <b>Crouch</b> Ctrl</div><div><b>Open / pick up</b> E</div><div><b>Weapons</b> 1-5 · wheel · <b>Pickaxe</b> Q</div><div><b>Reload</b> R</div><div><b>Build</b> B, then 1 wall 2 floor 3 ramp · G material</div><div><b>Map</b> M</div><div><b>Shoulder</b> H</div><div><b>Pause</b> P</div>'; }
@@ -1044,7 +1074,7 @@ $('btnFs').addEventListener('click',toggleFs);
 $('btnView').addEventListener('click',()=>{});
 $('btnSnd').addEventListener('click',()=>{ muted=!muted; $('btnSnd').textContent=muted?'Sound off':'Sound on'; if(!muted){ audio(); sfx.click(); } });
 $('result').addEventListener('click',()=>{ if(phase==='over') toMenu(); });
-if(TEST) window.__br={get BR(){return BR;},get phase(){return phase;},step,newMatch,keys,mouse,look,get WORLD(){return WORLD;},terrainH,groundAt,rayWorld,place,fire,jump,set lvl(v){lvl=v;},set nPlayers(v){nPlayers=v;},giveItem,openChest,kill,endMatch,camPose};
+if(TEST) window.__br={set squadSel(v){squadSel=v;},knock,get BR(){return BR;},get phase(){return phase;},step,newMatch,keys,mouse,look,get WORLD(){return WORLD;},terrainH,groundAt,rayWorld,place,fire,jump,set lvl(v){lvl=v;},set nPlayers(v){nPlayers=v;},giveItem,openChest,kill,endMatch,camPose};
 $('btnView').style.display='none'; $('viewBtn2').style.display='none'; setView3(true);
 renderMenu();
 requestAnimationFrame(frame);
