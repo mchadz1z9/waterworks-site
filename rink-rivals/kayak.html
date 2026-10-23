@@ -221,6 +221,9 @@ const NATC={CZE:'#1d4ed8',GBR:'#1e3a8a',ITA:'#16a34a',FRA:'#2563eb',SLO:'#1d4ed8
 /* ---------- whitewater venues: an artificial channel, its drop and flow, and where the eddies form ---------- */
 const VENUES=[{id:'vaires',name:'Vaires-sur-Marne',where:'Paris, France (Olympic course)',L:250,W0:11,U:3.1,drop:4.5,seed:3,col:[.33,.5,.56]},{id:'lee',name:'Lee Valley',where:'London, Great Britain',L:280,W0:12,U:2.9,drop:5.5,seed:7,col:[.3,.47,.5]},{id:'augsburg',name:'Augsburg Eiskanal',where:'Augsburg, Germany',L:300,W0:9.5,U:3.4,drop:5,seed:11,col:[.36,.55,.58]},{id:'penrith',name:'Penrith Whitewater',where:'Sydney, Australia',L:260,W0:12.5,U:2.8,drop:5.5,seed:17,col:[.3,.5,.52]}];
 const VBY=Object.fromEntries(VENUES.map(v=>[v.id,v]));
+/* the C1 field: single-blade canoeists, kneeling in the boat */
+const SLALOM_C={m:[['Nicolas Gestin','FRA',97],['Adam Burgess','GBR',95],['Benjamin Savšek','SLO',95],['Václav Chaloupka','CZE',94],['Luka Božič','SLO',93],['Sideris Tasiadis','GER',93],['Matej Beňuš','SVK',92],['Ryan Westley','GBR',92],['Lukáš Rohan','CZE',91],['Raffaello Ivaldi','ITA',91]],
+ w:[['Jessica Fox','AUS',98],['Elena Lilik','GER',95],['Evy Leibfarth','USA',94],['Gabriela Satková','CZE',94],['Mallory Franklin','GBR',93],['Andrea Herzog','GER',93],['Tereza Fišerová','CZE',92],['Kimberley Woods','GBR',92],['Marjorie Delassus','FRA',91],['Monika Škáchová','SVK',90]]};
 function buildCourse(id){ const V=VBY[id], rng=mulberry32(V.seed), L=V.L, obs=[], gates=[], waves=[];
   /* the channel winds a little; width varies */ const cz=x=>Math.sin(x/38+V.seed)*3.2+Math.sin(x/17)*1.1, wid=x=>V.W0+Math.sin(x/23+V.seed*.7)*1.6;
   /* eddy makers: concrete blocks and rocks jutting from alternating banks */ let side=rng()<.5?1:-1;
@@ -257,9 +260,11 @@ function boatStep(C,b,I,dt,t){ const f=[Math.cos(b.h),Math.sin(b.h)], rt=[-f[1],
   /* edging: lean into the turn. Caught flat (or on the wrong edge) across a strong eddy line and you go over */
   const need=clamp(-dlat*.35,-1,1); b.lean=I.edge!=null?lerp(b.lean,I.edge,dt*6):lerp(b.lean,need,dt*4); const wrong=Math.abs(dlat)>1.8&&(b.lean*need<-.05||Math.abs(b.lean)<.12); b.tip=Math.max(0,b.tip+(wrong?Math.abs(dlat)*.9:-1.5)*dt); if(b.tip>1){ b.cap=true; b.capT=0; b.tip=0; }
   /* the paddle */ const st=b.stroke; if(st){ b.stT+=dt; const k=clamp(1-b.stT/.35,0,1), sgn=st.side;
-    if(st.k==='fwd'){ const th=9.5*k*(1-clamp(vf/6,0,1)); ax+=f[0]*th; az+=f[1]*th; b.w+=-sgn*1.1*k*dt*8*.12; }
+    /* a C1 has one blade on one side: strokes on that side push harder but turn you away from it; cross strokes on the other side are weaker */
+    const c1=b.c1?(sgn===b.ps?1:.74):1, cy=b.c1?(sgn===b.ps?1.7:1.2):1;
+    if(st.k==='fwd'){ const th=9.5*k*(1-clamp(vf/6,0,1))*c1*(b.c1?1.03:1); ax+=f[0]*th; az+=f[1]*th; b.w+=-sgn*1.1*k*dt*8*.12*cy; }
     else if(st.k==='back'){ ax-=f[0]*6*k; az-=f[1]*6*k; b.w+=sgn*1.1*k*dt; }
-    else if(st.k==='sweep'){ b.w+=-sgn*9.5*k*dt; ax+=f[0]*2*k; az+=f[1]*2*k; }
+    else if(st.k==='sweep'){ b.w+=-sgn*9.5*k*dt*c1; ax+=f[0]*2*k*c1; az+=f[1]*2*k*c1; }
     else if(st.k==='draw'){ ax+=rt[0]*sgn*4.2*k; az+=rt[1]*sgn*4.2*k; }
     if(b.stT>.38) b.stroke=null; }
   b.vx+=ax*dt; b.vz+=az*dt; b.x+=b.vx*dt; b.z+=b.vz*dt; b.h+=b.w*dt; b.pad+=dt*(st?6:1.2); wallHit(C,b); }
@@ -283,19 +288,20 @@ let RIV=null; function riverAudio(v,on){ if(!AC||muted){ if(RIV) RIV.g.gain.valu
 const sfx={ click:()=>tone(700,.04,'square',.03), paddle:()=>noise(.18,.08,1100,'bandpass'), pole:()=>{ tone(1300,.12,'triangle',.05); tone(900,.15,'triangle',.04,null,.05); }, gate:()=>tone(880,.08,'sine',.04), miss:()=>tone(200,.4,'sawtooth',.05,120), splash:()=>noise(.6,.25,700), beep:()=>tone(990,.12,'square',.05), go:()=>tone(1320,.35,'square',.06), win:()=>{ [523,659,784,1047].forEach((f,i)=>tone(f,.2,'triangle',.06,null,i*.14)); }, crowd:v=>noise(1.4,v||.12,900) };
 let lastSay=0; function speak(t,pri){ if(muted||!window.speechSynthesis) return; const now=performance.now(); if(!pri&&now-lastSay<1200) return; lastSay=now; try{ speechSynthesis.cancel(); const u=new SpeechSynthesisUtterance(t); u.rate=1.08; speechSynthesis.speak(u); }catch(e){} }
 /* ---------- state ---------- */
-let R=null, phase='menu', paused=false, modeSel='slalom', venSel='vaires', distSel=200, gSel='m', assist=true, camMode=0;
+let boatSel='k1'; let R=null, phase='menu', paused=false, modeSel='slalom', venSel='vaires', distSel=200, gSel='m', assist=true, camMode=0;
 const keys=new Set(); const held=a=>a.some(k=>keys.has(k));
 const SKEY='rinkRivalsKayakV1'; let SV=(()=>{ try{ return Object.assign({best:{},spr:{},ghost:{},wins:0,runs:0},JSON.parse(localStorage.getItem(SKEY)||'null')||{}); }catch(e){ return {best:{},spr:{},ghost:{},wins:0,runs:0}; } })();
 const saveSV=()=>{ try{ localStorage.setItem(SKEY,JSON.stringify(SV)); }catch(e){ /* ghost too big: drop the ghosts */ SV.ghost={}; try{ localStorage.setItem(SKEY,JSON.stringify(SV)); }catch(e2){} } };
-try{ const p=JSON.parse(localStorage.getItem('rinkRivalsKayakPrefs')||'null'); if(p){ modeSel=p.modeSel||modeSel; venSel=VBY[p.venSel]?p.venSel:venSel; distSel=p.distSel||distSel; gSel=p.gSel||gSel; assist=p.assist??assist; camMode=p.camMode||0; } }catch(e){}
-const savePrefs=()=>{ try{ localStorage.setItem('rinkRivalsKayakPrefs',JSON.stringify({modeSel,venSel,distSel,gSel,assist,camMode})); }catch(e){} };
+try{ const p=JSON.parse(localStorage.getItem('rinkRivalsKayakPrefs')||'null'); if(p){ modeSel=p.modeSel||modeSel; venSel=VBY[p.venSel]?p.venSel:venSel; distSel=p.distSel||distSel; gSel=p.gSel||gSel; assist=p.assist??assist; camMode=p.camMode||0; boatSel=p.boatSel==='c1'?'c1':'k1'; } }catch(e){}
+const savePrefs=()=>{ try{ localStorage.setItem('rinkRivalsKayakPrefs',JSON.stringify({modeSel,venSel,distSel,gSel,assist,camMode,boatSel})); }catch(e){} };
+const slKey=()=>venSel+gSel+(boatSel==='c1'?'c':'');
 const fmtT=s=>s>=60?`${Math.floor(s/60)}:${(s%60).toFixed(2).padStart(5,'0')}`:s.toFixed(2);
 
 /* ---------- slalom: a run down the course ---------- */
-function newRun(){ const C=buildCourse(venSel), b=mkBoat(-6,C.cz(-6),0); b.vx=1.2; R={mode:'slalom',C,b,t:0,tStart:null,fin:null,gi:0,res:C.gates.map(()=>null),pen:0,touches:0,misses:0,trail:[],ghost:(SV.ghost||{})[venSel+gSel]||null,msg:null,msgT:0,swim:false};
-  R.field=makeField(C); phase='play'; paused=false; $('menu').classList.add('hidden'); $('result').classList.add('hidden'); camE=null; banner(C.V.name,`${C.gates.length} gates (${C.gates.filter(g=>g.up).length} upstream) · green downstream, red upstream`,'#16a34a',2.6); updateBoard(); renderKeysHelp(); }
+function newRun(){ const C=buildCourse(venSel), b=mkBoat(-6,C.cz(-6),0); b.vx=1.2; b.c1=boatSel==='c1'; b.ps=1; R={mode:'slalom',c1:b.c1,C,b,t:0,tStart:null,fin:null,gi:0,res:C.gates.map(()=>null),pen:0,touches:0,misses:0,trail:[],ghost:(SV.ghost||{})[slKey()]||null,msg:null,msgT:0,swim:false};
+  R.field=makeField(C); phase='play'; paused=false; $('menu').classList.add('hidden'); $('result').classList.add('hidden'); camE=null; banner(C.V.name,`${b.c1?'C1 · ':''}${C.gates.length} gates (${C.gates.filter(g=>g.up).length} upstream) · green downstream, red upstream`,'#16a34a',2.6); updateBoard(); renderKeysHelp(); }
 /* the real field's runs: a clean time from the course and the athlete, plus the touches and misses that happen */
-function makeField(C){ const clean=C.L/3.6+C.gates.filter(g=>g.up).length*3.4+12, list=SLALOM[gSel].map(([name,nat,rat])=>{ const pen=(Math.random()<.45?2:0)+(Math.random()<.2?2:0)+(Math.random()<.035?50:0); return {name,nat,rat,t:+(clean*(1+(97-rat)*.006+(gSel==='w'?.07:0)+gauss()*.012)+pen).toFixed(2),pen}; }); return list.sort((a,b)=>a.t-b.t); }
+function makeField(C){ const clean=C.L/3.6+C.gates.filter(g=>g.up).length*3.4+12, list=(boatSel==='c1'?SLALOM_C:SLALOM)[gSel].map(([name,nat,rat])=>{ const pen=(Math.random()<.45?2:0)+(Math.random()<.2?2:0)+(Math.random()<.035?50:0); return {name,nat,rat,t:+(clean*(1+(97-rat)*.006+(gSel==='w'?.07:0)+(boatSel==='c1'?.045:0)+gauss()*.012)+pen).toFixed(2),pen}; }); return list.sort((a,b)=>a.t-b.t); }
 function slalomStep(dt){ const C=R.C, b=R.b, I=slalomInput(dt); const px=b.x, pz=b.z; boatStep(C,b,I,dt,R.t); R.t+=dt;
   if(b.hitWall){ b.hitWall=0; }
   if(R.tStart==null&&b.x>=C.start){ R.tStart=R.t; sfx.beep(); }
@@ -312,10 +318,10 @@ let rollHold=0;
 function slalomInput(dt){ const b=R.b; let edge=null; if(held(['KeyJ'])) edge=-1; else if(held(['KeyL'])) edge=1; else if(!assist) edge=0;
   if(b.cap){ if(held(['Space'])){ rollHold+=dt; b.roll=rollHold; if(rollHold>.8){ b.cap=false; b.capT=0; b.tip=0; b.w=0; rollHold=0; sfx.splash(); msg('Rolled up!','#86efac'); } } else { rollHold=Math.max(0,rollHold-dt*2); b.roll=rollHold; } }
   return {edge}; }
-function runOver(){ phase='over'; const raw=R.fin, tot=raw!=null?raw+R.pen:null, key=venSel+gSel; SV.runs++;
+function runOver(){ phase='over'; const raw=R.fin, tot=raw!=null?raw+R.pen:null, key=slKey(); SV.runs++;
   let pb=false; if(tot!=null&&(SV.best[key]==null||tot<SV.best[key])){ SV.best[key]=+tot.toFixed(2); pb=true; SV.ghost=SV.ghost||{}; SV.ghost[key]=R.trail; }
   const rows=R.field.concat(tot!=null?[{name:'You',nat:'',t:+tot.toFixed(2),me:1}]:[]).sort((a,b)=>a.t-b.t), pos=rows.findIndex(r=>r.me)+1; if(pos===1) SV.wins++; saveSV(); R.pos=pos; sfx.crowd(pos===1?.3:.12); if(pos===1) sfx.win();
-  $('resultIn').innerHTML=`<h2>${R.swim?'Swim! Out of the boat: DNF':tot==null?'Did not finish':pos===1?'🥇 Fastest run!':`${ordinal(pos)} place`}</h2><div class="rs">${tot!=null?fmtT(tot):'DNF'}</div><p>${tot!=null?`${fmtT(raw)} + ${R.pen} s penalties (${R.touches} touch${R.touches===1?'':'es'}, ${R.misses} missed)`:''}${pb?' · personal best!':''} · ${R.C.V.name}</p>
+  $('resultIn').innerHTML=`<h2>${R.swim?'Swim! Out of the boat: DNF':tot==null?'Did not finish':pos===1?'🥇 Fastest run!':`${ordinal(pos)} place`}</h2><div class="rs">${tot!=null?fmtT(tot):'DNF'}</div><p>${tot!=null?`${fmtT(raw)} + ${R.pen} s penalties (${R.touches} touch${R.touches===1?'':'es'}, ${R.misses} missed)`:''}${pb?' · personal best!':''} · ${R.c1?'C1':'K1'} · ${R.C.V.name}</p>
    <table class="ls"><tr><th>#</th><th>Athlete</th><th>Time</th><th>Pen</th></tr>${rows.slice(0,10).map((r,i)=>`<tr${r.me?' style="background:rgba(255,209,102,.2)"':''}><td>${i+1}</td><td style="text-align:left">${esc(r.name)} ${r.nat||''}</td><td>${fmtT(r.t)}</td><td>${r.me?R.pen:r.pen}</td></tr>`).join('')}</table><p>Enter for the menu, R to run again.</p>`;
   setTimeout(()=>{ if(phase==='over') $('result').classList.remove('hidden'); },900); }
 const ordinal=n=>n+(['th','st','nd','rd'][(n%100>10&&n%100<14)?0:n%10]||'th');
@@ -373,8 +379,8 @@ let toastT=0, bannerT=0;
 const setText=(id,t)=>{ const e=$(id); if(e&&e.textContent!==String(t)) e.textContent=t; };
 const badgeK=col=>svg(`<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 100 100"><circle cx="50" cy="50" r="46" fill="${col}"/><ellipse cx="50" cy="55" rx="34" ry="8" fill="#facc15"/><rect x="24" y="30" width="52" height="5" rx="2" fill="#111" transform="rotate(-25 50 32)"/></svg>`);
 function updateBoard(){ $('logoL').src=badgeK('#0ea5e9'); setText('nameL','You'); $('logoR').src=badgeK('#ef4444');
-  if(!R){ setText('tpL',modeSel==='slalom'?'Canoe slalom':'Canoe sprint'); setText('scoreL',''); setText('nameR',modeSel==='slalom'?SLALOM[gSel][0][0]:SPRINT[gSel][0][0]); setText('tpR','World No. 1'); setText('scoreR',''); setText('cntT','Kayak'); setText('innT',modeSel==='slalom'?VBY[venSel].name:`K1 ${distSel} m`); setText('outsT',''); setText('basesT',''); return; }
-  if(R.mode==='slalom'){ const key=venSel+gSel; setText('tpL','K1 slalom'); setText('scoreL',SV.best[key]!=null?fmtT(SV.best[key]):'-'); setText('nameR',R.field[0].name); setText('tpR','Fastest in the field'); setText('scoreR',fmtT(R.field[0].t)); setText('cntT','Slalom'); setText('innT',R.C.V.name); setText('outsT',`${R.C.gates.length} gates`); }
+  if(!R){ setText('tpL',modeSel==='slalom'?'Canoe slalom':'Canoe sprint'); setText('scoreL',''); setText('nameR',modeSel==='slalom'?(boatSel==='c1'?SLALOM_C:SLALOM)[gSel][0][0]:SPRINT[gSel][0][0]); setText('tpR','World No. 1'); setText('scoreR',''); setText('cntT','Kayak'); setText('innT',modeSel==='slalom'?VBY[venSel].name:`K1 ${distSel} m`); setText('outsT',''); setText('basesT',''); return; }
+  if(R.mode==='slalom'){ const key=slKey(); setText('tpL',R.c1?'C1 slalom':'K1 slalom'); setText('scoreL',SV.best[key]!=null?fmtT(SV.best[key]):'-'); setText('nameR',R.field[0].name); setText('tpR','Fastest in the field'); setText('scoreR',fmtT(R.field[0].t)); setText('cntT','Slalom'); setText('innT',R.C.V.name); setText('outsT',`${R.C.gates.length} gates`); }
   else { setText('tpL',`K1 ${R.D} m`); setText('scoreL',SV.spr[gSel+R.D]!=null?fmtT(SV.spr[gSel+R.D]):'-'); const f=R.lanes.filter(a=>!a.me).sort((a,b)=>a.T-b.T)[0]; setText('nameR',f.name); setText('tpR','Favourite'); setText('scoreR',''); setText('cntT','Sprint'); setText('innT',`K1 ${R.D} m`); setText('outsT',gSel==='m'?'Men':'Women'); }
   setText('basesT',''); }
 function toast(t,col='#34d399'){ const e=$('toast'); e.textContent=t; e.style.borderColor=col; e.classList.add('on'); toastT=2.2; }
@@ -399,17 +405,17 @@ addEventListener('keyup',e=>keys.delete(e.code)); addEventListener('blur',()=>ke
 
 /* ---------- menu ---------- */
 const pill=(attr,val,on,label)=>`<button data-${attr}="${val}" class="${on?'on':''}" tabindex="-1">${label}</button>`;
-function renderMenu(){ const key=venSel+gSel;
+function renderMenu(){ const key=slKey();
   $('menuIn').innerHTML=`<h1>Rink Rivals: Kayak</h1><p>Canoe slalom on real whitewater channels: the current, the eddies behind every block, eddy lines that spin you round and flip you if you don't edge, green gates downstream and red gates you have to fight up into. Or a K1 sprint over 200, 500 or 1000 m on flat water.</p>
-  <div class="pills"><span class="lbl">Event</span>${pill('mode','slalom',modeSel==='slalom','K1 slalom')}${pill('mode','sprint',modeSel==='sprint','K1 sprint')}<span class="lbl">Division</span>${pill('g','m',gSel==='m','Men')}${pill('g','w',gSel==='w','Women')}</div>
+  <div class="pills"><span class="lbl">Event</span>${pill('mode','slalom',modeSel==='slalom'&&boatSel==='k1','K1 slalom')}${pill('mode','slalomc',modeSel==='slalom'&&boatSel==='c1','C1 slalom')}${pill('mode','sprint',modeSel==='sprint','K1 sprint')}<span class="lbl">Division</span>${pill('g','m',gSel==='m','Men')}${pill('g','w',gSel==='w','Women')}</div>
   ${modeSel==='slalom'?`<div class="pills"><span class="lbl">Course</span>${VENUES.map(v=>pill('ven',v.id,venSel===v.id,v.name)).join('')}</div><p style="margin:0;font-size:14px">${VBY[venSel].where} · ${VBY[venSel].L} m, ${VBY[venSel].drop} m drop · best ${SV.best[key]!=null?fmtT(SV.best[key]):'-'}</p>
    <div class="pills"><span class="lbl">Help</span>${pill('as',1,assist,'Auto edging, forgiving gates')}${pill('as',0,!assist,'Pro: manual edging (J / L), real gates')}</div>`:`<div class="pills"><span class="lbl">Distance</span>${[200,500,1000].map(d=>pill('dist',d,distSel===d,d+' m')).join('')}</div><p style="margin:0;font-size:14px">Best ${SV.spr[gSel+distSel]!=null?fmtT(SV.spr[gSel+distSel]):'-'}</p>`}
   <div class="pills"><button class="gold" data-act="start" tabindex="-1">${modeSel==='slalom'?'Into the start pool':'To the start'} <kbd>Enter</kbd></button><a href="./" tabindex="-1">Home</a><a href="sailing" tabindex="-1">Sailing</a></div>
   <div id="hint">Wins ${SV.wins} · runs ${SV.runs}</div>`; updateBoard(); renderKeysHelp(); }
 $('menuIn').addEventListener('mousedown',e=>{ if(e.target.closest('button')) e.preventDefault(); });
-$('menuIn').addEventListener('click',e=>{ const b=e.target.closest('button'); if(!b) return; const d=b.dataset; audio(); sfx.click(); if(d.mode) modeSel=d.mode; else if(d.g) gSel=d.g; else if(d.ven) venSel=d.ven; else if(d.dist) distSel=+d.dist; else if(d.as!==undefined) assist=d.as==='1'; else if(d.act==='start'){ startGame(); return; } savePrefs(); renderMenu(); });
+$('menuIn').addEventListener('click',e=>{ const b=e.target.closest('button'); if(!b) return; const d=b.dataset; audio(); sfx.click(); if(d.mode){ if(d.mode==='slalomc'){ modeSel='slalom'; boatSel='c1'; } else { modeSel=d.mode; if(d.mode==='slalom') boatSel='k1'; } } else if(d.g) gSel=d.g; else if(d.ven) venSel=d.ven; else if(d.dist) distSel=+d.dist; else if(d.as!==undefined) assist=d.as==='1'; else if(d.act==='start'){ startGame(); return; } savePrefs(); renderMenu(); });
 function startGame(){ audio(); savePrefs(); rollHold=0; if(modeSel==='slalom') newRun(); else newRace(); }
-function renderKeysHelp(){ $('keysHelp').innerHTML=modeSel==='slalom'?'<div><b>Paddle</b> A (left) D (right)</div><div><b>Sweep turn</b> Shift + A/D</div><div><b>Back-paddle</b> S + A/D</div><div><b>Draw</b> Q E</div><div><b>Edge</b> J L</div><div><b>Roll</b> hold Space</div><div><b>Camera</b> C</div><div><b>Pause</b> Esc</div>':'<div><b>Strokes</b> A D alternately, on the rhythm</div><div><b>Full power</b> hold Shift</div><div><b>Camera</b> C</div><div><b>Pause</b> Esc</div>'; }
+function renderKeysHelp(){ $('keysHelp').innerHTML=modeSel==='slalom'?(boatSel==='c1'?'<div><b>C1 blade</b> on your right: D strokes hard, A is a weaker cross stroke</div>':'')+'<div><b>Paddle</b> A (left) D (right)</div><div><b>Sweep turn</b> Shift + A/D</div><div><b>Back-paddle</b> S + A/D</div><div><b>Draw</b> Q E</div><div><b>Edge</b> J L</div><div><b>Roll</b> hold Space</div><div><b>Camera</b> C</div><div><b>Pause</b> Esc</div>':'<div><b>Strokes</b> A D alternately, on the rhythm</div><div><b>Full power</b> hold Shift</div><div><b>Camera</b> C</div><div><b>Pause</b> Esc</div>'; }
 function toMenu(){ phase='menu'; R=null; $('result').classList.add('hidden'); $('menu').classList.remove('hidden'); renderMenu(); }
 
 /* ---------- 3D engine (shared with the other Rink Rivals sports) ---------- */
@@ -724,9 +730,11 @@ function build3(tag,C){ if(builtFor===tag||!R3.ok) return; builtFor=tag; const K
       R3.crowdRow&&R3.crowdRow(G0,cr,[850*K,0,-52*K],[1050*K,0,-52*K],0,1.4*K,8,.8*K); for(let i=0;i<160;i++){ const x=rng()*1300-100, s=rng()<.5?-1:1, z=s*(60+rng()*120); G0.add(SPH,mm(T(x*K,5*K,z*K),S(3*K,4*K,3*K)),[.2,.42+rng()*.1,.18]); } } }); }
 const x2z=(C,x,u)=>C.cz(x)-C.wid(x)/2+C.wid(x)*u;
 /* a paddler in a kayak: hull, spraydeck, buoyancy aid, helmet, and the double paddle sweeping from side to side */
-function drawKayak(x,y,z,h,lean,padPh,padSide,col,ghost,cap,sprint){ const K=K3, M=R3.mm(R3.T(x*K,y*K,z*K),R3.RY(-h),R3.RX(lean*.5+(cap?Math.PI:0))), P=(dx,dy,dz,sx,sy,sz,c,u)=>R3.part(u||R3.UB,R3.mm(M,R3.T(dx*K,dy*K,dz*K),R3.S(sx*K,sy*K,sz*K)),c);
+function drawKayak(x,y,z,h,lean,padPh,padSide,col,ghost,cap,sprint,c1){ const K=K3, M=R3.mm(R3.T(x*K,y*K,z*K),R3.RY(-h),R3.RX(lean*.5+(cap?Math.PI:0))), P=(dx,dy,dz,sx,sy,sz,c,u)=>R3.part(u||R3.UB,R3.mm(M,R3.T(dx*K,dy*K,dz*K),R3.S(sx*K,sy*K,sz*K)),c);
   const len=sprint?5.2:3.5; P(0,.05,0,len*.5,.12,sprint?.22:.32,ghost?[.85,.9,1]:col,R3.US); P(.1,.12,0,.5,.06,.3,[.1,.1,.12]);
   if(cap) return; const body=ghost?[.8,.85,.95]:[.95,.85,.15]; P(0,.42,0,.18,.3,.22,body); P(0,.72,0,.1,.12,.1,[.85,.66,.5],R3.US); P(0,.78,0,.12,.07,.12,ghost?[.8,.85,.95]:[.9,.15,.15],R3.US);
+  if(c1){ /* kneeling C1 paddler with a single blade and a T-grip, always on the same side (cross strokes reach over the bow) */ const A=R3.mm(M,R3.T(0,0,0)), tp=p=>[A[0]*p[0]*K+A[4]*p[1]*K+A[8]*p[2]*K+A[12],A[1]*p[0]*K+A[5]*p[1]*K+A[9]*p[2]*K+A[13],A[2]*p[0]*K+A[6]*p[1]*K+A[10]*p[2]*K+A[14]];
+    const cross=padSide===-1, ph=Math.sin(padPh), sd=cross?-1:1, bx=.55*ph, top=[.1+bx*.4,1.15,sd*.18], bot=[.1+bx,.02,sd*.62]; R3.part(R3.UB,R3.beam(tp(top),tp(bot),.03*K,.03*K),[.15,.15,.15]); R3.part(R3.UB,R3.mm(R3.T(...tp(top)),R3.S(.14*K,.04*K,.04*K)),[.15,.15,.15]); R3.part(R3.UB,R3.mm(R3.T(...tp(bot)),R3.S(.12*K,.26*K,.04*K)),ghost?[.8,.85,.95]:[.95,.95,.95]); return; }
   const a=Math.sin(padPh)*(.9), s=padSide||Math.sign(Math.sin(padPh))||1; const c=[0,.55,0], d=[Math.cos(a)*.35,Math.sin(Math.abs(a))*.25,1.1*Math.sign(Math.sin(padPh)||1)];
   const A=R3.mm(M,R3.T(0,0,0)), tp=p=>[A[0]*p[0]*K+A[4]*p[1]*K+A[8]*p[2]*K+A[12],A[1]*p[0]*K+A[5]*p[1]*K+A[9]*p[2]*K+A[13],A[2]*p[0]*K+A[6]*p[1]*K+A[10]*p[2]*K+A[14]];
   const e1=[c[0]+d[0],c[1]+d[1]-.2,c[2]+d[2]], e2=[c[0]-d[0],c[1]-d[1]+.2,c[2]-d[2]]; R3.part(R3.UB,R3.beam(tp(e1),tp(e2),.03*K,.03*K),[.15,.15,.15]); R3.part(R3.UB,R3.mm(R3.T(...tp(e1)),R3.S(.2*K,.04*K,.12*K)),ghost?[.8,.85,.95]:[.95,.95,.95]); R3.part(R3.UB,R3.mm(R3.T(...tp(e2)),R3.S(.2*K,.04*K,.12*K)),ghost?[.8,.85,.95]:[.95,.95,.95]); void s; }
@@ -737,8 +745,8 @@ function render3D(dt){ const K=K3;
     if(camMode===1){ eye=[b.x-6,y+9,C.cz(b.x)+C.wid(b.x)/2+9]; ctr=[b.x+4,y,b.z]; } else { const hx=Math.cos(b.h)*.4+.6, hz=Math.sin(b.h)*.4; const n=Math.hypot(hx,hz); eye=[b.x-hx/n*7,y+4.2,b.z-hz/n*7]; ctr=[b.x+hx/n*6,y,b.z+hz/n*6]; }
     if(!camE){ camE=eye; camC=ctr; } else { const k=Math.min(1,dt*2.5); for(let i=0;i<3;i++){ camE[i]=lerp(camE[i],eye[i],k); camC[i]=lerp(camC[i],ctr[i],k); } }
     R3.frame({eye:camE.map(v=>v*K),center:camC.map(v=>v*K),fov:58,near:2,far:120000,sky:SKY},()=>{ const E=R3.partE||R3.part;
-      if(R.ghost&&R.tStart!=null){ const i=Math.floor((R.t-R.tStart)*10), g=R.ghost[Math.min(R.ghost.length-1,i)]; if(g) drawKayak(g[0],waterH(C,g[0],g[1],R.t),g[1],g[2],0,R.t*6,0,[.8,.85,1],true,false); }
-      drawKayak(b.x,y,b.z,b.h,b.lean,b.pad,b.stroke?b.stroke.side:0,[.95,.3,.1],false,b.cap);
+      if(R.ghost&&R.tStart!=null){ const i=Math.floor((R.t-R.tStart)*10), g=R.ghost[Math.min(R.ghost.length-1,i)]; if(g) drawKayak(g[0],waterH(C,g[0],g[1],R.t),g[1],g[2],0,R.t*6,0,[.8,.85,1],true,false,false,R.c1); }
+      drawKayak(b.x,y,b.z,b.h,b.lean,b.pad,b.stroke?b.stroke.side:0,[.95,.3,.1],false,b.cap,false,b.c1);
       /* foam drifting with the current shows you where the water goes */ for(let i=0;i<70;i++){ if(!FOAM[i]) FOAM[i]={x:b.x+rnd(-8,25),z:0,u:0}; const p=FOAM[i]; if(p.x<b.x-12||p.x>b.x+40||!p.z){ p.x=b.x+rnd(-6,38); p.z=x2z(C,p.x,Math.random()); } const fl=flowAt(C,p.x,p.z,R.t); p.x+=fl[0]*dt; p.z+=fl[1]*dt; if(Math.abs(p.z-C.cz(p.x))>C.wid(p.x)/2) p.z=0;
         E(R3.UB,R3.mm(R3.T(p.x*K,(waterH(C,p.x,p.z,R.t)+.03)*K,p.z*K),R3.S(.25*K,.02*K,.12*K)),[.95,.97,1]); }
       if(R3.decal) for(const g of C.gates){ if(g.x<b.x-8||g.x>b.x+45) continue; const yy=-g.x/C.L*C.V.drop+3.35; R3.decal(R3.mm(R3.T((g.x-.03)*K,yy*K,g.z*K),R3.RY(Math.PI),R3.S(1,.4*K,.4*K)),g.n,g.up?'#dc2626':'#15803d'); R3.decal(R3.mm(R3.T((g.x+.03)*K,yy*K,g.z*K),R3.S(1,.4*K,.4*K)),g.n,g.up?'#dc2626':'#15803d'); } },dt); return; }
@@ -764,14 +772,14 @@ requestAnimationFrame(frame);
 
 /* ---------- world records ---------- */
 const LBG=((location.pathname.split('/').pop()||'').replace(/\.html$/,'')||'game').toLowerCase(), lbPost=(id,s,t)=>{ try{ window.RRL&&RRL.post(id,s,t); }catch(e){} }, lbBoards=l=>{ try{ window.RRL&&RRL.boards(LBG,l); }catch(e){} };
-lbBoards(VENUES.map(v=>({id:'sl_'+v.id,name:`Slalom ${v.name} (s)`,mode:'min'})).concat([200,500,1000].map(d=>({id:'sp'+d,name:`K1 ${d} m (s)`,mode:'min'})),[{id:'wins',name:'Race wins',mode:'sum'}]));
-{ const _r=runOver; runOver=function(){ const r=_r.apply(this,arguments); try{ if(R.fin!=null&&!R.swim) lbPost('sl_'+venSel,+(R.fin+R.pen).toFixed(2),`${gSel==='m'?'Men':'Women'} · +${R.pen}`); if(R.pos===1) lbPost('wins',1,'Slalom'); }catch(e){} return r; }; }
+lbBoards(VENUES.map(v=>({id:'sl_'+v.id,name:`Slalom ${v.name} (s)`,mode:'min'})).concat(VENUES.map(v=>({id:'slc_'+v.id,name:`C1 slalom ${v.name} (s)`,mode:'min'}))).concat([200,500,1000].map(d=>({id:'sp'+d,name:`K1 ${d} m (s)`,mode:'min'})),[{id:'wins',name:'Race wins',mode:'sum'}]));
+{ const _r=runOver; runOver=function(){ const r=_r.apply(this,arguments); try{ if(R.fin!=null&&!R.swim) lbPost((R.c1?'slc_':'sl_')+venSel,+(R.fin+R.pen).toFixed(2),`${gSel==='m'?'Men':'Women'} · +${R.pen}`); if(R.pos===1) lbPost('wins',1,'Slalom'); }catch(e){} return r; }; }
 { const _s=sprintOver; sprintOver=function(){ if(phase==='over') return; const r=_s.apply(this,arguments); try{ const s=R.me; if(s.done&&!R.fs) lbPost('sp'+R.D,+s.fin.toFixed(2),gSel==='m'?'Men':'Women'); if(R.pos===1) lbPost('wins',1,'Sprint'); }catch(e){} return r; }; }
 
 
 /* ---------- online score battle ---------- */
 const NETV=window.RRV?RRV.attach({game:'kayak',title:'kayak battle',blurb:'Everyone paddles the same slalom course or sprint distance at the same time. Fastest time (penalties included) wins.',
-  better:'low', opts:()=>({modeSel,venSel,distSel,gSel}), start(o){ if(o.modeSel) modeSel=o.modeSel; if(o.venSel&&VBY[o.venSel]) venSel=o.venSel; if(o.distSel) distSel=o.distSel; if(o.gSel) gSel=o.gSel; startGame(); },
+  better:'low', opts:()=>({modeSel,venSel,distSel,gSel,boatSel}), start(o){ if(o.modeSel) modeSel=o.modeSel; if(o.boatSel) boatSel=o.boatSel==='c1'?'c1':'k1'; if(o.venSel&&VBY[o.venSel]) venSel=o.venSel; if(o.distSel) distSel=o.distSel; if(o.gSel) gSel=o.gSel; startGame(); },
   state(){ if(!R) return null; const done=phase==='over';
     if(R.mode==='slalom'){ const t=R.tStart!=null?R.t-R.tStart:0; const v=done&&R.fin!=null?+(R.fin+R.pen).toFixed(2):null; return {v,txt:done?(v!=null?fmtT(v):'DNF'):`gate ${R.gi}/${R.C.gates.length} · ${fmtT(t)} +${R.pen}`,done}; }
     const s=R.me, v=done&&s.done&&!R.fs?+s.fin.toFixed(2):null; return {v,txt:done?(v!=null?fmtT(v):'DNF'):`${Math.max(0,R.D-s.x).toFixed(0)} m to go`,done}; }}):null;
