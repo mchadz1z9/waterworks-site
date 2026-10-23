@@ -308,7 +308,7 @@ function ai21Aim(G,pi){ const T=TARGETS[G.tgt], p=G.pl[pi], need=21-p.s21, pf=PR
 /* ---------- match rules ---------- */
 function newPl(o){ return {name:o.name,kind:o.kind||'human',pro:o.pro==null?null:o.pro,hc:o.hc||0,games:0,gs:[],th:[],tot:0,s21:0,tb:[],
   st:{n:0,stick:0,pts:0,bull:0,ksAtt:0,ksHit:0,drops:0,best:0,perfect:0,bigBest:0,n21:0}}; }
-const MODES=[{k:'watl',n:'WATL Hatchet'},{k:'big',n:'Big Axe'},{k:'ks',n:'Killshot challenge'},{k:'21',n:'21 (pub game)'},{k:'prac',n:'Practice'}];
+const MODES=[{k:'league',n:'League season'},{k:'watl',n:'WATL Hatchet'},{k:'big',n:'Big Axe'},{k:'ks',n:'Killshot challenge'},{k:'21',n:'21 (pub game)'},{k:'prac',n:'Practice'}];
 function newMatch(o){ const G={mode:o.mode||'watl',disc:o.mode==='big'?'big':(o.disc||'hatchet'),tgt:o.tgt||'cur',pl:o.players.map(newPl),cur:o.starter||0,starter:o.starter||0,gameNo:1,seq:0,over:false,winner:-1,tb:null,ev:[]};
   return G; }
 const twoP=G=>G.pl.length>1;
@@ -379,7 +379,7 @@ const sfx={ click:()=>tone(700,.04,'square',.03),
 /* ---------- setup ---------- */
 let G=null, phase='menu', paused=false, ST='idle', pT=0, pFn=null, aiT=0, aiDelay=1, remT=0, net=null, myIdx=0, pendingSync=null, remQ={}, aiPlan=null, call=false, remCall={};
 let modeSel='watl', oppSel='p0', tgtSel='cur', venueSel='bar', steadySel=1, paceSel=0, pracDisc='hatchet', camMode=0, biasOn=true;
-const MODE_D={watl:'WATL hatchet match: best of three games, ten throws each per game, thrown in turn from the 12 ft line. The Killshot may be called on throws 5 and 10. A tied game goes to a sudden-death Big Axe throw-off.',
+const MODE_D={league:'League night: a season against seven league rivals, one best-of-three WATL hatchet match a week. The table ranks by wins, then game difference, then points. The top four go to the playoffs: semi-finals, then the league final. Your season is saved between visits.',watl:'WATL hatchet match: best of three games, ten throws each per game, thrown in turn from the 12 ft line. The Killshot may be called on throws 5 and 10. A tied game goes to a sudden-death Big Axe throw-off.',
   big:'WATL Big Axe: the same match with the two-handed big axe from the 17 ft line. Slower spin, longer flight: find your distance.',
   ks:'Ten throws, every one a called Killshot. Only the blue dots score. How many can you hit?',
   '21':'Pub rules: take turns, add up your points, finish on exactly 21. Go over and you drop back to 11. You may call a Killshot on any throw.',
@@ -557,8 +557,9 @@ function finish(){ if(phase!=='play') return; phase='over'; ST='idle'; const me=
   if(w===myIdx||!two) sfx.win();
   const pct=(a,b)=>b?`${(a/b*100).toFixed(0)}%`:'-';
   const rows=[['Games',p=>p.gs.length?p.gs.join(' · '):'-'],['Points',p=>p.st.pts],['Per throw',p=>p.st.n?(p.st.pts/p.st.n).toFixed(2):'-'],['Stuck',p=>`${pct(p.st.stick,p.st.n)} (${p.st.stick}/${p.st.n})`],['Bullseyes',p=>`${p.st.bull} (${pct(p.st.bull,p.st.n)})`],['Killshots',p=>p.st.ksAtt?`${p.st.ksHit}/${p.st.ksAtt}`:'-'],['Drops',p=>p.st.drops],['Best game',p=>Math.max(p.st.best,p.st.bigBest)||'-'],['Perfect games',p=>p.st.perfect]];
-  const rr=G.mode==='21'?rows.filter(r=>!['Games','Best game','Perfect games'].includes(r[0])):G.mode==='prac'?rows.filter(r=>!['Games','Best game','Perfect games'].includes(r[0])):rows;
-  $('resultIn').innerHTML=`<h2>${esc(title)}</h2><div class="rs">${esc(big)}</div><p>${esc(sub)}</p><table class="ls"><tr><th></th>${G.pl.map(p=>`<th>${esc(p.name)}</th>`).join('')}</tr>${rr.map(r=>`<tr><td>${r[0]}</td>${G.pl.map(p=>`<td>${r[1](p)}</td>`).join('')}</tr>`).join('')}</table><p>Enter or click for the menu.</p>`;
+  const rr=G.league?rows.filter(r=>['Points','Stuck','Bullseyes'].includes(r[0])):G.mode==='21'?rows.filter(r=>!['Games','Best game','Perfect games'].includes(r[0])):G.mode==='prac'?rows.filter(r=>!['Games','Best game','Perfect games'].includes(r[0])):rows;
+  let lgH=''; if(G.league&&two&&w>=0){ const r={ga:G.pl[myIdx].games,gb:G.pl[1-myIdx].games,sa:G.pl[myIdx].st.pts,sb:G.pl[1-myIdx].st.pts}; lgH=`<p style="margin:4px 0;color:#fde68a">League · ${esc(G.league)}</p>`+lgAfter(r); }
+  $('resultIn').innerHTML=`<h2>${esc(title)}</h2><div class="rs">${esc(big)}</div><p>${esc(sub)}</p>${lgH}<table class="ls" style="${G.league?'display:none':''}"><tr><th></th>${G.pl.map(p=>`<th>${esc(p.name)}</th>`).join('')}</tr>${rr.map(r=>`<tr><td>${r[0]}</td>${G.pl.map(p=>`<td>${r[1](p)}</td>`).join('')}</tr>`).join('')}</table><p>Enter or click for the menu.</p>`;
   setTimeout(()=>{ if(phase==='over') $('result').classList.remove('hidden'); },900); }
 
 /* ---------- HUD ---------- */
@@ -680,12 +681,44 @@ addEventListener('blur',()=>{ keys.clear(); });
 
 /* ---------- menu ---------- */
 const pill=(attr,val,on,label)=>`<button data-${attr}="${val}" class="${on?'on':''}" tabindex="-1">${label}</button>`;
+/* ---------- league season: seven rivals, a round robin of WATL hatchet matches, then a top-four playoff ---------- */
+const LG_POOL=[0,1,2,3,4,5,6];
+function lgNew(){ SV.lg={season:(SV.lg?SV.lg.season:0)+1,wk:0,T:[{n:myName(),me:true,w:0,l:0,gf:0,ga:0,pf:0}].concat(LG_POOL.map(i=>({n:PROS[i].name,pro:i,w:0,l:0,gf:0,ga:0,pf:0}))),po:null,log:[]}; saveSV(); }
+/* circle method: team 0 stays put, the rest rotate a place each week */
+function lgPairs(wk){ const r=[1,2,3,4,5,6,7], k=wk%7, a=[0].concat(r.slice(k),r.slice(0,k)); return [0,1,2,3].map(i=>[a[i],a[7-i]]); }
+const lgAvg=t=>t.me?0:+simAvg(PROS[t.pro]);
+function lgSimMatch(a,b){ const T=SV.lg.T, A=T[a], B=T[b], pa=1/(1+Math.exp(-(lgAvg(A)-lgAvg(B))/6)); let ga=0, gb=0; const pts=()=>Math.round(clamp(gauss()*6,-14,14));
+  while(ga<2&&gb<2){ if(Math.random()<pa) ga++; else gb++; } const sa=Math.round(lgAvg(A)+pts()), sb=Math.round(lgAvg(B)+pts()); return {ga,gb,sa:Math.max(0,sa)*ga+Math.max(0,sb-6)*gb,sb:Math.max(0,sb)*gb+Math.max(0,sa-6)*ga}; }
+function lgRecord(a,b,r){ const T=SV.lg.T; T[a].gf+=r.ga; T[a].ga+=r.gb; T[b].gf+=r.gb; T[b].ga+=r.ga; T[a].pf+=r.sa; T[b].pf+=r.sb; if(r.ga>r.gb){ T[a].w++; T[b].l++; } else { T[b].w++; T[a].l++; } }
+function lgOrder(){ return SV.lg.T.map((t,i)=>({t,i})).sort((x,y)=>y.t.w-x.t.w||(y.t.gf-y.t.ga)-(x.t.gf-x.t.ga)||y.t.pf-x.t.pf).map(o=>o.i); }
+function lgNext(){ const L=SV.lg; if(!L) return null; if(L.wk<7){ const p=lgPairs(L.wk).find(q=>q.includes(0)); return {opp:p[0]===0?p[1]:p[0],label:`Week ${L.wk+1} of 7`}; }
+  if(!L.po){ const o=lgOrder(); L.po={stage:'semi',seed:o.slice(0,4),semis:[[o[0],o[3]],[o[1],o[2]]],fin:null,champ:null}; saveSV(); }
+  const P=L.po; if(P.champ!=null) return null; if(!P.seed.includes(0)) return null;
+  if(P.stage==='semi'){ const s=P.semis.find(q=>q.includes(0)); if(!s) return null; return {opp:s[0]===0?s[1]:s[0],label:'Semi-final'}; }
+  if(P.stage==='final'&&P.fin&&P.fin.includes(0)) return {opp:P.fin[0]===0?P.fin[1]:P.fin[0],label:'League final'}; return null; }
+/* the rest of the league plays its matches; if you are out, the playoffs finish without you */
+function lgAfter(myRes){ const L=SV.lg; if(!L) return '';
+  if(L.wk<7){ const pairs=lgPairs(L.wk); for(const [a,b] of pairs){ if(a===0||b===0){ const opp=a===0?b:a; lgRecord(0,opp,myRes); L.log.push(`W${L.wk+1}: ${myRes.ga>myRes.gb?'beat':'lost to'} ${L.T[opp].n} ${myRes.ga}-${myRes.gb}`); } else lgRecord(a,b,lgSimMatch(a,b)); } L.wk++; lgNext(); lgFinishWithout(); saveSV(); return lgTable(1); }
+  const P=L.po; if(!P) return '';
+  if(P.stage==='semi'){ const w=[]; for(const s of P.semis){ if(s.includes(0)){ const opp=s[0]===0?s[1]:s[0]; w.push(myRes.ga>myRes.gb?0:opp); } else { const r=lgSimMatch(s[0],s[1]); w.push(r.ga>r.gb?s[0]:s[1]); } } P.fin=w; P.stage='final'; lgFinishWithout(); saveSV(); return lgTable(1); }
+  if(P.stage==='final'){ const opp=P.fin[0]===0?P.fin[1]:P.fin[0]; P.champ=myRes.ga>myRes.gb?0:opp; P.stage='done'; if(P.champ===0){ SV.lgTitles=(SV.lgTitles||0)+1; try{ lbPost('league',1,`season ${L.season}`); }catch(e){} } saveSV(); return lgTable(1); }
+  return ''; }
+function lgFinishWithout(){ const L=SV.lg, P=L.po; if(!P||P.champ!=null) return;
+  if(P.stage==='semi'&&!P.seed.includes(0)){ P.fin=P.semis.map(s=>{ const r=lgSimMatch(s[0],s[1]); return r.ga>r.gb?s[0]:s[1]; }); P.stage='final'; }
+  if(P.stage==='final'&&P.fin&&!P.fin.includes(0)){ const r=lgSimMatch(P.fin[0],P.fin[1]); P.champ=r.ga>r.gb?P.fin[0]:P.fin[1]; P.stage='done'; } }
+function lgTable(small){ const L=SV.lg; if(!L) return ''; const o=lgOrder(), P=L.po, nx=lgNext();
+  const st=P&&P.champ!=null?(P.champ===0?'🏆 You are the league champion!':`${esc(L.T[P.champ].n)} won the league${P.seed.includes(0)?'':' · you missed the top four'}`):P?(P.seed.includes(0)?'Playoffs':'You missed the playoffs'):`Week ${Math.min(7,L.wk+1)} of 7`;
+  return `<div style="max-width:560px;margin:6px auto;text-align:left"><div style="font-weight:800;color:#fde68a">Season ${L.season} · ${st}${nx?` · next: ${nx.label} v ${esc(L.T[nx.opp].n)}`:''}</div>
+  <table class="ls"${small?' style="font-size:13px;line-height:1.05"':''}><tr><th>#</th><th>Thrower</th><th>W</th><th>L</th><th>Games</th><th>Pts</th></tr>${o.map((i,k)=>{ const t=L.T[i]; return `<tr${t.me?' style="background:rgba(255,209,102,.2)"':''}><td>${k+1}${P&&P.seed.includes(i)?'*':''}</td><td>${esc(t.me?myName():t.n)}</td><td>${t.w}</td><td>${t.l}</td><td>${t.gf}-${t.ga}</td><td>${t.pf}</td></tr>`; }).join('')}</table>
+  ${P?`<div style="font-size:14px;color:#cbd5e1">Semi-finals: ${P.semis.map(s=>`${esc(L.T[s[0]].n)} v ${esc(L.T[s[1]].n)}`).join(' · ')}${P.fin?` · Final: ${esc(L.T[P.fin[0]].n)} v ${esc(L.T[P.fin[1]].n)}`:''}</div>`:''}</div>`; }
+function lgPlay(){ if(!SV.lg||(SV.lg.po&&SV.lg.po.champ!=null)||(!lgNext())) lgNew(); const nx=lgNext(); if(!nx) return; const keep=oppSel; oppSel='p'+SV.lg.T[nx.opp].pro; newGame({mode:'watl'}); oppSel=keep; G.league=nx.label; banner(`League · ${nx.label}`,`${G.pl[0].name} v ${G.pl[1].name} · best of 3 games`,'#facc15',2.2); }
 function renderMenu(){ const m=modeSel, oppOK=m==='watl'||m==='big'||m==='21', T=TARGETS[tgtSel];
   const pros=PROS.map((p,i)=>({p,i})).filter(o=>!o.p.amateur), ams=PROS.map((p,i)=>({p,i})).filter(o=>o.p.amateur);
   const avg=p=>simAvg(p);
   $('menuIn').innerHTML=`<h1>Rink Rivals: Axe Throwing</h1><p>WATL-style lanes: a painted target on end-grain planks, the 12 ft hatchet line and the 17 ft Big Axe line. The axe turns end over end; it only sticks if the blade meets the wood edge-first. Aim, steady your arm, time the release, and dial in your stance and grip.</p>
   <div class="pills"><span class="lbl">Game</span>${MODES.map(x=>pill('mode',x.k,m===x.k,x.n)).join('')}</div>
   <p style="margin:2px 0 4px;font-size:15px">${MODE_D[m]}</p>
+  ${m==='league'?(SV.lg?lgTable():'<p style="color:#fde68a">No season yet: your first match starts one.</p>')+(SV.lgTitles?`<p>League titles: ${'🏆'.repeat(Math.min(10,SV.lgTitles))}</p>`:''):''}
   ${oppOK?`<div class="pills"><span class="lbl">Pros</span>${pros.map(o=>pill('opp','p'+o.i,oppSel==='p'+o.i,`${o.p.name} <small>${avg(o.p)}</small>`)).join('')}</div>
   <div class="pills"><span class="lbl">or</span>${ams.map(o=>pill('opp','p'+o.i,oppSel==='p'+o.i,`${o.p.name} <small>${avg(o.p)}</small>`)).join('')}${pill('opp','friend',oppSel==='friend','👥 Friend (same screen)')}${pill('opp','solo',oppSel==='solo','Solo')}</div>`:''}
   ${m==='prac'?`<div class="pills"><span class="lbl">Axe</span>${pill('pd','hatchet',pracDisc==='hatchet','Hatchet · 12 ft')}${pill('pd','big',pracDisc==='big','Big Axe · 17 ft')}</div>`:''}
@@ -695,13 +728,13 @@ function renderMenu(){ const m=modeSel, oppOK=m==='watl'||m==='big'||m==='21', T
   <p style="margin:4px 0">Score the highest ring the blade touches: ${T.rings.map(r=>`${r.v===T.bull?'bullseye':'ring'} ${r.v}`).join(', ')}. A blade touching a line counts the higher ring. The axe must stick and stay in the wood until it is scored: a bounce or a drop scores 0, and so does anything outside the rings.</p>
   <p style="margin:4px 0">The two blue Killshot dots are worth ${T.ks}. You must call the Killshot before throwing (K), and only on throws 5 and 10 of a game. A called Killshot scores ${T.ks} if the blade touches a dot, and 0 otherwise, even on the bullseye. A Killshot hit without a call scores 0.</p>
   <p style="margin:4px 0">Ten throws each per game, best of three games. A tied game goes to a sudden-death Big Axe throw-off from 17 ft (higher score wins, Killshots not in play). Hatchet: front foot behind the 12 ft line. One full turn of the axe from release to target is the standard throw.</p></details>
-  <div class="pills"><button class="gold" data-act="start" tabindex="-1">Step up to the line <kbd>Enter</kbd></button><a href="./" tabindex="-1">Home</a><a href="darts" tabindex="-1">Darts</a><a href="archery" tabindex="-1">Archery</a></div>
+  <div class="pills"><button class="gold" data-act="start" tabindex="-1">${m==='league'?(SV.lg&&lgNext()?`Play ${lgNext().label}`:'Start a new season'):'Step up to the line'} <kbd>Enter</kbd></button>${m==='league'&&SV.lg&&lgNext()?'<button data-act="newseason" tabindex="-1">Restart season</button>':''}<a href="./" tabindex="-1">Home</a><a href="darts" tabindex="-1">Darts</a><a href="archery" tabindex="-1">Archery</a></div>
   <div id="hint">Matches ${SV.m} · won ${SV.w} · beat a pro ${SV.proW}${SV.best?` · best game ${SV.best}`:''}${SV.big?` · best Big Axe ${SV.big}`:''}${SV.ks?` · Killshots ${SV.ks}`:''}${SV.perfect?` · perfect games ${SV.perfect}`:''}${SV.throws?` · stick rate ${(SV.sticks/SV.throws*100).toFixed(0)}%`:''}</div>`; updateBoard(); renderKeysHelp(); }
 const avgCache={}; function simAvg(p){ const k=p.name+tgtSel+modeSel; if(avgCache[k]==null){ avgCache[k]=simStats(p,modeSel==='big'?'big':'hatchet',tgtSel,300,3).avg.toFixed(0); } return avgCache[k]; }
 $('menuIn').addEventListener('mousedown',e=>{ if(e.target.closest('button')) e.preventDefault(); });
 $('menuIn').addEventListener('click',e=>{ const b=e.target.closest('button'); if(!b||b.dataset.rro!==undefined) return; const d=b.dataset; audio(); sfx.click();
-  if(d.mode) modeSel=d.mode; else if(d.opp) oppSel=d.opp; else if(d.tgt) tgtSel=d.tgt; else if(d.pd) pracDisc=d.pd; else if(d.venue){ venueSel=d.venue; buildVenue(); } else if(d.steady!==undefined) steadySel=+d.steady; else if(d.pace!==undefined) paceSel=+d.pace; else if(d.caller!==undefined) callerOn=d.caller==='1'; else if(d.act==='start'){ startGame(); return; } else return; savePrefs(); renderMenu(); });
-function startGame(){ audio(); savePrefs(); newGame(); }
+  if(d.mode) modeSel=d.mode; else if(d.opp) oppSel=d.opp; else if(d.tgt) tgtSel=d.tgt; else if(d.pd) pracDisc=d.pd; else if(d.venue){ venueSel=d.venue; buildVenue(); } else if(d.steady!==undefined) steadySel=+d.steady; else if(d.pace!==undefined) paceSel=+d.pace; else if(d.caller!==undefined) callerOn=d.caller==='1'; else if(d.act==='start'){ startGame(); return; } else if(d.act==='newseason'){ if(confirm('Start a new season? This one is lost.')) lgNew(); } else return; savePrefs(); renderMenu(); });
+function startGame(){ audio(); savePrefs(); if(modeSel==='league') return lgPlay(); newGame(); }
 function renderKeysHelp(){ $('keysHelp').innerHTML='<div><b>Aim</b> mouse · WASD / arrows</div><div><b>Throw</b> hold Space or the mouse, release in the green</div><div><b>Steady</b> hold Shift</div><div><b>Stance</b> E forward · R back</div><div><b>Grip</b> Q</div><div><b>Killshot</b> K (throws 5 and 10)</div><div><b>Replay</b> T</div><div><b>Camera</b> C · zoom wheel</div><div><b>View</b> V · <b>Pause</b> P · <b>Leave</b> Esc</div>'; }
 function toMenu(){ const wasOn=online(); phase='menu'; G=null; ST='idle'; FL=null; BD=[]; FALL=[]; RP=null; $('result').classList.add('hidden'); $('menu').classList.remove('hidden'); ambience(false); try{ speechSynthesis.cancel(); }catch(e){} if(wasOn) try{ net.leave(); }catch(e){} renderMenu(); }
 
@@ -1195,7 +1228,7 @@ $('result').addEventListener('click',()=>{ if(phase==='over') toMenu(); });
 function throwAt(x,y,o){ if(!G||phase!=='play') return false; o=o||{}; if(FL){ FL.t=FL.T; land(); } pFn=null; const p=cur(), set=p.set?p.set[curDisc(G)]:{s:STANCE0,g:1}, disc=curDisc(G), ph=o.ph||0;
   const r={x,y,ph,dv:0,tilt:o.tilt||0,st:o.st==null?1:(o.st?1:0),why:o.why||(o.st===0?(ph>=0?'over':'under'):''),called:o.called?1:0,disc,stance:o.stance!=null?o.stance:set.s,grip:o.grip!=null?o.grip:set.g,T:turns(DISC[disc],o.stance!=null?o.stance:set.s,1,{x,y},0).T,N:(ph+360+IDEAL)/360};
   call=!!o.called; if(online()&&p.kind==='human') net.send({t:'axe',k:G.seq,r}); launch(r); if(o.instant){ FL.t=FL.T; land(); } return r; }
-if(TEST) window.__ax={get G(){return G;},get ST(){return ST;},get phase(){return phase;},get BD(){return BD;},get FALL(){return FALL;},get FL(){return FL;},get FB(){return FB;},get RP(){return RP;},step,stepWrap,newGame,throwAt,startDraw,release,land,beginTurn,finish,toMenu,startReplay,adjust,toggleCall,
+if(TEST) window.__ax={lgPlay,lgNext,lgNew,get SV(){return SV;},set modeSel(v){modeSel=v;},get G(){return G;},get ST(){return ST;},get phase(){return phase;},get BD(){return BD;},get FALL(){return FALL;},get FL(){return FL;},get FB(){return FB;},get RP(){return RP;},step,stepWrap,newGame,throwAt,startDraw,release,land,beginTurn,finish,toMenu,startReplay,adjust,toggleCall,
   scoreCut,resolveThrow,throwScore,turns,ksDecision,distFor,simStats,simGame,ai21Aim,aimFor,applyThrow,nextThrow,newMatch,ksAllowed,PROS,TARGETS,DISC,STANCES,GRIPS,KSPTS,CAMS,b2s,s2b,relPt,
   get aim(){return aim;},set aim(v){aim=v;},get meter(){return meter;},set meter(v){meter=v;},get wob(){return wob;},get call(){return call;},set call(v){call=v;},set camMode(v){camMode=v;},get camMode(){return camMode;},set modeSel(v){modeSel=v;},set oppSel(v){oppSel=v;},set tgtSel(v){tgtSel=v;},set venueSel(v){venueSel=v;},set steadySel(v){steadySel=v;},set paceSel(v){paceSel=v;},set pracDisc(v){pracDisc=v;},set biasOn(v){biasOn=v;},set camBoard(v){camBoard=v;},get view3(){return view3;},setView3,get SV(){return SV;},keys,get remQ(){return remQ;},get net(){return net;},onNetMsg:m=>{ remQ[m.k]=m; tryRemote(); }};
 setView3(view3);
@@ -1204,7 +1237,7 @@ requestAnimationFrame(frame);
 
 /* ---------- world records ---------- */
 const LBG=((location.pathname.split('/').pop()||'').replace(/\.html$/,'')||'game').toLowerCase(), lbPost=(id,s,t)=>{ try{ window.RRL&&RRL.post(id,s,t); }catch(e){} }, lbBoards=l=>{ try{ window.RRL&&RRL.boards(LBG,l); }catch(e){} };
-lbBoards([{id:'game',name:'Highest 10-throw hatchet game (WATL target)',mode:'max'},{id:'big',name:'Best Big Axe game (WATL target)',mode:'max'},{id:'perfect',name:'Perfect games',mode:'sum'},{id:'ks',name:'Killshots hit',mode:'sum'},{id:'kschal',name:'Killshot challenge (hits of 10)',mode:'max'},{id:'wins',name:'Match wins vs the pros',mode:'sum'},{id:'online',name:'Online match wins',mode:'sum'},{id:'t21',name:'21 in the fewest throws',mode:'min'}]);
+lbBoards([{id:'league',name:'League titles',mode:'sum'},{id:'game',name:'Highest 10-throw hatchet game (WATL target)',mode:'max'},{id:'big',name:'Best Big Axe game (WATL target)',mode:'max'},{id:'perfect',name:'Perfect games',mode:'sum'},{id:'ks',name:'Killshots hit',mode:'sum'},{id:'kschal',name:'Killshot challenge (hits of 10)',mode:'max'},{id:'wins',name:'Match wins vs the pros',mode:'sum'},{id:'online',name:'Online match wins',mode:'sum'},{id:'t21',name:'21 in the fewest throws',mode:'min'}]);
 { const _f=finish; finish=function(){ const was=phase, g=G; const r=_f.apply(this,arguments);
   try{ if(was==='play'&&g){ const me=g.pl[myIdx], st=me.st, two=g.pl.length>1, hot=two&&g.pl.every(p=>p.kind==='human')&&!g.online, opp=two?g.pl[1-myIdx]:null, vs=opp?` vs ${opp.name}`:'';
     if(!hot&&me.kind==='human'){
