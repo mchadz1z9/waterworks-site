@@ -258,7 +258,8 @@ export class Site {
       if(m.op==='get') return J({...await this.state(),role});
       if(!full) return J({err:'forbidden'},403);
       if(m.op==='ann'){ const title=String(m.title||'').slice(0,120), body=String(m.body||'').slice(0,2000); if(!title&&!body) return J({err:'empty'},400);
-        await this.s.put('ann',{id:Date.now().toString(36),title,body,ts:Date.now()}); return J({ok:true}); }
+        const icon=String(m.icon||'').slice(0,6), theme=String(m.theme||'').replace(/[^a-z]/g,'').slice(0,12);
+        await this.s.put('ann',{id:Date.now().toString(36),title,body,icon,theme,ts:Date.now()}); return J({ok:true}); }
       if(m.op==='annClear'){ await this.s.delete('ann'); return J({ok:true}); }
       if(m.op==='ov'){ const e=m.entry||{}; const lg=String(e.lg||''), name=String(e.name||'').slice(0,40); if(!lg||!name) return J({err:'bad'},400);
         const ov=(await this.s.get('ov'))||[]; const clean={lg,name,edit:true}; if(e.ovr!=null&&e.ovr!=='') clean.ovr=Math.max(1,Math.min(99,Math.round(+e.ovr))); if(e.tid) clean.tid=String(e.tid).slice(0,12); if(e.pos) clean.pos=String(e.pos).slice(0,4);

@@ -46,12 +46,18 @@ h3.sec{margin:16px 0 4px;font-size:15px;color:var(--mut);text-transform:uppercas
   <div class="card full">
     <h2>📣 Full-screen update announcement</h2>
     <p class="mut">Everyone sees this cover their screen the next time they open the site. They close it with X; it shows once per update.</p>
+    <label>Quick templates</label><div class="row" id="annTpls" style="margin-bottom:4px"></div>
     <label>Title</label><input id="annTitle" maxlength="120" placeholder="e.g. New: Blackjack + player trades!">
     <label>Message</label><textarea id="annBody" maxlength="2000" placeholder="Tell players what's new…"></textarea>
+    <div class="row">
+      <div style="flex:0 0 130px"><label>Cover icon</label><input id="annIcon" maxlength="6" placeholder="auto"></div>
+      <div><label>Cover colour</label><select id="annTheme"></select></div>
+    </div>
     <div class="row" style="margin-top:12px">
       <button id="annPost" class="go">Post update (show to everyone)</button>
-      <button id="annClear" class="del" style="flex:0 0 auto">Clear current</button>
+      <button id="annPolish" class="warn" style="flex:0 0 auto">✨ Polish text</button>
       <button id="annPreview" class="ghost" style="flex:0 0 auto">Preview</button>
+      <button id="annClear" class="del" style="flex:0 0 auto">Clear current</button>
     </div>
     <div class="msg" id="annMsg"></div>
     <div class="mut" id="annNow" style="margin-top:8px"></div>
@@ -109,14 +115,34 @@ $('logout').onclick=e=>{ e.preventDefault(); sessionStorage.removeItem('rrAdminK
 function showApp(st){ ROLE=st.role||'full'; $('login').classList.add('hide'); $('app').classList.remove('hide');
   const full=ROLE==='full'; document.querySelectorAll('.full').forEach(el=>el.style.display=full?'':'none');
   $('roleNote').textContent=full?'Signed in as full admin — changes go live for everyone.':'Signed in as moderator — you can kick, ban and tag.';
-  if(full){ initEditor(); renderAnn(st.ann); renderEdits(st.ov); } loadUsers(); }
+  if(full){ initAnn(); initEditor(); renderAnn(st.ann); renderEdits(st.ov); } loadUsers(); }
 
 /* ---- announcement ---- */
-function renderAnn(ann){ $('annNow').innerHTML=ann?`Currently showing: <b>${esc(ann.title||'(no title)')}</b> — posted ${new Date(ann.ts).toLocaleString()}`:'No announcement is active.'; if(ann){ if(!$('annTitle').value) $('annTitle').value=ann.title||''; if(!$('annBody').value) $('annBody').value=ann.body||''; } }
-$('annPost').onclick=async()=>{ const title=$('annTitle').value.trim(), body=$('annBody').value.trim(); if(!title&&!body){ setMsg('annMsg','Type a title or message first.',0); return; } setMsg('annMsg','Posting…'); try{ await api('/admin/site','ann',{title,body}); setMsg('annMsg','Posted — everyone will see it.',1); refreshState(); }catch(e){ setMsg('annMsg','Failed.',0); } };
+const THEMES={blue:['#1e3a8a','#0ea5e9'],green:['#065f46','#22c55e'],purple:['#4c1d95','#a855f7'],red:['#7f1d1d','#ef4444'],orange:['#7c2d12','#f59e0b'],pink:['#831843','#ec4899'],teal:['#134e4a','#14b8a6'],gold:['#78350f','#fbbf24']};
+const TPLS=[
+ {n:'New game',icon:'🎮',theme:'purple',title:'A new game just dropped!',body:"There's a brand-new game to play on Rink Rivals. Jump in, climb the records, and let us know what you think in chat. Have fun out there!"},
+ {n:'Big update',icon:'✨',theme:'blue',title:"Big update — here's what's new",body:"We've just rolled out a bunch of improvements across the site. Everything should feel smoother and look better. Thanks for playing Rink Rivals!"},
+ {n:'Online & chat',icon:'🌐',theme:'teal',title:'Play and chat with everyone',body:"You can now play against anyone on the site and message friends privately. Hop online, start a match, and say hi in chat!"},
+ {n:'Player trades',icon:'🔁',theme:'gold',title:'Move your players into the games',body:"You can now send players from 84 & Up and 82-0 straight into the real sports games — they keep their overall and join their real team. Give it a try!"},
+ {n:'Bug fixes',icon:'🛠️',theme:'green',title:'Fixes and tune-ups',body:"We squashed some bugs and polished a few rough edges. If you spot anything else, let us know in chat. Thanks for your patience!"},
+];
+function initAnn(){ const t=$('annTheme'); t.innerHTML='<option value="">Auto (from title)</option>'+Object.keys(THEMES).map(k=>`<option value="${k}">${k[0].toUpperCase()+k.slice(1)}</option>`).join('');
+  $('annTpls').innerHTML=TPLS.map((x,i)=>`<button class="ghost sm" data-tpl="${i}">${x.icon} ${x.n}</button>`).join('');
+  $('annTpls').querySelectorAll('[data-tpl]').forEach(b=>b.onclick=()=>{ const x=TPLS[+b.dataset.tpl]; $('annTitle').value=x.title; $('annBody').value=x.body; $('annIcon').value=x.icon; $('annTheme').value=x.theme; }); }
+const FIX={theres:"there's",dont:"don't",cant:"can't",wont:"won't",im:"I'm",youre:"you're",theyre:"they're",lets:"let's",ive:"I've",id:"I'd",doesnt:"doesn't",didnt:"didn't",isnt:"isn't",wasnt:"wasn't",arent:"aren't",couldnt:"couldn't",wouldnt:"wouldn't",shouldnt:"shouldn't",havent:"haven't",hasnt:"hasn't",wanna:"want to",gonna:"going to",u:"you",ur:"your",pls:"please",thru:"through",alot:"a lot"};
+function polishText(t,isTitle){ if(!t) return t; t=t.replace(/[ \t]+/g,' ').replace(/ *\n */g,'\n').trim();
+  t=t.replace(/[A-Za-z']+/g,w=>{ const low=w.toLowerCase(); if(FIX[low]){ const f=FIX[low]; return /^[A-Z]/.test(w)?f.charAt(0).toUpperCase()+f.slice(1):f; } return w; });
+  t=t.replace(/\bi\b/g,'I').replace(/([.!?]\s+|^|\n)([a-z])/g,(m,p,c)=>p+c.toUpperCase());
+  if(!isTitle) t=t.split('\n').map(l=>{ l=l.trim(); if(l&&!/[.!?:)]$/.test(l)) l+='.'; return l; }).join('\n');
+  return t; }
+function hashStr(x){ let h=0; for(let i=0;i<x.length;i++) h=(h*31+x.charCodeAt(i))>>>0; return h; }
+function coverOf(){ const tk=Object.keys(THEMES), th=THEMES[$('annTheme').value]||THEMES[tk[hashStr($('annTitle').value||'x')%tk.length]]; return {grad:`linear-gradient(135deg,${th[0]},${th[1]})`,icon:$('annIcon').value||'📣'}; }
+$('annPolish').onclick=()=>{ $('annTitle').value=polishText($('annTitle').value,true); $('annBody').value=polishText($('annBody').value,false); setMsg('annMsg','Cleaned up the wording. Review it, then post.',1); };
+function renderAnn(ann){ $('annNow').innerHTML=ann?`Currently showing: <b>${esc(ann.title||'(no title)')}</b> — posted ${new Date(ann.ts).toLocaleString()}`:'No announcement is active.'; if(ann){ if(!$('annTitle').value) $('annTitle').value=ann.title||''; if(!$('annBody').value) $('annBody').value=ann.body||''; if(!$('annIcon').value&&ann.icon) $('annIcon').value=ann.icon; if(ann.theme) $('annTheme').value=ann.theme; } }
+$('annPost').onclick=async()=>{ const title=$('annTitle').value.trim(), body=$('annBody').value.trim(); if(!title&&!body){ setMsg('annMsg','Type a title or message first.',0); return; } setMsg('annMsg','Posting…'); try{ await api('/admin/site','ann',{title,body,icon:$('annIcon').value.trim(),theme:$('annTheme').value}); setMsg('annMsg','Posted — everyone will see it.',1); refreshState(); }catch(e){ setMsg('annMsg','Failed.',0); } };
 $('annClear').onclick=async()=>{ if(!confirm('Clear the current announcement?')) return; await api('/admin/site','annClear'); $('annTitle').value='';$('annBody').value=''; setMsg('annMsg','Cleared.',1); refreshState(); };
 $('annPreview').onclick=()=>previewAnn($('annTitle').value.trim(),$('annBody').value.trim());
-function previewAnn(title,body){ const d=document.createElement('div'); d.style.cssText='position:fixed;inset:0;z-index:99;display:flex;align-items:center;justify-content:center;padding:18px;background:rgba(3,6,14,.82)'; d.innerHTML=`<div style="position:relative;width:min(640px,96vw);background:linear-gradient(160deg,#182446,#0c1227);border:2px solid #3b4e86;border-radius:22px;padding:30px;text-align:center"><div style="font-weight:800;letter-spacing:.08em;text-transform:uppercase;color:#ffd166;font-size:14px">📣 Rink Rivals update</div>${title?`<h2 style="margin:10px 0 12px;font-size:32px">${esc(title)}</h2>`:''}<div style="font-size:19px;color:#cdd6ec;white-space:pre-wrap">${esc(body)}</div><button style="margin-top:22px;background:#22c55e;color:#052e16;border:0;border-radius:14px;padding:13px 30px;font:800 18px system-ui;cursor:pointer">Let's play ▸</button></div>`; d.onclick=()=>d.remove(); document.body.appendChild(d); }
+function previewAnn(title,body){ const cv=coverOf(); const d=document.createElement('div'); d.style.cssText='position:fixed;inset:0;z-index:99;display:flex;align-items:center;justify-content:center;padding:18px;background:rgba(3,6,14,.82)'; d.innerHTML=`<div style="position:relative;width:min(640px,96vw);overflow:hidden;background:linear-gradient(160deg,#182446,#0c1227);border:2px solid #3b4e86;border-radius:22px;padding:0 30px 26px;text-align:center"><div style="margin:0 -30px 14px;padding:26px 20px 18px;background:${cv.grad};box-shadow:inset 0 -30px 50px rgba(0,0,0,.25)"><div style="font-size:64px">${esc(cv.icon)}</div><div style="margin-top:8px;font-weight:800;letter-spacing:.1em;text-transform:uppercase;color:#fff;font-size:14px">Rink Rivals update</div></div>${title?`<h2 style="margin:4px 0 12px;font-size:32px">${esc(title)}</h2>`:''}<div style="font-size:19px;color:#cdd6ec;white-space:pre-wrap">${esc(body)}</div><button style="margin-top:22px;background:#22c55e;color:#052e16;border:0;border-radius:14px;padding:13px 30px;font:800 18px system-ui;cursor:pointer">Let's play ▸</button></div>`; d.onclick=()=>d.remove(); document.body.appendChild(d); }
 
 /* ---- player editor ---- */
 function initEditor(){ const g=$('eGame'); g.innerHTML=Object.keys(D.game).map(lg=>`<option value="${lg}">${D.game[lg]}</option>`).join(''); g.onchange=fillSport; fillSport(); }
