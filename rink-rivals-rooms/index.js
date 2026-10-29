@@ -9,6 +9,7 @@ export default {
       const id=env.ROOMS.idFromName(m[1]);
       return env.ROOMS.get(id).fetch(req);
     }
+    if(url.pathname==='/site'){ if(req.method==='OPTIONS') return new Response(null,{headers:CORS}); return env.SITE.get(env.SITE.idFromName('SITE')).fetch(req); }
     const lb=url.pathname.match(/^\/lb\/([a-z0-9]{2,16})$/);
     if(lb){ if(req.method==='OPTIONS') return new Response(null,{headers:CORS}); return env.BOARDS.get(env.BOARDS.idFromName(lb[1])).fetch(req); }
     if(url.pathname==='/chat'){
@@ -16,11 +17,12 @@ export default {
       return env.CHAT.get(env.CHAT.idFromName('SITE')).fetch(req);
     }
     /* site owner tools: clean leaderboards and chat. Needs the ADMIN_KEY secret. */
-    const ad=url.pathname.match(/^\/admin\/(lb|chat)(?:\/([a-z0-9]{2,16}))?$/);
-    if(ad){ if(req.method==='OPTIONS') return new Response(null,{headers:CORS}); if(!env.ADMIN_KEY||req.headers.get('x-admin-key')!==env.ADMIN_KEY) return J({err:'forbidden'},403);
+    const ad=url.pathname.match(/^\/admin\/(lb|chat|site)(?:\/([a-z0-9]{2,16}))?$/);
+    if(ad){ if(req.method==='OPTIONS') return new Response(null,{headers:CORS}); const key=req.headers.get('x-admin-key'); const ok=key&&((env.ADMIN_KEY&&key===env.ADMIN_KEY)||(env.SITE_ADMIN_KEY&&key===env.SITE_ADMIN_KEY)); if(!ok) return J({err:'forbidden'},403);
       const u=new URL(req.url); u.pathname='/admin'; const r2=new Request(u,req);
       if(ad[1]==='lb'&&ad[2]) return env.BOARDS.get(env.BOARDS.idFromName(ad[2])).fetch(r2);
       if(ad[1]==='chat') return env.CHAT.get(env.CHAT.idFromName('SITE')).fetch(r2);
+      if(ad[1]==='site') return env.SITE.get(env.SITE.idFromName('SITE')).fetch(r2);
       return J({err:'bad'},400); }
     if(url.pathname==='/lobby'){
       if(req.headers.get('Upgrade')!=='websocket') return new Response('Expected a WebSocket',{status:426});
@@ -87,7 +89,7 @@ export class Lobby {
 }
 
 /* Leaderboards: one Durable Object per game, a SQLite table of each player's record on each board */
-const CORS={'Access-Control-Allow-Origin':'*','Access-Control-Allow-Methods':'GET,POST,OPTIONS','Access-Control-Allow-Headers':'content-type'};
+const CORS={'Access-Control-Allow-Origin':'*','Access-Control-Allow-Methods':'GET,POST,OPTIONS','Access-Control-Allow-Headers':'content-type,x-admin-key'};
 const J=(o,st)=>new Response(JSON.stringify(o),{status:st||200,headers:{...CORS,'content-type':'application/json','cache-control':'no-store'}});
 const BAD=/fuck|shit|cunt|nigg|fag|bitch|whore|slut|rape|hitler|nazi|dick|pussy|cock/i;
 export class Board {
@@ -155,6 +157,9 @@ export class Chat {
       if(m.op==='list') return J({rows:this.sql.exec('SELECT * FROM m ORDER BY id DESC LIMIT 200').toArray()});
       if(m.op==='del'&&m.id){ this.sql.exec('UPDATE m SET hid=1 WHERE id=?',+m.id); this.all({t:'del',id:+m.id}); return J({ok:true}); }
       if(m.op==='mute'&&m.who){ this.sql.exec('INSERT OR REPLACE INTO mute(who,until) VALUES(?,?)',String(m.who),Date.now()+(+m.mins||1440)*60000); return J({ok:true}); }
+      if(m.op==='kick'&&m.name){ const nm=String(m.name).toLowerCase(), mins=+m.mins||30; let n=0;
+        for(const ws of this.ctx.getWebSockets()){ const b=ws.deserializeAttachment(); if(b&&String(b.name||'').toLowerCase()===nm){ n++; this.sql.exec('INSERT OR REPLACE INTO mute(who,until) VALUES(?,?)',b.who,Date.now()+mins*60000); try{ ws.send(JSON.stringify({t:'kicked',mins})); }catch(e){} try{ ws.close(4001,'kicked'); }catch(e){} } }
+        return J({ok:true,kicked:n}); }
       if(m.op==='who') return J({who:this.socks().map(ws=>{ const a=ws.deserializeAttachment(); return {name:a.name,game:a.game}; })});
       if(m.op==='clear'){ this.sql.exec('UPDATE m SET hid=1'); this.all({t:'clear'}); return J({ok:true}); }
       return J({err:'op'},400); }
@@ -197,4 +202,29 @@ export class Chat {
       this.all({t:'msg',m:{id,ts:now,name:a.name,text,game:a.game}}); return; } }
   async webSocketClose(ws){ try{ ws.serializeAttachment(null); ws.close(); }catch(e){} this.count(); }
   async webSocketError(ws){ return this.webSocketClose(ws); }
+}
+
+
+/* Site config: a full-screen update announcement and admin player edits, read by every page from /site.
+   Only the admin tools (with a key) can change it. */
+export class Site {
+  constructor(ctx){ this.ctx=ctx; this.s=ctx.storage; }
+  async state(){ return { ann: await this.s.get('ann')||null, ov: await this.s.get('ov')||[] }; }
+  async fetch(req){
+    const url=new URL(req.url);
+    if(url.pathname==='/site'){ const st=await this.state(); return new Response(JSON.stringify(st),{headers:{...CORS,'content-type':'application/json','cache-control':'public,max-age=15'}}); }
+    if(url.pathname==='/admin'){ let m={}; try{ m=await req.json(); }catch(e){}
+      if(m.op==='get') return J(await this.state());
+      if(m.op==='ann'){ const title=String(m.title||'').slice(0,120), body=String(m.body||'').slice(0,2000); if(!title&&!body) return J({err:'empty'},400);
+        await this.s.put('ann',{id:Date.now().toString(36),title,body,ts:Date.now()}); return J({ok:true}); }
+      if(m.op==='annClear'){ await this.s.delete('ann'); return J({ok:true}); }
+      if(m.op==='ov'){ const e=m.entry||{}; const lg=String(e.lg||''), name=String(e.name||'').slice(0,40); if(!lg||!name) return J({err:'bad'},400);
+        const ov=(await this.s.get('ov'))||[]; const clean={lg,name,edit:true}; if(e.ovr!=null&&e.ovr!=='') clean.ovr=Math.max(1,Math.min(99,Math.round(+e.ovr))); if(e.tid) clean.tid=String(e.tid).slice(0,12); if(e.pos) clean.pos=String(e.pos).slice(0,4);
+        if(e.skills&&typeof e.skills==='object'){ clean.skills={}; for(const k of Object.keys(e.skills).slice(0,16)){ const v=+e.skills[k]; if(v>=1&&v<=99) clean.skills[String(k).slice(0,6)]=Math.round(v); } }
+        const i=ov.findIndex(x=>x.lg===lg&&x.name===name); if(i>=0) ov[i]=clean; else ov.push(clean); await this.s.put('ov',ov.slice(-200)); return J({ok:true}); }
+      if(m.op==='ovDel'){ const ov=((await this.s.get('ov'))||[]).filter(x=>!(x.lg===m.lg&&x.name===m.name)); await this.s.put('ov',ov); return J({ok:true}); }
+      if(m.op==='ovClear'){ await this.s.delete('ov'); return J({ok:true}); }
+      return J({err:'op'},400); }
+    return J({err:'path'},404);
+  }
 }

@@ -102,7 +102,7 @@
   function sys(t){ const el=document.createElement('div'); el.className='sys'; el.textContent=t; log.appendChild(el); log.scrollTop=log.scrollHeight; }
   function tx(o){ if(ws&&ws.readyState===1) ws.send(JSON.stringify(o)); }
   function send(){ const t=inp.value.trim(); if(!t) return; if(!name){ askName(); return; } if(!ws||ws.readyState!==1){ sys('Not connected yet, try again in a second.'); return; } tx({t:'say',text:t}); inp.value=''; }
-  function connect(){ if(OFF){ cnt.textContent='offline'; sys('Chat is off on test pages.'); return; }
+  function connect(){ if(banned) return; if(OFF){ cnt.textContent='offline'; sys('Chat is off on test pages.'); return; }
     try{ ws=new WebSocket(URL_WS); }catch(e){ return later(); }
     ws.onopen=()=>{ retry=0; tx({t:'hello',name:name||'Player',pid,game:GAME}); clearInterval(pingT); pingT=setInterval(()=>tx({t:'ping'}),25000); };
     ws.onmessage=ev=>{ let m; try{ m=JSON.parse(ev.data); }catch(e){ return; }
@@ -115,9 +115,19 @@
       else if(m.t==='who'){ roster=m.list||[]; setN(roster.length); renderWho(); try{ dispatchEvent(new CustomEvent('rrc-who',{detail:roster})); }catch(e){} }
       else if(m.t==='invite') inviteCard(m);
       else if(m.t==='invsent'){ if(invCb) try{ invCb(m); }catch(e){} }
+      else if(m.t==='kicked') kicked(m);
       else if(m.t==='sys') sys(m.text); };
     ws.onclose=()=>{ clearInterval(pingT); cnt.textContent='reconnecting…'; later(); }; ws.onerror=()=>{ try{ ws.close(); }catch(e){} }; }
-  function later(){ retry=Math.min(retry+1,6); setTimeout(connect,1000*retry*retry); }
+  let banned=false;
+  function later(){ if(banned) return; retry=Math.min(retry+1,6); setTimeout(connect,1000*retry*retry); }
+  /* an admin removed this person: cover the screen and stop reconnecting for a while */
+  function kicked(m){ banned=true; try{ ws&&ws.close(); }catch(e){} clearInterval(pingT);
+    try{ localStorage.setItem('rrKicked',String(Date.now()+(+m.mins||30)*60000)); }catch(e){}
+    if(document.getElementById('rrKick')) return; const d=document.createElement('div'); d.id='rrKick';
+    d.style.cssText='position:fixed;inset:0;z-index:100001;display:flex;align-items:center;justify-content:center;padding:20px;background:rgba(2,4,10,.94);color:#fff;font-family:system-ui,sans-serif;text-align:center';
+    d.innerHTML=`<div style="max-width:460px"><div style="font-size:52px">🚫</div><h2 style="margin:10px 0;font-size:30px">You've been removed</h2><p style="font-size:18px;color:#cbd5e1">An admin removed you from Rink Rivals${m.mins?` for ${m.mins} minutes`:''}. Chat and online play are paused for now.</p></div>`;
+    (document.body||document.documentElement).appendChild(d); }
+  try{ const until=+localStorage.getItem('rrKicked')||0; if(until>Date.now()){ banned=true; kicked({mins:Math.ceil((until-Date.now())/60000)}); } }catch(e){}
   function setN(n){ online=n; cnt.textContent=`👥 ${n} online ${root.classList.contains('showwho')?'▴':'▾'}`; if(fab){ fab.title=`Chat · ${n} online`; fab.innerHTML=`💬 Chat <s>· ${n} online</s> <i></i>`; badge(); } }
   /* who's online and what they're playing; a button takes you to their game */
   let roster=[];

@@ -31,7 +31,24 @@
         np.name=q.name; np.real=true; np.imp=q.src||'84'; np.ovr=o.cap?Math.min(o.cap,ovr):ovr; np.pot=Math.max(np.pot||0,np.ovr);
         const num=parseInt(q.num,10); if(num>=0&&num<100){ const cl=R.find((p,k)=>p.num===num&&k!==i); if(cl) cl.num=o.renum(cl,R); np.num=num; } else np.num=R[i].num;
         if(o.after) o.after(np,q,id); R[i]=np; n++; (this.log=this.log||[]).push({lg,name:np.name,team:id,pos,ovr:np.ovr,num:np.num,a:np.a}); }
-      this.applied=(this.applied||0)+n; return n; },
+      n+=this.applyServer(out,lg,o); this.applied=(this.applied||0)+n; return n; },
+    /* admin edits from the /admin page (cached from the server). Edits a named player in place: set his overall and/or skills. */
+    serverOv:lg=>{ try{ const a=JSON.parse(localStorage.getItem('rrServerOv')||'[]'); return Array.isArray(a)?a.filter(x=>x.lg===lg):[]; }catch(e){ return []; } },
+    applyServer(out,lg,o){ let n=0;
+      for(const q of this.serverOv(lg)){ let R=null,i=-1;
+        /* a team move was asked for: send him there (reuse the import path) */
+        const moveId=q.tid&&out[q.tid]?q.tid:(q.team?teamId(lg,q.team):null);
+        for(const [tid,T] of Object.entries(out)){ if(!T||!T.roster) continue; const k=T.roster.findIndex(p=>p.name===q.name); if(k>=0){ if(moveId&&tid!==moveId){ const old=T.roster[k]; if(!old.fixed){ const f=o.make(old.pos,Math.min(old.ovr,70),27); f.num=old.num; T.roster[k]=f; } } else { R=T.roster; i=k; } break; } }
+        if(!R){ if(!moveId||!out[moveId]) continue; R=out[moveId].roster; const pos=posOf(lg,q.pos)||POSL[lg][0]; const c=R.filter(p=>p.pos===pos&&!p.real).sort((a,b)=>a.ovr-b.ovr)[0]||R.filter(p=>!p.real).sort((a,b)=>a.ovr-b.ovr)[0]; if(!c) continue; i=R.indexOf(c); }
+        const cur=R[i], pos=posOf(lg,q.pos)||cur.pos; let np;
+        if(q.ovr!=null){ np=o.make(pos,Math.max(1,Math.min(99,Math.round(q.ovr))),cur.age||27); np.name=cur.name; np.num=cur.num; }
+        else { np=cur; }
+        if(q.skills) for(const k in q.skills){ if(np.a&&k in np.a) np.a[k]=Math.max(1,Math.min(99,Math.round(q.skills[k]))); }
+        const tid=Object.keys(out).find(t=>out[t].roster===R); np.name=q.name; np.real=true; np.imp='edit'; if(tid) np.tid=tid;
+        np.ovr=o.rate?o.rate(np):(q.ovr!=null?Math.round(q.ovr):cur.ovr); np.pot=Math.max(np.pot||0,np.ovr);
+        if(o.after) o.after(np,q,tid); R[i]=np; n++;
+        (this.log=this.log||[]).push({lg,name:np.name,pos,ovr:np.ovr,num:np.num,a:np.a,edit:true}); }
+      return n; },
     /* the send dialog: who, which game, which team (his real one when the game has it), which position */
     send(p){ const lg=p.lg, G=GAME[lg]; if(!G) return; const tid=teamId(lg,p.team), pos=posOf(lg,p.pos)||POSL[lg][0];
       let d=document.getElementById('rriDlg'); if(d) d.remove(); d=document.createElement('div'); d.id='rriDlg';
