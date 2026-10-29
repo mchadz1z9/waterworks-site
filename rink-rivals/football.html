@@ -1034,13 +1034,14 @@ function playBall(f,m){ const B=PL.ball; if(B.st!=='air'||B.air.pitch||PL.kr||f.
 /* passing: bullet (fast, flat), touch, or lob (high and slow, drops in over underneath defenders) */
 const PASS={bullet:{v:1.3,pk:dd=>dd*.07+1,sg:1.12},touch:{v:1,pk:dd=>dd*.17+1.6,sg:1},lob:{v:.8,pk:dd=>dd*.28+2.6,sg:.96}};
 function passType(team){ const s=sch(team); if(!s) return 'touch'; if(held(s.spr)) return 'bullet'; if(held(s.dv)) return 'lob'; return 'touch'; }
-const qbSpd=qb=>15+qb.pl.a.thp*.09;
+const isCannon=pl=>pl&&pl.name==='Josh Allen';
+const qbSpd=qb=>isCannon(qb.pl)?34:15+qb.pl.a.thp*.09;
 /* how far downfield a quarterback can aim: 60 yards, or 110 for a 999 arm */
-const armOf=e=>60;
+const armOf=e=>e&&e.pl&&isCannon(e.pl)?110:60;
 function launch(qb,r,x,y,type,extra){
   const cpu=extra&&extra.cpu, spd=qbSpd(qb)*PASS[type].v, dd=Math.hypot(x-qb.x,y-qb.y), T=dd/spd;
   const pressure=PL.ents.some(f=>f.side===1&&!f.eng&&dist(f,qb)<2.5)?.8:0, wr=windRel(qb.team), wk=type==='bullet'?.5:type==='lob'?1.4:1;
-  const sig=(cpu?.5+dd*.045:.3+dd*.03)*(1.35-qb.pl.a.tha/100)*(1+pressure)*PASS[type].sg*(G.ctrl[qb.team]?G.ast.arm:1)*(skyIs('rain')?1.12:skyIs('snow')?1.08:1)*(xf(qb.pl)==='Dot'&&!pressure?.78:1);
+  const sig=(cpu?.5+dd*.045:.3+dd*.03)*(1.35-qb.pl.a.tha/100)*(1+pressure)*PASS[type].sg*(G.ctrl[qb.team]?G.ast.arm:1)*(skyIs('rain')?1.12:skyIs('snow')?1.08:1)*(xf(qb.pl)==='Dot'&&!pressure?.78:1)*(isCannon(qb.pl)?.28:1);
   const lx=x+gauss()*sig+wr.tail*dd*.0015*wk, ly=y+gauss()*sig+wr.cross*dd*.0015*wk; PL.throwT=PL.t;
   PL.ball.st='air'; PL.ball.holder=null; PL.ball.air=Object.assign({x0:qb.x,y0:qb.y,lx,ly:clamp(ly,-2,FH+2),T:Math.max(.25,T),t:0,to:r,peak:PASS[type].pk(dd),type},extra||{}); PL.thrown=true; PL.aud=null; autoSwitchDef(lx,ly);
   bx(G,qb.pl,qb.team).pa++; sfx.throw();
@@ -1158,7 +1159,7 @@ function liveStep(dt){
     /* a user defender who attacks the line on a pass play becomes a rusher, so the line picks him up */
     if(hum&&e.side===1&&!e.rush&&!PL.kr&&PL.play.type==='pass'&&!PL.thrown&&e.x<PL.los+2.5) e.rush=true;
     let want; e.prot=false;
-    if(hum&&PL.aim&&e.slot==='QB'){ const d=PL.aim.ptr?[0,0]:humanDir(team); PL.aim.t+=dt; PL.aim.x=clamp(PL.aim.x+d[0]*18*dt,e.x-5,Math.min(109.5,e.x+armOf(e))); PL.aim.y=clamp(PL.aim.y+d[1]*18*dt,.5,FH-.5); want=[0,0]; }
+    if(hum&&PL.aim&&e.slot==='QB'){ const d=PL.aim.ptr?[0,0]:humanDir(team); PL.aim.t+=dt; PL.aim.x=clamp(PL.aim.x+d[0]*(isCannon(e.pl)?30:18)*dt,e.x-5,Math.min(109.5,e.x+armOf(e))); PL.aim.y=clamp(PL.aim.y+d[1]*18*dt,.5,FH-.5); want=[0,0]; }
     /* until the user touches the stick, his player runs the called assignment (the QB takes his drop); after that it is all his */
     else if(hum&&e.stun<=0&&(()=>{ const d=humanDir(team); if(d[0]||d[1]){ e.touched=true; return false; } const c=carrierOf(); return G.car?e.slot!=='QB'&&c!==e:!e.touched&&(c!==e||e.slot==='QB'&&!PL.thrown&&!PL.scramble&&e.x<=PL.los+.5); })()) want=aiMove(e);
     else if(hum&&e.stun<=0){ const d=humanDir(team), s=sch(team), spr=s&&held(s.spr); if(s&&carrierOf()===e&&held(s.prot)) e.prot=true; const m=e.max*(spr?1:.86)*(e.dive>0?1.25:1)*(e.prot?.92:1)*(e.hurdle>0?.9:1); want=[d[0]*m,d[1]*m]; }
