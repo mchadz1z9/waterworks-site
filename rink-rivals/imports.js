@@ -24,8 +24,8 @@
     apply(out,lg,o){ let n=0; const L=this.list(lg);
       for(const q of L){ const id=q.tid&&out[q.tid]?q.tid:teamId(lg,q.team); if(!id||!out[id]) continue; const pos=posOf(lg,q.pos)||q.pos; if(!pos) continue;
         /* he leaves whatever team he was on in this game */
-        for(const [tid,T] of Object.entries(out)){ if(tid===id||!T||!T.roster) continue; const i=T.roster.findIndex(p=>p.name===q.name); if(i>=0&&!T.roster[i].goat){ const old=T.roster[i], f=o.make(old.pos,Math.min(old.ovr,70),27); f.num=old.num; T.roster[i]=f; } }
-        const R=out[id].roster; let i=R.findIndex(p=>p.name===q.name); if(i>=0&&R[i].goat) continue;
+        for(const [tid,T] of Object.entries(out)){ if(tid===id||!T||!T.roster) continue; const i=T.roster.findIndex(p=>p.name===q.name); if(i>=0&&!T.roster[i].fixed){ const old=T.roster[i], f=o.make(old.pos,Math.min(old.ovr,70),27); f.num=old.num; T.roster[i]=f; } }
+        const R=out[id].roster; let i=R.findIndex(p=>p.name===q.name); if(i>=0&&R[i].fixed) continue;
         if(i<0){ const c=R.filter(p=>p.pos===pos&&!p.real&&!p.imp).sort((a,b)=>b.ovr-a.ovr)[0]||R.filter(p=>p.pos===pos&&!p.imp).sort((a,b)=>a.ovr-b.ovr)[0]||R.filter(p=>!p.real&&!p.imp).sort((a,b)=>a.ovr-b.ovr)[0]; if(!c) continue; i=R.indexOf(c); }
         const ovr=Math.max(40,Math.round(+q.ovr||70)), np=o.make(pos,Math.min(99,ovr),q.age||27);
         np.name=q.name; np.real=true; np.imp=q.src||'84'; np.ovr=o.cap?Math.min(o.cap,ovr):ovr; np.pot=Math.max(np.pot||0,np.ovr);
