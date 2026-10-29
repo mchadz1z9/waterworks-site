@@ -126,6 +126,7 @@ table.box td.pl{display:flex;gap:8px;align-items:center;min-width:0} table.box .
 </style>
 </head>
 <body data-sport="bb">
+<script src="imports.js"></script>
 <div class="arena" aria-hidden="true"><i class="grid"></i><i class="beam b1"></i><i class="beam b2"></i><i class="beam b3"></i><i class="crowd"></i><i class="floor"></i></div>
 <div class="wrap">
 <div class="top">
@@ -161,6 +162,7 @@ table.box td.pl{display:flex;gap:8px;align-items:center;min-width:0} table.box .
       <div class="eyebrow" id="recH">Your best season</div>
       <div class="row between" style="align-items:flex-end;margin-top:6px"><div class="big" id="best">—</div><div class="muted" style="text-align:right" id="bestSub"></div></div>
       <p class="muted" style="font-size:14px;margin-bottom:0" id="history"></p>
+      <div id="rriBox"></div>
     </section>
   </aside>
 </div>
@@ -1642,14 +1644,14 @@ const slotLbl=s=>S_().lbl[s]||s;
 function cardHTML(p,animate){ const T=teamOf(p), t=tierOf(p.R), ok=SLOT().filter(s=>!picks[s]&&canGo(p,s)), names=(p.kind==='G'?SKILLS.nhlG:p.kind==='P'?SKILLS.mlbP:S_().skills).s;
   const two=p.pst?`<p class="muted" style="margin:10px 0 0;font-size:13px">Two-way star: pitches at <b style="color:#fff">${p.pR}</b> (${SKILLS.mlbP.s.map((k,i)=>k+' '+p.pst[i]).slice(0,4).join(' · ')}).</p>`:'';
   return `<div class="pcard r-${t[0]} ${animate?'flip':''}"><div class="in"><div class="ch">${portrait(p)}<div class="meta"><div class="rar">${t[2]}${p.leg?' <span class="icon">ICON</span>':''}</div><h3>${esc(p.name)}</h3><div class="muted">${esc(T.full)}${p.num!==''?` · #${esc(p.num)}`:''} · ${p.pos.join(' / ')}</div></div><div class="ovr"><span>OVR</span><b>${p.R}</b></div></div>
-    ${skillBars(p.st,names)}${two}<p style="margin:12px 0 4px;font-weight:700">Put him in a highlighted slot:</p><div class="row">${ok.map(s=>`<button class="chip" data-put="${s}">${slotLbl(s)} <b>${S_().fit(p,s)}</b></button>`).join('')}</div></div></div>${animate&&!RM()?`<div class="burst" style="--bc:${t[3]}"></div>`:''}`; }
-function render(anim){ const E=teamEval(), sl=SLOT(), n=S_().n, filled=Object.keys(picks).length;
+    ${skillBars(p.st,names)}${two}<p style="margin:12px 0 4px;font-weight:700">Put him in a highlighted slot:</p><div class="row">${ok.map(s=>`<button class="chip" data-put="${s}">${slotLbl(s)} <b>${S_().fit(p,s)}</b></button>`).join('')}</div>${window.RRI&&RRI.GAME[p.lg]?`<button class="rri-send" data-rrisend>📤 Send ${esc(p.name)} to the ${RRI.GAME[p.lg][1]} game</button>`:''}</div></div>${animate&&!RM()?`<div class="burst" style="--bc:${t[3]}"></div>`:''}`; }
+function render(anim){ rriBox(); const E=teamEval(), sl=SLOT(), n=S_().n, filled=Object.keys(picks).length;
   $('roundTxt').textContent=full()?'Draft complete':`Round ${filled+1} / ${sl.length}`; $('skipTxt').textContent=`${skipsLeft} skip${skipsLeft===1?'':'s'} left · ${ERAS[eraSel].n} · ${pool().length} players in the pool`;
   $('rollBtn').disabled=!!rolled||busy||full()||phase!=='draft'; $('skipBtn').disabled=!rolled||skipsLeft<=0;
   const A=$('rollArea');
   if(busy&&pending) A.innerHTML=`<div class="reveal"><div class="pack"><div class="e">${S_().emoji}</div><div class="logo">${S_().goal}</div><div class="eyebrow" style="position:relative">Scouting…</div></div></div>`;
   else if(full()&&phase==='draft'){ A.innerHTML=`<div class="banner enter"><div class="eyebrow">Roster complete</div><h3 style="margin:6px 0">Projected ${E.proj}-${n-E.proj}</h3><p class="muted">${esc(E.sum)}. Every game is played out: great teams still lose some.</p><button class="btn primary" id="playBtn">Play the season <kbd>Enter</kbd></button></div>`; $('playBtn').onclick=startSeason; }
-  else if(rolled){ A.innerHTML=`<div class="reveal">${cardHTML(rolled,anim)}</div>`; A.querySelectorAll('[data-put]').forEach(b=>b.onclick=()=>place(b.dataset.put)); }
+  else if(rolled){ A.innerHTML=`<div class="reveal">${cardHTML(rolled,anim)}</div>`; A.querySelectorAll('[data-put]').forEach(b=>b.onclick=()=>place(b.dataset.put)); const sb=A.querySelector('[data-rrisend]'); if(sb){ const p0=rolled; sb.onclick=()=>RRI.send(impOf(p0)); } }
   else A.innerHTML=`<p class="waiting">${filled?'Roll your next player.':'Press Roll to open your first pack.'}</p>`;
   $('slots').innerHTML=sl.map((s,i)=>{ const p=picks[s], can=rolled&&!p&&canGo(rolled,s); const head=i===S_().starters?`<div class="eyebrow sub">${sport==='mb'?'Pitching staff':'Bench'}</div>`:'';
     const t=p?tierOf(p.fit)[0]:''; return `${head}<button class="slot ${p?'filled':''} ${can?'can':''} ${p&&s===lastPlaced?'pop':''}" data-slot="${s}" ${can?'':'tabindex="-1"'} aria-label="${esc(slotLbl(s))}${p?': '+esc(p.name):can?': place here':''}">${p?portrait(p,'sm'):`<span class="ph">${esc(s.replace(/\d/,''))}</span>`}<span class="tx"><span class="p">${esc(slotLbl(s))}${p&&p.pen?' · off-pos':''}</span><span class="n">${p?esc(p.name):can?`Place here · ${S_().fit(rolled,s)}`:'Open'}</span></span>${p?`<span class="r t-${t}">${p.fit}</span>`:''}</button>`; }).join('');
@@ -1677,7 +1679,14 @@ function renderSeason(){ const S=SEASON; if(!S) return; const P=S.po, n=S_().n, 
   h+=`<div class="grid2 res" style="margin-top:12px"><div class="tblwrap"><div class="eyebrow" style="font-size:10px;margin-bottom:4px">Regular-season stats</div>${statTable(S)}</div><div class="log" aria-label="Game log">${S.log.join('')||'<span class="muted">First pitch…</span>'}</div></div>`;
   $('seasonPanel').innerHTML=h; const a=$('againBtn'); if(a) a.onclick=()=>{ battle=false; newDraft(); }; const sb=$('simBtn'); if(sb) sb.onclick=simAll; const sp=$('spdBtn'); if(sp) sp.onclick=()=>{ spd=(spd+1)%3; if(simT) runTimer(); renderSeason(); }; }
 function simAll(){ if(!SEASON) return; const m=SND.muted; SND.muted=true; let n=0; while(SEASON&&!SEASON.done&&n++<400) stepGame(); SND.muted=m; if(SEASON&&SEASON.done){ /* finishSeason already celebrated (muted) */ const S=SEASON; if(champOf(S)||S.w===S_().n) SND.title(); } renderSeason(); }
-function renderRecord(){ const V=SVS[sport], n=S_().n; $('recH').textContent=`Your best · ${S_().name}`; $('best').textContent=V.best==null?'—':sport==='hk'?`${V.best} W`:`${V.best}-${n-V.best}`; $('bestSub').innerHTML=`${V.seasons} season${V.seasons===1?'':'s'}<br>${V.titles} title${V.titles===1?'':'s'}${V.perfect?`<br>${V.perfect} perfect`:''}`; $('history').textContent=V.best!=null?`Best: ${V.bestTxt}. Recent: ${V.hist.join(' · ')}`:'No finished seasons yet.'; }
+/* ---------- send players into the sports games (imports.js) ---------- */
+function impOf(p){ const pit=p.kind==='P'; return {lg:p.lg,name:p.name,team:p.team,teamFull:teamOf(p).full,pos:p.main,num:p.num,ovr:p.R,leg:p.leg,src:'82'}; }
+function rriBox(){ const el=$('rriBox'); if(!el||!window.RRI) return; const lg=S_().lg, G=RRI.GAME[lg], mine=Object.values(picks);
+  el.innerHTML=(mine.length?`<button class="rri-send" id="rriTeam">📤 Send my ${mine.length} player${mine.length===1?'':'s'} to their teams in the ${G[1]} game</button>`:'')+'<div id="rriList"></div>'; RRI.panel($('rriList'),lg);
+  const b=$('rriTeam'); if(b) b.onclick=()=>{ let n=0, miss=[]; for(const p of mine){ const tid=RRI.teamId(lg,p.team); if(!tid){ miss.push(p.name); continue; } RRI.add({lg,name:p.name,team:p.team,tid,pos:RRI.posOf(lg,p.main)||p.main,num:p.num,ovr:p.R,leg:p.leg,src:'82',ts:Date.now()}); n++; }
+    notice(`${n} player${n===1?'':'s'} sent to their real teams in the ${G[1]} game${miss.length?` (no team there for ${miss.join(', ')}: send them one at a time to pick a team)`:''}.`); }; }
+addEventListener('rri-change',()=>rriBox());
+function renderRecord(){ rriBox(); const V=SVS[sport], n=S_().n; $('recH').textContent=`Your best · ${S_().name}`; $('best').textContent=V.best==null?'—':sport==='hk'?`${V.best} W`:`${V.best}-${n-V.best}`; $('bestSub').innerHTML=`${V.seasons} season${V.seasons===1?'':'s'}<br>${V.titles} title${V.titles===1?'':'s'}${V.perfect?`<br>${V.perfect} perfect`:''}`; $('history').textContent=V.best!=null?`Best: ${V.bestTxt}. Recent: ${V.hist.join(' · ')}`:'No finished seasons yet.'; }
 function renderOpts(){ $('sports').innerHTML=Object.values(SP).map(s=>`<button class="${s.k===sport?'on':''}" style="--c:${s.col}" data-sport="${s.k}" aria-pressed="${s.k===sport}"><span class="e" aria-hidden="true">${s.emoji}</span><span><b>${s.name}</b><small>${s.n} games · ${s.slots.length} roster spots</small></span></button>`).join('');
   $('opts').innerHTML=`<span class="lbl">Players</span>${ERAS.map((e,i)=>`<button class="${i===eraSel?'on':''}" data-era="${i}">${e.n}</button>`).join('')}<span class="lbl">Skips</span>${SKIPS.map((e,i)=>`<button class="${i===skipSel?'on':''}" data-skip="${i}">${e.n}</button>`).join('')}`;
   $('title').textContent=S_().goal; $('eyebrow').textContent=`${S_().short} · team draft · the perfect season`; $('lede').textContent=S_().lede; document.title=`Rink Rivals - ${S_().name}`; $('brandTag').textContent=S_().goal; }

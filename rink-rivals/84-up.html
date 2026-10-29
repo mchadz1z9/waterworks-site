@@ -125,6 +125,7 @@ table.box td.pl{display:flex;gap:8px;align-items:center;min-width:0} table.box .
 </style>
 </head>
 <body data-sport="nhl">
+<script src="imports.js"></script>
 <div class="arena" aria-hidden="true"><i class="grid"></i><i class="beam b1"></i><i class="beam b2"></i><i class="beam b3"></i><i class="crowd"></i><i class="floor"></i></div>
 <div class="wrap">
 <div class="top">
@@ -160,6 +161,7 @@ table.box td.pl{display:flex;gap:8px;align-items:center;min-width:0} table.box .
       <div class="eyebrow" id="recSport">Your best</div>
       <div class="row between" style="align-items:flex-end;margin-top:6px"><div class="big" id="best">—</div><div class="muted" style="text-align:right" id="bestSub"></div></div>
       <p class="muted" style="font-size:14px;margin-bottom:0" id="history"></p>
+      <div id="rriBox"></div>
     </section>
   </aside>
 </div>
@@ -1859,15 +1861,23 @@ function card(pl,anim){ const t=blind?['mystery',0,'Mystery','#64748b']:tierOf(p
   const tiles=sk.map((k,i)=>{ const v=pl.st[i], o=open(i), tk=blind?'x':tierOf(v)[0], hot=offer&&offer.includes(i); return `<button class="s skb ${hot?'hot':''}" data-pick="${i}" ${o?'':'disabled'} aria-label="${k}${blind?'':' '+v}${o?'':' (taken or not offered)'}"><span>${i+1<10?i+1:0} · ${SH()[i]}</span><b class="t-${tk}">${blind?'?':v}</b><i><em style="width:${blind?0:clamp((v-40)/59*100,3,100)}%"></em></i>${picks[i]?'<small>taken</small>':''}</button>`; }).join('');
   return `<div class="pcard r-${t[0]} ${anim?'flip':''}"><div class="in"><div class="ch">${portrait(pl)}<div class="meta"><div class="rar">${blind?'Blind draft':t[2]}${pl.leg?' <span class="icon">ICON</span>':''}</div><h3>${esc(pl.name)}</h3><div class="muted">${esc(T.full)}${pl.num!==''?` · #${esc(pl.num)}`:''} · ${pl.pos.join(' / ')}</div></div><div class="ovr"><span>${blind?'Top skill':'OVR'}</span><b>${blind?'?':pl.R}</b></div></div>
     <p style="margin:12px 0 2px;font-weight:700">${offer?`This round's skill is <span style="color:var(--acc)">${sk[offer[0]]}</span>: draft his ${blind?'rating':pl.st[offer[0]]} there (Enter), or skip him (S).`:blind?'Blind mode: pick the skill you think he is best at.':'Tap an open skill to draft it:'}</p>
-    <div class="sk pickgrid">${tiles}</div></div></div>${anim&&!RM()?`<div class="burst" style="--bc:${t[3]}"></div>`:''}`; }
-function render(anim){ const sk=SKL(), ov=overall(); $('roundTxt').textContent=done?'Build complete':`Round ${filled()+1} / 10`; $('rollH').textContent=done?'Your player is ready':'Open a pack'; $('skipTxt').textContent=`${MODES[modeSel].n} · ${SPORTS[sport].e} ${SPORTS[sport].n} · ${POOLS[poolSel].n} (${pool().length} left) · ${skipsLeft} skip${skipsLeft===1?'':'s'}${blind?' · blind':''}`;
+    <div class="sk pickgrid">${tiles}</div>${!blind&&window.RRI&&RRI.GAME[pl.lg]?`<button class="rri-send" data-rrisend>📤 Send ${esc(pl.name)} to the ${RRI.GAME[pl.lg][1]} game</button>`:''}</div></div>${anim&&!RM()?`<div class="burst" style="--bc:${t[3]}"></div>`:''}`; }
+function render(anim){ rriBox(); const sk=SKL(), ov=overall(); $('roundTxt').textContent=done?'Build complete':`Round ${filled()+1} / 10`; $('rollH').textContent=done?'Your player is ready':'Open a pack'; $('skipTxt').textContent=`${MODES[modeSel].n} · ${SPORTS[sport].e} ${SPORTS[sport].n} · ${POOLS[poolSel].n} (${pool().length} left) · ${skipsLeft} skip${skipsLeft===1?'':'s'}${blind?' · blind':''}`;
   $('rollBtn').disabled=!!rolled||busy||done; $('skipBtn').disabled=!rolled||skipsLeft<=0||done;
   if(busy&&pending) $('rollArea').innerHTML=`<div class="reveal"><div class="pack"><div class="e">${SPORTS[sport].e}</div><div class="logo">84+</div><div class="eyebrow" style="position:relative">Scouting…</div></div></div>`;
-  else if(rolled){ $('rollArea').innerHTML=`<div class="reveal">${card(rolled,anim)}</div>`; $('rollArea').querySelectorAll('[data-pick]').forEach(b=>b.onclick=()=>pick(+b.dataset.pick)); }
+  else if(rolled){ $('rollArea').innerHTML=`<div class="reveal">${card(rolled,anim)}</div>`; $('rollArea').querySelectorAll('[data-pick]').forEach(b=>b.onclick=()=>pick(+b.dataset.pick)); const sb=$('rollArea').querySelector('[data-rrisend]'); if(sb){ const p0=rolled; sb.onclick=()=>RRI.send(impOf(p0)); } }
   else $('rollArea').innerHTML=done?'':`<p class="waiting">${filled()?'Roll your next player.':'Press Roll to open your first pack.'}</p>`;
   $('slots').innerHTML=sk.map((k,i)=>{ const p=picks[i], hot=rolled&&offer&&offer.includes(i); return `<div class="slot ${p?'filled':''} ${hot?'can':''} ${i===lastPick?'pop':''}">${p?portrait(p.p,'sm'):`<span class="ph">${SH()[i]}</span>`}<span class="tx"><span class="p">${k}</span><span class="n" style="font-size:13px">${p?esc(p.name):hot?'This round':'Open'}</span></span>${p?`<span class="r t-${tierOf(p.v)[0]}">${p.v}</span>`:''}</div>`; }).join(''); lastPick=-1;
   $('ovr').textContent=ov??'—'; $('ovr').style.color=ov!=null?buildTier(ov)[1]:''; $('ovrBar').style.width=ov!=null?`${Math.max(0,Math.min(100,(ov-70)/29*100))}%`:'0'; $('arche').textContent=archetype(); $('buildSport').textContent=`${SPORTS[sport].e} Your ${SPORTS[sport].n.toLowerCase()} build`; }
-function renderRecord(){ const R=rec(); $('recSport').textContent=`Your best ${SPORTS[sport].n.toLowerCase()} build · ${MODES[modeSel].n}`; $('best').textContent=R.best??'—'; $('best').style.color=R.best!=null?buildTier(R.best)[1]:''; $('bestSub').innerHTML=`${R.builds} build${R.builds===1?'':'s'}<br>${R.club} in the 84 club`; $('history').textContent=R.best!=null?`Best: ${R.bestTxt}. Recent: ${R.hist.join(', ')}`:'No finished builds yet.'; }
+/* ---------- send players into the sports games (imports.js) ---------- */
+function impOf(p){ return {lg:p.lg,name:p.name,team:p.team,teamFull:teamOf(p).full,pos:p.pos[0],num:p.num,ovr:p.R,leg:p.leg,src:'84'}; }
+function myBuildName(){ try{ const n=(localStorage.getItem('rrOnlineName')||'').trim(); if(n) return n; }catch(e){} return 'My Build'; }
+function rriBox(){ const el=$('rriBox'); if(!el||!window.RRI) return; const lg=SPORTS[sport].lg, G=RRI.GAME[lg];
+  let h=''; if(done&&picks.every(Boolean)){ h=`<button class="rri-send" id="rriBuild">📤 Bring my build into the ${G[1]} game</button>`; }
+  el.innerHTML=h+'<div id="rriList"></div>'; RRI.panel($('rriList'),lg);
+  const b=$('rriBuild'); if(b) b.onclick=()=>{ const top=[...picks].sort((a,b)=>b.v-a.v)[0], tp=top.p; RRI.send({lg,name:myBuildName(),team:tp.team,teamFull:teamOf(tp).full,pos:tp.pos[0],num:'',ovr:overall(),built:true,src:'84b'}); }; }
+addEventListener('rri-change',()=>rriBox());
+function renderRecord(){ rriBox(); const R=rec(); $('recSport').textContent=`Your best ${SPORTS[sport].n.toLowerCase()} build · ${MODES[modeSel].n}`; $('best').textContent=R.best??'—'; $('best').style.color=R.best!=null?buildTier(R.best)[1]:''; $('bestSub').innerHTML=`${R.builds} build${R.builds===1?'':'s'}<br>${R.club} in the 84 club`; $('history').textContent=R.best!=null?`Best: ${R.bestTxt}. Recent: ${R.hist.join(', ')}`:'No finished builds yet.'; }
 const COLS={hockey:'#4fd1ff',baseball:'#ff4d5e',football:'#7ee06d',basketball:'#ff7a18',soccer:'#c084fc'};
 function renderOpts(){ $('sports').innerHTML=Object.entries(SPORTS).map(([k,v])=>`<button class="${k===sport?'on':''}" style="--c:${COLS[k]}" data-sport="${k}" aria-pressed="${k===sport}"><span class="e" aria-hidden="true">${v.e}</span><span><b>${v.n}</b><small>${v.players.length} players · ${v.players.filter(p=>p.leg).length} legends</small></span></button>`).join('');
   $('opts').innerHTML=`<span class="lbl">Mode</span>${MODES.map((m,i)=>`<button class="${i===modeSel?'on':''}" data-mode="${i}">${m.n}</button>`).join('')}<span class="lbl">Players</span>${POOLS.map((p,i)=>`<button class="${i===poolSel?'on':''}" data-pool="${i}">${p.n}</button>`).join('')}<span class="lbl">Skips</span>${SKIPS.map((n,i)=>`<button class="${i===skipSel?'on':''}" data-skip="${i}">${n}</button>`).join('')}<button class="${blind?'on':''}" data-blind="1" title="The numbers are hidden: draft on what you know about the player">🙈 Blind</button>`; }
