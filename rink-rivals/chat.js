@@ -49,18 +49,20 @@
 .rrc form button{background:#6366f1;color:#fff;border:0;border-radius:10px;padding:0 14px;font:800 16px 'Big Shoulders Display','Arial Narrow',sans-serif;cursor:pointer}
 .rrc .empty{color:#64748b;text-align:center;margin:auto;font-size:14px}
 @media (max-width:600px){ #rrcP{right:8px;left:8px;width:auto;bottom:110px;height:60vh} #rrcF{bottom:58px;right:8px} }`;
-  const st=document.createElement('style'); st.textContent=css; document.head.appendChild(st);
+  const RRC_EXTRA=`.rrc header .adm{font:800 13px system-ui,sans-serif;color:#fde68a;background:rgba(253,230,138,.12);border:1px solid rgba(253,230,138,.3);border-radius:8px;padding:2px 7px;text-decoration:none;cursor:pointer}\n.rrc .tg{font:800 10px system-ui,sans-serif;background:#7c3aed;color:#fff;border-radius:6px;padding:1px 6px;margin:0 4px;vertical-align:middle;letter-spacing:.02em}\n.rrc .dmb{flex:0 0 auto;background:rgba(255,255,255,.1);border:0;border-radius:8px;color:#fff;cursor:pointer;font-size:14px;padding:3px 8px}\n.rrc .dmb:hover{background:rgba(255,255,255,.22)}\n.rrc .dmv{flex:1;min-height:0;background:#0f172a;flex-direction:column} .rrc:not(.dmopen) .dmv{display:none} .rrc.dmopen .dmv{display:flex} .rrc.dmopen .log,.rrc.dmopen .who,.rrc.dmopen .rules{display:none}\n.rrc .dmh{display:flex;align-items:center;gap:8px;padding:8px 10px;background:linear-gradient(135deg,#4c1d95,#1e3a8a);font:800 16px 'Big Shoulders Display',sans-serif}\n.rrc .dmh .bk{background:rgba(255,255,255,.15);border:0;border-radius:8px;color:#fff;font-size:18px;cursor:pointer;padding:2px 10px}\n.rrc .dml{flex:1;overflow-y:auto;padding:8px 10px;display:flex;flex-direction:column;gap:4px}\n.rrc .dml .undel{font-size:11px;color:#fca5a5}\n#rrcF.dm i{background:#a855f7}\n.rrc{position:relative}`;
+  const st=document.createElement('style'); st.textContent=css+RRC_EXTRA; document.head.appendChild(st);
 
   let ws=null, open=false, unread=0, online=0, retry=0, pingT=null, root, log, inp, cnt, fab, panel, msgs=new Map();
   const dock=()=>{ const d=document.getElementById('chatDock'); return d&&getComputedStyle(d).display!=='none'?d:null; };
   if(GAME!=='home') ls.set('rrLast',GAME);
-  function build(){
+    function build(){
     root=document.createElement('div'); root.className='rrc';
-    root.innerHTML=`<header><span>💬</span><b>Rink Rivals Chat</b><small class="cnt" title="See who's online and what they're playing">connecting…</small><button class="bell" title="Message notifications on/off">🔔</button><button class="nm" title="Change your name">✎ Name</button>${dock()?'':'<button class="cl" title="Close">✕</button>'}</header>
-      <div class="log"><div class="empty">Say hi to everyone on Rink Rivals 👋</div></div><div class="who"></div>
+    root.innerHTML=`<header><span>💬</span><b>Rink Rivals Chat</b><small class="cnt" title="See who's online and what they're playing">connecting…</small><button class="bell" title="Message notifications on/off">🔔</button><button class="nm" title="Change your name">✎ Name</button><a class="adm" href="admin" title="Admin tools" style="display:none">⚙</a>${dock()?'':'<button class="cl" title="Close">✕</button>'}</header>
+      <div class="log"><div class="empty">Say hi to everyone on Rink Rivals 👋</div></div><div class="who"></div><div class="dmv" style="display:none"></div>
       <div class="rules">Be kind · no swearing · never share personal info · no spam · ⚑ reports a message</div>
       <form autocomplete="off"><input maxlength="200" placeholder="${name?'Message everyone…':'Pick a name to chat…'}" aria-label="Chat message"><button>Send</button></form>`;
-    log=root.querySelector('.log'); inp=root.querySelector('input'); cnt=root.querySelector('.cnt');
+    log=root.querySelector('.log'); inp=root.querySelector('input'); cnt=root.querySelector('.cnt'); dmv=root.querySelector('.dmv');
+    { const a=root.querySelector('.adm'); if(a&&myRole){ a.style.display=''; a.textContent=myRole==='full'?'⚙ Admin':'⚙ Mod'; } }
     /* keys typed into the chat must never reach the game */
     for(const ev of ['keydown','keyup','keypress']) inp.addEventListener(ev,e=>{ e.stopPropagation(); if(ev==='keydown'&&e.key==='Escape'){ inp.blur(); if(!dock()) toggle(false); } });
     root.querySelector('form').addEventListener('submit',e=>{ e.preventDefault(); send(); });
@@ -75,8 +77,9 @@
   function toggle(on){ open=on; if(panel) panel.classList.toggle('open',on); if(on){ unread=0; badge(); setTimeout(()=>{ log.scrollTop=log.scrollHeight; if(name) inp.focus(); else askName(); },30); } }
   function badge(){ if(!fab) return; const i=fab.querySelector('i'); i.textContent=unread>9?'9+':unread; i.classList.toggle('on',unread>0); }
   function askName(){ const n=prompt('Your chat name (shown to everyone; don\'t use your real full name):',name||''); if(n==null) return; const v=n.replace(/[<>]/g,'').trim().slice(0,20); if(!v) return; name=v; ls.set('rrOnlineName',v); inp.placeholder='Message everyone…'; tx({t:'name',name:v}); inp.focus(); }
+  const tagHTML=t=>t?`<span class="tg">${esc(t)}</span>`:'';
   function line(m){ const el=document.createElement('div'); el.className='m'+(m.name===name?' me':''); el.dataset.id=m.id; const d=new Date(m.ts), hh=d.getHours(), mm=String(d.getMinutes()).padStart(2,'0');
-    el.innerHTML=`<span class="t">${hh}:${mm}</span><span class="n" style="color:hsl(${hue(m.name)},85%,70%)">${esc(m.name)}</span><span class="g">${esc(GN[m.game]||m.game)}</span><br>${linkify(m.text)}${m.name===name?'':`<button class="x" data-id="${m.id}" title="Report">⚑</button>`}`; return el; }
+    el.innerHTML=`<span class="t">${hh}:${mm}</span><span class="n" style="color:hsl(${hue(m.name)},85%,70%)">${esc(m.name)}</span>${tagHTML(m.tag)}<span class="g">${esc(GN[m.game]||m.game)}</span><br>${linkify(m.text)}${m.name===name?'':`<button class="x" data-id="${m.id}" title="Report">⚑</button>`}`; return el; }
   function add(m,quiet){ if(msgs.has(m.id)) return; const e=log.querySelector('.empty'); if(e) e.remove(); const atBottom=log.scrollHeight-log.scrollTop-log.clientHeight<60, el=line(m); msgs.set(m.id,el); log.appendChild(el);
     while(log.children.length>150) log.removeChild(log.firstChild); if(atBottom||m.name===name) log.scrollTop=log.scrollHeight; if(!quiet&&m.name!==name){ if(!open){ unread++; badge(); } notify(m); } }
   let notifOn=ls.get('rrChatNotify')!=='0', pop=null, popT=null, titleT=null, baseTitle=document.title, missed=0, nAC=null;
@@ -101,7 +104,7 @@
   let invCb=null;
   function sys(t){ const el=document.createElement('div'); el.className='sys'; el.textContent=t; log.appendChild(el); log.scrollTop=log.scrollHeight; }
   function tx(o){ if(ws&&ws.readyState===1) ws.send(JSON.stringify(o)); }
-  function send(){ const t=inp.value.trim(); if(!t) return; if(!name){ askName(); return; } if(!ws||ws.readyState!==1){ sys('Not connected yet, try again in a second.'); return; } tx({t:'say',text:t}); inp.value=''; }
+  function send(){ const t=inp.value.trim(); if(!t) return; if(!name){ askName(); return; } if(!ws||ws.readyState!==1){ sys('Not connected yet, try again in a second.'); return; } if(dmCur){ tx({t:'dm',to:dmCur.id,text:t}); } else tx({t:'say',text:t}); inp.value=''; }
   function connect(){ if(banned) return; if(OFF){ cnt.textContent='offline'; sys('Chat is off on test pages.'); return; }
     try{ ws=new WebSocket(URL_WS); }catch(e){ return later(); }
     ws.onopen=()=>{ retry=0; tx({t:'hello',name:name||'Player',pid,game:GAME}); clearInterval(pingT); pingT=setInterval(()=>tx({t:'ping'}),25000); };
@@ -115,6 +118,8 @@
       else if(m.t==='who'){ roster=m.list||[]; setN(roster.length); renderWho(); try{ dispatchEvent(new CustomEvent('rrc-who',{detail:roster})); }catch(e){} }
       else if(m.t==='invite') inviteCard(m);
       else if(m.t==='invsent'){ if(invCb) try{ invCb(m); }catch(e){} }
+      else if(m.t==='dm') onDM(m);
+      else if(m.t==='role'){ myRole=m.lvl; try{ m.lvl?sessionStorage.setItem('rrRole',m.lvl):sessionStorage.removeItem('rrRole'); }catch(e){} applyRole(); }
       else if(m.t==='kicked') kicked(m);
       else if(m.t==='sys') sys(m.text); };
     ws.onclose=()=>{ clearInterval(pingT); cnt.textContent='reconnecting…'; later(); }; ws.onerror=()=>{ try{ ws.close(); }catch(e){} }; }
@@ -130,15 +135,29 @@
   try{ const until=+localStorage.getItem('rrKicked')||0; if(until>Date.now()){ banned=true; kicked({mins:Math.ceil((until-Date.now())/60000)}); } }catch(e){}
   function setN(n){ online=n; cnt.textContent=`👥 ${n} online ${root.classList.contains('showwho')?'▴':'▾'}`; if(fab){ fab.title=`Chat · ${n} online`; fab.innerHTML=`💬 Chat <s>· ${n} online</s> <i></i>`; badge(); } }
   /* who's online and what they're playing; a button takes you to their game */
-  let roster=[];
+  let roster=[], dmv=null, dmCur=null, myRole=(()=>{ try{ return sessionStorage.getItem('rrRole')||null; }catch(e){ return null; } })(); const dms=new Map();
   function showWho(on){ if(!dock()&&!open) toggle(true); const v=on==null?!root.classList.contains('showwho'):on; root.classList.toggle('showwho',v); setN(online); renderWho(); }
   function renderWho(){ const el=root&&root.querySelector('.who'); if(!el) return; const by={}; for(const p of roster){ (by[p.game]=by[p.game]||[]).push(p); }
     const games=Object.keys(by).sort((a,b)=>(a==='home')-(b==='home')||by[b].length-by[a].length);
-    el.innerHTML=`<h4>👥 ${roster.length} on Rink Rivals right now</h4>`+(roster.length?games.map(g=>by[g].map(p=>`<div class="wr"><b style="color:hsl(${hue(p.name)},85%,70%)">${esc(p.name)}${p.me?' (you)':''}</b><span>${g==='home'?'🏠 browsing':esc(GN[g]||g)}</span>${g==='home'?'':g===GAME?'<a class="here">Here</a>':`<a href="${esc(g)}" title="Go play ${esc(GN[g]||g)} with them">Play →</a>`}</div>`).join('')).join(''):'<div class="empty">Nobody else yet.</div>')+'<div class="rules" style="border:0;padding:6px 2px">Tip: in a game press <b>Online → Play with anyone</b> to get matched with the people there.</div>'; }
+    el.innerHTML=`<h4>👥 ${roster.length} on Rink Rivals right now</h4>`+(roster.length?games.map(g=>by[g].map(p=>`<div class="wr"><b style="color:hsl(${hue(p.name)},85%,70%)">${esc(p.name)}${p.tag?` <span class="tg">${esc(p.tag)}</span>`:''}${p.me?' (you)':''}</b>${p.me?'':`<button class="dmb" data-dm="${esc(p.id)}" data-nm="${esc(p.name)}" title="Private message">💬</button>`}<span>${g==='home'?'🏠 browsing':esc(GN[g]||g)}</span>${g==='home'?'':g===GAME?'<a class="here">Here</a>':`<a href="${esc(g)}" title="Go play ${esc(GN[g]||g)} with them">Play →</a>`}</div>`).join('')).join(''):'<div class="empty">Nobody else yet.</div>')+'<div class="rules" style="border:0;padding:6px 2px">Tip: in a game press <b>Online → Play with anyone</b> to get matched with the people there.</div>';
+    el.querySelectorAll('.dmb').forEach(b=>b.onclick=ev=>{ ev.stopPropagation(); openDM(b.dataset.dm,b.dataset.nm); }); }
+  /* ---------- private messages ---------- */
+  function applyRole(){ const a=root&&root.querySelector('.adm'); if(!a) return; if(myRole){ a.style.display=''; a.textContent=myRole==='full'?'⚙ Admin':'⚙ Mod'; } else a.style.display='none'; }
+  function dmGet(id,nm){ let t=dms.get(id); if(!t){ t={name:nm||'Player',msgs:[],unread:0}; dms.set(id,t); } if(nm) t.name=nm; return t; }
+  function openDM(id,nm){ if(!name){ askName(); if(!name) return; } dmCur={id,name:nm}; const t=dmGet(id,nm); t.unread=0; if(!open&&!dock()) toggle(true); root.classList.remove('showwho'); root.classList.add('dmopen'); renderDM(); dmBadge(); setTimeout(()=>inp&&inp.focus(),30); }
+  function closeDM(){ dmCur=null; root.classList.remove('dmopen'); if(inp) inp.placeholder=name?'Message everyone…':'Pick a name to chat…'; }
+  function dmLineHTML(x){ const d=new Date(x.ts),hh=d.getHours(),mm=String(d.getMinutes()).padStart(2,'0'); return `<div class="m${x.mine?' me':''}"><span class="t">${hh}:${mm}</span>${linkify(x.text)}${x.mine&&x.delivered===false?' <span class="undel" title="They are offline">· offline</span>':''}</div>`; }
+  function renderDM(){ if(!dmv||!dmCur) return; const t=dmGet(dmCur.id);
+    dmv.innerHTML=`<div class="dmh"><button class="bk" title="Back to everyone">←</button><b>🔒 ${esc(dmCur.name)}</b></div><div class="dml">${t.msgs.map(dmLineHTML).join('')||'<div class="empty">No messages yet. Say hi privately 👋</div>'}</div>`;
+    dmv.querySelector('.bk').onclick=closeDM; const dl=dmv.querySelector('.dml'); dl.scrollTop=dl.scrollHeight; if(inp) inp.placeholder=`Private message to ${dmCur.name}…`; }
+  function onDM(m){ const key=m.self?m.to:m.from, nm=m.self?(m.toName||(dms.get(key)||{}).name):m.fromName; const t=dmGet(key,nm);
+    t.msgs.push({mine:!!m.self,text:m.text,ts:m.ts,delivered:m.delivered}); if(t.msgs.length>120) t.msgs=t.msgs.slice(-120);
+    if(dmCur&&dmCur.id===key){ renderDM(); } else if(!m.self){ t.unread++; dmBadge(); if(!open) { unread++; badge(); } ping(); notify({name:nm+' (private)',text:m.text,game:''}); } }
+  function dmBadge(){ let n=0; for(const t of dms.values()) n+=t.unread; const i=fab&&fab.querySelector('i'); if(i&&n>unread){} if(fab) fab.classList.toggle('dm',n>0); }
   function start(){ build(); connect(); }
   if(document.readyState==='loading') document.addEventListener('DOMContentLoaded',start); else start();
   addEventListener('rr-name',e=>{ const v=String(e.detail||'').trim(); if(!v||v===name) return; name=v; if(inp) inp.placeholder='Message everyone…'; tx({t:'name',name:v}); });
-  window.RRC={ invite(id,game,room,cb){ invCb=cb||null; tx({t:'invite',to:id,game,room}); }, toggle:on=>toggle(on==null?!open:on), showWho, get online(){ return online; }, get roster(){ return roster; } };
+  window.RRC={ invite(id,game,room,cb){ invCb=cb||null; tx({t:'invite',to:id,game,room}); }, dm:(id,nm)=>openDM(id,nm), get role(){ return myRole; }, get pid(){ return pid; }, toggle:on=>toggle(on==null?!open:on), showWho, get online(){ return online; }, get roster(){ return roster; } };
 })();
 
 /* Rink Rivals player name: everyone picks a name once, before they play (it's the name on the chat, online games and the records) */

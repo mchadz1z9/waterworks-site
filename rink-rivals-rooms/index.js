@@ -18,8 +18,14 @@ export default {
     }
     /* site owner tools: clean leaderboards and chat. Needs the ADMIN_KEY secret. */
     const ad=url.pathname.match(/^\/admin\/(lb|chat|site)(?:\/([a-z0-9]{2,16}))?$/);
-    if(ad){ if(req.method==='OPTIONS') return new Response(null,{headers:CORS}); const key=req.headers.get('x-admin-key'); const ok=key&&((env.ADMIN_KEY&&key===env.ADMIN_KEY)||(env.SITE_ADMIN_KEY&&key===env.SITE_ADMIN_KEY)); if(!ok) return J({err:'forbidden'},403);
-      const u=new URL(req.url); u.pathname='/admin'; const r2=new Request(u,req);
+    if(ad){ if(req.method==='OPTIONS') return new Response(null,{headers:CORS});
+      const key=req.headers.get('x-admin-key'); let role=null;
+      if(key&&((env.ADMIN_KEY&&key===env.ADMIN_KEY)||(env.SITE_ADMIN_KEY&&key===env.SITE_ADMIN_KEY))) role='full';
+      else { const pid=req.headers.get('x-admin-pid'); if(pid){ try{ const ar=await env.CHAT.get(env.CHAT.idFromName('SITE')).fetch(new Request('https://do/authpid',{method:'POST',headers:{'content-type':'application/json'},body:JSON.stringify({op:'authpid',pid})})); const d=await ar.json(); if(d&&d.lvl) role=d.lvl; }catch(e){} } }
+      if(!role) return J({err:'forbidden'},403);
+      const body=await req.text(); const u=new URL(req.url); u.pathname='/admin';
+      const h=new Headers(); h.set('content-type','application/json'); h.set('x-admin-role',role);
+      const r2=new Request(u,{method:'POST',headers:h,body});
       if(ad[1]==='lb'&&ad[2]) return env.BOARDS.get(env.BOARDS.idFromName(ad[2])).fetch(r2);
       if(ad[1]==='chat') return env.CHAT.get(env.CHAT.idFromName('SITE')).fetch(r2);
       if(ad[1]==='site') return env.SITE.get(env.SITE.idFromName('SITE')).fetch(r2);
@@ -143,24 +149,47 @@ export class Chat {
   constructor(ctx){ this.ctx=ctx; this.sql=ctx.storage.sql;
     this.sql.exec('CREATE TABLE IF NOT EXISTS m(id INTEGER PRIMARY KEY AUTOINCREMENT, ts INTEGER, name TEXT, text TEXT, game TEXT, who TEXT, hid INTEGER DEFAULT 0)');
     this.sql.exec('CREATE TABLE IF NOT EXISTS r(mid INTEGER, who TEXT, PRIMARY KEY(mid,who))');
-    this.sql.exec('CREATE TABLE IF NOT EXISTS mute(who TEXT PRIMARY KEY, until INTEGER)'); }
+    this.sql.exec('CREATE TABLE IF NOT EXISTS mute(who TEXT PRIMARY KEY, until INTEGER)');
+    this.sql.exec('CREATE TABLE IF NOT EXISTS ban(nm TEXT PRIMARY KEY, until INTEGER)');
+    this.sql.exec('CREATE TABLE IF NOT EXISTS tag(nm TEXT PRIMARY KEY, tag TEXT)');
+    this.sql.exec('CREATE TABLE IF NOT EXISTS grnt(pubid TEXT PRIMARY KEY, lvl TEXT, name TEXT, ts INTEGER)'); }
   socks(){ return this.ctx.getWebSockets().filter(ws=>ws.deserializeAttachment()); }
   send(ws,o){ try{ ws.send(JSON.stringify(o)); }catch(e){} }
   all(o){ const s=JSON.stringify(o); for(const ws of this.ctx.getWebSockets()) try{ ws.send(s); }catch(e){} }
   count(){ this.all({t:'n',n:this.socks().length}); this.who(); }
-  /* who is on the site and which game each person is in (one entry per person, newest tab wins) */
+  tagOf(name){ const r=this.sql.exec('SELECT tag FROM tag WHERE nm=?',String(name||'').toLowerCase()).toArray()[0]; return r?r.tag:''; }
+  grantOf(pubid){ const r=this.sql.exec('SELECT lvl FROM grnt WHERE pubid=?',String(pubid)).toArray()[0]; return r?r.lvl:null; }
+  isBanned(name,who){ const now=Date.now(); const chk=k=>{ const r=this.sql.exec('SELECT until FROM ban WHERE nm=?',k).toArray()[0]; return r&&(r.until===0||r.until>now)?r:null; }; return chk(String(name||'').toLowerCase())||(who?chk('pid:'+who):null); }
+  socksByPub(pubid){ return this.ctx.getWebSockets().filter(ws=>{ const a=ws.deserializeAttachment(); return a&&pubId(a.who)===pubid; }); }
   who(){ const m=new Map(); for(const ws of this.socks()){ const a=ws.deserializeAttachment(); m.set(a.who,{name:a.name,game:a.game,me:a.who}); }
-    const list=[...m.values()]; for(const ws of this.socks()){ const a=ws.deserializeAttachment(); this.send(ws,{t:'who',list:list.map(x=>({name:x.name,game:x.game,id:pubId(x.me),me:x.me===a.who}))}); } }
-  hist(){ return this.sql.exec('SELECT id,ts,name,text,game FROM m WHERE hid=0 ORDER BY id DESC LIMIT 60').toArray().reverse(); }
+    const list=[...m.values()].map(x=>({name:x.name,game:x.game,id:pubId(x.me),tag:this.tagOf(x.name)}));
+    for(const ws of this.socks()){ const a=ws.deserializeAttachment(); const mine=pubId(a.who); this.send(ws,{t:'who',list:list.map(x=>({...x,me:mine===x.id}))}); } }
+  hist(){ return this.sql.exec('SELECT id,ts,name,text,game FROM m WHERE hid=0 ORDER BY id DESC LIMIT 60').toArray().reverse().map(r=>({...r,tag:this.tagOf(r.name)})); }
   async fetch(req){
-    if(new URL(req.url).pathname==='/admin'){ let m={}; try{ m=await req.json(); }catch(e){}
+    const path=new URL(req.url).pathname;
+    if(path==='/authpid'){ let m={}; try{ m=await req.json(); }catch(e){} const pid=String(m.pid||'').replace(/[^a-z0-9]/gi,'').slice(0,24); return J({lvl:pid?this.grantOf(pubId(pid)):null}); }
+    if(path==='/admin'){ let m={}; try{ m=await req.json(); }catch(e){}
+      const role=req.headers.get('x-admin-role')||'full', full=role==='full';
+      const FULLONLY=['grant','ungrant','clear']; if(FULLONLY.includes(m.op)&&!full) return J({err:'forbidden'},403);
       if(m.op==='list') return J({rows:this.sql.exec('SELECT * FROM m ORDER BY id DESC LIMIT 200').toArray()});
       if(m.op==='del'&&m.id){ this.sql.exec('UPDATE m SET hid=1 WHERE id=?',+m.id); this.all({t:'del',id:+m.id}); return J({ok:true}); }
       if(m.op==='mute'&&m.who){ this.sql.exec('INSERT OR REPLACE INTO mute(who,until) VALUES(?,?)',String(m.who),Date.now()+(+m.mins||1440)*60000); return J({ok:true}); }
       if(m.op==='kick'&&m.name){ const nm=String(m.name).toLowerCase(), mins=+m.mins||30; let n=0;
         for(const ws of this.ctx.getWebSockets()){ const b=ws.deserializeAttachment(); if(b&&String(b.name||'').toLowerCase()===nm){ n++; this.sql.exec('INSERT OR REPLACE INTO mute(who,until) VALUES(?,?)',b.who,Date.now()+mins*60000); try{ ws.send(JSON.stringify({t:'kicked',mins})); }catch(e){} try{ ws.close(4001,'kicked'); }catch(e){} } }
         return J({ok:true,kicked:n}); }
-      if(m.op==='who') return J({who:this.socks().map(ws=>{ const a=ws.deserializeAttachment(); return {name:a.name,game:a.game}; })});
+      if(m.op==='ban'){ const nm=String(m.name||'').toLowerCase(), perm=!!m.perm, until=perm?0:Date.now()+(+m.mins||1440)*60000; let n=0;
+        if(nm) this.sql.exec('INSERT OR REPLACE INTO ban(nm,until) VALUES(?,?)',nm,until);
+        for(const ws of this.ctx.getWebSockets()){ const b=ws.deserializeAttachment(); if(b&&((nm&&String(b.name||'').toLowerCase()===nm)||(m.pubid&&pubId(b.who)===m.pubid))){ n++; if(m.pubid&&pubId(b.who)===m.pubid) this.sql.exec('INSERT OR REPLACE INTO ban(nm,until) VALUES(?,?)','pid:'+b.who,until); try{ ws.send(JSON.stringify({t:'kicked',perm,mins:perm?0:Math.ceil((until-Date.now())/60000)})); }catch(e){} try{ ws.close(4003,'banned'); }catch(e){} } }
+        return J({ok:true,banned:n}); }
+      if(m.op==='unban'&&m.name){ this.sql.exec('DELETE FROM ban WHERE nm=?',String(m.name).toLowerCase()); return J({ok:true}); }
+      if(m.op==='bans') return J({bans:this.sql.exec('SELECT nm,until FROM ban').toArray()});
+      if(m.op==='tag'){ const nm=String(m.name||'').toLowerCase(), tg=String(m.tag||'').replace(/[^\w \-!★+]/g,'').slice(0,18); if(!nm) return J({err:'bad'},400); if(tg) this.sql.exec('INSERT OR REPLACE INTO tag(nm,tag) VALUES(?,?)',nm,tg); else this.sql.exec('DELETE FROM tag WHERE nm=?',nm); this.who(); return J({ok:true}); }
+      if(m.op==='tags') return J({tags:this.sql.exec('SELECT nm,tag FROM tag').toArray()});
+      if(m.op==='grant'){ const pub=String(m.pubid||'').slice(0,12), lvl=m.lvl==='full'?'full':'mod', nm=String(m.name||'').slice(0,24); if(!pub) return J({err:'bad'},400); this.sql.exec('INSERT OR REPLACE INTO grnt(pubid,lvl,name,ts) VALUES(?,?,?,?)',pub,lvl,nm,Date.now()); for(const ws of this.socksByPub(pub)) this.send(ws,{t:'role',lvl}); return J({ok:true}); }
+      if(m.op==='ungrant'&&m.pubid){ this.sql.exec('DELETE FROM grnt WHERE pubid=?',String(m.pubid)); for(const ws of this.socksByPub(String(m.pubid))) this.send(ws,{t:'role',lvl:null}); return J({ok:true}); }
+      if(m.op==='grants') return J({grants:this.sql.exec('SELECT pubid,lvl,name,ts FROM grnt ORDER BY ts DESC').toArray()});
+      if(m.op==='who'){ const seen=new Set(), out=[]; for(const ws of this.socks()){ const a=ws.deserializeAttachment(); if(seen.has(a.who)) continue; seen.add(a.who); out.push({name:a.name,game:a.game,id:pubId(a.who),tag:this.tagOf(a.name)}); } return J({who:out}); }
+      if(m.op==='recent'){ const rows=this.sql.exec('SELECT name FROM m WHERE hid=0 ORDER BY id DESC LIMIT 300').toArray(); const seen=new Set(), out=[]; for(const r of rows){ const k=r.name.toLowerCase(); if(seen.has(k)) continue; seen.add(k); out.push({name:r.name,tag:this.tagOf(r.name),banned:!!this.isBanned(r.name)}); if(out.length>=40) break; } return J({recent:out}); }
       if(m.op==='clear'){ this.sql.exec('UPDATE m SET hid=1'); this.all({t:'clear'}); return J({ok:true}); }
       return J({err:'op'},400); }
     if(req.headers.get('Upgrade')!=='websocket') return new Response('Expected a WebSocket',{status:426});
@@ -169,10 +198,21 @@ export class Chat {
     return new Response(null,{status:101,webSocket:client}); }
   async webSocketMessage(ws,raw){ if(typeof raw!=='string'||raw.length>1500) return; let m; try{ m=JSON.parse(raw); }catch(e){ return; }
     let a=ws.deserializeAttachment();
-    if(m.t==='hello'){ const who=String(m.pid||'').replace(/[^a-z0-9]/gi,'').slice(0,24)||crypto.randomUUID().slice(0,12); a={name:cleanName(m.name),game:String(m.game||'home').replace(/[^a-z0-9]/g,'').slice(0,16)||'home',who,ts:[],last:''}; ws.serializeAttachment(a); this.count(); return; }
+    if(m.t==='hello'){ const who=String(m.pid||'').replace(/[^a-z0-9]/gi,'').slice(0,24)||crypto.randomUUID().slice(0,12); const nm=cleanName(m.name);
+      const b=this.isBanned(nm,who); if(b){ this.send(ws,{t:'kicked',perm:b.until===0,mins:b.until===0?0:Math.ceil((b.until-Date.now())/60000)}); try{ ws.close(4003,'banned'); }catch(e){} return; }
+      a={name:nm,game:String(m.game||'home').replace(/[^a-z0-9]/g,'').slice(0,16)||'home',who,ts:[],last:''}; ws.serializeAttachment(a);
+      const g=this.grantOf(pubId(who)); if(g) this.send(ws,{t:'role',lvl:g}); this.count(); return; }
     if(!a) return;
     if(m.t==='where'){ a.game=String(m.game||'home').replace(/[^a-z0-9]/g,'').slice(0,16)||'home'; ws.serializeAttachment(a); this.who(); return; }
-    /* invite one person into your online room: only a room code and a game travel, nothing else */
+    if(m.t==='dm'){ const now=Date.now(), to=String(m.to||'').slice(0,12); if(!to) return;
+      const mu=this.sql.exec('SELECT until FROM mute WHERE who=?',a.who).toArray()[0]; if(mu&&mu.until>now){ this.send(ws,{t:'sys',text:`You are muted for ${Math.ceil((mu.until-now)/60000)} more minutes.`}); return; }
+      let text=String(m.text||'').replace(/[\u0000-\u001f​-‏‪-‮]/g,'').replace(/\s+/g,' ').trim().slice(0,300); if(!text) return;
+      a.ts=(a.ts||[]).filter(t=>now-t<10000); if(a.ts.length>=12){ this.send(ws,{t:'sys',text:'Slow down a moment.'}); return; }
+      if(PERSONAL.test(text)){ this.send(ws,{t:'sys',text:"For your safety, don't share phone numbers, emails, addresses or ages."}); return; }
+      for(const r of CHAT_BAD){ r.lastIndex=0; text=text.replace(r,w=>'*'.repeat(w.length)); }
+      a.ts.push(now); ws.serializeAttachment(a); const mine=pubId(a.who), tg=this.tagOf(a.name);
+      const tgts=this.socksByPub(to); for(const s of tgts) this.send(s,{t:'dm',from:mine,fromName:a.name,tag:tg,text,ts:now});
+      this.send(ws,{t:'dm',from:mine,to,toName:tgts[0]?tgts[0].deserializeAttachment().name:null,self:true,text,ts:now,delivered:tgts.length>0}); return; }
     if(m.t==='invite'){ const now=Date.now(), to=String(m.to||'').slice(0,12), room=String(m.room||'').toUpperCase(), game=String(m.game||'').toLowerCase().replace(/[^a-z0-9-]/g,'').slice(0,16);
       if(!to||!/^[A-Z0-9]{4,8}$/.test(room)||!game) return;
       const mu=this.sql.exec('SELECT until FROM mute WHERE who=?',a.who).toArray()[0]; if(mu&&mu.until>now){ this.send(ws,{t:'sys',text:'You are muted, so you cannot send invites right now.'}); return; }
@@ -182,7 +222,7 @@ export class Chat {
       a.inv.push(now); ws.serializeAttachment(a); const tn=targets[0].deserializeAttachment().name;
       for(const s of targets) this.send(s,{t:'invite',from:a.name,game,room});
       this.send(ws,{t:'invsent',ok:true,to,name:tn}); return; }
-    if(m.t==='name'){ a.name=cleanName(m.name); ws.serializeAttachment(a); this.send(ws,{t:'you',name:a.name}); this.who(); return; }
+    if(m.t==='name'){ const nm=cleanName(m.name); if(this.isBanned(nm,a.who)){ this.send(ws,{t:'kicked',perm:true}); try{ ws.close(4003,'banned'); }catch(e){} return; } a.name=nm; ws.serializeAttachment(a); this.send(ws,{t:'you',name:a.name}); this.who(); return; }
     if(m.t==='ping'){ this.send(ws,{t:'pong'}); return; }
     if(m.t==='report'){ const id=+m.id; if(!id) return; this.sql.exec('INSERT OR IGNORE INTO r(mid,who) VALUES(?,?)',id,a.who); const c=this.sql.exec('SELECT COUNT(*) AS c FROM r WHERE mid=?',id).toArray()[0].c;
       if(c>=3){ const row=this.sql.exec('SELECT who FROM m WHERE id=?',id).toArray()[0]; this.sql.exec('UPDATE m SET hid=1 WHERE id=?',id); this.all({t:'del',id}); if(row){ const n=this.sql.exec('SELECT COUNT(*) AS c FROM m WHERE who=? AND hid=1 AND ts>?',row.who,Date.now()-86400000).toArray()[0].c; if(n>=2) this.sql.exec('INSERT OR REPLACE INTO mute(who,until) VALUES(?,?)',row.who,Date.now()+3600000*(n>=4?24:1)); } }
@@ -199,7 +239,7 @@ export class Chat {
       a.ts.push(now); a.last=text.toLowerCase(); ws.serializeAttachment(a);
       this.sql.exec('INSERT INTO m(ts,name,text,game,who) VALUES(?,?,?,?,?)',now,a.name,text,a.game,a.who);
       const id=this.sql.exec('SELECT last_insert_rowid() AS id').toArray()[0].id; this.sql.exec('DELETE FROM m WHERE id<?',id-600);
-      this.all({t:'msg',m:{id,ts:now,name:a.name,text,game:a.game}}); return; } }
+      this.all({t:'msg',m:{id,ts:now,name:a.name,text,game:a.game,tag:this.tagOf(a.name)}}); return; } }
   async webSocketClose(ws){ try{ ws.serializeAttachment(null); ws.close(); }catch(e){} this.count(); }
   async webSocketError(ws){ return this.webSocketClose(ws); }
 }
@@ -214,7 +254,9 @@ export class Site {
     const url=new URL(req.url);
     if(url.pathname==='/site'){ const st=await this.state(); return new Response(JSON.stringify(st),{headers:{...CORS,'content-type':'application/json','cache-control':'public,max-age=15'}}); }
     if(url.pathname==='/admin'){ let m={}; try{ m=await req.json(); }catch(e){}
-      if(m.op==='get') return J(await this.state());
+      const role=req.headers.get('x-admin-role')||'full', full=role==='full';
+      if(m.op==='get') return J({...await this.state(),role});
+      if(!full) return J({err:'forbidden'},403);
       if(m.op==='ann'){ const title=String(m.title||'').slice(0,120), body=String(m.body||'').slice(0,2000); if(!title&&!body) return J({err:'empty'},400);
         await this.s.put('ann',{id:Date.now().toString(36),title,body,ts:Date.now()}); return J({ok:true}); }
       if(m.op==='annClear'){ await this.s.delete('ann'); return J({ok:true}); }
