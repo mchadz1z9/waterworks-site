@@ -24,14 +24,23 @@
     d.innerHTML=`<div class="rra-card"><button class="rra-x" aria-label="Close">×</button>
       <div class="rra-cover" style="background:${cv.grad}"><span class="rra-ico">${esc(cv.icon)}</span><span class="rra-tag">Rink Rivals update</span></div>
       ${ann.title?`<h2>${esc(ann.title)}</h2>`:''}<div class="rra-body">${esc(ann.body||'').replace(/\n/g,'<br>')}</div>
-      <button class="rra-go">Let's play ▸</button></div>`;
+      <button class="rra-go">${esc(ann.btn||"Let's play ▸")}</button></div>`;
     const close=()=>{ ls.set('rrAnnSeen',ann.id); d.remove(); };
-    d.querySelector('.rra-x').onclick=close; d.querySelector('.rra-go').onclick=close;
+    const go=()=>{ if(ann.link){ try{ window.open(ann.link,'_blank','noopener'); }catch(e){} } close(); };
+    d.querySelector('.rra-x').onclick=close; d.querySelector('.rra-go').onclick=go;
     d.addEventListener('keydown',e=>{ if(e.key==='Escape') close(); });
     (document.body||document.documentElement).appendChild(d); setTimeout(()=>{ const g=d.querySelector('.rra-go'); g&&g.focus(); },30);
   }
 
-  function apply(st){ if(!st) return; if('ov' in st) cacheOv(st.ov); try{ ls.set('rrSiteAt',String(Date.now())); }catch(e){} if(st.ann) showAnn(st.ann); }
+  /* a slim dismissible banner across the top of every page, set from /admin */
+  function showBanner(s){ if(PAGE==='admin') return; const ex=document.getElementById('rrBanner'); if(ex) ex.remove();
+    if(!s||!s.bannerOn||!s.banner||!s.banner.text) return; const bid=s.bannerId||'b'; if(ls.get('rrBannerSeen')===bid) return;
+    const th=THEMES[s.banner.theme]||THEMES.blue; const d=document.createElement('div'); d.id='rrBanner';
+    d.style.background=`linear-gradient(90deg,${th[0]},${th[1]})`;
+    d.innerHTML=`<span>${esc(s.banner.text)}</span><button aria-label="Dismiss">×</button>`;
+    d.querySelector('button').onclick=()=>{ ls.set('rrBannerSeen',bid); d.remove(); };
+    (document.body||document.documentElement).appendChild(d); }
+  function apply(st){ if(!st) return; if('ov' in st) cacheOv(st.ov); try{ ls.set('rrSiteAt',String(Date.now())); }catch(e){} if(st.ann) showAnn(st.ann); if(st.settings) showBanner(st.settings); }
 
   const css=document.createElement('style'); css.textContent=`#rrAnn{position:fixed;inset:0;z-index:100000;display:flex;align-items:center;justify-content:center;padding:18px;background:rgba(3,6,14,.82);backdrop-filter:blur(3px);font-family:'DM Sans',system-ui,sans-serif;animation:rraIn .25s ease}
 @keyframes rraIn{from{opacity:0}to{opacity:1}}
@@ -46,7 +55,10 @@
 .rra-go:hover{background:#16a34a}
 .rra-x{position:absolute;top:12px;right:14px;width:40px;height:40px;border-radius:12px;border:0;background:rgba(255,255,255,.1);color:#fff;font-size:26px;line-height:1;cursor:pointer}
 .rra-x:hover{background:rgba(255,255,255,.22)}
-@media(max-width:560px){.rra-card h2{font-size:26px}.rra-body{font-size:17px}}`;
+@media(max-width:560px){.rra-card h2{font-size:26px}.rra-body{font-size:17px}}
+#rrBanner{position:fixed;top:0;left:0;right:0;z-index:99998;display:flex;align-items:center;justify-content:center;gap:10px;padding:8px 44px 8px 16px;color:#fff;font:700 15px 'DM Sans',system-ui,sans-serif;text-align:center;box-shadow:0 2px 10px rgba(0,0,0,.35)}
+#rrBanner span{word-break:break-word}
+#rrBanner button{position:absolute;right:8px;top:50%;transform:translateY(-50%);width:28px;height:28px;border:0;border-radius:8px;background:rgba(0,0,0,.25);color:#fff;font-size:18px;line-height:1;cursor:pointer}`;
   (document.head||document.documentElement).appendChild(css);
 
   const RRSITE={ show:showAnn, applied:null,

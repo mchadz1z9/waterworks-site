@@ -35,6 +35,10 @@ h3.sec{margin:16px 0 4px;font-size:15px;color:var(--mut);text-transform:uppercas
 .kchip{padding:5px 11px;border-radius:999px;border:1px solid var(--line);background:#0b1120;color:var(--mut);font:700 13px system-ui;cursor:pointer}
 .kchip.on{background:var(--acc2);color:#fff;border-color:var(--acc2)}
 .krow #kCustom{flex:0 0 76px;min-width:0;width:76px;padding:6px 9px}
+.ovgrid{display:grid;grid-template-columns:repeat(auto-fill,minmax(130px,1fr));gap:10px}
+.ovt{background:#0b1120;border:1px solid var(--line);border-radius:12px;padding:12px 14px}
+.ovt b{display:block;font-size:26px;line-height:1.1}
+.ovt span{color:var(--mut);font-size:12px;text-transform:uppercase;letter-spacing:.04em}
 </style></head><body>
 <div class="wrap">
 <div id="login" class="card">
@@ -49,6 +53,18 @@ h3.sec{margin:16px 0 4px;font-size:15px;color:var(--mut);text-transform:uppercas
   <h1>Rink Rivals Admin</h1>
   <p class="sub"><span id="roleNote"></span> <a href="#" id="logout">Sign out</a></p>
 
+  <div class="card">
+    <h2>📊 Overview</h2>
+    <div class="ovgrid" id="ovGrid">
+      <div class="ovt"><b id="ovOnline">—</b><span>Online now</span></div>
+      <div class="ovt"><b id="ovRecent">—</b><span>Recent chatters</span></div>
+      <div class="ovt"><b id="ovBanned">—</b><span>Banned</span></div>
+      <div class="ovt"><b id="ovTags">—</b><span>Tags</span></div>
+      <div class="ovt"><b id="ovAdmins">—</b><span>Admins / mods</span></div>
+      <div class="ovt"><b id="ovChat">—</b><span>Chat status</span></div>
+    </div>
+  </div>
+
   <div class="card full">
     <h2>📣 Full-screen update announcement</h2>
     <p class="mut">Everyone sees this cover their screen the next time they open the site. They close it with X; it shows once per update.</p>
@@ -58,6 +74,10 @@ h3.sec{margin:16px 0 4px;font-size:15px;color:var(--mut);text-transform:uppercas
     <div class="row">
       <div style="flex:0 0 130px"><label>Cover icon</label><input id="annIcon" maxlength="6" placeholder="auto"></div>
       <div><label>Cover colour</label><select id="annTheme"></select></div>
+    </div>
+    <div class="row">
+      <div><label>Button text <span class="mut">(optional)</span></label><input id="annBtn" maxlength="40" placeholder="Let's play ▸"></div>
+      <div><label>Button link <span class="mut">(optional, opens a page)</span></label><input id="annLink" maxlength="300" placeholder="https://…"></div>
     </div>
     <div class="row" style="margin-top:12px">
       <button id="annPost" class="go">Post update (show to everyone)</button>
@@ -95,6 +115,33 @@ h3.sec{margin:16px 0 4px;font-size:15px;color:var(--mut);text-transform:uppercas
     <div class="list" id="eList"></div>
   </div>
 
+  <div class="card full">
+    <h2>🎛️ Site settings</h2>
+    <p class="mut">A slim banner across the top of every page (separate from the full-screen update). Great for a heads-up, event, or quick notice.</p>
+    <label>Banner text</label><input id="bnText" maxlength="160" placeholder="e.g. 🏆 Weekend tournament — jump into any game to join!">
+    <div class="row">
+      <div style="flex:0 0 200px"><label>Banner colour</label><select id="bnTheme"></select></div>
+      <div style="display:flex;align-items:flex-end;gap:8px">
+        <button id="bnShow" class="go" style="flex:0 0 auto">Show banner</button>
+        <button id="bnClear" class="del" style="flex:0 0 auto">Turn off</button>
+      </div>
+    </div>
+    <div class="msg" id="bnMsg"></div>
+  </div>
+
+  <div class="card full">
+    <h2>📡 Broadcast &amp; chat control</h2>
+    <p class="mut">Send a message straight into the live chat for everyone, or lock chat so only admins can post.</p>
+    <label>Broadcast a message to everyone in chat</label>
+    <div class="row"><input id="bcText" maxlength="300" placeholder="Type an announcement for the chat…"><button id="bcSend" class="go" style="flex:0 0 auto">Send to chat</button></div>
+    <div class="row" style="margin-top:10px">
+      <button id="lockBtn" class="warn" style="flex:0 0 auto">🔒 Lock chat</button>
+      <button id="clearChatBtn" class="del" style="flex:0 0 auto">🧹 Clear all chat</button>
+      <span class="mut" id="lockState" style="align-self:center"></span>
+    </div>
+    <div class="msg" id="bcMsg"></div>
+  </div>
+
   <div class="card">
     <h2>👥 Users &amp; moderation</h2>
     <p class="mut">Click a player below — kick or ban them, give them a tag, or (full admin) grant them admin access. No typing needed.</p>
@@ -102,6 +149,7 @@ h3.sec{margin:16px 0 4px;font-size:15px;color:var(--mut);text-transform:uppercas
     <div class="row" style="margin:8px 0 6px"><button id="uRefresh" class="ghost" style="flex:0 0 auto">↻ Refresh</button></div>
     <h3 class="sec">Online now</h3><div id="whoList" class="list"><span class="mut">Loading…</span></div>
     <h3 class="sec">Recently in chat</h3><div id="recentList" class="list"><span class="mut">Loading…</span></div>
+    <h3 class="sec">Muted (online)</h3><div id="muteList" class="list"></div>
     <h3 class="sec">Banned</h3><div id="banList" class="list"></div>
     <h3 class="sec">Tags</h3><div id="tagList" class="list"></div>
     <div class="full"><h3 class="sec">Admin access granted to</h3><div id="grantList" class="list"></div></div>
@@ -130,7 +178,7 @@ function showApp(st){ ROLE=st.role||'full'; $('login').classList.add('hide'); $(
   const full=ROLE==='full'; document.querySelectorAll('.full').forEach(el=>el.style.display=full?'':'none');
   try{ if(full) localStorage.setItem('rrOwner','1'); }catch(e){}
   $('roleNote').textContent=full?'Signed in as full admin — changes go live for everyone.':'Signed in as moderator — you can kick, ban and tag.';
-  if(full){ initAnn(); initEditor(); renderAnn(st.ann); renderEdits(st.ov); } loadUsers(); }
+  if(full){ initAnn(); initEditor(); initSettings(); renderAnn(st.ann); renderEdits(st.ov); renderSettings(st.settings); } loadUsers(); loadStats(); }
 
 /* ---- announcement ---- */
 const THEMES={blue:['#1e3a8a','#0ea5e9'],green:['#065f46','#22c55e'],purple:['#4c1d95','#a855f7'],red:['#7f1d1d','#ef4444'],orange:['#7c2d12','#f59e0b'],pink:['#831843','#ec4899'],teal:['#134e4a','#14b8a6'],gold:['#78350f','#fbbf24']};
@@ -153,8 +201,8 @@ function polishText(t,isTitle){ if(!t) return t; t=t.replace(/[ \t]+/g,' ').repl
 function hashStr(x){ let h=0; for(let i=0;i<x.length;i++) h=(h*31+x.charCodeAt(i))>>>0; return h; }
 function coverOf(){ const tk=Object.keys(THEMES), th=THEMES[$('annTheme').value]||THEMES[tk[hashStr($('annTitle').value||'x')%tk.length]]; return {grad:`linear-gradient(135deg,${th[0]},${th[1]})`,icon:$('annIcon').value||'📣'}; }
 $('annPolish').onclick=()=>{ $('annTitle').value=polishText($('annTitle').value,true); $('annBody').value=polishText($('annBody').value,false); setMsg('annMsg','Cleaned up the wording. Review it, then post.',1); };
-function renderAnn(ann){ $('annNow').innerHTML=ann?`Currently showing: <b>${esc(ann.title||'(no title)')}</b> — posted ${new Date(ann.ts).toLocaleString()}`:'No announcement is active.'; if(ann){ if(!$('annTitle').value) $('annTitle').value=ann.title||''; if(!$('annBody').value) $('annBody').value=ann.body||''; if(!$('annIcon').value&&ann.icon) $('annIcon').value=ann.icon; if(ann.theme) $('annTheme').value=ann.theme; } }
-$('annPost').onclick=async()=>{ const title=$('annTitle').value.trim(), body=$('annBody').value.trim(); if(!title&&!body){ setMsg('annMsg','Type a title or message first.',0); return; } setMsg('annMsg','Posting…'); try{ await api('/admin/site','ann',{title,body,icon:$('annIcon').value.trim(),theme:$('annTheme').value}); setMsg('annMsg','Posted — everyone will see it.',1); refreshState(); }catch(e){ setMsg('annMsg','Failed.',0); } };
+function renderAnn(ann){ $('annNow').innerHTML=ann?`Currently showing: <b>${esc(ann.title||'(no title)')}</b> — posted ${new Date(ann.ts).toLocaleString()}`:'No announcement is active.'; if(ann){ if(!$('annTitle').value) $('annTitle').value=ann.title||''; if(!$('annBody').value) $('annBody').value=ann.body||''; if(!$('annIcon').value&&ann.icon) $('annIcon').value=ann.icon; if(ann.theme) $('annTheme').value=ann.theme; if(!$('annBtn').value&&ann.btn) $('annBtn').value=ann.btn; if(!$('annLink').value&&ann.link) $('annLink').value=ann.link; } }
+$('annPost').onclick=async()=>{ const title=$('annTitle').value.trim(), body=$('annBody').value.trim(); if(!title&&!body){ setMsg('annMsg','Type a title or message first.',0); return; } setMsg('annMsg','Posting…'); try{ await api('/admin/site','ann',{title,body,icon:$('annIcon').value.trim(),theme:$('annTheme').value,btn:$('annBtn').value.trim(),link:$('annLink').value.trim()}); setMsg('annMsg','Posted — everyone will see it.',1); refreshState(); }catch(e){ setMsg('annMsg','Failed.',0); } };
 $('annClear').onclick=async()=>{ if(!confirm('Clear the current announcement?')) return; await api('/admin/site','annClear'); $('annTitle').value='';$('annBody').value=''; setMsg('annMsg','Cleared.',1); refreshState(); };
 $('annPreview').onclick=()=>previewAnn($('annTitle').value.trim(),$('annBody').value.trim());
 function previewAnn(title,body){ const cv=coverOf(); const d=document.createElement('div'); d.style.cssText='position:fixed;inset:0;z-index:99;display:flex;align-items:center;justify-content:center;padding:18px;background:rgba(3,6,14,.82)'; d.innerHTML=`<div style="position:relative;width:min(640px,96vw);overflow:hidden;background:linear-gradient(160deg,#182446,#0c1227);border:2px solid #3b4e86;border-radius:22px;padding:0 30px 26px;text-align:center"><div style="margin:0 -30px 14px;padding:26px 20px 18px;background:${cv.grad};box-shadow:inset 0 -30px 50px rgba(0,0,0,.25)"><div style="font-size:64px">${esc(cv.icon)}</div><div style="margin-top:8px;font-weight:800;letter-spacing:.1em;text-transform:uppercase;color:#fff;font-size:14px">Rink Rivals update</div></div>${title?`<h2 style="margin:4px 0 12px;font-size:32px">${esc(title)}</h2>`:''}<div style="font-size:19px;color:#cdd6ec;white-space:pre-wrap">${esc(body)}</div><button style="margin-top:22px;background:#22c55e;color:#052e16;border:0;border-radius:14px;padding:13px 30px;font:800 18px system-ui;cursor:pointer">Let's play ▸</button></div>`; d.onclick=()=>d.remove(); document.body.appendChild(d); }
@@ -182,13 +230,15 @@ function renderKick(){ $('kChips').innerHTML=KPRE.map(m=>`<button class="kchip${
   $('kNow').textContent='Kicks last '+fmtDur(kickMins)+'.'; }
 $('kCustom').oninput=()=>{ if($('kCustom').value.trim()==='') return; const v=Math.max(1,Math.round(+$('kCustom').value||1)); kickMins=v; $('kChips').querySelectorAll('[data-km]').forEach(b=>b.classList.toggle('on',+b.dataset.km===v)); $('kNow').textContent='Kicks last '+fmtDur(kickMins)+'.'; renderAll(); };
 $('uRefresh').onclick=loadUsers;
-let LAST={who:[],recent:[],bans:[],tags:[],grants:[]};
-function renderAll(){ renderWho(LAST.who); renderRecent(LAST.recent); renderBans(LAST.bans); renderTags(LAST.tags); renderGrants(LAST.grants); }
-async function loadUsers(){ renderKick(); try{ const [who,recent,bans,tags,grants]=await Promise.all([api('/admin/chat','who'),api('/admin/chat','recent'),api('/admin/chat','bans'),api('/admin/chat','tags'),ROLE==='full'?api('/admin/chat','grants'):Promise.resolve({grants:[]})]);
-  LAST={who:who.who||[],recent:recent.recent||[],bans:bans.bans||[],tags:tags.tags||[],grants:grants.grants||[]}; renderAll(); }catch(e){ setMsg('uMsg','Could not load users.',0); } }
+let LAST={who:[],recent:[],muted:[],bans:[],tags:[],grants:[]};
+function renderAll(){ renderWho(LAST.who); renderRecent(LAST.recent); renderMuted(LAST.muted); renderBans(LAST.bans); renderTags(LAST.tags); renderGrants(LAST.grants); }
+async function loadUsers(){ renderKick(); try{ const [who,recent,muted,bans,tags,grants]=await Promise.all([api('/admin/chat','who'),api('/admin/chat','recent'),api('/admin/chat','muted'),api('/admin/chat','bans'),api('/admin/chat','tags'),ROLE==='full'?api('/admin/chat','grants'):Promise.resolve({grants:[]})]);
+  LAST={who:who.who||[],recent:recent.recent||[],muted:muted.muted||[],bans:bans.bans||[],tags:tags.tags||[],grants:grants.grants||[]}; renderAll(); }catch(e){ setMsg('uMsg','Could not load users.',0); } loadStats(); }
+function renderMuted(list){ const el=$('muteList'); if(!el) return; list=list||[]; if(!list.length){ el.innerHTML='<span class="mut">No one is muted.</span>'; return; }
+  el.innerHTML=list.map(u=>`<div class="urow"><span class="nm">${esc(u.name)} <span class="pill">${u.mins} min left</span></span>${actBtns([{l:'Unmute',cls:'go',d:{k:'unmute',name:u.name}}])}</div>`).join(''); wireActs(el); }
 function actBtns(acts){ return `<span class="acts">${acts.map(a=>`<button class="sm ${a.cls||''}" data-act='${esc(JSON.stringify(a.d))}'>${a.l}</button>`).join('')}</span>`; }
 function wireActs(container){ container.querySelectorAll('[data-act]').forEach(b=>b.onclick=()=>doAct(JSON.parse(b.dataset.act))); }
-function allActs(u){ const a=[{l:'Kick '+fmtDur(kickMins),cls:'warn',d:{k:'kick',name:u.name}},{l:'Tag',cls:'ghost',d:{k:'tag',name:u.name}}];
+function allActs(u){ const a=[{l:'Kick '+fmtDur(kickMins),cls:'warn',d:{k:'kick',name:u.name}},{l:'Mute '+fmtDur(kickMins),cls:'ghost',d:{k:'mute',name:u.name}},{l:'Tag',cls:'ghost',d:{k:'tag',name:u.name}}];
   a.push(u.banned?{l:'Unban',cls:'go',d:{k:'unban',name:u.name}}:{l:'Ban',cls:'del',d:{k:'ban',name:u.name,pubid:u.id}});
   if(ROLE==='full'){ a.push({l:'Make mod',d:{k:'grant',pubid:u.id,name:u.name,lvl:'mod'}},{l:'Make admin',cls:'go',d:{k:'grant',pubid:u.id,name:u.name,lvl:'full'}}); }
   return actBtns(a); }
@@ -205,6 +255,8 @@ function renderGrants(list){ const el=$('grantList'); if(!el) return; if(!list.l
 async function doAct(a){ try{
   if(a.k==='kick'){ const mins=kickMins; if(!confirm('Kick '+a.name+' for '+fmtDur(mins)+'?')) return; const r=await api('/admin/chat','kick',{name:a.name,mins}); setMsg('uMsg',r.kicked?`Kicked ${a.name} for ${fmtDur(mins)}.`:`${a.name} isn't online.`,1); }
   else if(a.k==='ban'){ if(!confirm('Permanently ban '+a.name+'? (You can unban later.)')) return; await api('/admin/chat','ban',{name:a.name,pubid:a.pubid,perm:true}); setMsg('uMsg',`Banned ${a.name}.`,1); }
+  else if(a.k==='mute'){ const mins=kickMins; if(!confirm('Mute '+a.name+' for '+fmtDur(mins)+'? They stay in chat but can\'t post.')) return; const r=await api('/admin/chat','smute',{name:a.name,mins}); setMsg('uMsg',r.muted?`Muted ${a.name} for ${fmtDur(mins)}.`:`${a.name} isn't online.`,1); }
+  else if(a.k==='unmute'){ const r=await api('/admin/chat','unmute',{name:a.name}); setMsg('uMsg',r.unmuted?`Unmuted ${a.name}.`:`${a.name} isn't online.`,1); }
   else if(a.k==='unban'){ await api('/admin/chat','unban',{name:a.name}); setMsg('uMsg',`Unbanned.`,1); }
   else if(a.k==='tag'){ let tag=''; if(!a.clear){ tag=prompt('Tag for '+a.name+' (e.g. Professional, VIP, PRO, MOD, OWNER). Blank removes it:','Professional'); if(tag===null) return; } await api('/admin/chat','tag',{name:a.name,tag}); setMsg('uMsg',a.clear||!tag?`Tag removed.`:`Tagged ${a.name} [${tag}].`,1); }
   else if(a.k==='grant'){ if(!a.pubid){ setMsg('uMsg','To make someone an admin or mod, do it from the \'Online now\' list while they are online.',0); return; } if(!confirm(`Give ${a.name} ${a.lvl==='full'?'FULL admin':'moderator'} access? They'll be able to open /admin on their device without the password.`)) return; await api('/admin/chat','grant',{pubid:a.pubid,lvl:a.lvl,name:a.name}); setMsg('uMsg',`${a.name} is now ${a.lvl==='full'?'a full admin':'a moderator'}.`,1); }
@@ -213,7 +265,26 @@ async function doAct(a){ try{
 }catch(e){ setMsg('uMsg', e.message==='forbidden'?'Not allowed at your access level.':'Action failed.',0); } }
 
 function setMsg(id,t,ok){ const e=$(id); e.textContent=t; e.className='msg'+(ok===1?' ok':ok===0?' err':''); }
-async function refreshState(){ try{ const st=await api('/admin/site','get'); renderAnn(st.ann); renderEdits(st.ov); }catch(e){} }
+async function refreshState(){ try{ const st=await api('/admin/site','get'); renderAnn(st.ann); renderEdits(st.ov); renderSettings(st.settings); }catch(e){} }
+
+/* ---- site settings: the top banner ---- */
+function initSettings(){ const t=$('bnTheme'); if(t) t.innerHTML=Object.keys(THEMES).map(k=>`<option value="${k}">${k[0].toUpperCase()+k.slice(1)}</option>`).join('');
+  const sh=$('bnShow'); if(sh) sh.onclick=async()=>{ const text=$('bnText').value.trim(); if(!text){ setMsg('bnMsg','Type the banner text first.',0); return; } setMsg('bnMsg','Saving…'); try{ await api('/admin/site','settings',{patch:{bannerOn:true,banner:{text,theme:$('bnTheme').value}}}); setMsg('bnMsg','Banner is live across the site.',1); }catch(e){ setMsg('bnMsg','Failed.',0); } };
+  const cl=$('bnClear'); if(cl) cl.onclick=async()=>{ setMsg('bnMsg','Turning off…'); try{ await api('/admin/site','settings',{patch:{bannerOn:false}}); setMsg('bnMsg','Banner turned off.',1); }catch(e){ setMsg('bnMsg','Failed.',0); } }; }
+function renderSettings(s){ s=s||{}; if(s.banner&&!$('bnText').value) $('bnText').value=s.banner.text||''; if(s.banner&&s.banner.theme) $('bnTheme').value=s.banner.theme; }
+
+/* ---- overview stats + chat lock state ---- */
+let chatLocked=false;
+async function loadStats(){ try{ const s=await api('/admin/chat','stats');
+  $('ovOnline').textContent=s.online??'—'; $('ovBanned').textContent=s.bans??'—'; $('ovTags').textContent=s.tags??'—'; $('ovAdmins').textContent=s.admins??'—';
+  $('ovRecent').textContent=(LAST.recent||[]).length; $('ovChat').textContent=s.locked?'🔒 Locked':'🔓 Open';
+  chatLocked=!!s.locked; const lb=$('lockBtn'); if(lb){ lb.textContent=chatLocked?'🔓 Unlock chat':'🔒 Lock chat'; } const ls2=$('lockState'); if(ls2) ls2.textContent=chatLocked?'Chat is locked — only admins can post.':'Chat is open to everyone.';
+  }catch(e){} }
+
+/* ---- broadcast + chat control ---- */
+(function wireBroadcast(){ const bs=$('bcSend'); if(bs) bs.onclick=async()=>{ const text=$('bcText').value.trim(); if(!text){ setMsg('bcMsg','Type a message first.',0); return; } setMsg('bcMsg','Sending…'); try{ await api('/admin/chat','broadcast',{text}); $('bcText').value=''; setMsg('bcMsg','Sent to everyone in chat.',1); }catch(e){ setMsg('bcMsg','Failed.',0); } };
+  const lk=$('lockBtn'); if(lk) lk.onclick=async()=>{ try{ await api('/admin/chat','lock',{on:!chatLocked}); setMsg('bcMsg',!chatLocked?'Chat locked.':'Chat unlocked.',1); loadStats(); }catch(e){ setMsg('bcMsg','Failed.',0); } };
+  const cc=$('clearChatBtn'); if(cc) cc.onclick=async()=>{ if(!confirm('Clear ALL chat messages for everyone? This cannot be undone.')) return; try{ await api('/admin/chat','clear'); setMsg('bcMsg','Chat cleared for everyone.',1); }catch(e){ setMsg('bcMsg','Failed.',0); } }; })();
 
 /* auto sign-in: stored password, or this device if it was granted access */
 (async()=>{ if(KEY){ try{ const st=await authGet(); if(st){ showApp(st); return; } KEY=''; sessionStorage.removeItem('rrAdminKey'); }catch(e){} }

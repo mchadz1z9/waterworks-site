@@ -152,7 +152,10 @@ export class Chat {
     this.sql.exec('CREATE TABLE IF NOT EXISTS mute(who TEXT PRIMARY KEY, until INTEGER)');
     this.sql.exec('CREATE TABLE IF NOT EXISTS ban(nm TEXT PRIMARY KEY, until INTEGER)');
     this.sql.exec('CREATE TABLE IF NOT EXISTS tag(nm TEXT PRIMARY KEY, tag TEXT)');
-    this.sql.exec('CREATE TABLE IF NOT EXISTS grnt(pubid TEXT PRIMARY KEY, lvl TEXT, name TEXT, ts INTEGER)'); }
+    this.sql.exec('CREATE TABLE IF NOT EXISTS grnt(pubid TEXT PRIMARY KEY, lvl TEXT, name TEXT, ts INTEGER)');
+    this.sql.exec('CREATE TABLE IF NOT EXISTS cfg(k TEXT PRIMARY KEY, v TEXT)'); }
+  cfgGet(k){ const r=this.sql.exec('SELECT v FROM cfg WHERE k=?',k).toArray()[0]; return r?r.v:null; }
+  cfgSet(k,v){ this.sql.exec('INSERT OR REPLACE INTO cfg(k,v) VALUES(?,?)',k,String(v)); }
   socks(){ return this.ctx.getWebSockets().filter(ws=>ws.deserializeAttachment()); }
   send(ws,o){ try{ ws.send(JSON.stringify(o)); }catch(e){} }
   all(o){ const s=JSON.stringify(o); for(const ws of this.ctx.getWebSockets()) try{ ws.send(s); }catch(e){} }
@@ -170,7 +173,7 @@ export class Chat {
     if(path==='/authpid'){ let m={}; try{ m=await req.json(); }catch(e){} const pid=String(m.pid||'').replace(/[^a-z0-9]/gi,'').slice(0,24); return J({lvl:pid?this.grantOf(pubId(pid)):null}); }
     if(path==='/admin'){ let m={}; try{ m=await req.json(); }catch(e){}
       const role=req.headers.get('x-admin-role')||'full', full=role==='full';
-      const FULLONLY=['grant','ungrant','clear']; if(FULLONLY.includes(m.op)&&!full) return J({err:'forbidden'},403);
+      const FULLONLY=['grant','ungrant','clear','broadcast','lock']; if(FULLONLY.includes(m.op)&&!full) return J({err:'forbidden'},403);
       if(m.op==='list') return J({rows:this.sql.exec('SELECT * FROM m ORDER BY id DESC LIMIT 200').toArray()});
       if(m.op==='del'&&m.id){ this.sql.exec('UPDATE m SET hid=1 WHERE id=?',+m.id); this.all({t:'del',id:+m.id}); return J({ok:true}); }
       if(m.op==='mute'&&m.who){ this.sql.exec('INSERT OR REPLACE INTO mute(who,until) VALUES(?,?)',String(m.who),Date.now()+(+m.mins||1440)*60000); return J({ok:true}); }
@@ -191,6 +194,24 @@ export class Chat {
       if(m.op==='who'){ const seen=new Set(), out=[]; for(const ws of this.socks()){ const a=ws.deserializeAttachment(); if(seen.has(a.who)) continue; seen.add(a.who); out.push({name:a.name,game:a.game,id:pubId(a.who),tag:this.tagOf(a.name)}); } return J({who:out}); }
       if(m.op==='recent'){ const rows=this.sql.exec('SELECT name FROM m WHERE hid=0 ORDER BY id DESC LIMIT 300').toArray(); const seen=new Set(), out=[]; for(const r of rows){ const k=r.name.toLowerCase(); if(seen.has(k)) continue; seen.add(k); out.push({name:r.name,tag:this.tagOf(r.name),banned:!!this.isBanned(r.name)}); if(out.length>=40) break; } return J({recent:out}); }
       if(m.op==='clear'){ this.sql.exec('UPDATE m SET hid=1'); this.all({t:'clear'}); return J({ok:true}); }
+      if(m.op==='broadcast'){ const text=String(m.text||'').replace(/[\u0000-\u001f]/g,' ').replace(/\s+/g,' ').trim().slice(0,300); if(!text) return J({err:'empty'},400);
+        const now=Date.now(); this.sql.exec('INSERT INTO m(ts,name,text,game,who) VALUES(?,?,?,?,?)',now,'📣 Rink Rivals',text,'',' admin');
+        const id=this.sql.exec('SELECT last_insert_rowid() AS id').toArray()[0].id; this.sql.exec('DELETE FROM m WHERE id<?',id-600);
+        this.all({t:'msg',m:{id,ts:now,name:'📣 Rink Rivals',text,game:'',tag:'NEWS'}}); return J({ok:true}); }
+      if(m.op==='smute'&&m.name){ const nm=String(m.name).toLowerCase(), mins=Math.max(1,+m.mins||15); let n=0;
+        for(const ws of this.socks()){ const b=ws.deserializeAttachment(); if(b&&String(b.name||'').toLowerCase()===nm){ n++; this.sql.exec('INSERT OR REPLACE INTO mute(who,until) VALUES(?,?)',b.who,Date.now()+mins*60000); this.send(ws,{t:'sys',text:`You have been muted for ${mins} minute${mins===1?'':'s'} by an admin.`}); } }
+        return J({ok:true,muted:n}); }
+      if(m.op==='unmute'&&m.name){ const nm=String(m.name).toLowerCase(); let n=0;
+        for(const ws of this.socks()){ const b=ws.deserializeAttachment(); if(b&&String(b.name||'').toLowerCase()===nm){ this.sql.exec('DELETE FROM mute WHERE who=?',b.who); this.send(ws,{t:'sys',text:'An admin has unmuted you — you can chat again.'}); n++; } }
+        return J({ok:true,unmuted:n}); }
+      if(m.op==='muted'){ const now=Date.now(), seen=new Set(), out=[]; for(const ws of this.socks()){ const a=ws.deserializeAttachment(); const k=a.name.toLowerCase(); if(seen.has(k)) continue; const r=this.sql.exec('SELECT until FROM mute WHERE who=?',a.who).toArray()[0]; if(r&&r.until>now){ seen.add(k); out.push({name:a.name,mins:Math.ceil((r.until-now)/60000)}); } } return J({muted:out}); }
+      if(m.op==='lock'){ const on=!!m.on; this.cfgSet('locked',on?'1':'0'); this.all({t:'sys',text:on?'🔒 Chat has been locked by an admin.':'🔓 Chat is open again.'}); return J({ok:true,locked:on}); }
+      if(m.op==='lockstatus') return J({locked:this.cfgGet('locked')==='1'});
+      if(m.op==='stats'){ return J({online:this.socks().length,
+        bans:this.sql.exec('SELECT COUNT(*) AS c FROM ban').toArray()[0].c,
+        tags:this.sql.exec('SELECT COUNT(*) AS c FROM tag').toArray()[0].c,
+        admins:this.sql.exec('SELECT COUNT(*) AS c FROM grnt').toArray()[0].c,
+        locked:this.cfgGet('locked')==='1'}); }
       return J({err:'op'},400); }
     if(req.headers.get('Upgrade')!=='websocket') return new Response('Expected a WebSocket',{status:426});
     const pair=new WebSocketPair(); const [client,server]=Object.values(pair); this.ctx.acceptWebSocket(server);
@@ -229,6 +250,7 @@ export class Chat {
       this.send(ws,{t:'sys',text:'Thanks, that message was reported.'}); return; }
     if(m.t==='say'){ const now=Date.now();
       const mu=this.sql.exec('SELECT until FROM mute WHERE who=?',a.who).toArray()[0]; if(mu&&mu.until>now){ this.send(ws,{t:'sys',text:`You are muted for ${Math.ceil((mu.until-now)/60000)} more minutes.`}); return; }
+      if(this.cfgGet('locked')==='1'&&!this.grantOf(pubId(a.who))){ this.send(ws,{t:'sys',text:'Chat is locked by an admin right now.'}); return; }
       let text=String(m.text||'').replace(/[\u0000-\u001f​-‏‪-‮]/g,'').replace(/\s+/g,' ').trim().slice(0,200); if(!text) return;
       a.ts=(a.ts||[]).filter(t=>now-t<10000); if(a.ts.length>=8){ this.send(ws,{t:'sys',text:'That is a lot of messages at once, give it a few seconds.'}); return; }
       if(text.toLowerCase()===a.last){ this.send(ws,{t:'sys',text:'You just said that.'}); return; }
@@ -249,7 +271,7 @@ export class Chat {
    Only the admin tools (with a key) can change it. */
 export class Site {
   constructor(ctx){ this.ctx=ctx; this.s=ctx.storage; }
-  async state(){ return { ann: await this.s.get('ann')||null, ov: await this.s.get('ov')||[] }; }
+  async state(){ return { ann: await this.s.get('ann')||null, ov: await this.s.get('ov')||[], settings: await this.s.get('settings')||{} }; }
   async fetch(req){
     const url=new URL(req.url);
     if(url.pathname==='/site'){ const st=await this.state(); return new Response(JSON.stringify(st),{headers:{...CORS,'content-type':'application/json','cache-control':'public,max-age=15'}}); }
@@ -259,7 +281,8 @@ export class Site {
       if(!full) return J({err:'forbidden'},403);
       if(m.op==='ann'){ const title=String(m.title||'').slice(0,120), body=String(m.body||'').slice(0,2000); if(!title&&!body) return J({err:'empty'},400);
         const icon=String(m.icon||'').slice(0,6), theme=String(m.theme||'').replace(/[^a-z]/g,'').slice(0,12);
-        await this.s.put('ann',{id:Date.now().toString(36),title,body,icon,theme,ts:Date.now()}); return J({ok:true}); }
+        const btn=String(m.btn||'').slice(0,40), link=String(m.link||'').trim().slice(0,300);
+        await this.s.put('ann',{id:Date.now().toString(36),title,body,icon,theme,btn,link:/^https?:\/\//.test(link)?link:'',ts:Date.now()}); return J({ok:true}); }
       if(m.op==='annClear'){ await this.s.delete('ann'); return J({ok:true}); }
       if(m.op==='ov'){ const e=m.entry||{}; const lg=String(e.lg||''), name=String(e.name||'').slice(0,40); if(!lg||!name) return J({err:'bad'},400);
         const ov=(await this.s.get('ov'))||[]; const clean={lg,name,edit:true}; if(e.ovr!=null&&e.ovr!=='') clean.ovr=Math.max(1,Math.min(99,Math.round(+e.ovr))); if(e.tid) clean.tid=String(e.tid).slice(0,12); if(e.pos) clean.pos=String(e.pos).slice(0,4);
@@ -267,6 +290,10 @@ export class Site {
         const i=ov.findIndex(x=>x.lg===lg&&x.name===name); if(i>=0) ov[i]=clean; else ov.push(clean); await this.s.put('ov',ov.slice(-200)); return J({ok:true}); }
       if(m.op==='ovDel'){ const ov=((await this.s.get('ov'))||[]).filter(x=>!(x.lg===m.lg&&x.name===m.name)); await this.s.put('ov',ov); return J({ok:true}); }
       if(m.op==='ovClear'){ await this.s.delete('ov'); return J({ok:true}); }
+      if(m.op==='settings'){ const cur=(await this.s.get('settings'))||{}, p=m.patch||{}, next={...cur};
+        if('bannerOn' in p) next.bannerOn=!!p.bannerOn;
+        if('banner' in p){ const b=p.banner||{}; next.banner={text:String(b.text||'').slice(0,160),theme:String(b.theme||'').replace(/[^a-z]/g,'').slice(0,12)}; next.bannerId=Date.now().toString(36); }
+        await this.s.put('settings',next); return J({ok:true,settings:next}); }
       return J({err:'op'},400); }
     return J({err:'path'},404);
   }
