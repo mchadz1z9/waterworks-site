@@ -29,6 +29,12 @@ button:disabled{opacity:.5;cursor:default}
 #login{max-width:400px;margin:12vh auto 0}
 .hide{display:none}
 h3.sec{margin:16px 0 4px;font-size:15px;color:var(--mut);text-transform:uppercase;letter-spacing:.05em}
+.krow{display:flex;align-items:center;gap:8px;flex-wrap:wrap;margin-top:10px}
+.krow .klbl{font-weight:700;font-size:13px}
+.kchips{display:flex;gap:5px;flex-wrap:wrap}
+.kchip{padding:5px 11px;border-radius:999px;border:1px solid var(--line);background:#0b1120;color:var(--mut);font:700 13px system-ui;cursor:pointer}
+.kchip.on{background:var(--acc2);color:#fff;border-color:var(--acc2)}
+.krow #kCustom{flex:0 0 76px;min-width:0;width:76px;padding:6px 9px}
 </style></head><body>
 <div class="wrap">
 <div id="login" class="card">
@@ -73,6 +79,13 @@ h3.sec{margin:16px 0 4px;font-size:15px;color:var(--mut);text-transform:uppercas
       <div style="flex:0 0 130px"><label>Overall <span class="mut">(blank=keep)</span></label><input id="eOvr" type="number" min="1" max="99" placeholder="1–99"></div>
     </div>
     <label>Skills <span class="mut">(blank = leave unchanged)</span></label>
+    <div class="row" style="margin:2px 0 6px;gap:6px">
+      <button id="eMax" class="ghost sm" style="flex:0 0 auto">★ Max out (99 OVR + all skills)</button>
+      <button id="e99" class="ghost sm" style="flex:0 0 auto">99 OVR</button>
+      <button id="eMaxSk" class="ghost sm" style="flex:0 0 auto">All skills 99</button>
+      <button id="eZeroSk" class="ghost sm" style="flex:0 0 auto">All skills 1</button>
+      <button id="eClr" class="ghost sm" style="flex:0 0 auto">Clear fields</button>
+    </div>
     <div class="skgrid" id="eSkills"></div>
     <div class="row" style="margin-top:14px">
       <button id="eSave" class="go">Save edit</button>
@@ -85,7 +98,8 @@ h3.sec{margin:16px 0 4px;font-size:15px;color:var(--mut);text-transform:uppercas
   <div class="card">
     <h2>👥 Users &amp; moderation</h2>
     <p class="mut">Click a player below — kick or ban them, give them a tag, or (full admin) grant them admin access. No typing needed.</p>
-    <div class="row" style="margin-bottom:6px"><button id="uRefresh" class="ghost" style="flex:0 0 auto">↻ Refresh</button></div>
+    <div class="krow"><span class="klbl">Kick length:</span><span class="kchips" id="kChips"></span><input id="kCustom" type="number" min="1" placeholder="min"><span class="mut" id="kNow"></span></div>
+    <div class="row" style="margin:8px 0 6px"><button id="uRefresh" class="ghost" style="flex:0 0 auto">↻ Refresh</button></div>
     <h3 class="sec">Online now</h3><div id="whoList" class="list"><span class="mut">Loading…</span></div>
     <h3 class="sec">Recently in chat</h3><div id="recentList" class="list"><span class="mut">Loading…</span></div>
     <h3 class="sec">Banned</h3><div id="banList" class="list"></div>
@@ -146,19 +160,35 @@ $('annPreview').onclick=()=>previewAnn($('annTitle').value.trim(),$('annBody').v
 function previewAnn(title,body){ const cv=coverOf(); const d=document.createElement('div'); d.style.cssText='position:fixed;inset:0;z-index:99;display:flex;align-items:center;justify-content:center;padding:18px;background:rgba(3,6,14,.82)'; d.innerHTML=`<div style="position:relative;width:min(640px,96vw);overflow:hidden;background:linear-gradient(160deg,#182446,#0c1227);border:2px solid #3b4e86;border-radius:22px;padding:0 30px 26px;text-align:center"><div style="margin:0 -30px 14px;padding:26px 20px 18px;background:${cv.grad};box-shadow:inset 0 -30px 50px rgba(0,0,0,.25)"><div style="font-size:64px">${esc(cv.icon)}</div><div style="margin-top:8px;font-weight:800;letter-spacing:.1em;text-transform:uppercase;color:#fff;font-size:14px">Rink Rivals update</div></div>${title?`<h2 style="margin:4px 0 12px;font-size:32px">${esc(title)}</h2>`:''}<div style="font-size:19px;color:#cdd6ec;white-space:pre-wrap">${esc(body)}</div><button style="margin-top:22px;background:#22c55e;color:#052e16;border:0;border-radius:14px;padding:13px 30px;font:800 18px system-ui;cursor:pointer">Let's play ▸</button></div>`; d.onclick=()=>d.remove(); document.body.appendChild(d); }
 
 /* ---- player editor ---- */
-function initEditor(){ const g=$('eGame'); g.innerHTML=Object.keys(D.game).map(lg=>`<option value="${lg}">${D.game[lg]}</option>`).join(''); g.onchange=fillSport; fillSport(); }
+function initEditor(){ const g=$('eGame'); g.innerHTML=Object.keys(D.game).map(lg=>`<option value="${lg}">${D.game[lg]}</option>`).join(''); g.onchange=fillSport; fillSport();
+  const setSkills=v=>document.querySelectorAll('#eSkills [data-sk]').forEach(i=>i.value=v);
+  $('eMax').onclick=()=>{ $('eOvr').value=99; setSkills(99); setMsg('eMsg','Maxed out — overall 99 and every skill 99. Hit Save edit.',1); };
+  $('e99').onclick=()=>{ $('eOvr').value=99; };
+  $('eMaxSk').onclick=()=>{ setSkills(99); };
+  $('eZeroSk').onclick=()=>{ setSkills(1); };
+  $('eClr').onclick=()=>{ $('eName').value='';$('eOvr').value='';setSkills(''); setMsg('eMsg','Fields cleared.',1); }; }
 function fillSport(){ const lg=$('eGame').value; $('ePos').innerHTML='<option value="">—</option>'+D.pos[lg].map(p=>`<option>${p}</option>`).join(''); $('eNames').innerHTML=(D.names[lg]||[]).map(n=>`<option>${esc(n)}</option>`).join(''); $('eSkills').innerHTML=Object.entries(D.sk[lg]).map(([k,v])=>`<label>${esc(v)}<input data-sk="${k}" type="number" min="1" max="99" placeholder="—"></label>`).join(''); }
 $('eSave').onclick=async()=>{ const lg=$('eGame').value, name=$('eName').value.trim(); if(!name){ setMsg('eMsg','Type a player name.',0); return; } const ovr=$('eOvr').value.trim(); const skills={}; document.querySelectorAll('#eSkills [data-sk]').forEach(i=>{ if(i.value.trim()!=='') skills[i.dataset.sk]=+i.value; }); if(ovr===''&&!Object.keys(skills).length){ setMsg('eMsg','Set an overall or at least one skill.',0); return; } const entry={lg,name,pos:$('ePos').value||undefined}; if(ovr!=='') entry.ovr=+ovr; if(Object.keys(skills).length) entry.skills=skills; setMsg('eMsg','Saving…'); try{ await api('/admin/site','ov',{entry}); setMsg('eMsg',`Saved. ${esc(name)} updated in ${D.game[lg]}.`,1); $('eName').value='';$('eOvr').value=''; document.querySelectorAll('#eSkills [data-sk]').forEach(i=>i.value=''); refreshState(); }catch(e){ setMsg('eMsg','Failed.',0); } };
 $('eClear').onclick=async()=>{ if(!confirm('Remove ALL player edits in every game?')) return; await api('/admin/site','ovClear'); setMsg('eMsg','All edits removed.',1); refreshState(); };
 function renderEdits(ov){ ov=ov||[]; if(!ov.length){ $('eList').innerHTML='<p class="mut">No player edits yet.</p>'; return; } $('eList').innerHTML='<div class="mut" style="margin-bottom:4px">Current edits:</div>'+ov.map(e=>`<div class="urow"><span class="nm">${D.game[e.lg]||e.lg} · <b>${esc(e.name)}</b>${e.ovr!=null?` <span class="pill">OVR ${e.ovr}</span>`:''}${e.skills?' <span class="pill">skills</span>':''}</span><button class="del sm" data-del="${esc(e.lg)}|${esc(e.name)}">Remove</button></div>`).join(''); $('eList').querySelectorAll('[data-del]').forEach(b=>b.onclick=async()=>{ const [lg,...n]=b.dataset.del.split('|'); await api('/admin/site','ovDel',{lg,name:n.join('|')}); refreshState(); }); }
 
 /* ---- users & moderation ---- */
+/* custom kick length: pick a preset or type any number of minutes */
+let kickMins=30;
+function fmtDur(m){ m=+m||0; if(m>=1440&&m%1440===0) return (m/1440)+(m===1440?' day':' days'); if(m>=60&&m%60===0) return (m/60)+(m===60?' hr':' hrs'); return m+' min'; }
+const KPRE=[5,10,15,30,60,1440];
+function renderKick(){ $('kChips').innerHTML=KPRE.map(m=>`<button class="kchip${m===kickMins?' on':''}" data-km="${m}">${fmtDur(m)}</button>`).join('');
+  $('kChips').querySelectorAll('[data-km]').forEach(b=>b.onclick=()=>{ kickMins=+b.dataset.km; $('kCustom').value=''; renderKick(); renderAll(); });
+  $('kNow').textContent='Kicks last '+fmtDur(kickMins)+'.'; }
+$('kCustom').oninput=()=>{ if($('kCustom').value.trim()==='') return; const v=Math.max(1,Math.round(+$('kCustom').value||1)); kickMins=v; $('kChips').querySelectorAll('[data-km]').forEach(b=>b.classList.toggle('on',+b.dataset.km===v)); $('kNow').textContent='Kicks last '+fmtDur(kickMins)+'.'; renderAll(); };
 $('uRefresh').onclick=loadUsers;
-async function loadUsers(){ try{ const [who,recent,bans,tags,grants]=await Promise.all([api('/admin/chat','who'),api('/admin/chat','recent'),api('/admin/chat','bans'),api('/admin/chat','tags'),ROLE==='full'?api('/admin/chat','grants'):Promise.resolve({grants:[]})]);
-  renderWho(who.who||[]); renderRecent(recent.recent||[]); renderBans(bans.bans||[]); renderTags(tags.tags||[]); renderGrants(grants.grants||[]); }catch(e){ setMsg('uMsg','Could not load users.',0); } }
+let LAST={who:[],recent:[],bans:[],tags:[],grants:[]};
+function renderAll(){ renderWho(LAST.who); renderRecent(LAST.recent); renderBans(LAST.bans); renderTags(LAST.tags); renderGrants(LAST.grants); }
+async function loadUsers(){ renderKick(); try{ const [who,recent,bans,tags,grants]=await Promise.all([api('/admin/chat','who'),api('/admin/chat','recent'),api('/admin/chat','bans'),api('/admin/chat','tags'),ROLE==='full'?api('/admin/chat','grants'):Promise.resolve({grants:[]})]);
+  LAST={who:who.who||[],recent:recent.recent||[],bans:bans.bans||[],tags:tags.tags||[],grants:grants.grants||[]}; renderAll(); }catch(e){ setMsg('uMsg','Could not load users.',0); } }
 function actBtns(acts){ return `<span class="acts">${acts.map(a=>`<button class="sm ${a.cls||''}" data-act='${esc(JSON.stringify(a.d))}'>${a.l}</button>`).join('')}</span>`; }
 function wireActs(container){ container.querySelectorAll('[data-act]').forEach(b=>b.onclick=()=>doAct(JSON.parse(b.dataset.act))); }
-function allActs(u){ const a=[{l:'Kick 30m',cls:'warn',d:{k:'kick',name:u.name}},{l:'Tag',cls:'ghost',d:{k:'tag',name:u.name}}];
+function allActs(u){ const a=[{l:'Kick '+fmtDur(kickMins),cls:'warn',d:{k:'kick',name:u.name}},{l:'Tag',cls:'ghost',d:{k:'tag',name:u.name}}];
   a.push(u.banned?{l:'Unban',cls:'go',d:{k:'unban',name:u.name}}:{l:'Ban',cls:'del',d:{k:'ban',name:u.name,pubid:u.id}});
   if(ROLE==='full'){ a.push({l:'Make mod',d:{k:'grant',pubid:u.id,name:u.name,lvl:'mod'}},{l:'Make admin',cls:'go',d:{k:'grant',pubid:u.id,name:u.name,lvl:'full'}}); }
   return actBtns(a); }
@@ -173,7 +203,7 @@ function renderTags(list){ const el=$('tagList'); if(!list.length){ el.innerHTML
 function renderGrants(list){ const el=$('grantList'); if(!el) return; if(!list.length){ el.innerHTML='<span class="mut">No one has admin access (besides the password).</span>'; return; }
   el.innerHTML=list.map(g=>`<div class="urow"><span class="nm">${esc(g.name||'(player)')} <span class="pill">${g.lvl==='full'?'full admin':'moderator'}</span></span>${actBtns([{l:'Remove access',cls:'del',d:{k:'ungrant',pubid:g.pubid}}])}</div>`).join(''); wireActs(el); }
 async function doAct(a){ try{
-  if(a.k==='kick'){ if(!confirm('Kick '+a.name+' for 30 minutes?')) return; const r=await api('/admin/chat','kick',{name:a.name,mins:30}); setMsg('uMsg',r.kicked?`Kicked ${a.name}.`:`${a.name} isn't online.`,1); }
+  if(a.k==='kick'){ const mins=kickMins; if(!confirm('Kick '+a.name+' for '+fmtDur(mins)+'?')) return; const r=await api('/admin/chat','kick',{name:a.name,mins}); setMsg('uMsg',r.kicked?`Kicked ${a.name} for ${fmtDur(mins)}.`:`${a.name} isn't online.`,1); }
   else if(a.k==='ban'){ if(!confirm('Permanently ban '+a.name+'? (You can unban later.)')) return; await api('/admin/chat','ban',{name:a.name,pubid:a.pubid,perm:true}); setMsg('uMsg',`Banned ${a.name}.`,1); }
   else if(a.k==='unban'){ await api('/admin/chat','unban',{name:a.name}); setMsg('uMsg',`Unbanned.`,1); }
   else if(a.k==='tag'){ let tag=''; if(!a.clear){ tag=prompt('Tag for '+a.name+' (e.g. Professional, VIP, PRO, MOD, OWNER). Blank removes it:','Professional'); if(tag===null) return; } await api('/admin/chat','tag',{name:a.name,tag}); setMsg('uMsg',a.clear||!tag?`Tag removed.`:`Tagged ${a.name} [${tag}].`,1); }
