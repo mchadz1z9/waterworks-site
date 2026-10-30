@@ -8,9 +8,10 @@
   const isOwner=()=>{ try{ if(localStorage.getItem('rrOwner')==='1') return true; }catch(e){} try{ return sessionStorage.getItem('rrRole')==='full'; }catch(e){ return false; } };
   let val=(()=>{ const n=+ls.get(K); return isFinite(n)?Math.max(0,Math.min(MAX,n)):0; })();
   function save(){ ls.set(K,String(Math.round(val))); try{ dispatchEvent(new CustomEvent('rrstr-change',{detail:RRSTR.state()})); }catch(e){} }
-  function level(){ return isOwner()?MAX:Math.round(val); }           /* 0..100 */
-  function frac(){ return level()/MAX; }                              /* 0..1   */
-  /* how much bigger the body gets: arms/torso/legs thicken up to ~65% */
+  const OWNER_LVL=1000;
+  function level(){ return isOwner()?OWNER_LVL:Math.round(val); }      /* 0..100, owner shows 1000 */
+  function frac(){ return isOwner()?1:Math.max(0,Math.min(1,val/MAX)); } /* 0..1 for the look */
+  /* how much bigger the muscles get */
   function muscle(){ return 1+frac()*0.65; }
   function tag(){ if(isOwner()) return 'OWNER'; return level()>=MAX?'Professional':''; }
   /* short badge for chat / nameplates */

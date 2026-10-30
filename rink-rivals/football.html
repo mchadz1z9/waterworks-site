@@ -2334,6 +2334,7 @@ void main(){vec4 t=texture2D(uTex,vUV*uUVR.zw+uUVR.xy);if(t.a<0.04)discard;gl_Fr
     const t=o.team, base=mm(T(o.x,o.lift||0,o.z),RY(-o.ang)), k=Math.min(1,o.run||0);
     o.ph=(o.ph||0)+(o.dt||1/60)*(3+9*k);
     const crouch=o.crouch||0, hip=(o.fb?24:25)-crouch*8-(o.down?18:0), skin=SKIN[(o.num||0)%SKIN.length];
+    const mz=Math.min(1.7,o.buff||1), bch=1+(mz-1)*0.5, bsh=1+(mz-1)*1.15, barm=1+(mz-1)*2.0, bleg=1+(mz-1)*0.7;
     const pants=t.pants||'#e5e7eb', socks=t.dark||t.jersey;
     if(o.down){ /* player on the ground after a dive or tackle */
       const b2=mm(base,T(0,4,0),RZ(-Math.PI/2.2));
@@ -2342,19 +2343,19 @@ void main(){vec4 t=texture2D(uTex,vUV*uUVR.zw+uUVR.xy);if(t.a<0.04)discard;gl_Fr
     }
     for(const s of [-1,1]){
       const sw=Math.sin(o.ph+(s>0?0:Math.PI))*.75*k, spread=crouch*.35;
-      const bwl=(o.bw||1)*Math.min(1.7,o.buff||1), leg=mm(base,T(0,hip,s*3.3*bwl),RX(-s*spread),RZ(sw));
+      const bwl=(o.bw||1)*bleg, leg=mm(base,T(0,hip,s*3.3*bwl),RX(-s*spread),RZ(sw));
       part(UB,mm(leg,T(0,-6,0),S(4.8*bwl,12,4.8*bwl)),pants);
       if(o.fb){ part(UB,mm(leg,T(1.9*bwl,-5,0),S(1.2,6,4)),pants); /* thigh pad */ part(US,mm(leg,T(1.7,-11.4,0),S(2.4*bwl,2.2,2.6*bwl)),pants); /* knee */ }
       part(UB,mm(leg,T(0,-16.5,0),S(4.1*bwl,10,4.1*bwl)),socks);
       part(UB,mm(leg,T(1.6,-hip+1.6+(o.down?0:0),0),RZ(-sw*.3),S(7.5,3,4.6)),'#111827');
     }
-    const lean=(o.fb?.12:.06)+.28*k+crouch*.45, bw=(o.bw||1)*Math.min(1.7,o.buff||1);
+    const lean=(o.fb?.12:.06)+.28*k+crouch*.45, bw=o.bw||1;
     const tor=mm(base,T(0,hip,0),RZ(-lean));
-    part(UB,mm(tor,T(0,8,0),S(7*bw,15,12*bw)),t.jersey);
+    part(UB,mm(tor,T(0,8,0),S(7*bw*bch,15,12*bw*bch)),t.jersey);
     if(o.belly) part(US,mm(tor,T(2.2*bw,5,0),S(5*o.belly,6,6*bw)),t.jersey); /* a lineman's build */
-    part(UB,mm(tor,T(0,1.5,0),S(7.4*bw,2,12.4*bw)),t.trim);
-    part(UB,mm(tor,T(0,15.5,0),S(o.fb?9*bw:7.6,o.fb?5:3.6,o.fb?18*bw:14)),t.jersey);
-    if(o.fb){ for(const s of [-1,1]) part(US,mm(tor,T(0,16.2,s*7.2*bw),S(4.6*bw,3.4,3.8)),t.jersey); /* shoulder-pad caps */ }
+    part(UB,mm(tor,T(0,1.5,0),S(7.4*bw*bch,2,12.4*bw*bch)),t.trim);
+    part(UB,mm(tor,T(0,15.5,0),S(o.fb?9*bw*bsh:7.6,o.fb?5:3.6,o.fb?18*bw*bsh:14)),t.jersey);
+    if(o.fb){ for(const s of [-1,1]) part(US,mm(tor,T(0,16.2,s*7.2*bw*bsh),S(4.6*bw*bsh,3.4,3.8)),t.jersey); /* shoulder-pad caps */ }
     part(US,mm(tor,T(.6,20,0),S(2.2,2.2,2.2)),skin);
     part(US,mm(tor,T(.8,23,0),S(3.4,3.9,3.3)),skin);
     if(o.fb){ part(US,mm(tor,T(.4,23.6,0),S(4.4,4.5,4.3)),t.helmet); part(UB,mm(tor,T(.4,24.2,0),S(8.6,.8,1)),t.trim);
@@ -2378,9 +2379,9 @@ void main(){vec4 t=texture2D(uTex,vUV*uUVR.zw+uUVR.xy);if(t.a<0.04)discard;gl_Fr
     else if(pose==='block'){ ha=[11,13,-5]; hb=[11,13,5]; }
     else if(pose==='cheer'){ const j=Math.abs(Math.sin(ph*1.5))*3; ha=[2,30+j,-7]; hb=[2,30+j,7]; }
     else { const a=Math.sin(ph)*6*k; ha=[a+1.5,7,-8.5]; hb=[-a+1.5,7,8.5]; }
-    const shw=6.5*(o.bw||1), sl=L([0,sh,-shw]), sr=L([0,sh,shw]), A=L(ha), B=L(hb);
+    const shw=6.5*(o.bw||1)*(1+(bsh-1)*0.5), sl=L([0,sh,-shw]), sr=L([0,sh,shw]), A=L(ha), B=L(hb);
     if(o.fb){ /* two-segment arms: jersey sleeve to the elbow, then forearm (sleeve or skin) and a glove */
-      const el=(h,z)=>{ const m=[(0+h[0])/2-1.6,(sh+h[1])/2-2,(z+h[2])/2+Math.sign(z)*2.2]; return L(m); }, EA=el(ha,-shw), EB=el(hb,shw), arm=(o.bw||1)>1.1?3.4:2.9, fore=o.sleeve||skin, glove=o.glove2||t.dark;
+      const el=(h,z)=>{ const m=[(0+h[0])/2-1.6,(sh+h[1])/2-2,(z+h[2])/2+Math.sign(z)*2.2]; return L(m); }, EA=el(ha,-shw), EB=el(hb,shw), arm=((o.bw||1)>1.1?3.4:2.9)*barm, fore=o.sleeve||skin, glove=o.glove2||t.dark;
       part(UB,beam(sl,EA,arm,arm),t.jersey); part(UB,beam(sr,EB,arm,arm),t.jersey); part(UB,beam(EA,A,arm*.8,arm*.8),fore); part(UB,beam(EB,B,arm*.8,arm*.8),fore);
       part(US,mm(T(...A),S(1.9,1.9,1.9)),glove); part(US,mm(T(...B),S(1.9,1.9,1.9)),glove); }
     else { part(UB,beam(sl,A,2.8,2.8),t.jersey); part(UB,beam(sr,B,2.8,2.8),t.jersey);

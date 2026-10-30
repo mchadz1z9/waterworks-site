@@ -17,23 +17,24 @@ main{ max-width:1060px; margin:0 auto; padding:12px 14px 30px; }
 .tools{ display:flex; gap:8px; flex-wrap:wrap }
 .tools button,.tools a{ font:inherit; font-size:16px; color:var(--ink); background:var(--panel); border:2px solid var(--line); border-radius:999px; padding:4px 14px; cursor:pointer; text-decoration:none }
 .wrap{ display:grid; grid-template-columns:1fr; gap:14px }
-.stage{ position:relative; background:linear-gradient(180deg,#1a2238,#0c1020); border:2px solid var(--line); border-radius:16px; overflow:hidden }
-canvas{ display:block; width:100%; height:auto; background:transparent }
+#stage{ position:relative; width:100%; height:min(60vh,540px); background:linear-gradient(180deg,#141b2e,#0a0e18); border:2px solid var(--line); border-radius:16px; overflow:hidden; touch-action:none }
+#gl,#cv{ position:absolute; inset:0; width:100%; height:100% }
+#cv{ pointer-events:none }
 .panel{ background:var(--panel); border:2px solid var(--line); border-radius:14px; padding:14px 16px }
 .row{ display:flex; gap:10px; flex-wrap:wrap; align-items:center }
 .pills button{ font:inherit; font-size:17px; border:2px solid var(--line); background:var(--panel); color:var(--ink); border-radius:999px; padding:6px 16px; cursor:pointer; margin:3px }
 .pills button.on{ background:var(--acc); border-color:var(--acc); color:#fff }
 .gold{ background:var(--led)!important; border-color:var(--led)!important; color:#0a0d18!important; font-weight:800 }
-h1{ font-size:30px; margin:4px 0 8px } h2{ margin:0 0 6px }
-.muted{ color:var(--muted) } .big{ font-size:40px; font-weight:800; color:var(--led) }
-kbd{ font:inherit; font-size:13px; background:var(--ledbg); color:#fff; border-radius:6px; padding:1px 7px }
+h1{ font-size:30px; margin:4px 0 8px }
+.muted{ color:var(--muted) }
 .statrow{ display:flex; gap:18px; flex-wrap:wrap; align-items:flex-end; margin-top:6px }
 .stat b{ font-size:26px } .stat span{ display:block; color:var(--muted); font-size:13px; text-transform:uppercase; letter-spacing:.05em }
 .tag{ display:inline-block; background:#7c3aed; color:#fff; border-radius:8px; padding:2px 10px; font-weight:800 }
 .tag.owner{ background:linear-gradient(135deg,#b45309,#fbbf24); color:#241100 }
-.bar{ height:14px; border-radius:8px; background:rgba(255,255,255,.12); overflow:hidden; margin-top:4px; border:1px solid var(--line) }
+.bar{ height:14px; border-radius:8px; background:rgba(120,130,160,.25); overflow:hidden; margin-top:4px; border:1px solid var(--line) }
 .bar i{ display:block; height:100%; background:linear-gradient(90deg,#22c55e,#fbbf24) }
 .hint{ color:var(--muted); font-size:14px; margin-top:8px }
+kbd{ font:inherit; font-size:13px; background:var(--ledbg); color:#fff; border-radius:6px; padding:1px 7px }
 </style>
 </head>
 <body data-sport="gym">
@@ -47,7 +48,7 @@ kbd{ font:inherit; font-size:13px; background:var(--ledbg); color:#fff; border-r
   </div>
 
   <div class="wrap">
-    <div class="stage"><canvas id="cv" width="1000" height="460"></canvas></div>
+    <div id="stage"><canvas id="gl"></canvas><canvas id="cv" width="1000" height="562"></canvas></div>
 
     <div class="panel">
       <div class="row" style="justify-content:space-between">
@@ -64,174 +65,197 @@ kbd{ font:inherit; font-size:13px; background:var(--ledbg); color:#fff; border-r
       <div class="bar" title="Progress to Professional"><i id="sBarFill" style="width:0%"></i></div>
       <div class="muted" id="sBarTxt" style="font-size:13px;margin-top:4px"></div>
 
-      <div class="row" style="margin-top:14px">
-        <span class="muted">Lift:</span>
-        <div class="pills" id="liftPills"></div>
-      </div>
-      <div class="row" style="margin-top:6px">
-        <span class="muted">Bar weight:</span>
+      <div class="row" style="margin-top:14px"><span class="muted">Lift:</span><div class="pills" id="liftPills"></div></div>
+      <div class="row" style="margin-top:6px"><span class="muted">Bar weight:</span>
         <div class="pills"><button data-w="-10">−10</button><button data-w="-5">−5</button><b id="barW" style="font-size:22px;min-width:92px;text-align:center">135 lb</b><button data-w="5">+5</button><button data-w="25">+25</button></div>
       </div>
       <div class="row" style="margin-top:10px">
         <button class="gold" id="startBtn">Start the set <kbd>Enter</kbd></button>
         <button id="restBtn">Rest &amp; recover</button>
+        <button id="camBtn">Camera <kbd>C</kbd></button>
       </div>
-      <div class="hint" id="hint">Hold <kbd>Space</kbd> to drive the bar up and lock it out. Grind through the sticking point. Each clean rep builds strength; heavier bars build it faster but are harder to move. A full set to failure gives the most gains.</div>
+      <div class="hint" id="hint">Hold <kbd>Space</kbd> (or press and hold the screen) to drive the bar up and lock it out. Grind through the sticking point, keep good form, and take each rep down under control. Heavier bars build strength faster but are harder to move — a full set to failure gives the most gains.</div>
     </div>
   </div>
 </main>
 
+<script src="r3lib.js"></script>
 <script src="strength.js"></script>
 <script>
 (() => {
 'use strict';
 const $=id=>document.getElementById(id);
-const cv=$('cv'), ctx=cv.getContext('2d'), W=1000, H=460;
 const clamp=(v,a,b)=>Math.max(a,Math.min(b,v));
 const lerp=(a,b,t)=>a+(b-a)*t;
+const smooth=t=>{ t=clamp(t,0,1); return t*t*(3-2*t); };
 let muted=false;
+const R3=makeR3($('gl'),$('stage'));
+const K=100;
 
 /* ---------- records ---------- */
 const SKEY='rinkRivalsGymV1';
 const SV=(()=>{ try{ return Object.assign({bench:0,squat:0,dead:0,press:0,vol:0,sets:0,reps:0},JSON.parse(localStorage.getItem(SKEY)||'null')||{}); }catch(e){ return {bench:0,squat:0,dead:0,press:0,vol:0,sets:0,reps:0}; } })();
 const saveSV=()=>{ try{ localStorage.setItem(SKEY,JSON.stringify(SV)); }catch(e){} };
 
-/* ---------- lifts ---------- */
 const LIFTS=[
  {k:'bench',n:'Bench Press',start:135,hard:1.0,gain:1.0},
- {k:'squat',n:'Squat',start:185,hard:1.15,gain:1.25},
- {k:'dead', n:'Deadlift',start:225,hard:1.25,gain:1.4},
+ {k:'squat',n:'Squat',start:185,hard:1.18,gain:1.3},
+ {k:'dead', n:'Deadlift',start:225,hard:1.3,gain:1.5},
  {k:'press',n:'Overhead Press',start:95,hard:.9,gain:.8}];
 let lift=LIFTS[0], barW=lift.start;
 
 /* ---------- audio ---------- */
 let AC=null; function audio(){ if(!AC){ try{ AC=new (window.AudioContext||window.webkitAudioContext)(); }catch(e){} } if(AC&&AC.state==='suspended') AC.resume(); return AC; }
 function tone(f,d,type='sine',v=.05,slide=0){ if(muted||!AC) return; const t=AC.currentTime,o=AC.createOscillator(),g=AC.createGain(); o.type=type; o.frequency.setValueAtTime(f,t); if(slide) o.frequency.exponentialRampToValueAtTime(Math.max(40,f+slide),t+d); g.gain.setValueAtTime(v,t); g.gain.exponentialRampToValueAtTime(.0001,t+d); o.connect(g); g.connect(AC.destination); o.start(t); o.stop(t+d+.02); }
-const sfx={ rep:()=>{ tone(180,.12,'triangle',.08,160); }, fail:()=>tone(150,.4,'sawtooth',.07,-90), pr:()=>{ [523,659,784,1047].forEach((f,i)=>setTimeout(()=>tone(f,.2,'triangle',.06),i*90)); }, clank:()=>tone(90,.05,'square',.05), grind:()=>tone(70+Math.random()*20,.05,'sawtooth',.03) };
+const sfx={ up:()=>tone(150,.14,'triangle',.07,170), rack:()=>{ tone(90,.08,'square',.06); tone(70,.12,'square',.05); }, fail:()=>tone(140,.45,'sawtooth',.07,-90), pr:()=>{ [523,659,784,1047].forEach((f,i)=>setTimeout(()=>tone(f,.2,'triangle',.06),i*90)); }, grind:()=>tone(64+Math.random()*18,.05,'sawtooth',.03), clank:()=>tone(95,.05,'square',.05) };
 
-/* ---------- a set in progress ---------- */
-let S=null, phase='idle'; /* idle | lift | done */
-function startSet(){ audio(); const diff=lift.hard*(barW/lift.start); /* heavier than your base = harder */
-  S={bar:0,reps:0,vel:0,up:false,stam:1,sticking:0,shake:0,fatRep:0,ended:false,best:0,gained:0,diff,msg:'',msgT:0,flash:0,t:0};
-  phase='lift'; $('hint').innerHTML='Hold <kbd>Space</kbd> to push the bar up and <b>lock it out</b> at the top. Keep your reps clean — the set ends when you fail.'; }
-function endSet(){ phase='done'; S.ended=true; sfx.fail(); SV.sets++;
-  /* strength gains from the set: volume done at this weight, scaled to the lift */
+/* ---------- a set: hold to drive the bar up, it lowers under control, repeat to failure ---------- */
+let S=null, phase='idle';
+let lastTS=performance.now();
+function startSet(){ audio(); const diff=lift.hard*Math.max(.6,barW/lift.start);
+  S={bar:0,vel:0,stam:1,reps:0,gained:0,sticking:0,strain:0,lowering:false,shake:0,msg:'',msgT:0,t:0,diff,ended:false}; phase='lift';
+  $('hint').innerHTML='Hold <kbd>Space</kbd> to drive the bar up and <b>lock it out</b>. It lowers on its own — then go again. The set ends when you fail.'; }
+function endSet(reason){ phase='done'; S.ended=true; sfx.fail(); SV.sets++;
   const vol=S.reps*barW, g=Math.round(S.gained); SV.vol+=vol; SV.reps+=S.reps; saveSV();
-  S.msg=S.reps?`Set done — ${S.reps} rep${S.reps===1?'':'s'} at ${barW} lb.${g>0?` +${g} strength`:''}`:'No reps — try a lighter bar.'; S.msgT=4; refreshStats(); }
-function restSet(){ if(phase==='lift') return; phase='idle'; S=null; $('hint').innerHTML='Hold <kbd>Space</kbd> to drive the bar up and lock it out. Rested up and ready for the next set.'; }
+  S.msg=S.reps?`Set done — ${S.reps} rep${S.reps===1?'':'s'} at ${barW} lb.${g>0?`  +${g} strength`:''}`:'No reps — try a lighter bar.'; S.msgT=4.5; refreshStats(); }
+function restSet(){ if(phase==='lift') return; phase='idle'; S=null; $('hint').innerHTML='Rested up. Hold <kbd>Space</kbd> to lift again.'; }
 
-/* one physics step while lifting */
-function step(dt){ if(!S||phase!=='lift') return; S.t+=dt; if(S.msgT>0) S.msgT-=dt; if(S.flash>0) S.flash-=dt; if(S.shake>0) S.shake-=dt;
+const keys=new Set();
+function step(dt){ if(!S||phase!=='lift') return; S.t+=dt; if(S.msgT>0) S.msgT-=dt; if(S.shake>0) S.shake-=dt;
   const held=keys.has('Space'), dif=S.diff;
-  /* resistance: gravity pulls down, hardest at the "sticking point" ~ bar 0.45 */
-  const stick=Math.exp(-Math.pow((S.bar-0.45)/0.16,2))*0.9; S.sticking=stick;
-  const drive=held&&S.stam>0.02 ? (1.9 - stick*1.15) * (0.75+0.25*S.stam) / dif : 0;
-  const gravity=0.85+stick*0.9;
-  S.vel += (drive - gravity)*dt*2.2;
-  S.vel = clamp(S.vel,-2.2,2.2);
-  S.bar = clamp(S.bar + S.vel*dt, 0, 1.0);
-  if(held&&S.stam>0){ S.stam=Math.max(0,S.stam - dt*(0.07 + 0.05*dif + stick*0.08)); if(Math.random()<dt*18) sfx.grind(); }
-  else S.stam=Math.min(1,S.stam + dt*0.22);
-  /* lockout: reached the top with upward motion */
-  if(S.bar>=0.999 && S.vel>-0.05){ rep(); }
-  /* failed rep: bar sank to the bottom under load */
-  if(S.bar<=0.001 && S.reps>0 && S.t>0.6 && S.stam<0.25){ endSet(); }
-  /* can't even budge it off the chest for a while = failure */
-  if(S.reps===0 && S.t>4 && S.bar<0.1){ endSet(); }
-}
-function rep(){ S.reps++; S.bar=0; S.vel=0; S.flash=.3; S.shake=.25; sfx.rep();
-  /* each rep adds strength; heavier relative to your base = more, but fatigue cuts later reps */
-  const fatigue=Math.max(0.35, 1 - S.reps*0.06);
-  const inc = (barW/110) * lift.gain * fatigue * 1.6;
-  S.gained += inc; if(window.RRSTR) RRSTR.add(inc);
-  /* new 1-rep max: a clean rep at a weight above your record for this lift */
-  if(barW>(SV[lift.k]||0)){ SV[lift.k]=barW; saveSV(); S.flash=.6; S.msg='NEW 1-REP MAX! '+barW+' lb'; S.msgT=2.5; sfx.pr(); refreshStats(); }
-  S.stam=Math.min(1,S.stam+0.12);
-}
+  if(S.lowering){ /* the eccentric: the bar comes down under control, then the next rep begins */
+    S.bar=Math.max(0,S.bar-dt*1.6); S.strain=Math.max(0,S.strain-dt*3); if(S.bar<=0.02){ S.lowering=false; S.bar=0; S.vel=0; } return; }
+  const stick=Math.exp(-Math.pow((S.bar-0.45)/0.16,2))*0.95; S.sticking=stick;
+  const drive=held&&S.stam>0.02 ? (1.95 - stick*1.2)*(0.72+0.28*S.stam)/dif : 0;
+  const grav=0.9+stick*0.95;
+  S.vel=clamp(S.vel+(drive-grav)*dt*2.3,-2.4,2.4);
+  S.bar=clamp(S.bar+S.vel*dt,0,1);
+  S.strain=clamp((held?1:0)*(0.3+stick)*(1.2-S.stam)+(S.sticking>.5&&S.vel<.1?.6:0),0,1);
+  if(held&&S.stam>0){ S.stam=Math.max(0,S.stam-dt*(0.075+0.05*dif+stick*0.09)); if(Math.random()<dt*20*(1+stick)) sfx.grind(); if(S.strain>.6) S.shake=Math.max(S.shake,.2); }
+  else S.stam=Math.min(1,S.stam+dt*0.24);
+  if(S.bar>=0.999&&S.vel>-0.05) rep();
+  if(S.bar<=0.001&&S.reps>0&&S.t>0.5&&S.stam<0.22) endSet('fail');
+  if(S.reps===0&&S.t>4.5&&S.bar<0.12) endSet('nolift'); }
+function rep(){ S.reps++; S.lowering=true; S.vel=0; S.shake=.3; sfx.up();
+  const fatigue=Math.max(0.35,1-S.reps*0.06), inc=(barW/110)*lift.gain*fatigue*1.6;
+  S.gained+=inc; if(window.RRSTR) RRSTR.add(inc);
+  if(barW>(SV[lift.k]||0)){ SV[lift.k]=barW; saveSV(); S.msg='NEW 1-REP MAX! '+barW+' lb'; S.msgT=2.6; sfx.pr(); refreshStats(); }
+  S.stam=Math.min(1,S.stam+0.1); }
 
-/* ---------- drawing: a lifter who bulks up with your strength ---------- */
-function drawLifter(x,y,s,bend,barFrac,buff){
-  /* buff 1..1.65 thickens the body */ const bw=buff;
-  const skin='#d8a77f', shirt='#2563eb', shorts='#111827';
-  ctx.save(); ctx.translate(x,y); ctx.scale(s,s);
-  const squat=bend*26; // how low (legs bent)
+/* ---------- 3D gym ---------- */
+let built=false;
+function buildGym(){ if(built||!R3.ok) return; built=true;
+  R3.setStatic((g,c,P)=>{ const {primBox,primCyl,T,S,RY,RZ,mm}=P, B=primBox(), CY=primCyl(16);
+    const box=(x,y,z,sx,sy,sz,col,ry)=>g.add(B,mm(T(x*K,y*K,z*K),ry?RY(ry):T(0,0,0),S(sx*K,sy*K,sz*K)),col);
+    /* floor + lifting platform */
+    box(0,-0.05,0, 9,0.1,8, '#0c1018'); for(let i=-4;i<=4;i++) box(i*1.0,0,-0.5, 0.02,0.005,8, '#141b2c');
+    box(0,0.02,0.2, 2.2,0.08,2.0, '#3a2a1a'); box(0,0.02,0.2, 2.0,0.1,1.8, '#4b3620');
+    /* back wall + logo band */
+    box(0,2.0,-3.4, 12,4.4,0.2, '#121a2e'); box(0,2.6,-3.28, 4,0.9,0.05, '#1e2b49');
+    /* a power rack behind the lifter */
+    for(const sx of [-1,1]){ box(sx*0.9,1.1,-0.9, 0.09,2.2,0.09, '#273149'); box(sx*0.9,0.05,-0.9,0.3,0.1,0.3,'#1b2338'); }
+    box(0,2.15,-0.9, 2.0,0.09,0.09, '#273149');
+    /* weight-plate trees on the sides */
+    for(const sx of [-1,1]){ box(sx*2.6,0.6,-0.6, 0.1,1.2,0.1,'#20283c'); for(let i=0;i<4;i++){ g.add(CY,mm(T(sx*2.6*K,(0.25+i*0.26)*K,-0.6*K),RZ(Math.PI/2),S(0.19*K,0.03*K,0.19*K)),i%2?'#1f2a44':'#243050'); } }
+    /* a flat bench off to the side */
+    box(2.9,0.42,0.9, 0.3,0.08,1.1,'#111827'); box(2.9,0.2,0.4,0.1,0.4,0.1,'#1f2937'); box(2.9,0.2,1.4,0.1,0.4,0.1,'#1f2937');
+    /* a couple of dumbbells on the floor */
+    for(const dx of [-2.3,-2.0]){ g.add(CY,mm(T(dx*K,0.12*K,1.3*K),RZ(Math.PI/2),S(0.12*K,0.14*K,0.12*K)),'#1b2236'); g.add(CY,mm(T((dx-0.18)*K,0.12*K,1.3*K),RZ(Math.PI/2),S(0.16*K,0.03*K,0.16*K)),'#243050'); g.add(CY,mm(T((dx+0.18)*K,0.12*K,1.3*K),RZ(Math.PI/2),S(0.16*K,0.03*K,0.16*K)),'#243050'); }
+  }); }
+
+function drawLifter(bar,buff){
+  const bsh=1+(buff-1)*1.15, barm=1+(buff-1)*2.0, bch=1+(buff-1)*0.55, bleg=1+(buff-1)*0.7;
+  const perf=performance.now()/1000, strain=S&&phase==='lift'?S.strain:0, sway=strain*0.02*Math.sin(perf*23);
+  const squatF=Math.max(0,0.95-smooth(bar)*1.9);
+  const hipY=0.95-squatF*0.4, lean=squatF*0.5;
+  const shY=hipY+0.5, shX=0.17*bsh;
+  const barY=0.52+smooth(bar)*1.74, barFwd=bar<0.5?(0.27-bar*0.46):0.02;
+  const skin='#caa078', tank='#1d4ed8', legc='#0f1726', shoe='#121a2a';
+  const P=(x,y,z,sx,sy,sz,c,m)=>R3.part(m||R3.UB,R3.mm(R3.T(x*K,y*K,z*K),R3.S(sx*K,sy*K,sz*K)),c);
+  const LB=(a,b,th,tw,c)=>R3.part(R3.UB,R3.beam([a[0]*K,a[1]*K,a[2]*K],[b[0]*K,b[1]*K,b[2]*K],th*K,tw*K),c);
+  const SP=(x,y,z,r,c)=>R3.part(R3.US,R3.mm(R3.T(x*K,y*K,z*K),R3.S(r*K,r*K,r*K)),c);
   /* legs */
-  ctx.fillStyle=shorts; ctx.strokeStyle=skin; ctx.lineWidth=0;
-  for(const sx of [-1,1]){ ctx.fillStyle=shorts; rr(sx*10-6*bw, -squat, 12*bw, 22, 4); ctx.fillStyle=skin; rr(sx*10-5*bw, 22-squat, 10*bw, 26, 4); ctx.fillStyle='#1f2937'; rr(sx*10-7*bw,46-squat,15*bw,8,3); }
-  /* torso: wider & taller with buff */
-  const th=46, tw=26*bw;
-  ctx.fillStyle=shirt; rr(-tw/2, -squat-th, tw, th, 7);
-  /* chest/pec shading */ ctx.fillStyle='rgba(255,255,255,.12)'; rr(-tw/2+3,-squat-th+5,tw-6,14,6);
-  /* arms up holding a bar (overhead-ish) or at chest */
-  const armR=5.5*Math.min(1.5,bw);
-  const shoulderY=-squat-th+8, handY=-squat-th-6 - barFrac*34;
-  ctx.strokeStyle=skin; ctx.lineWidth=armR*2; ctx.lineCap='round';
-  for(const sx of [-1,1]){ ctx.beginPath(); ctx.moveTo(sx*tw/2, shoulderY); ctx.lineTo(sx*(tw/2+6), (shoulderY+handY)/2); ctx.lineTo(sx*18, handY); ctx.stroke(); }
-  /* head */ ctx.fillStyle=skin; ctx.beginPath(); ctx.arc(0,-squat-th-10,11,0,7); ctx.fill(); ctx.fillStyle='#3a2b22'; rr(-10,-squat-th-20,20,8,4);
-  /* the barbell */
-  const barY=handY; ctx.strokeStyle='#cbd5e1'; ctx.lineWidth=4; ctx.beginPath(); ctx.moveTo(-70,barY); ctx.lineTo(70,barY); ctx.stroke();
-  const plates=Math.max(1,Math.round(barW/45)); ctx.fillStyle='#111827';
-  for(const sx of [-1,1]){ for(let i=0;i<Math.min(4,plates);i++){ rr(sx*(40+i*9)-4, barY-18, 8, 36, 2); } }
-  ctx.restore();
-}
-function rr(x,y,w,h,r){ ctx.beginPath(); ctx.roundRect(x,y,w,h,r); ctx.fill(); }
-
-function draw(){ ctx.clearRect(0,0,W,H);
-  /* gym backdrop */ ctx.fillStyle='#0c1020'; ctx.fillRect(0,0,W,H);
-  ctx.fillStyle='#161d33'; ctx.fillRect(0,H-70,W,70); for(let i=0;i<W;i+=56){ ctx.fillStyle='rgba(255,255,255,.04)'; ctx.fillRect(i,H-70,2,70); }
-  /* rack */ ctx.fillStyle='#232c47'; ctx.fillRect(170,70,16,H-140); ctx.fillRect(W-186,70,16,H-140);
-  const buff=window.RRSTR?RRSTR.muscle():1;
-  const bend=S&&phase==='lift'?(1-S.bar)*0.7:0.1, barFrac=S&&phase==='lift'?S.bar:0.4;
-  const sh=S&&S.shake>0?(Math.random()-.5)*S.shake*22:0;
-  drawLifter(W/2+sh, H-78, 2.0, bend, barFrac, buff);
-  /* the effort/stamina + bar meter on the right */
-  if(S){ const mx=W-120, my=90, mh=240;
-    ctx.fillStyle='rgba(255,255,255,.08)'; rr(mx,my,46,mh,10);
-    const bh=mh*(S.bar); ctx.fillStyle=S.sticking>0.5?'#f59e0b':'#22c55e'; rr(mx,my+mh-bh,46,bh,10);
-    ctx.fillStyle='#fff'; ctx.font="700 14px 'Big Shoulders Display',sans-serif"; ctx.textAlign='center'; ctx.fillText('LOCKOUT',mx+23,my-8); ctx.fillText(Math.round(S.bar*100)+'%',mx+23,my+mh+18);
-    /* sticking-point marker */ ctx.strokeStyle='#ef4444'; ctx.lineWidth=2; const sy=my+mh-mh*0.45; ctx.beginPath(); ctx.moveTo(mx-6,sy); ctx.lineTo(mx+52,sy); ctx.stroke(); ctx.fillStyle='#ef4444'; ctx.fillText('sticking',mx+23,sy-4);
-    /* stamina */ ctx.fillStyle='rgba(255,255,255,.08)'; rr(120,my,46,mh,10); ctx.fillStyle=S.stam<.25?'#ef4444':'#38bdf8'; const sh2=mh*S.stam; rr(120,my+mh-sh2,46,sh2,10); ctx.fillStyle='#fff'; ctx.fillText('ENERGY',143,my-8);
-    ctx.font="800 40px 'Big Shoulders Display',sans-serif"; ctx.fillStyle='#fde047'; ctx.textAlign='center'; ctx.fillText(S.reps+(S.reps===1?' REP':' REPS'),W/2,60);
-    if(S.flash>0){ ctx.fillStyle=`rgba(253,224,71,${S.flash})`; ctx.font="800 30px 'Big Shoulders Display',sans-serif"; ctx.fillText(S.bar>=.99?'':'',W/2,110); }
-    if(S.msgT>0&&S.msg){ ctx.fillStyle=/MAX/.test(S.msg)?'#fde047':'#e2e8f0'; ctx.font="800 24px 'Big Shoulders Display',sans-serif"; ctx.fillText(S.msg,W/2,H-30); }
-  } else {
-    ctx.fillStyle='#93a0bd'; ctx.font="700 22px 'Big Shoulders Display',sans-serif"; ctx.textAlign='center';
-    ctx.fillText(`${lift.n} · ${barW} lb — press Start, then hold Space to lift`,W/2,60);
-  }
-  /* strength label on the lifter */
-  if(window.RRSTR){ const st=RRSTR.state(); ctx.fillStyle='#cbd5e1'; ctx.font="800 18px 'Big Shoulders Display',sans-serif"; ctx.textAlign='center'; ctx.fillText('STRENGTH '+st.level+(st.badge?'  '+st.badge:''),W/2,H-92); }
+  for(const sx of [-1,1]){ const hip=[sx*0.11,hipY,sway], knee=[sx*0.13,hipY-0.26,0.03+squatF*0.16], ank=[sx*0.12,0.1,-0.02+squatF*0.02];
+    LB(hip,knee,0.085*bleg,0.1*bleg,legc); LB(knee,ank,0.06*bleg,0.07*bleg,skin); P(sx*0.12,0.05,0.04,0.11,0.07,0.22,shoe); }
+  /* torso as a thick beam hip->shoulders, tilted by lean */
+  const hipC=[0,hipY,sway], shC=[0,shY,sway-lean*0.22];
+  LB(hipC,shC,0.2*bch,0.145*bch,tank);
+  /* abs/chest detail + lower back */ SP(0,hipY+0.34,sway-lean*0.12+0.06,0.11*bch,tank);
+  /* shoulders (delts) */ const ShL=[-shX,shY-0.02,shC[2]], ShR=[shX,shY-0.02,shC[2]];
+  SP(ShL[0],ShL[1],ShL[2],0.085*bsh,tank); SP(ShR[0],ShR[1],ShR[2],0.085*bsh,tank);
+  /* traps/neck + head */ SP(0,shY+0.04,shC[2],0.07*bsh,skin); SP(0,shY+0.17,shC[2]-0.01,0.1,skin);
+  R3.part(R3.UB,R3.mm(R3.T(0,(shY+0.22)*K,(shC[2]-0.02)*K),R3.S(0.1*K,0.06*K,0.1*K)),'#2a1f16');
+  /* arms: shoulder -> elbow -> hand(bar) */
+  for(const sx of [-1,1]){ const Sh=[sx*shX,shY-0.02,shC[2]], Hd=[sx*0.24,barY,barFwd];
+    const overhead=bar>0.55, El=[sx*(shX+(overhead?0.03:0.1)),(Sh[1]+Hd[1])/2-(overhead?0.0:0.04),(Sh[2]+Hd[2])/2+(overhead?0:0.06)];
+    LB(Sh,El,0.07*barm,0.075*barm,skin); LB(El,Hd,0.055*barm,0.06*barm,skin);
+    SP((Sh[0]+El[0])/2,(Sh[1]+El[1])/2,(Sh[2]+El[2])/2,0.06*barm,skin); /* bicep */
+    SP(Hd[0],Hd[1],Hd[2],0.05,'#1b2236'); /* hand/grip */ }
+  /* barbell + plates, with a tilt when straining */
+  const tilt=sway*1.5, bm=R3.mm(R3.T(0,barY*K,barFwd*K),R3.RZ(Math.PI/2+tilt));
+  R3.part(R3.UC,R3.mm(bm,R3.S(0.028*K,0.8*K,0.028*K)),'#cbd5e1');
+  const plates=clamp(Math.round(barW/45),1,5);
+  for(const sx of [-1,1]) for(let i=0;i<plates;i++){ const px=sx*(0.58+i*0.05);
+    R3.part(R3.UC,R3.mm(R3.T(px*K,barY*K,barFwd*K),R3.RZ(Math.PI/2+tilt),R3.S(0.17*K,0.022*K,0.17*K)), i%2?'#20304f':'#1a2338'); }
+  R3.shadow(0,0.2, 55+buff*12);
 }
 
-/* ---------- loop ---------- */
-let last=performance.now();
-function frame(now){ const dt=Math.min(.05,(now-last)/1000); last=now; step(dt); draw(); requestAnimationFrame(frame); }
+/* ---------- camera + loop ---------- */
+let camMode=0;
+function render(dt){ if(!R3.ok) return; buildGym();
+  const buff=window.RRSTR?RRSTR.muscle():1, bar=S&&phase==='lift'?S.bar:0.08;
+  const cy=lerp(1.1,1.5,smooth(bar));
+  let eye,ctr,fov;
+  if(camMode===1){ eye=[0,1.3,2.6]; ctr=[0,cy,0]; fov=38; }
+  else if(camMode===2){ eye=[2.4,1.3,1.4]; ctr=[0,cy-0.1,0]; fov=42; }
+  else { eye=[1.75,1.55,2.9]; ctr=[0,cy,-0.05]; fov=42; }
+  const sh=S&&S.shake>0?S.shake:0;
+  R3.frame({eye:[(eye[0]+(Math.random()-.5)*sh)*K,eye[1]*K,(eye[2]+(Math.random()-.5)*sh)*K],center:[ctr[0]*K,ctr[1]*K,ctr[2]*K],fov,near:20,far:12000},()=>{ drawLifter(bar,buff); },dt);
+  drawHUD();
+}
+function frame(now){ const dt=Math.min(.05,(now-lastTS)/1000); lastTS=now; step(dt); render(dt); requestAnimationFrame(frame); }
 
-/* ---------- stats UI ---------- */
-function refreshStats(){ const st=window.RRSTR?RRSTR.state():{level:0,badge:'',tag:'',owner:false};
+/* ---------- HUD overlay ---------- */
+const cv=$('cv'), ctx=cv.getContext('2d'), HW=1000, HH=562;
+function txt(t,x,y,size,col,align='center',font){ ctx.font=`${font||800} ${size}px 'Big Shoulders Display','Arial Narrow',sans-serif`; ctx.textAlign=align; ctx.lineWidth=Math.max(3,size/6); ctx.strokeStyle='rgba(0,0,0,.55)'; ctx.strokeText(t,x,y); ctx.fillStyle=col; ctx.fillText(t,x,y); }
+function rrct(x,y,w,h,r,c){ ctx.fillStyle=c; ctx.beginPath(); ctx.roundRect(x,y,w,h,r); ctx.fill(); }
+function drawHUD(){ ctx.clearRect(0,0,HW,HH);
+  const st=window.RRSTR?RRSTR.state():{level:0,badge:''};
+  if(S&&phase==='lift'){ const mx=HW-96,my=70,mh=300;
+    rrct(mx,my,52,mh,10,'rgba(0,0,0,.4)'); const bh=mh*S.bar; ctx.fillStyle=S.sticking>.5?'#f59e0b':'#22c55e'; rrct(mx,my+mh-bh,52,bh,10); txt('LOCKOUT',mx+26,my-8,15,'#fff'); txt(Math.round(S.bar*100)+'%',mx+26,my+mh+20,15,'#fff');
+    ctx.strokeStyle='#ef4444'; ctx.lineWidth=2; const sy=my+mh-mh*0.45; ctx.beginPath(); ctx.moveTo(mx-6,sy); ctx.lineTo(mx+58,sy); ctx.stroke(); txt('sticking',mx+26,sy-5,12,'#ef4444');
+    rrct(44,my,52,mh,10,'rgba(0,0,0,.4)'); const eh=mh*S.stam; ctx.fillStyle=S.stam<.25?'#ef4444':'#38bdf8'; rrct(44,my+mh-eh,52,eh,10); txt('ENERGY',70,my-8,15,'#fff');
+    txt(S.lowering?'…down':(S.reps+(S.reps===1?' REP':' REPS')),HW/2,56,40,'#fde047');
+    if(S.msgT>0&&S.msg) txt(S.msg,HW/2,HH-28,24,/MAX/.test(S.msg)?'#fde047':'#e2e8f0'); }
+  else if(S&&phase==='done'){ txt(S.msg,HW/2,HH-28,26,/MAX/.test(S.msg)?'#fde047':'#e2e8f0'); txt('Enter / Start to go again · Rest to recover',HW/2,HH-4,15,'#cbd5e1'); }
+  else txt(`${lift.n} · ${barW} lb — Start, then hold Space to lift`,HW/2,56,22,'#cbd5e1');
+  txt('STRENGTH '+st.level+(st.badge?'  '+st.badge:''),HW/2,HH-54,19,'#e2e8f0'); }
+
+/* ---------- stats panel ---------- */
+function refreshStats(){ const st=window.RRSTR?RRSTR.state():{level:0,frac:0,badge:'',owner:false};
   $('sLvl').textContent=st.level; $('sBench').textContent=SV.bench||'—'; $('sSquat').textContent=SV.squat||'—'; $('sDead').textContent=SV.dead||'—'; $('sVol').textContent=(SV.vol||0).toLocaleString();
-  $('sBarFill').style.width=(st.frac!=null?st.frac*100:st.level)+'%';
+  $('sBarFill').style.width=(st.frac*100)+'%';
   $('sBarTxt').textContent=st.owner?'Owner — maxed out 💪':st.level>=100?'Maxed out — you are a Professional! 💪':`${100-st.level} strength to go until Professional`;
-  const tw=$('tagWrap'); tw.innerHTML = st.owner?'<span class="tag owner">👑 OWNER</span>' : (st.level>=100?'<span class="tag">💪 Professional</span>' : (st.badge?`<span class="tag">${st.badge}</span>`:'<span class="muted">No tag yet — keep lifting</span>')); }
+  $('tagWrap').innerHTML=st.owner?'<span class="tag owner">👑 OWNER</span>':(st.level>=100?'<span class="tag">💪 Professional</span>':(st.badge?`<span class="tag">${st.badge}</span>`:'<span class="muted">No tag yet — keep lifting</span>')); }
 
-/* ---------- menu wiring ---------- */
+/* ---------- menu ---------- */
 function renderLifts(){ $('liftPills').innerHTML=LIFTS.map(l=>`<button data-l="${l.k}" class="${l.k===lift.k?'on':''}">${l.n}</button>`).join(''); }
 function setW(){ $('barW').textContent=barW+' lb'; }
-$('liftPills').addEventListener('click',e=>{ const b=e.target.closest('[data-l]'); if(!b||phase==='lift') return; lift=LIFTS.find(l=>l.k===b.dataset.l); barW=Math.max(lift.start, (SV[lift.k]||lift.start)); barW=Math.round(barW/5)*5; renderLifts(); setW(); draw(); });
-document.querySelectorAll('[data-w]').forEach(b=>b.onclick=()=>{ if(phase==='lift') return; barW=clamp(Math.round((barW+ +b.dataset.w)/5)*5, 45, 1200); setW(); sfx.clank(); draw(); });
+$('liftPills').addEventListener('click',e=>{ const b=e.target.closest('[data-l]'); if(!b||phase==='lift') return; lift=LIFTS.find(l=>l.k===b.dataset.l); barW=Math.max(lift.start,Math.round((SV[lift.k]||lift.start)/5)*5); renderLifts(); setW(); });
+document.querySelectorAll('[data-w]').forEach(b=>b.onclick=()=>{ if(phase==='lift') return; barW=clamp(Math.round((barW+ +b.dataset.w)/5)*5,45,1200); setW(); sfx.clank(); });
 $('startBtn').onclick=()=>{ if(phase!=='lift') startSet(); };
 $('restBtn').onclick=restSet;
+$('camBtn').onclick=()=>{ camMode=(camMode+1)%3; };
 $('btnSnd').onclick=()=>{ muted=!muted; $('btnSnd').textContent=muted?'Sound off':'Sound on'; if(!muted) audio(); };
-$('btnFs').onclick=()=>{ try{ document.fullscreenElement?document.exitFullscreen():document.documentElement.requestFullscreen(); }catch(e){} };
+$('btnFs').onclick=()=>{ try{ document.fullscreenElement?document.exitFullscreen():document.getElementById('stage').requestFullscreen(); }catch(e){} };
 
-/* ---------- keys ---------- */
-const keys=new Set();
 addEventListener('keydown',e=>{ const t=document.activeElement; if(t&&(t.tagName==='INPUT'||t.tagName==='TEXTAREA')) return;
-  if(e.code==='Space'){ e.preventDefault(); if(phase!=='lift') { startSet(); } keys.add('Space'); audio(); }
+  if(e.code==='Space'){ e.preventDefault(); if(phase!=='lift') startSet(); keys.add('Space'); audio(); }
   else if(e.code==='Enter'){ if(phase!=='lift') startSet(); }
-  else if(e.code==='KeyR'){ restSet(); } });
+  else if(e.code==='KeyR'){ restSet(); }
+  else if(e.code==='KeyC'){ camMode=(camMode+1)%3; } });
 addEventListener('keyup',e=>{ if(e.code==='Space') keys.delete('Space'); });
-/* touch: press and hold the canvas to lift */
-cv.addEventListener('pointerdown',e=>{ e.preventDefault(); audio(); if(phase!=='lift') startSet(); keys.add('Space'); });
+$('stage').addEventListener('pointerdown',e=>{ e.preventDefault(); audio(); if(phase!=='lift') startSet(); keys.add('Space'); });
 addEventListener('pointerup',()=>keys.delete('Space'));
 addEventListener('rrstr-change',refreshStats);
 
