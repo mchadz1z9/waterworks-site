@@ -163,43 +163,79 @@ function buildGym(){ if(built||!R3.ok) return; built=true;
     for(const dx of [-2.3,-2.0]){ g.add(CY,mm(T(dx*K,0.12*K,1.3*K),RZ(Math.PI/2),S(0.12*K,0.14*K,0.12*K)),'#1b2236'); g.add(CY,mm(T((dx-0.18)*K,0.12*K,1.3*K),RZ(Math.PI/2),S(0.16*K,0.03*K,0.16*K)),'#243050'); g.add(CY,mm(T((dx+0.18)*K,0.12*K,1.3*K),RZ(Math.PI/2),S(0.16*K,0.03*K,0.16*K)),'#243050'); }
   }); }
 
+/* Draw the lifter in the real stance for the current lift: bench lying on the bench,
+   squat standing with the bar on the back, deadlift hinging from the floor,
+   press standing and driving the bar overhead. bar: 0 = bottom of the rep, 1 = locked out. */
 function drawLifter(bar,buff){
   const bsh=1+(buff-1)*1.15, barm=1+(buff-1)*2.0, bch=1+(buff-1)*0.55, bleg=1+(buff-1)*0.7;
+  const b=smooth(bar);
   const perf=performance.now()/1000, strain=S&&phase==='lift'?S.strain:0, sway=strain*0.02*Math.sin(perf*23);
-  const squatF=Math.max(0,0.95-smooth(bar)*1.9);
-  const hipY=0.95-squatF*0.4, lean=squatF*0.5;
-  const shY=hipY+0.5, shX=0.17*bsh;
-  const barY=0.52+smooth(bar)*1.74, barFwd=bar<0.5?(0.27-bar*0.46):0.02;
   const skin='#caa078', tank='#1d4ed8', legc='#0f1726', shoe='#121a2a';
   const P=(x,y,z,sx,sy,sz,c,m)=>R3.part(m||R3.UB,R3.mm(R3.T(x*K,y*K,z*K),R3.S(sx*K,sy*K,sz*K)),c);
-  const LB=(a,b,th,tw,c)=>R3.part(R3.UB,R3.beam([a[0]*K,a[1]*K,a[2]*K],[b[0]*K,b[1]*K,b[2]*K],th*K,tw*K),c);
+  const LB=(a,c,th,tw,col)=>R3.part(R3.UB,R3.beam([a[0]*K,a[1]*K,a[2]*K],[c[0]*K,c[1]*K,c[2]*K],th*K,tw*K),col);
   const SP=(x,y,z,r,c)=>R3.part(R3.US,R3.mm(R3.T(x*K,y*K,z*K),R3.S(r*K,r*K,r*K)),c);
+  const mid=(a,c,t)=>[a[0]+(c[0]-a[0])*t,a[1]+(c[1]-a[1])*t,a[2]+(c[2]-a[2])*t];
+  const k=lift.k;
+  let pelvis,chest,head,front,barC, hipF,kneeF,ankF,shoF,elbF,handF, platesC='#20304f';
+
+  if(k==='squat'){                                   /* bar on the back, stand up out of the hole */
+    const depth=1-b, hipY=0.95-depth*0.44, shY=hipY+0.5-depth*0.04, lean=depth*0.5;
+    pelvis=[0,hipY,sway]; chest=[0,shY,-lean*0.2]; head=[0,shY+0.2,chest[2]-0.02]; front=[0,0,1];
+    const barY=shY+0.07, barZ=-0.17; barC=[0,barY,barZ];
+    hipF=sx=>[sx*0.11,hipY,sway]; kneeF=sx=>[sx*0.16,hipY-0.22,0.05+depth*0.24]; ankF=sx=>[sx*0.14,0.1,0.0];
+    shoF=sx=>[sx*0.17*bsh,shY-0.02,chest[2]]; handF=sx=>[sx*0.30,barY,barZ]; elbF=sx=>[sx*0.33,shY-0.12,barZ+0.05];
+  } else if(k==='dead'){                              /* bar on the floor, hinge and stand tall */
+    const hipY=0.52+b*0.44, lean=(1-b)*0.6, shY=hipY+0.4+b*0.1;
+    pelvis=[0,hipY,sway-(1-b)*0.04]; chest=[0,shY,0.03+lean*0.34]; head=[0,shY+0.17+lean*0.05,chest[2]+0.06]; front=[0,0,1];
+    const barY=0.24+b*0.70, barZ=0.20; barC=[0,barY,barZ];
+    hipF=sx=>[sx*0.12,hipY,pelvis[2]]; kneeF=sx=>[sx*0.14,hipY-0.24,0.10+(1-b)*0.10]; ankF=sx=>[sx*0.13,0.1,barZ-0.03];
+    shoF=sx=>[sx*0.17*bsh,shY-0.02,chest[2]]; handF=sx=>[sx*0.16,barY,barZ]; elbF=sx=>mid(shoF(sx),handF(sx),0.5);
+  } else if(k==='press'){                             /* standing, press from shoulders to overhead */
+    const hipY=0.95, shY=hipY+0.5;
+    pelvis=[0,hipY,sway]; chest=[0,shY,0]; head=[0,shY+0.2,0]; front=[0,0,1];
+    const barY=shY+0.05+b*0.74, barZ=0.10-b*0.14; barC=[0,barY,barZ];
+    hipF=sx=>[sx*0.11,hipY,sway]; kneeF=sx=>[sx*0.12,hipY-0.26,0.03]; ankF=sx=>[sx*0.12,0.1,0.0];
+    shoF=sx=>[sx*0.17*bsh,shY-0.02,0]; handF=sx=>[sx*0.22,barY,barZ]; elbF=sx=>[sx*(0.26-b*0.05),(shY+barY)/2-(1-b)*0.04,barZ+(1-b)*0.08];
+  } else {                                            /* bench: lie back on the bench, press up */
+    const benchY=0.52, hipZ=0.30, chZ=-0.20;
+    pelvis=[0,benchY+0.04,hipZ]; chest=[0,benchY+0.07,chZ]; head=[0,benchY+0.08,chZ-0.28]; front=[0,1,0];
+    const barY=benchY+0.24+b*0.42, barZ=chZ+0.02; barC=[0,barY,barZ];
+    hipF=sx=>[sx*0.12,benchY+0.02,hipZ]; kneeF=sx=>[sx*0.17,benchY-0.04,hipZ+0.34]; ankF=sx=>[sx*0.19,0.1,hipZ+0.54];
+    shoF=sx=>[sx*0.17*bsh,benchY+0.12,chZ]; handF=sx=>[sx*0.22,barY,barZ]; elbF=sx=>[sx*(0.30-b*0.07),(benchY+0.13+barY)/2,barZ+0.03];
+    /* the bench itself, under the lifter */
+    P(0,benchY,0.0,0.18,0.05,0.82,'#141b2c'); P(0,benchY+0.03,-0.3,0.2,0.03,0.24,'#172036');
+    P(0,benchY-0.26,-0.3,0.12,0.52,0.12,'#1f2937'); P(0,benchY-0.26,0.28,0.12,0.52,0.12,'#1f2937');
+    for(const sx of [-1,1]) P(sx*0.3,0.56,-0.46,0.05,0.56,0.05,'#273149');
+  }
+
   /* legs */
-  for(const sx of [-1,1]){ const hip=[sx*0.11,hipY,sway], knee=[sx*0.13,hipY-0.26,0.03+squatF*0.16], ank=[sx*0.12,0.1,-0.02+squatF*0.02];
-    LB(hip,knee,0.085*bleg,0.1*bleg,legc); LB(knee,ank,0.06*bleg,0.07*bleg,skin); P(sx*0.12,0.05,0.04,0.11,0.07,0.22,shoe); }
-  /* torso as a thick beam hip->shoulders, tilted by lean */
-  const hipC=[0,hipY,sway], shC=[0,shY,sway-lean*0.22];
-  LB(hipC,shC,0.2*bch,0.145*bch,tank);
-  /* chest/abs: a flat, shallow plate on the front of the torso (no round bulge) */
-  const chZ=sway-lean*0.12+0.055;
-  P(0,hipY+0.38,chZ,0.19*bch,0.17*bch,0.055*bch,tank);  /* pecs: wide, tall, very thin */
-  P(0,hipY+0.17,chZ-0.004,0.15*bch,0.2*bch,0.045*bch,tank); /* abs: narrower, flat */
-  /* shoulders (delts) */ const ShL=[-shX,shY-0.02,shC[2]], ShR=[shX,shY-0.02,shC[2]];
-  SP(ShL[0],ShL[1],ShL[2],0.085*bsh,tank); SP(ShR[0],ShR[1],ShR[2],0.085*bsh,tank);
-  /* traps/neck + head */ SP(0,shY+0.04,shC[2],0.07*bsh,skin); SP(0,shY+0.17,shC[2]-0.01,0.1,skin);
-  R3.part(R3.UB,R3.mm(R3.T(0,(shY+0.22)*K,(shC[2]-0.02)*K),R3.S(0.1*K,0.06*K,0.1*K)),'#2a1f16');
-  /* arms: shoulder -> elbow -> hand(bar) */
-  for(const sx of [-1,1]){ const Sh=[sx*shX,shY-0.02,shC[2]], Hd=[sx*0.24,barY,barFwd];
-    const overhead=bar>0.55, El=[sx*(shX+(overhead?0.03:0.1)),(Sh[1]+Hd[1])/2-(overhead?0.0:0.04),(Sh[2]+Hd[2])/2+(overhead?0:0.06)];
-    LB(Sh,El,0.07*barm,0.075*barm,skin); LB(El,Hd,0.055*barm,0.06*barm,skin);
-    SP((Sh[0]+El[0])/2,(Sh[1]+El[1])/2,(Sh[2]+El[2])/2,0.06*barm,skin); /* bicep */
-    SP(Hd[0],Hd[1],Hd[2],0.05,'#1b2236'); /* hand/grip */ }
-  /* barbell + plates, with a tilt when straining */
-  const tilt=sway*1.5, bm=R3.mm(R3.T(0,barY*K,barFwd*K),R3.RZ(Math.PI/2+tilt));
-  R3.part(R3.UC,R3.mm(bm,R3.S(0.028*K,0.8*K,0.028*K)),'#cbd5e1');
+  for(const sx of [-1,1]){ const h=hipF(sx),kn=kneeF(sx),an=ankF(sx);
+    LB(h,kn,0.085*bleg,0.1*bleg,legc); LB(kn,an,0.06*bleg,0.07*bleg,skin); P(an[0],0.05,an[2]+0.02,0.11,0.07,0.22,shoe); }
+  /* torso beam hips->shoulders */
+  LB(pelvis,chest,0.2*bch,0.145*bch,tank);
+  /* flat pec + ab plates on the front of the torso (never a round bulge) */
+  const chMid=mid(pelvis,chest,0.62), abMid=mid(pelvis,chest,0.32);
+  if(front[1]>0.5){ /* lying face-up: front is +Y, keep the plates shallow in Y */
+    P(chMid[0],chMid[1]+0.06,chMid[2],0.18*bch,0.05*bch,0.17*bch,tank);
+    P(abMid[0],abMid[1]+0.05,abMid[2],0.15*bch,0.045*bch,0.2*bch,tank);
+  } else {         /* standing: front is +Z, shallow in Z */
+    P(chMid[0],chMid[1],chMid[2]+0.07,0.19*bch,0.17*bch,0.055*bch,tank);
+    P(abMid[0],abMid[1],abMid[2]+0.065,0.15*bch,0.2*bch,0.045*bch,tank);
+  }
+  /* delts, neck, head */
+  for(const sx of [-1,1]){ const s=shoF(sx); SP(s[0],s[1],s[2],0.085*bsh,tank); }
+  const neck=mid(chest,head,0.5); SP(neck[0],neck[1],neck[2],0.07*bsh,skin); SP(head[0],head[1],head[2],0.1,skin);
+  P(head[0],head[1]+0.055,head[2]-(front[1]>0.5?0:0.02),0.1,0.06,0.1,'#2a1f16');
+  /* arms: shoulder -> elbow -> hand on the bar */
+  for(const sx of [-1,1]){ const s=shoF(sx),e=elbF(sx),hd=handF(sx);
+    LB(s,e,0.07*barm,0.075*barm,skin); LB(e,hd,0.055*barm,0.06*barm,skin);
+    const bi=mid(s,e,0.5); SP(bi[0],bi[1],bi[2],0.06*barm,skin); SP(hd[0],hd[1],hd[2],0.05,'#1b2236'); }
+  /* barbell + plates, with a little tilt under strain */
+  const tilt=sway*1.5;
+  R3.part(R3.UC,R3.mm(R3.T(barC[0]*K,barC[1]*K,barC[2]*K),R3.RZ(Math.PI/2+tilt),R3.S(0.028*K,0.8*K,0.028*K)),'#cbd5e1');
   const plates=clamp(Math.round(barW/45),1,5);
-  for(const sx of [-1,1]) for(let i=0;i<plates;i++){ const px=sx*(0.58+i*0.05);
-    R3.part(R3.UC,R3.mm(R3.T(px*K,barY*K,barFwd*K),R3.RZ(Math.PI/2+tilt),R3.S(0.17*K,0.022*K,0.17*K)), i%2?'#20304f':'#1a2338'); }
+  for(const sx of [-1,1]) for(let i=0;i<plates;i++){ const px=barC[0]+sx*(0.58+i*0.05);
+    R3.part(R3.UC,R3.mm(R3.T(px*K,barC[1]*K,barC[2]*K),R3.RZ(Math.PI/2+tilt),R3.S(0.17*K,0.022*K,0.17*K)), i%2?'#20304f':'#1a2338'); }
   R3.shadow(0,0.2, 55+buff*12);
 }
 
@@ -207,11 +243,14 @@ function drawLifter(bar,buff){
 let camMode=0;
 function render(dt){ if(!R3.ok) return; buildGym();
   const buff=window.RRSTR?RRSTR.muscle():1, bar=S&&phase==='lift'?S.bar:0.08;
-  const cy=lerp(1.1,1.5,smooth(bar));
-  let eye,ctr,fov;
-  if(camMode===1){ eye=[0,1.3,2.6]; ctr=[0,cy,0]; fov=38; }
-  else if(camMode===2){ eye=[2.4,1.3,1.4]; ctr=[0,cy-0.1,0]; fov=42; }
-  else { eye=[1.75,1.55,2.9]; ctr=[0,cy,-0.05]; fov=42; }
+  const b=smooth(bar), k=lift.k;
+  /* focus height follows where the work is for each lift */
+  const foc = k==='press'? lerp(1.4,2.0,b) : k==='dead'? lerp(0.62,1.08,b) : k==='bench'? 0.9 : lerp(0.95,1.32,b);
+  let eye,ctr,fov=42;
+  if(camMode===1){ eye=[0,foc+0.1,2.6]; ctr=[0,foc,-0.05]; fov=40; }
+  else if(camMode===2){ eye=[2.5,foc+0.2,1.5]; ctr=[0,foc,0]; fov=44; }
+  else if(k==='bench'){ eye=[2.1,1.5,2.4]; ctr=[0,0.92,-0.05]; }
+  else { eye=[1.75,1.55,2.9]; ctr=[0,foc,-0.05]; }
   const sh=S&&S.shake>0?S.shake:0;
   R3.frame({eye:[(eye[0]+(Math.random()-.5)*sh)*K,eye[1]*K,(eye[2]+(Math.random()-.5)*sh)*K],center:[ctr[0]*K,ctr[1]*K,ctr[2]*K],fov,near:20,far:12000},()=>{ drawLifter(bar,buff); },dt);
   drawHUD();
