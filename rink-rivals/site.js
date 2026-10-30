@@ -88,7 +88,7 @@
 .rra-body{font-size:19px;line-height:1.5;color:#cdd6ec;white-space:pre-wrap;word-wrap:break-word}
 .rra-go{margin-top:22px;font:800 19px 'DM Sans',system-ui,sans-serif;border:0;border-radius:14px;padding:13px 30px;background:#22c55e;color:#052e16;cursor:pointer}
 .rra-go:hover{background:#16a34a}
-.rra-x{position:absolute;top:12px;right:14px;width:40px;height:40px;border-radius:12px;border:0;background:rgba(255,255,255,.1);color:#fff;font-size:26px;line-height:1;cursor:pointer}
+.rra-x{position:absolute;z-index:3;top:12px;right:14px;width:40px;height:40px;border-radius:12px;border:0;background:rgba(0,0,0,.25);color:#fff;font-size:26px;line-height:1;cursor:pointer}
 .rra-x:hover{background:rgba(255,255,255,.22)}
 @media(max-width:560px){.rra-card h2{font-size:26px}.rra-body{font-size:17px}}
 #rrBanner{position:fixed;top:0;left:0;right:0;z-index:99998;display:flex;align-items:center;justify-content:center;gap:10px;padding:8px 44px 8px 16px;color:#fff;font:700 15px 'DM Sans',system-ui,sans-serif;text-align:center;box-shadow:0 2px 10px rgba(0,0,0,.35)}
