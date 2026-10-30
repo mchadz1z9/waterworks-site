@@ -10,6 +10,7 @@ export default {
       return env.ROOMS.get(id).fetch(req);
     }
     if(url.pathname==='/site'){ if(req.method==='OPTIONS') return new Response(null,{headers:CORS}); return env.SITE.get(env.SITE.idFromName('SITE')).fetch(req); }
+    if(url.pathname==='/tourney'){ if(req.method==='OPTIONS') return new Response(null,{headers:CORS}); return env.SITE.get(env.SITE.idFromName('SITE')).fetch(req); }
     const lb=url.pathname.match(/^\/lb\/([a-z0-9]{2,16})$/);
     if(lb){ if(req.method==='OPTIONS') return new Response(null,{headers:CORS}); return env.BOARDS.get(env.BOARDS.idFromName(lb[1])).fetch(req); }
     if(url.pathname==='/chat'){
@@ -271,10 +272,17 @@ export class Chat {
    Only the admin tools (with a key) can change it. */
 export class Site {
   constructor(ctx){ this.ctx=ctx; this.s=ctx.storage; }
-  async state(){ return { ann: await this.s.get('ann')||null, ov: await this.s.get('ov')||[], settings: await this.s.get('settings')||{} }; }
+  async state(){ return { ann: await this.s.get('ann')||null, ov: await this.s.get('ov')||[], settings: await this.s.get('settings')||{}, tourneys: await this.s.get('tourneys')||[] }; }
   async fetch(req){
     const url=new URL(req.url);
-    if(url.pathname==='/site'){ const st=await this.state(); return new Response(JSON.stringify(st),{headers:{...CORS,'content-type':'application/json','cache-control':'public,max-age=15'}}); }
+    if(url.pathname==='/site'){ const st=await this.state(); return new Response(JSON.stringify(st),{headers:{...CORS,'content-type':'application/json','cache-control':'public,max-age=10'}}); }
+    if(url.pathname==='/tourney'){ let m={}; try{ m=await req.json(); }catch(e){}
+      if(m.op==='join'&&m.id){ const arr=(await this.s.get('tourneys'))||[]; const t=arr.find(x=>x.id===m.id); if(!t) return J({err:'gone'},404);
+        const pid=String(m.pid||'').replace(/[^a-z0-9]/gi,'').slice(0,24), name=String(m.name||'Player').replace(/[<>]/g,'').trim().slice(0,20)||'Player';
+        t.joins=(t.joins||[]).filter(j=>j.pid!==pid); t.joins.push({name,pid,ts:Date.now()}); t.joins=t.joins.slice(-500);
+        await this.s.put('tourneys',arr); return J({ok:true,joined:t.joins.length}); }
+      if(m.op==='leave'&&m.id){ const arr=(await this.s.get('tourneys'))||[]; const t=arr.find(x=>x.id===m.id); if(t){ const pid=String(m.pid||'').replace(/[^a-z0-9]/gi,'').slice(0,24); t.joins=(t.joins||[]).filter(j=>j.pid!==pid); await this.s.put('tourneys',arr); } return J({ok:true}); }
+      return J({err:'op'},400); }
     if(url.pathname==='/admin'){ let m={}; try{ m=await req.json(); }catch(e){}
       const role=req.headers.get('x-admin-role')||'full', full=role==='full';
       if(m.op==='get') return J({...await this.state(),role});
@@ -294,6 +302,10 @@ export class Site {
         if('bannerOn' in p) next.bannerOn=!!p.bannerOn;
         if('banner' in p){ const b=p.banner||{}; next.banner={text:String(b.text||'').slice(0,160),theme:String(b.theme||'').replace(/[^a-z]/g,'').slice(0,12)}; next.bannerId=Date.now().toString(36); }
         await this.s.put('settings',next); return J({ok:true,settings:next}); }
+      if(m.op==='tourneyAdd'){ const t=m.t||{}, name=String(t.name||'').slice(0,80); if(!name) return J({err:'bad'},400);
+        const row={id:Date.now().toString(36),name,game:String(t.game||'').slice(0,40),page:String(t.page||'').replace(/[^a-z0-9-]/g,'').slice(0,16),time:String(t.time||'').slice(0,40),desc:String(t.desc||'').slice(0,600),joins:[],ts:Date.now()};
+        const arr=(await this.s.get('tourneys'))||[]; arr.push(row); await this.s.put('tourneys',arr.slice(-20)); return J({ok:true,id:row.id}); }
+      if(m.op==='tourneyDel'&&m.id){ const arr=((await this.s.get('tourneys'))||[]).filter(x=>x.id!==m.id); await this.s.put('tourneys',arr); return J({ok:true}); }
       return J({err:'op'},400); }
     return J({err:'path'},404);
   }

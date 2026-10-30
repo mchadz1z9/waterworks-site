@@ -142,6 +142,21 @@ h3.sec{margin:16px 0 4px;font-size:15px;color:var(--mut);text-transform:uppercas
     <div class="msg" id="bcMsg"></div>
   </div>
 
+  <div class="card full">
+    <h2>🏆 Tournaments</h2>
+    <p class="mut">Create a tournament, pick the game and time. Everyone sees a pop-up when they open the site and can tap <b>Join</b> — and a 🏆 Tournament button stays in the top-right.</p>
+    <div class="row">
+      <div><label>Tournament name</label><input id="tName" maxlength="80" placeholder="e.g. Friday Night Football Cup"></div>
+      <div style="flex:0 0 200px"><label>Game</label><select id="tGame"></select></div>
+      <div style="flex:0 0 220px"><label>Date &amp; time</label><input id="tTime" type="datetime-local"></div>
+    </div>
+    <label>Details <span class="mut">(rules, prize, how to join…)</span></label>
+    <textarea id="tDesc" maxlength="600" placeholder="Tell players what it is, when, and how it works…"></textarea>
+    <div class="row" style="margin-top:12px"><button id="tCreate" class="go" style="flex:0 0 auto">Create tournament</button></div>
+    <div class="msg" id="tMsg"></div>
+    <div class="list" id="tList"></div>
+  </div>
+
   <div class="card">
     <h2>👥 Users &amp; moderation</h2>
     <p class="mut">Click a player below — kick or ban them, give them a tag, or (full admin) grant them admin access. No typing needed.</p>
@@ -178,7 +193,7 @@ function showApp(st){ ROLE=st.role||'full'; $('login').classList.add('hide'); $(
   const full=ROLE==='full'; document.querySelectorAll('.full').forEach(el=>el.style.display=full?'':'none');
   try{ if(full) localStorage.setItem('rrOwner','1'); }catch(e){}
   $('roleNote').textContent=full?'Signed in as full admin — changes go live for everyone.':'Signed in as moderator — you can kick, ban and tag.';
-  if(full){ initAnn(); initEditor(); initSettings(); renderAnn(st.ann); renderEdits(st.ov); renderSettings(st.settings); } loadUsers(); loadStats(); }
+  if(full){ initAnn(); initEditor(); initSettings(); initTourney(); renderAnn(st.ann); renderEdits(st.ov); renderSettings(st.settings); renderTourneys(st.tourneys); } loadUsers(); loadStats(); }
 
 /* ---- announcement ---- */
 const THEMES={blue:['#1e3a8a','#0ea5e9'],green:['#065f46','#22c55e'],purple:['#4c1d95','#a855f7'],red:['#7f1d1d','#ef4444'],orange:['#7c2d12','#f59e0b'],pink:['#831843','#ec4899'],teal:['#134e4a','#14b8a6'],gold:['#78350f','#fbbf24']};
@@ -264,8 +279,18 @@ async function doAct(a){ try{
   loadUsers();
 }catch(e){ setMsg('uMsg', e.message==='forbidden'?'Not allowed at your access level.':'Action failed.',0); } }
 
+/* ---- tournaments ---- */
+const GAMES=[['football','🏈 Football'],['basketball','🏀 Basketball'],['hockey','🏒 Hockey'],['baseball','⚾ Baseball'],['soccer','⚽ Soccer'],['ufc','🥊 UFC'],['poker','🃏 Poker'],['blackjack','🃏 Blackjack'],['chess','♟️ Chess'],['tennis','🎾 Tennis'],['golf','⛳ Golf'],['bowling','🎳 Bowling'],['f1','🏎️ F1'],['nascar','🏁 NASCAR'],['kart','🏎️ Kart'],['moto','🏍️ MotoGP'],['mx','🏍️ Motocross'],['drift','💨 Drift'],['skate','🛹 Skate'],['archery','🏹 Archery'],['darts','🎯 Darts'],['paintball','🟡 Paintball'],['airsoft','🎯 Airsoft'],['br','🌀 Storm Royale'],['fishing','🎣 Fishing'],['pool','🎱 Pool'],['karate','🥋 Karate'],['weightlifting','🏋️ Weightlifting'],['landlord','🏘️ Landlord'],['tabletennis','🏓 Table Tennis'],['volleyball','🏐 Volleyball']];
+function initTourney(){ const g=$('tGame'); if(g) g.innerHTML='<option value="">— pick a game —</option>'+GAMES.map(([p,l])=>`<option value="${p}">${esc(l)}</option>`).join(''); }
+const tc=$('tCreate'); if(tc) tc.onclick=async()=>{ const name=$('tName').value.trim(); if(!name){ setMsg('tMsg','Type a tournament name.',0); return; } const sel=$('tGame'), page=sel.value, game=page?sel.options[sel.selectedIndex].text:'', time=$('tTime').value, desc=$('tDesc').value.trim(); setMsg('tMsg','Creating…'); try{ await api('/admin/site','tourneyAdd',{t:{name,game,page,time,desc}}); setMsg('tMsg','Tournament created — everyone will see it.',1); $('tName').value='';$('tDesc').value=''; refreshState(); }catch(e){ setMsg('tMsg','Failed.',0); } };
+function renderTourneys(list){ const el=$('tList'); if(!el) return; list=list||[]; if(!list.length){ el.innerHTML='<p class="mut">No tournaments yet.</p>'; return; }
+  el.innerHTML='<div class="mut" style="margin:6px 0">Current tournaments:</div>'+list.slice().reverse().map(t=>{ const n=(t.joins||[]).length, when=t.time?new Date(t.time).toLocaleString():'no time set';
+    return `<div class="urow"><span class="nm">🏆 <b>${esc(t.name)}</b> <span class="pill">${esc(t.game||'any')}</span> <span class="pill">${esc(when)}</span> <span class="pill">${n} joined</span></span><span class="acts"><button class="sm ghost" data-twho="${esc(t.id)}">Who joined</button><button class="sm del" data-tdel="${esc(t.id)}">Delete</button></span></div><div class="mut" id="tw_${esc(t.id)}" style="display:none;margin:-2px 0 8px 6px"></div>`; }).join('');
+  el.querySelectorAll('[data-tdel]').forEach(b=>b.onclick=async()=>{ if(!confirm('Delete this tournament?')) return; await api('/admin/site','tourneyDel',{id:b.dataset.tdel}); refreshState(); });
+  el.querySelectorAll('[data-twho]').forEach(b=>b.onclick=()=>{ const t=list.find(x=>x.id===b.dataset.twho), w=$('tw_'+b.dataset.twho); if(!w) return; const names=(t.joins||[]).map(j=>esc(j.name)); w.style.display=w.style.display==='none'?'block':'none'; w.innerHTML=names.length?('Joined ('+names.length+'): '+names.join(', ')):'No one has joined yet.'; }); }
+
 function setMsg(id,t,ok){ const e=$(id); e.textContent=t; e.className='msg'+(ok===1?' ok':ok===0?' err':''); }
-async function refreshState(){ try{ const st=await api('/admin/site','get'); renderAnn(st.ann); renderEdits(st.ov); renderSettings(st.settings); }catch(e){} }
+async function refreshState(){ try{ const st=await api('/admin/site','get'); renderAnn(st.ann); renderEdits(st.ov); renderSettings(st.settings); renderTourneys(st.tourneys); }catch(e){} }
 
 /* ---- site settings: the top banner ---- */
 function initSettings(){ const t=$('bnTheme'); if(t) t.innerHTML=Object.keys(THEMES).map(k=>`<option value="${k}">${k[0].toUpperCase()+k.slice(1)}</option>`).join('');
