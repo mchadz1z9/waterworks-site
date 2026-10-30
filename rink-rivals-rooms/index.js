@@ -10,7 +10,7 @@ export default {
       return env.ROOMS.get(id).fetch(req);
     }
     if(url.pathname==='/site'){ if(req.method==='OPTIONS') return new Response(null,{headers:CORS}); return env.SITE.get(env.SITE.idFromName('SITE')).fetch(req); }
-    if(url.pathname==='/tourney'){ if(req.method==='OPTIONS') return new Response(null,{headers:CORS}); return env.SITE.get(env.SITE.idFromName('SITE')).fetch(req); }
+    if(url.pathname==='/tourney'||url.pathname==='/play'||url.pathname==='/daily'){ if(req.method==='OPTIONS') return new Response(null,{headers:CORS}); return env.SITE.get(env.SITE.idFromName('SITE')).fetch(req); }
     const lb=url.pathname.match(/^\/lb\/([a-z0-9]{2,16})$/);
     if(lb){ if(req.method==='OPTIONS') return new Response(null,{headers:CORS}); return env.BOARDS.get(env.BOARDS.idFromName(lb[1])).fetch(req); }
     if(url.pathname==='/chat'){
@@ -273,8 +273,40 @@ export class Chat {
 export class Site {
   constructor(ctx){ this.ctx=ctx; this.s=ctx.storage; }
   async state(){ return { ann: await this.s.get('ann')||null, ov: await this.s.get('ov')||[], settings: await this.s.get('settings')||{}, tourneys: await this.s.get('tourneys')||[] }; }
+  /* ---- daily play time + daily challenge ---- */
+  day(){ try{ return new Date().toLocaleDateString('en-CA',{timeZone:'America/Toronto'}); }catch(e){ return new Date().toISOString().slice(0,10); } }
+  async board(d){ const m=(await this.s.get('pt:'+d))||{}; return Object.entries(m).map(([pid,v])=>({pid,name:v.n,s:Math.round(v.s)})).filter(x=>x.s>0).sort((a,b)=>b.s-a.s); }
+  async prevDay(d){ const days=(await this.s.get('ptDays'))||[]; const i=days.indexOf(d); return i>0?days[i-1]:(i<0&&days.length?days[days.length-1]:null); }
+  async trackDay(d){ const days=(await this.s.get('ptDays'))||[]; if(days.includes(d)) return; days.push(d); while(days.length>10){ const old=days.shift(); await this.s.delete('pt:'+old); } await this.s.put('ptDays',days); }
+  async addAch(pid,e){ const k='ach:'+pid, a=(await this.s.get(k))||[]; a.push({ts:Date.now(),...e}); await this.s.put(k,a.slice(-100)); }
+  async archiveChal(){ const c=await this.s.get('chal'); if(!c) return; const h=(await this.s.get('chalHist'))||[]; h.push({day:c.day,game:c.game,goal:c.goal,winner:c.winner?c.winner.name:null,prize:c.pick?c.pick.prize:null}); await this.s.put('chalHist',h.slice(-30)); }
   async fetch(req){
     const url=new URL(req.url);
+    const cleanPid=v=>String(v||'').replace(/[^a-z0-9]/gi,'').slice(0,24), cleanName=v=>String(v||'').replace(/[<>]/g,'').trim().slice(0,20)||'Player';
+    if(url.pathname==='/play'){ let m={}; try{ m=await req.json(); }catch(e){}
+      const pid=cleanPid(m.pid), name=cleanName(m.name); if(pid.length<8) return J({err:'bad'},400);
+      const d=this.day(), k='pt:'+d, map=(await this.s.get(k))||{}, now=Date.now(), r=map[pid]||{n:name,s:0,l:0};
+      if(r.l&&now-r.l<30000) return J({ok:true,s:Math.round(r.s)});        /* too soon: ignore */
+      const inc=r.l&&now-r.l<=90000?Math.min(75,(now-r.l)/1000):0;          /* only count time between live beats */
+      r.s+=inc; r.l=now; r.n=name; map[pid]=r; await this.s.put(k,map); await this.trackDay(d);
+      if(inc){ const all=(await this.s.get('pta'))||{}, a=all[pid]||{n:name,s:0}; a.s+=inc; a.n=name; all[pid]=a; await this.s.put('pta',all); }
+      return J({ok:true,s:Math.round(r.s)}); }
+    if(url.pathname==='/daily'){ let m={}; try{ m=await req.json(); }catch(e){}
+      const pid=cleanPid(m.pid), name=cleanName(m.name), d=this.day(); const c=await this.s.get('chal'); const live=c&&c.day===d?c:null;
+      if(m.op==='get'){ const b=await this.board(d), i=b.findIndex(x=>x.pid===pid), pd=await this.prevDay(d), yb=pd?await this.board(pd):[];
+        const hist=(await this.s.get('chalHist'))||[], last=hist.length?hist[hist.length-1]:null;
+        return J({day:d, board:b.slice(0,10).map(x=>({name:x.name,s:x.s})), mine:{s:i>=0?b[i].s:0,rank:i>=0?i+1:null,players:b.length},
+          yTop:yb[0]?{name:yb[0].name,s:yb[0].s}:null,
+          chal:live?{game:live.game,page:live.page,goal:live.goal,prizes:live.prizes,winner:live.winner?live.winner.name:null,prize:live.pick?live.pick.prize:null,
+            claimed:!!(live.claims||[]).find(x=>x.pid===pid),youWon:!!(live.winner&&live.winner.pid===pid),claims:(live.claims||[]).length}:null,
+          lastChal:c&&c.day!==d?{game:c.game,goal:c.goal,winner:c.winner?c.winner.name:null,prize:c.pick?c.pick.prize:null}:(last?{game:last.game,goal:last.goal,winner:last.winner,prize:last.prize}:null)}); }
+      if(m.op==='claim'){ if(!live) return J({err:'none'},400); if(live.winner) return J({err:'done'},400); if(pid.length<8) return J({err:'bad'},400);
+        live.claims=(live.claims||[]).filter(x=>x.pid!==pid); live.claims.push({pid,name,ts:Date.now()}); live.claims=live.claims.slice(-300); await this.s.put('chal',live); return J({ok:true}); }
+      if(m.op==='pick'){ if(!live||!live.winner||live.winner.pid!==pid) return J({err:'forbidden'},403); if(live.pick) return J({ok:true,prize:live.pick.prize});
+        const prize=(live.prizes||[])[+m.i]; if(!prize) return J({err:'bad'},400);
+        live.pick={prize,ts:Date.now()}; await this.s.put('chal',live);
+        await this.addAch(pid,{title:'Daily challenge prize',detail:prize+' (awarded)',game:live.game}); return J({ok:true,prize}); }
+      return J({err:'op'},400); }
     if(url.pathname==='/site'){ const st=await this.state(); return new Response(JSON.stringify(st),{headers:{...CORS,'content-type':'application/json','cache-control':'public,max-age=10'}}); }
     if(url.pathname==='/tourney'){ let m={}; try{ m=await req.json(); }catch(e){}
       if(m.op==='join'&&m.id){ const arr=(await this.s.get('tourneys'))||[]; const t=arr.find(x=>x.id===m.id); if(!t) return J({err:'gone'},404);
@@ -306,6 +338,23 @@ export class Site {
         const row={id:Date.now().toString(36),name,game:String(t.game||'').slice(0,40),page:String(t.page||'').replace(/[^a-z0-9-]/g,'').slice(0,16),time:String(t.time||'').slice(0,40),desc:String(t.desc||'').slice(0,600),joins:[],ts:Date.now()};
         const arr=(await this.s.get('tourneys'))||[]; arr.push(row); await this.s.put('tourneys',arr.slice(-20)); return J({ok:true,id:row.id}); }
       if(m.op==='tourneyDel'&&m.id){ const arr=((await this.s.get('tourneys'))||[]).filter(x=>x.id!==m.id); await this.s.put('tourneys',arr); return J({ok:true}); }
+      if(m.op==='daily'){ const d=this.day(), b=await this.board(d), c=await this.s.get('chal');
+        return J({day:d, board:b.slice(0,30), chal:c||null, live:!!(c&&c.day===d), hist:((await this.s.get('chalHist'))||[]).slice(-10).reverse()}); }
+      if(m.op==='chalSet'){ const x=m.c||{}, goal=String(x.goal||'').slice(0,200); if(!goal) return J({err:'bad'},400);
+        const prizes=(Array.isArray(x.prizes)?x.prizes:[]).map(p=>String(p||'').trim().slice(0,80)).filter(Boolean).slice(0,8); if(!prizes.length) return J({err:'noprize'},400);
+        await this.archiveChal();
+        await this.s.put('chal',{day:this.day(),game:String(x.game||'').slice(0,40),page:String(x.page||'').replace(/[^a-z0-9-]/g,'').slice(0,16),goal,prizes,claims:[],winner:null,pick:null,ts:Date.now()}); return J({ok:true}); }
+      if(m.op==='chalWinner'){ const c=await this.s.get('chal'); if(!c) return J({err:'none'},400); const pid=cleanPid(m.pid); if(!pid) return J({err:'bad'},400);
+        const cl=(c.claims||[]).find(x=>x.pid===pid); c.winner={pid,name:cleanName(m.name||(cl&&cl.name))}; c.pick=null; await this.s.put('chal',c);
+        await this.addAch(pid,{title:'Won the daily challenge',detail:c.goal,game:c.game}); return J({ok:true}); }
+      if(m.op==='chalClear'){ await this.archiveChal(); await this.s.delete('chal'); return J({ok:true}); }
+      if(m.op==='player'){ const q=String(m.q||'').trim().toLowerCase(); if(!q) return J({err:'bad'},400);
+        const all=(await this.s.get('pta'))||{}, today=(await this.s.get('pt:'+this.day()))||{};
+        const pids=Object.keys({...all,...today}).filter(p=>p===q||String((all[p]||today[p]).n||'').toLowerCase()===q||String((all[p]||today[p]).n||'').toLowerCase().includes(q)).slice(0,10);
+        const out=[]; for(const p of pids){ const ach=(await this.s.get('ach:'+p))||[]; out.push({pid:p,name:(all[p]||today[p]).n,today:Math.round((today[p]||{}).s||0),total:Math.round((all[p]||{}).s||0),wins:ach.filter(a=>a.title==='Won the daily challenge').length,ach:ach.slice().reverse()}); }
+        return J({players:out}); }
+      if(m.op==='achAdd'){ const pid=cleanPid(m.pid), title=String(m.title||'').slice(0,60); if(!pid||!title) return J({err:'bad'},400); await this.addAch(pid,{title,detail:String(m.detail||'').slice(0,120),game:String(m.game||'').slice(0,40),byAdmin:true}); return J({ok:true}); }
+      if(m.op==='achDel'){ const pid=cleanPid(m.pid), k='ach:'+pid, a=((await this.s.get(k))||[]).filter(x=>x.ts!==+m.ts); await this.s.put(k,a); return J({ok:true}); }
       return J({err:'op'},400); }
     return J({err:'path'},404);
   }

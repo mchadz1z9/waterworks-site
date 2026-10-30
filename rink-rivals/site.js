@@ -106,8 +106,16 @@ body.rrHasBanner #rrTourBtn{top:48px}
   (document.head||document.documentElement).appendChild(css);
 
   const RRSITE={ show:showAnn, applied:null,
-    refresh(){ if(OFF) return Promise.resolve(null); return fetch(SERVER+'/site',{cache:'no-store'}).then(r=>r.json()).then(st=>{ RRSITE.applied=st; apply(st); return st; }).catch(()=>null); } };
+    refresh(){ if(OFF) return Promise.resolve(null); return fetch(SERVER+'/site',{cache:'no-store'}).then(r=>r.json()).then(st=>{ RRSITE.applied=st; apply(st); return st; }).catch(()=>null); },
+    /* daily play-time board + daily challenge (used by the home page) */
+    daily(op,extra){ if(OFF) return Promise.resolve(null); return fetch(SERVER+'/daily',{method:'POST',headers:{'content-type':'application/json'},body:JSON.stringify(Object.assign({op,pid:pid(),name:ls.get('rrOnlineName')||'Player'},extra||{}))}).then(r=>r.json()).catch(()=>null); },
+    pid };
   window.RRSITE=RRSITE;
+
+  /* count play time: a heartbeat every minute while the page is open and visible */
+  function beat(){ if(OFF||PAGE==='admin'||document.visibilityState!=='visible') return;
+    fetch(SERVER+'/play',{method:'POST',headers:{'content-type':'application/json'},keepalive:true,body:JSON.stringify({pid:pid(),name:ls.get('rrOnlineName')||'Player',game:PAGE||'home'})}).catch(()=>{}); }
+  if(!OFF&&PAGE!=='admin'){ setTimeout(beat,4000); setInterval(beat,60000); document.addEventListener('visibilitychange',()=>{ if(document.visibilityState==='visible') beat(); }); }
   /* show a cached announcement instantly, then refresh from the server */
   try{ const c=JSON.parse(ls.get('rrSiteCfgCache')||'null'); if(c&&c.ann) showAnn(c.ann); }catch(e){}
   if(!OFF) RRSITE.refresh().then(st=>{ if(st) try{ ls.set('rrSiteCfgCache',JSON.stringify({ann:st.ann})); }catch(e){} });

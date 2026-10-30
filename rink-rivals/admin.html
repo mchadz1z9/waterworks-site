@@ -157,6 +157,37 @@ h3.sec{margin:16px 0 4px;font-size:15px;color:var(--mut);text-transform:uppercas
     <div class="list" id="tList"></div>
   </div>
 
+  <div class="card full">
+    <h2>📅 Daily challenge &amp; play time</h2>
+    <p class="mut">Everything here resets every day at midnight. Players see today's play-time leaders and the challenge on the home page. People who finish tap "I did it" — you pick the winner, they choose a prize.</p>
+    <h3 class="sec">Set today's challenge</h3>
+    <div class="row">
+      <div style="flex:0 0 200px"><label>Game</label><select id="cGame"></select></div>
+      <div><label>Challenge (what they have to do)</label><input id="cGoal" maxlength="200" placeholder="e.g. Catch a bluefin tuna"></div>
+    </div>
+    <label>Prize options <span class="mut">(one per line — the winner picks one. Tap a suggestion to add it.)</span></label>
+    <div class="row" id="cSugg" style="gap:6px;margin-bottom:6px"></div>
+    <textarea id="cPrizes" maxlength="700" placeholder="1,000 fishing points&#10;Golden rod + lure pack"></textarea>
+    <div class="row" style="margin-top:10px">
+      <button id="cRand" class="warn" style="flex:0 0 auto">🎲 Randomize</button>
+      <button id="cSet" class="go" style="flex:0 0 auto">Set today's challenge</button>
+      <button id="cClear" class="del" style="flex:0 0 auto">Clear challenge</button>
+      <button id="cRefresh" class="ghost" style="flex:0 0 auto">↻ Refresh</button>
+    </div>
+    <div class="msg" id="cMsg"></div>
+    <h3 class="sec">Today's challenge</h3><div id="cNow" class="list"></div>
+    <h3 class="sec">Today's play time</h3><div id="ptList" class="list"></div>
+    <h3 class="sec">Past challenges</h3><div id="cHist" class="list"></div>
+  </div>
+
+  <div class="card full" id="achCard">
+    <h2>🏅 Player stats &amp; achievements</h2>
+    <p class="mut">Look up any player to see their play time, challenge wins and achievements. You can also give or remove achievements.</p>
+    <div class="row"><input id="aQ" placeholder="Player name"><button id="aGo" class="go" style="flex:0 0 auto">Look up</button></div>
+    <div class="msg" id="aMsg"></div>
+    <div id="aOut" class="list"></div>
+  </div>
+
   <div class="card">
     <h2>👥 Users &amp; moderation</h2>
     <p class="mut">Click a player below — kick or ban them, give them a tag, or (full admin) grant them admin access. No typing needed.</p>
@@ -193,7 +224,7 @@ function showApp(st){ ROLE=st.role||'full'; $('login').classList.add('hide'); $(
   const full=ROLE==='full'; document.querySelectorAll('.full').forEach(el=>el.style.display=full?'':'none');
   try{ if(full) localStorage.setItem('rrOwner','1'); }catch(e){}
   $('roleNote').textContent=full?'Signed in as full admin — changes go live for everyone.':'Signed in as moderator — you can kick, ban and tag.';
-  if(full){ initAnn(); initEditor(); initSettings(); initTourney(); renderAnn(st.ann); renderEdits(st.ov); renderSettings(st.settings); renderTourneys(st.tourneys); } loadUsers(); loadStats(); }
+  if(full){ initAnn(); initEditor(); initSettings(); initTourney(); initDaily(); renderAnn(st.ann); renderEdits(st.ov); renderSettings(st.settings); renderTourneys(st.tourneys); } loadUsers(); loadStats(); }
 
 /* ---- announcement ---- */
 const THEMES={blue:['#1e3a8a','#0ea5e9'],green:['#065f46','#22c55e'],purple:['#4c1d95','#a855f7'],red:['#7f1d1d','#ef4444'],orange:['#7c2d12','#f59e0b'],pink:['#831843','#ec4899'],teal:['#134e4a','#14b8a6'],gold:['#78350f','#fbbf24']};
@@ -255,7 +286,7 @@ function actBtns(acts){ return `<span class="acts">${acts.map(a=>`<button class=
 function wireActs(container){ container.querySelectorAll('[data-act]').forEach(b=>b.onclick=()=>doAct(JSON.parse(b.dataset.act))); }
 function allActs(u){ const a=[{l:'Kick '+fmtDur(kickMins),cls:'warn',d:{k:'kick',name:u.name}},{l:'Mute '+fmtDur(kickMins),cls:'ghost',d:{k:'mute',name:u.name}},{l:'Tag',cls:'ghost',d:{k:'tag',name:u.name}}];
   a.push(u.banned?{l:'Unban',cls:'go',d:{k:'unban',name:u.name}}:{l:'Ban',cls:'del',d:{k:'ban',name:u.name,pubid:u.id}});
-  if(ROLE==='full'){ a.push({l:'Make mod',d:{k:'grant',pubid:u.id,name:u.name,lvl:'mod'}},{l:'Make admin',cls:'go',d:{k:'grant',pubid:u.id,name:u.name,lvl:'full'}}); }
+  if(ROLE==='full'){ a.push({l:'Stats',cls:'ghost',d:{k:'stats',name:u.name}}); a.push({l:'Make mod',d:{k:'grant',pubid:u.id,name:u.name,lvl:'mod'}},{l:'Make admin',cls:'go',d:{k:'grant',pubid:u.id,name:u.name,lvl:'full'}}); }
   return actBtns(a); }
 function renderWho(list){ const el=$('whoList'); if(!list.length){ el.innerHTML='<span class="mut">Nobody online.</span>'; return; }
   el.innerHTML=list.map(u=>`<div class="urow"><span class="nm">${esc(u.name)}${u.tag?` <span class="tg">${esc(u.tag)}</span>`:''} <span class="pill">${esc(u.game||'home')}</span></span>${allActs(u)}</div>`).join(''); wireActs(el); }
@@ -272,6 +303,9 @@ async function doAct(a){ try{
   else if(a.k==='ban'){ if(!confirm('Permanently ban '+a.name+'? (You can unban later.)')) return; await api('/admin/chat','ban',{name:a.name,pubid:a.pubid,perm:true}); setMsg('uMsg',`Banned ${a.name}.`,1); }
   else if(a.k==='mute'){ const mins=kickMins; if(!confirm('Mute '+a.name+' for '+fmtDur(mins)+'? They stay in chat but can\'t post.')) return; const r=await api('/admin/chat','smute',{name:a.name,mins}); setMsg('uMsg',r.muted?`Muted ${a.name} for ${fmtDur(mins)}.`:`${a.name} isn't online.`,1); }
   else if(a.k==='unmute'){ const r=await api('/admin/chat','unmute',{name:a.name}); setMsg('uMsg',r.unmuted?`Unmuted ${a.name}.`:`${a.name} isn't online.`,1); }
+  else if(a.k==='cwin'){ if(!confirm(`Make ${a.name} today's challenge winner? They'll get to pick a prize on the home page.`)) return; await api('/admin/site','chalWinner',{pid:a.pid,name:a.name}); setMsg('cMsg',`${a.name} is today's winner.`,1); loadDaily(); return; }
+  else if(a.k==='stats'){ await lookup(a.name); const c=$('achCard'); if(c) c.scrollIntoView({behavior:'smooth',block:'start'}); return; }
+  else if(a.k==='achdel'){ if(!confirm('Remove this achievement?')) return; await api('/admin/site','achDel',{pid:a.pid,ts:a.ts}); lookup(a.name); return; }
   else if(a.k==='unban'){ await api('/admin/chat','unban',{name:a.name}); setMsg('uMsg',`Unbanned.`,1); }
   else if(a.k==='tag'){ let tag=''; if(!a.clear){ tag=prompt('Tag for '+a.name+' (e.g. Professional, VIP, PRO, MOD, OWNER). Blank removes it:','Professional'); if(tag===null) return; } await api('/admin/chat','tag',{name:a.name,tag}); setMsg('uMsg',a.clear||!tag?`Tag removed.`:`Tagged ${a.name} [${tag}].`,1); }
   else if(a.k==='grant'){ if(!a.pubid){ setMsg('uMsg','To make someone an admin or mod, do it from the \'Online now\' list while they are online.',0); return; } if(!confirm(`Give ${a.name} ${a.lvl==='full'?'FULL admin':'moderator'} access? They'll be able to open /admin on their device without the password.`)) return; await api('/admin/chat','grant',{pubid:a.pubid,lvl:a.lvl,name:a.name}); setMsg('uMsg',`${a.name} is now ${a.lvl==='full'?'a full admin':'a moderator'}.`,1); }
@@ -288,6 +322,67 @@ function renderTourneys(list){ const el=$('tList'); if(!el) return; list=list||[
     return `<div class="urow"><span class="nm">🏆 <b>${esc(t.name)}</b> <span class="pill">${esc(t.game||'any')}</span> <span class="pill">${esc(when)}</span> <span class="pill">${n} joined</span></span><span class="acts"><button class="sm ghost" data-twho="${esc(t.id)}">Who joined</button><button class="sm del" data-tdel="${esc(t.id)}">Delete</button></span></div><div class="mut" id="tw_${esc(t.id)}" style="display:none;margin:-2px 0 8px 6px"></div>`; }).join('');
   el.querySelectorAll('[data-tdel]').forEach(b=>b.onclick=async()=>{ if(!confirm('Delete this tournament?')) return; await api('/admin/site','tourneyDel',{id:b.dataset.tdel}); refreshState(); });
   el.querySelectorAll('[data-twho]').forEach(b=>b.onclick=()=>{ const t=list.find(x=>x.id===b.dataset.twho), w=$('tw_'+b.dataset.twho); if(!w) return; const names=(t.joins||[]).map(j=>esc(j.name)); w.style.display=w.style.display==='none'?'block':'none'; w.innerHTML=names.length?('Joined ('+names.length+'): '+names.join(', ')):'No one has joined yet.'; }); }
+
+/* ---- daily challenge + play time ---- */
+/* prize ideas per game, roughly scaled to how hard the challenge is */
+const PRIZE_DEF=['Champion tag for a day','1,000 points','Shout-out on the home banner'];
+const PRIZES={
+  fishing:['1,000 fishing points','2,500 fishing points (hard catch)','Golden rod + lure pack'],
+  football:['99-overall player added to your franchise','Legendary QB for your franchise','Franchise salary-cap boost'],
+  basketball:['99-overall player added to your team','All-Star starting five','Signature shoe unlock'],
+  hockey:['99-overall player added to your team','Gold stick + jersey','Elite goalie for your team'],
+  baseball:['99-overall slugger for your roster','Ace pitcher (99 overall)','Gold bat'],
+  soccer:['99-overall striker for your squad','Golden boots','Elite keeper for your squad'],
+  weightlifting:['+25 strength','Pro tag for a week','Gold belt'],
+  poker:['10,000 chips','50,000 chips (hard)','VIP table seat'], blackjack:['10,000 chips','50,000 chips (hard)','High-roller table'],
+  f1:['Gold car skin','Top-tier engine upgrade','Champion helmet'], kart:['Gold kart skin','Turbo upgrade'], nascar:['Gold car skin','Pit-crew upgrade'],
+  drift:['Gold car skin','Pro tires'], moto:['Gold bike skin','Engine upgrade'], mx:['Gold bike skin','Suspension upgrade'],
+  golf:['Pro club set','Golden ball'], bowling:['Golden ball','Pro lane skin'], skate:['Gold board','Signature trick unlock'],
+  chess:['Gold piece set','Champion board'], darts:['Gold darts','Pro board'], archery:['Gold bow','Champion arrows'],
+  paintball:['Gold marker','Elite gear pack'], airsoft:['Gold rifle skin','Elite gear pack'], br:['Gold skin','Legendary loadout'],
+  tennis:['Gold racket','Pro shoes'], pool:['Gold cue','Champion table'], karate:['Black belt badge','Gold gi']};
+const CHAL={
+  fishing:['Catch a bluefin tuna','Land 5 fish in one trip','Catch a fish over 200 lb'],
+  football:['Win a game by 21+ points','Throw 4 touchdown passes in one game','Score a rushing TD after a hurdle'],
+  basketball:['Score 40 points in one game','Win a game by 20+','Hit 6 three-pointers in a game'],
+  hockey:['Score a hat trick','Win a game with a shutout'], baseball:['Hit 2 home runs in one game','Pitch 5 scoreless innings'],
+  soccer:['Score a hat trick','Win 3-0 or better'], weightlifting:['Bench 225 lb for 5 reps','Set a new deadlift max'],
+  golf:['Finish a round under par','Make a hole-in-one'], bowling:['Bowl a 200+ game','Roll 3 strikes in a row'],
+  f1:['Win a race starting from last','Set a new lap record'], kart:['Win a race by 5+ seconds'], chess:['Win in under 25 moves'],
+  poker:['Win a hand with a full house or better','Double your starting chips'], darts:['Hit a 180'], archery:['Hit 3 bullseyes in a row'],
+  skate:['Land a 5,000-point combo'], br:['Win a Storm Royale match'], tennis:['Win a set 6-0'], pool:['Clear the table in one turn']};
+const fmtT=s=>{ s=Math.round(s||0); const h=Math.floor(s/3600), m=Math.floor(s%3600/60); return h?`${h}h ${m}m`:(m?`${m}m`:(s?'<1m':'0m')); };
+function initDaily(){ const g=$('cGame'); g.innerHTML='<option value="">— any game —</option>'+GAMES.map(([p,l])=>`<option value="${p}">${esc(l)}</option>`).join(''); g.onchange=renderSugg; renderSugg(); loadDaily(); }
+function renderSugg(){ const list=PRIZES[$('cGame').value]||PRIZE_DEF; $('cSugg').innerHTML=list.map(x=>`<button class="ghost sm" style="flex:0 0 auto" data-sg="${esc(x)}">+ ${esc(x)}</button>`).join('');
+  $('cSugg').querySelectorAll('[data-sg]').forEach(b=>b.onclick=()=>{ const t=$('cPrizes'), lines=t.value.split('\n').map(s=>s.trim()).filter(Boolean); if(!lines.includes(b.dataset.sg)) lines.push(b.dataset.sg); t.value=lines.join('\n'); }); }
+$('cRand').onclick=()=>{ const keys=Object.keys(CHAL), p=keys[Math.floor(Math.random()*keys.length)], goals=CHAL[p]; $('cGame').value=p; $('cGoal').value=goals[Math.floor(Math.random()*goals.length)]; $('cPrizes').value=(PRIZES[p]||PRIZE_DEF).join('\n'); renderSugg(); setMsg('cMsg','Suggested a challenge — edit anything you like, then tap "Set today\'s challenge".',1); };
+$('cSet').onclick=async()=>{ const goal=$('cGoal').value.trim(); if(!goal){ setMsg('cMsg','Type the challenge first.',0); return; } const prizes=$('cPrizes').value.split('\n').map(s=>s.trim()).filter(Boolean); if(!prizes.length){ setMsg('cMsg','Add at least one prize option.',0); return; }
+  const sel=$('cGame'), page=sel.value, game=page?sel.options[sel.selectedIndex].text:''; if(!confirm("Set this as today's challenge? It replaces any current one.")) return; setMsg('cMsg','Saving…');
+  try{ const r=await api('/admin/site','chalSet',{c:{game,page,goal,prizes}}); if(r&&r.err){ setMsg('cMsg','Failed: '+r.err,0); return; } setMsg('cMsg',"Today's challenge is live on the home page.",1); loadDaily(); }catch(e){ setMsg('cMsg','Failed.',0); } };
+$('cClear').onclick=async()=>{ if(!confirm("Clear today's challenge?")) return; await api('/admin/site','chalClear'); setMsg('cMsg','Cleared.',1); loadDaily(); };
+$('cRefresh').onclick=()=>loadDaily();
+async function loadDaily(){ try{ renderDaily(await api('/admin/site','daily')); }catch(e){ setMsg('cMsg','Could not load daily data.',0); } }
+function renderDaily(d){ const c=d.chal, live=c&&d.live;
+  if(live){ const cl=c.claims||[];
+    $('cNow').innerHTML=`<div class="urow"><span class="nm">🎯 ${esc(c.goal)} ${c.game?`<span class="pill">${esc(c.game)}</span>`:''}<br><span class="mut">Prizes: ${c.prizes.map(esc).join(' · ')}</span></span></div>`+
+      (c.winner?`<div class="urow"><span class="nm">🏆 Winner: <b>${esc(c.winner.name)}</b> ${c.pick?`<span class="pill" style="color:#86efac">chose: ${esc(c.pick.prize)} — awarded</span>`:`<span class="pill">hasn't picked a prize yet</span>`}</span></div>`:'')+
+      (cl.length?cl.slice().reverse().map(x=>`<div class="urow"><span class="nm">🙋 ${esc(x.name)} <span class="pill">says they did it · ${new Date(x.ts).toLocaleTimeString([],{hour:'numeric',minute:'2-digit'})}</span></span>${actBtns([{l:'Make winner',cls:'go',d:{k:'cwin',pid:x.pid,name:x.name}},{l:'Stats',cls:'ghost',d:{k:'stats',name:x.name}}])}</div>`).join(''):'<span class="mut">No one has said they finished it yet.</span>');
+  } else $('cNow').innerHTML='<span class="mut">No challenge set for today.</span>';
+  const b=d.board||[]; $('ptList').innerHTML=b.length?b.map((x,i)=>`<div class="urow"><span class="nm">${i<3?['🥇','🥈','🥉'][i]:'#'+(i+1)} ${esc(x.name)} <span class="pill">${fmtT(x.s)}</span></span>${actBtns([{l:'Stats',cls:'ghost',d:{k:'stats',name:x.name}}].concat(live?[{l:'Make winner',cls:'go',d:{k:'cwin',pid:x.pid,name:x.name}}]:[]))}</div>`).join(''):'<span class="mut">No play time logged yet today.</span>';
+  const h=d.hist||[]; $('cHist').innerHTML=h.length?h.map(x=>`<div class="urow"><span class="nm">${esc(x.day)} · ${esc(x.goal)} ${x.game?`<span class="pill">${esc(x.game)}</span>`:''} ${x.winner?`<span class="pill">🏆 ${esc(x.winner)}${x.prize?' — '+esc(x.prize):''}</span>`:'<span class="pill">no winner</span>'}</span></div>`).join(''):'<span class="mut">None yet.</span>';
+  wireActs($('cNow')); wireActs($('ptList')); }
+
+/* ---- player stats + achievements ---- */
+async function lookup(q){ q=String(q||'').trim(); if(!q) return; $('aQ').value=q; setMsg('aMsg','Looking up…');
+  try{ const ps=(await api('/admin/site','player',{q})).players||[]; if(!ps.length){ setMsg('aMsg','No player found with that name (they need to have played at least once since this was added).',0); $('aOut').innerHTML=''; return; } setMsg('aMsg',ps.length===1?'Found 1 player.':`Found ${ps.length} players.`,1); renderPlayers(ps); }catch(e){ setMsg('aMsg','Lookup failed.',0); } }
+function renderPlayers(ps){ $('aOut').innerHTML=ps.map(p=>`<div style="background:#0b1120;border:1px solid var(--line);border-radius:12px;padding:12px 14px;margin:8px 0">
+    <div style="font-size:18px;font-weight:800">${esc(p.name)} <span class="pill">ID ${esc(p.pid.slice(0,6))}…</span></div>
+    <div class="ovgrid" style="margin:10px 0"><div class="ovt"><b>${fmtT(p.today)}</b><span>Today</span></div><div class="ovt"><b>${fmtT(p.total)}</b><span>All-time</span></div><div class="ovt"><b>${p.wins}</b><span>Challenge wins</span></div><div class="ovt"><b>${p.ach.length}</b><span>Achievements</span></div></div>
+    ${p.ach.length?p.ach.map(a=>`<div class="urow"><span class="nm">🏅 ${esc(a.title)} ${a.game?`<span class="pill">${esc(a.game)}</span>`:''}<br><span class="mut">${esc(a.detail||'')} · ${new Date(a.ts).toLocaleDateString()}</span></span>${actBtns([{l:'Remove',cls:'del',d:{k:'achdel',pid:p.pid,ts:a.ts,name:p.name}}])}</div>`).join(''):'<span class="mut">No achievements yet.</span>'}
+    <div class="row" style="margin-top:8px"><input placeholder="Give an achievement (e.g. Tournament champion)" data-at="${esc(p.pid)}"><input placeholder="Details (optional)" data-ad="${esc(p.pid)}"><button class="go sm" style="flex:0 0 auto" data-give="${esc(p.pid)}" data-nm="${esc(p.name)}">Give</button></div></div>`).join('');
+  wireActs($('aOut'));
+  $('aOut').querySelectorAll('[data-give]').forEach(b=>b.onclick=async()=>{ const pid=b.dataset.give, t=$('aOut').querySelector(`[data-at="${pid}"]`).value.trim(), dd=$('aOut').querySelector(`[data-ad="${pid}"]`).value.trim(); if(!t) return; await api('/admin/site','achAdd',{pid,title:t,detail:dd}); lookup(b.dataset.nm); }); }
+$('aGo').onclick=()=>lookup($('aQ').value); $('aQ').addEventListener('keydown',e=>{ if(e.key==='Enter') lookup($('aQ').value); });
 
 function setMsg(id,t,ok){ const e=$(id); e.textContent=t; e.className='msg'+(ok===1?' ok':ok===0?' err':''); }
 async function refreshState(){ try{ const st=await api('/admin/site','get'); renderAnn(st.ann); renderEdits(st.ov); renderSettings(st.settings); renderTourneys(st.tourneys); }catch(e){} }
