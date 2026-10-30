@@ -4,7 +4,8 @@
 (function(){ if(window.RRSTR) return;
   const K='rrStrength', MAX=100;
   const ls={ get:k=>{ try{ return localStorage.getItem(k); }catch(e){ return null; } }, set:(k,v)=>{ try{ localStorage.setItem(k,v); }catch(e){} } };
-  const isOwner=()=>{ try{ return sessionStorage.getItem('rrRole')==='full'; }catch(e){ return false; } };
+  /* the owner: this device signed into /admin as full admin (flag saved there), or was granted full-admin access */
+  const isOwner=()=>{ try{ if(localStorage.getItem('rrOwner')==='1') return true; }catch(e){} try{ return sessionStorage.getItem('rrRole')==='full'; }catch(e){ return false; } };
   let val=(()=>{ const n=+ls.get(K); return isFinite(n)?Math.max(0,Math.min(MAX,n)):0; })();
   function save(){ ls.set(K,String(Math.round(val))); try{ dispatchEvent(new CustomEvent('rrstr-change',{detail:RRSTR.state()})); }catch(e){} }
   function level(){ return isOwner()?MAX:Math.round(val); }           /* 0..100 */
