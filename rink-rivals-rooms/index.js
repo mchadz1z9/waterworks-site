@@ -160,7 +160,9 @@ export class Chat {
   socks(){ return this.ctx.getWebSockets().filter(ws=>ws.deserializeAttachment()); }
   send(ws,o){ try{ ws.send(JSON.stringify(o)); }catch(e){} }
   all(o){ const s=JSON.stringify(o); for(const ws of this.ctx.getWebSockets()) try{ ws.send(s); }catch(e){} }
-  count(){ this.all({t:'n',n:this.socks().length}); this.who(); }
+  /* people, not connections: one player with several tabs open counts once */
+  people(){ return new Set(this.socks().map(ws=>ws.deserializeAttachment().who)).size; }
+  count(){ this.all({t:'n',n:this.people()}); this.who(); }
   tagOf(name){ const r=this.sql.exec('SELECT tag FROM tag WHERE nm=?',String(name||'').toLowerCase()).toArray()[0]; return r?r.tag:''; }
   grantOf(pubid){ const r=this.sql.exec('SELECT lvl FROM grnt WHERE pubid=?',String(pubid)).toArray()[0]; return r?r.lvl:null; }
   isBanned(name,who){ const now=Date.now(); const chk=k=>{ const r=this.sql.exec('SELECT until FROM ban WHERE nm=?',k).toArray()[0]; return r&&(r.until===0||r.until>now)?r:null; }; return chk(String(name||'').toLowerCase())||(who?chk('pid:'+who):null); }
@@ -208,7 +210,7 @@ export class Chat {
       if(m.op==='muted'){ const now=Date.now(), seen=new Set(), out=[]; for(const ws of this.socks()){ const a=ws.deserializeAttachment(); const k=a.name.toLowerCase(); if(seen.has(k)) continue; const r=this.sql.exec('SELECT until FROM mute WHERE who=?',a.who).toArray()[0]; if(r&&r.until>now){ seen.add(k); out.push({name:a.name,mins:Math.ceil((r.until-now)/60000)}); } } return J({muted:out}); }
       if(m.op==='lock'){ const on=!!m.on; this.cfgSet('locked',on?'1':'0'); this.all({t:'sys',text:on?'🔒 Chat has been locked by an admin.':'🔓 Chat is open again.'}); return J({ok:true,locked:on}); }
       if(m.op==='lockstatus') return J({locked:this.cfgGet('locked')==='1'});
-      if(m.op==='stats'){ return J({online:this.socks().length,
+      if(m.op==='stats'){ return J({online:this.people(),connections:this.socks().length,
         bans:this.sql.exec('SELECT COUNT(*) AS c FROM ban').toArray()[0].c,
         tags:this.sql.exec('SELECT COUNT(*) AS c FROM tag').toArray()[0].c,
         admins:this.sql.exec('SELECT COUNT(*) AS c FROM grnt').toArray()[0].c,
