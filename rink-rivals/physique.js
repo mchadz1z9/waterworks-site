@@ -139,5 +139,10 @@ function stagePose(k,w){ const J={F:[0,0,1],toe:[0,0,1],pelvis:[0,.97,0],chest:[
   return J; }
 /* ease one pose toward another (k = 0..1 per call) */
 function blendPose(cur,tgt,k){ if(!cur) return JSON.parse(JSON.stringify(tgt)); for(const n in tgt){ const b=tgt[n]; if(!Array.isArray(b)){ cur[n]=b; continue; } const a=Array.isArray(cur[n])?cur[n]:b; cur[n]=[a[0]+(b[0]-a[0])*k,a[1]+(b[1]-a[1])*k,a[2]+(b[2]-a[2])*k]; } return cur; }
-return {STAGE,stagePose,blendPose,pose,drawBody,drawOlympia,dumbbell,OB,LB,SP,wp,wd,sub3,add3,mul3,dot3,nrm3,crs3,mix3};
+/* the barbell (moved here so the powerlifting meet draws the same bar) */
+/* a barbell across the person's x axis at local point c; plates depend on the weight */
+function barbell(f,c,weight,tilt){ const p=wp(f,c); R3.part(R3.UC,R3.mm(R3.T(p[0]*K,p[1]*K,p[2]*K),R3.RY(f.yaw),R3.RZ(PI/2+(tilt||0)),R3.S(.028*K,1.0*K,.028*K)),'#cbd5e1');
+  const per=Math.max(0,(weight-45)/2), n=clamp(Math.ceil(per/45),1,9), big=weight>1500, huge=weight>15000;
+  for(const sx of [-1,1]) for(let i=0;i<n;i++){ const q=wp(f,[c[0]+sx*(.6+i*.052),c[1],c[2]]); R3.part(R3.UC,R3.mm(R3.T(q[0]*K,q[1]*K,q[2]*K),R3.RY(f.yaw),R3.RZ(PI/2+(tilt||0)),R3.S((huge?.29:big?.23:.19)*K,(huge?.03:.024)*K,(huge?.29:big?.23:.19)*K)),huge?(i%2?'#7f1d1d':'#dc2626'):big?(i%2?'#b45309':'#f59e0b'):(i%2?'#20304f':'#1a2338')); } }
+return {barbell,STAGE,stagePose,blendPose,pose,drawBody,drawOlympia,dumbbell,OB,LB,SP,wp,wd,sub3,add3,mul3,dot3,nrm3,crs3,mix3};
 };

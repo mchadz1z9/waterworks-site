@@ -1,0 +1,207 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
+<title>Rink Rivals - Arm Wrestling</title>
+<link href="https://fonts.googleapis.com/css2?family=Big+Shoulders+Display:wght@600;800&display=swap" rel="stylesheet">
+<style>
+:root{ --bg:#dfe6f2; --panel:#ffffff; --ink:#0f1730; --muted:#55627f; --line:#c3cde2; --led:#ffb703; --ledbg:#0a0d18; --acc:#3b82f6;
+  --font:'Big Shoulders Display','Arial Narrow','Helvetica Neue',Impact,sans-serif; }
+@media (prefers-color-scheme:dark){ :root:not([data-theme="light"]){ --bg:#0b1120; --panel:#141c33; --ink:#eef2fb; --muted:#93a0bd; --line:#27345a; } }
+:root[data-theme="dark"]{ --bg:#0b1120; --panel:#141c33; --ink:#eef2fb; --muted:#93a0bd; --line:#27345a; }
+*{box-sizing:border-box}
+body{ margin:0; min-height:100%; background:var(--bg); color:var(--ink); font-family:var(--font); font-weight:600; }
+main{ max-width:1100px; margin:0 auto; padding:12px 14px 30px; }
+.top{ display:flex; justify-content:space-between; align-items:center; margin-bottom:10px; gap:8px; flex-wrap:wrap; }
+.brand{ font-size:26px; font-weight:800 } .brand span{ color:var(--muted); font-weight:600 }
+.tools{ display:flex; gap:8px; flex-wrap:wrap }
+.tools button,.tools a{ font:inherit; font-size:16px; color:var(--ink); background:var(--panel); border:2px solid var(--line); border-radius:999px; padding:4px 14px; cursor:pointer; text-decoration:none }
+#stage{ position:relative; width:100%; height:min(66vh,580px); background:#0a0d18; border:2px solid var(--line); border-radius:16px; overflow:hidden; touch-action:none; cursor:pointer; user-select:none; -webkit-user-select:none }
+#gl,#cv{ position:absolute; inset:0; width:100%; height:100% } #cv{ pointer-events:none }
+.panel{ background:var(--panel); border:2px solid var(--line); border-radius:14px; padding:14px 16px; margin-top:14px }
+.row{ display:flex; gap:10px; flex-wrap:wrap; align-items:center }
+.btn{ font:inherit; font-size:17px; border:2px solid var(--line); background:var(--panel); color:var(--ink); border-radius:999px; padding:6px 15px; cursor:pointer; margin:3px }
+.gold{ background:var(--led)!important; border-color:var(--led)!important; color:#0a0d18!important; font-weight:800 }
+h1{ font-size:30px; margin:0 0 6px } .muted{ color:var(--muted) }
+.ladder{ display:grid; grid-template-columns:repeat(auto-fill,minmax(160px,1fr)); gap:8px; margin-top:8px }
+.ladder button{ font:inherit; text-align:left; border:2px solid var(--line); background:var(--panel); color:var(--ink); border-radius:12px; padding:8px 10px; cursor:pointer }
+.ladder button b{ display:block; font-size:19px } .ladder button small{ color:var(--muted) } .ladder button.beat{ border-color:#22c55e } .ladder button:disabled{ opacity:.45; cursor:default } .ladder button.sel{ background:rgba(59,130,246,.18); border-color:var(--acc) }
+.statrow{ display:grid; grid-template-columns:repeat(auto-fill,minmax(110px,1fr)); gap:10px 14px; margin-top:8px }
+.stat b{ font-size:25px } .stat span{ display:block; color:var(--muted); font-size:12px; text-transform:uppercase; letter-spacing:.05em }
+.hint{ color:var(--muted); font-size:15px; margin-top:8px; line-height:1.45 }
+kbd{ font:inherit; font-size:13px; background:var(--ledbg); color:#fff; border-radius:6px; padding:1px 7px }
+</style>
+</head>
+<body data-sport="gym">
+<main>
+  <div class="top">
+    <div class="brand">Rink Rivals <span>Arm Wrestling</span></div>
+    <div class="tools"><a href="./">Home</a><a href="weightlifting">🏋️ Gym</a><button id="btnFs">Full screen</button><button id="btnSnd">Sound on</button></div>
+  </div>
+  <div id="stage"><canvas id="gl"></canvas><canvas id="cv" width="1000" height="562"></canvas></div>
+  <div class="panel">
+    <div id="menuIn">
+      <h1>💪 Arm Wrestling</h1>
+      <div class="muted">Standing pro table, best of three. Explode off the "GO", mash to drive their hand down, and read their technique — counter a top roll or a hook before it costs you the pin. Your gym strength is your arm.</div>
+      <div class="ladder" id="ladder"></div>
+      <div class="row" style="margin-top:8px"><button class="btn gold" id="goBtn" style="font-size:22px;padding:8px 26px">Grip up ▶</button><span class="muted" id="powTxt"></span></div>
+    </div>
+    <div class="statrow" id="stats"></div>
+    <div class="hint"><b>Start:</b> on "READY… GO!" press <kbd>Space</kbd> right on GO (too early is a foul). <b>Pull:</b> tap <kbd>Space</kbd> fast (or click) to push — it burns energy, so ease off to recover. <b>Counters:</b> when they go for a move, press the counter fast:
+      <kbd>A</kbd> vs <b>TOP ROLL</b> · <kbd>D</kbd> vs <b>HOOK</b> · <kbd>W</kbd> vs <b>PRESS</b>. Pin their hand to the pad to win the round.</div>
+  </div>
+</main>
+<script src="r3lib.js"></script>
+<script src="strength.js"></script>
+<script src="physique.js"></script>
+<script src="online.js"></script>
+<script>
+(() => {
+'use strict';
+const $=id=>document.getElementById(id);
+const clamp=(v,a,b)=>Math.max(a,Math.min(b,v)), lerp=(a,b,t)=>a+(b-a)*t;
+const esc=s=>String(s).replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
+const PI=Math.PI, K=100, TEST=/[?&]test\b/.test(location.search);
+const R3=makeR3($('gl'),$('stage')), PHY=RRPHY(R3,K);
+const owner=()=>!!(window.RRSTR&&RRSTR.owner);
+let muted=false, AC=null;
+function audio(){ if(!AC){ try{ AC=new (window.AudioContext||window.webkitAudioContext)(); }catch(e){} } if(AC&&AC.state==='suspended') AC.resume(); return AC; }
+function tone(f,d,type,v,slide,delay){ const a=audio(); if(!a||muted) return; const t=a.currentTime+(delay||0), o=a.createOscillator(), g=a.createGain(); o.type=type||'sine'; o.frequency.setValueAtTime(f,t); if(slide) o.frequency.linearRampToValueAtTime(f+slide,t+d); g.gain.setValueAtTime(v||.06,t); g.gain.exponentialRampToValueAtTime(.0001,t+d); o.connect(g); g.connect(a.destination); o.start(t); o.stop(t+d+.02); }
+const sfx={ ready:()=>tone(440,.15,'triangle',.06), go:()=>tone(880,.3,'square',.06), tap:()=>tone(150+Math.random()*40,.04,'square',.02), slam:()=>{ tone(90,.4,'sawtooth',.08,-40); }, win:()=>{ [523,659,784,1047].forEach((f,i)=>tone(f,.22,'triangle',.07,0,i*.11)); }, lose:()=>tone(220,.5,'sawtooth',.05,-120), move:()=>tone(620,.12,'square',.05,-200), good:()=>{ tone(700,.1,'triangle',.06); tone(1050,.15,'triangle',.05,0,.08); } };
+
+/* ---------- opponents ---------- */
+const LADDER=[{n:'Gym Rookie',p:.85,ai:.5,tech:.15,skin:'#f1c27d',top:'#64748b'},{n:'Barstool Bob',p:1.05,ai:.6,tech:.25,skin:'#e0ac69',top:'#b45309'},{n:'Farm Hands',p:1.25,ai:.68,tech:.35,skin:'#c68642',top:'#15803d'},
+  {n:'The Hook',p:1.45,ai:.74,tech:.6,skin:'#8d5524',top:'#7c3aed'},{n:'Iron Grip Ivan',p:1.7,ai:.8,tech:.5,skin:'#f1c27d',top:'#b91c1c'},{n:'Top Roll Tony',p:1.95,ai:.84,tech:.75,skin:'#c68642',top:'#0e7490'},{n:'The Champion',p:2.3,ai:.9,tech:.8,skin:'#5c3a21',top:'#ca8a04'}];
+const SV=(()=>{ try{ return Object.assign({beat:0,sel:0,wins:0,losses:0,pins:0},JSON.parse(localStorage.getItem('rrArmWrestling')||'{}')); }catch(e){ return {beat:0,sel:0,wins:0,losses:0,pins:0}; } })();
+const saveSV=()=>{ try{ localStorage.setItem('rrArmWrestling',JSON.stringify(SV)); }catch(e){} };
+function myPower(){ if(owner()) return 4; const f=window.RRSTR?RRSTR.frac:0; return .9+f*1.6; }
+const MOVES=[{k:'top',n:'TOP ROLL',key:'KeyA',kl:'A'},{k:'hook',n:'HOOK',key:'KeyD',kl:'D'},{k:'press',n:'PRESS',key:'KeyW',kl:'W'}];
+
+/* ---------- the match ----------
+   ang: -1 = your hand pinned, +1 = theirs. Each side pushes with power × effort; effort comes from how fast you tap (and, for you, your energy). */
+let M=null;
+function startMatch(opp,net){ audio(); M={opp,net:!!net,round:1,me:0,them:0,phase:'ready',t:0,ang:0,stam:1,ostam:1,taps:[],eff:0,oeff:0,move:null,moveT:0,nextMove:2+Math.random()*3,msg:'',msgT:0,early:false,result:null,host:net?NET.isHost():true,remoteEff:0};
+  $('menuIn').style.display='none'; }
+function say(t,c,d){ M.msg=t; M.msgCol=c||'#fde047'; M.msgT=d||1.4; }
+function newRound(){ M.phase='ready'; M.t=0; M.ang=0; M.stam=1; M.ostam=1; M.taps=[]; M.move=null; M.nextMove=2+Math.random()*3; M.early=false; M.react=null; }
+function endRound(win){ M.phase='pinned'; M.t=0; if(win){ M.me++; SV.pins++; sfx.slam(); say('PINNED! 💥','#4ade80',1.8); } else { M.them++; sfx.slam(); say('YOU GOT PINNED','#f87171',1.8); }
+  if(M.net&&M.host) NET.send({t:'rnd',me:M.them,them:M.me}); saveSV(); }
+function endMatch(){ const win=M.me>M.them; M.phase='done'; M.t=0; M.result=win;
+  if(win){ SV.wins++; sfx.win(); if(!M.net&&SV.sel===SV.beat&&SV.beat<LADDER.length) SV.beat++; if(window.RRSTR) RRSTR.add(owner()?1:1+Math.floor(SV.sel/2)); try{ window.RRL&&RRL.post('wins',1,'1'); }catch(e){} }
+  else { SV.losses++; sfx.lose(); }
+  saveSV(); renderMenu(); }
+function tapRate(){ const now=M.t; M.taps=M.taps.filter(x=>now-x<.6); return M.taps.length/.6; }
+function step(dt){ if(!M) return; M.t+=dt; if(M.msgT>0) M.msgT-=dt; const o=M.opp;
+  if(M.phase==='ready'){ if(M.t>.9&&!M.saidReady){ M.saidReady=1; sfx.ready(); } M.goAt=M.goAt||(M.net?2.2:1.6+Math.random()*1.4); if(M.t>=M.goAt){ M.phase='go'; M.t=0; M.saidReady=0; M.goAt=0; sfx.go(); } return; }
+  if(M.phase==='go'){ if(M.t>.6&&M.react==null){ M.react=.6; } if(M.t>.25||M.react!=null){ M.phase='pull'; M.t=0;
+      const bonus=M.early?-.18:M.react!=null&&M.react<.25?.16*(1-M.react/.25):0; M.ang+=bonus; if(bonus>.05) say('GREAT START!','#4ade80',1); } return; }
+  if(M.phase==='pinned'){ if(M.t>2){ if(M.me>=2||M.them>=2) endMatch(); else { M.round++; newRound(); } } return; }
+  if(M.phase!=='pull') return;
+  /* your effort: taps per second, limited by energy */
+  const r=tapRate(); M.eff=lerp(M.eff,clamp(r/7,0,1.25)*(M.stam>.05?1:.35),Math.min(1,dt*8));
+  M.stam=clamp(M.stam-(M.eff*.11-.06)*dt*(owner()?.4:1),0,1);
+  if(M.net){ M.oeff=M.remoteEff; }
+  else { /* the AI pushes harder when it's losing, and gasses out */ const want=clamp(o.ai*(1.0+(M.ang>.3?.25:0))+Math.sin(M.t*1.7)*.12,0,1.2); M.oeff=lerp(M.oeff,M.ostam>.05?want:want*.35,Math.min(1,dt*4)); M.ostam=clamp(M.ostam-(M.oeff*.085-.055)*dt,0,1);
+    /* techniques: they telegraph a move; counter it with the right key */
+    if(!M.move){ M.nextMove-=dt; if(M.nextMove<=0&&Math.random()<o.tech+.2){ const mv=MOVES[Math.floor(Math.random()*3)]; M.move=mv; M.moveT=0; sfx.move(); } else if(M.nextMove<=0) M.nextMove=2+Math.random()*3; }
+    else { M.moveT+=dt; const lim=1.0-o.tech*.35; if(M.moveT>lim){ M.ang-=.26; say(`${M.move.n} GOT YOU!`,'#f87171',1); M.move=null; M.nextMove=2.5+Math.random()*3; } } }
+  if(!M.net||M.host){ const myF=myPower()*M.eff, thF=(M.net?M.oppPow||1:o.p)*M.oeff; M.ang+=(myF-thF)*dt*.32; M.ang=clamp(M.ang,-1,1);
+    if(M.net&&(M.sendT=(M.sendT||0)-dt)<=0){ M.sendT=.08; NET.send({t:'ang',a:-M.ang}); }
+    if(M.ang>=1) endRound(true); else if(M.ang<=-1) endRound(false); }
+  if(M.net&&(M.effT=(M.effT||0)-dt)<=0){ M.effT=.08; NET.send({t:'eff',e:+M.eff.toFixed(3),p:+myPower().toFixed(2)}); } }
+function press(code){ if(!M) return; audio();
+  if(code==='Space'){ if(M.phase==='ready'){ M.early=true; say('FOUL — TOO EARLY!','#f87171',1); return; } if(M.phase==='go'&&M.react==null){ M.react=M.t; } if(M.phase==='pull'){ M.taps.push(M.t); sfx.tap(); } return; }
+  const mv=MOVES.find(x=>x.key===code); if(!mv||M.phase!=='pull') return;
+  if(M.move){ if(mv.k===M.move.k){ M.ang+=.2; say(`COUNTERED THE ${M.move.n}!`,'#4ade80',1.1); sfx.good(); } else { M.ang-=.12; say('WRONG COUNTER!','#f87171',1); } M.move=null; M.nextMove=2+Math.random()*3; } }
+
+/* ---------- 3D ---------- */
+let built=false;
+function build(){ if(built||!R3.ok) return; built=true;
+  R3.setStatic((g,c,P)=>{ const {primBox,primCyl,T,S,mm}=P, B=primBox(), CY=primCyl(16); const box=(x,y,z,w,h,d,col)=>g.add(B,mm(T(x*K,y*K,z*K),S(w*K,h*K,d*K)),col); const cyl=(x,y,z,r,h,col)=>g.add(CY,mm(T(x*K,y*K,z*K),S(r*K,h*K,r*K)),col);
+    box(0,-.05,0,14,.1,10,'#1e1b18'); box(0,3,-4,14,6,.2,'#151b2e'); box(-5,3,0,.2,6,10,'#111827'); box(5,3,0,.2,6,10,'#111827');
+    for(let i=0;i<6;i++) box(-4+i*1.6,4.6,-3.88,1.2,.8,.02,['#b91c1c','#1d4ed8','#ca8a04','#15803d','#7c3aed','#0e7490'][i]);   /* banners */
+    box(0,.98,0,1.0,.06,.95,'#111827'); box(0,1.012,0,.96,.01,.9,'#b91c1c');                                 /* the table top */
+    for(const sx of [-1,1]) for(const sz of [-1,1]) cyl(sx*.42,.5,sz*.4,.035,1.0,'#334155');
+    box(0,1.04,.17,.16,.04,.16,'#0f172a'); box(0,1.04,-.17,.16,.04,.16,'#0f172a');                          /* elbow pads */
+    for(const sx of [-1,1]){ box(sx*.38,1.035,0,.12,.03,.3,'#1d4ed8'); }                                  /* pin pads */
+    for(const sz of [-1,1]) cyl(.32,1.12,sz*.38,.018,.2,'#e2e8f0');                                   /* grip pegs */
+    R3.crowdRow(g,c,[4*K,0,-3.3*K],[-4*K,0,-3.3*K],.5*K,1*K,3,.6*K);
+  }); }
+/* a wrestler's pose, built from where the elbow and hand are in the world */
+function toLocal(f,p){ const c=Math.cos(f.yaw), s=Math.sin(f.yaw), dx=p[0]-f.x, dz=p[2]-f.z; return [c*dx-s*dz,p[1],s*dx+c*dz]; }
+function wrestler(f,sx,elbW,handW,w,lean,effort){ const J={F:[0,0,1],toe:[0,0,1]};
+  const pz=-.04+lean*.03; J.pelvis=[0,.95,pz]; J.chest=[0,1.36,.2+lean*.05]; J.head=[0,1.55,.3+lean*.06];
+  for(const s of [-1,1]){ J['hip'+s]=[s*.12,.95,pz]; J['knee'+s]=[s*.16,.5,s===sx?-.05:.12]; J['ank'+s]=[s*.2,.1,s===sx?-.25:.1]; J['sho'+s]=[s*w,1.36+(s===sx?.02*effort:0),.17]; }
+  J['elb'+sx]=toLocal(f,elbW); J['hand'+sx]=toLocal(f,handW);
+  J['elb'+(-sx)]=[-sx*(w+.12),1.12,.32]; J['hand'+(-sx)]=toLocal(f,[.32,1.14,f.z>0?.38:-.38]);   /* free hand on the peg */
+  J['elb'+(-sx)]=toLocal(f,[.42,1.2,f.z>0?.5:-.5]);
+  return J; }
+let camE=[2.6,1.7,1.4], camC=[0,1.15,0], T0=0;
+function render(dt){ if(!R3.ok) return; build(); T0+=dt;
+  const ang=M?M.ang:0, th=ang*1.15, ex=0, hw=[ex+Math.sin(th)*.3,1.06+Math.cos(th)*.3,0];
+  const meLk=owner()?{olympia:true,skin:'#caa078',hi:'#dcb68f',shade:'#a37b55',top:'#1d4ed8',topHi:'#2b62f0',topDk:'#1a3a9e',shorts:'#0f1726',shoe:'#121a2a',hair:'#2a1f16',flex:M?M.eff:0}:{top:'#1d4ed8',legs:'#0f1726',skin:'#caa078',shoe:'#121a2a',hair:'#2a1f16',buff:(window.RRSTR?RRSTR.muscle():1)*(1+(M?M.eff*.06:0))};
+  const o=M?M.opp:LADDER[Math.min(SV.sel,LADDER.length-1)], opLk=o.olympia?o.olympia:{top:o.top,legs:'#111827',skin:o.skin,shoe:'#111',hair:'#1f2937',buff:1+o.p*.3};
+  const wMe=owner()?.27:.17*(1+((meLk.buff||1)-1)*.6), wOp=.17*(1+(opLk.buff-1)*.6);
+  const shake=M&&M.phase==='pull'?Math.sin(T0*55)*.004*(M.eff+M.oeff):0;
+  const fMe={x:wMe*.9,z:.63,yaw:PI}, fOp={x:wOp*.9,z:-.63,yaw:0};
+  const eMe=[0,1.06,.17], eOp=[0,1.06,-.17], h=[hw[0]+shake,hw[1],hw[2]];
+  const eye=M&&M.phase==='pull'?[1.9+Math.sin(T0*.4)*.2,1.95,.7]:[2.4,2.0,1.1], ctr=[0,1.2,0], k=Math.min(1,dt*3);
+  for(let i=0;i<3;i++){ camE[i]=lerp(camE[i],eye[i],k); camC[i]=lerp(camC[i],ctr[i],k); }
+  R3.frame({eye:camE.map(v=>v*K),center:camC.map(v=>v*K),fov:46,near:5,far:6000,cheer:M&&M.phase==='pull'?Math.abs(M.ang):0},()=>{
+    PHY.drawBody(wrestler(fMe,1,eMe,h,wMe,M?M.eff:0,M?M.eff:0),fMe,meLk);
+    PHY.drawBody(wrestler(fOp,-1,eOp,h,wOp,M?M.oeff:0,M?M.oeff:0),fOp,opLk);
+    R3.part(R3.US,R3.mm(R3.T(h[0]*K,h[1]*K,h[2]*K),R3.S(.075*K,.08*K,.075*K)),'#caa078');   /* the locked grip */
+  },dt);
+  drawHUD(); }
+
+/* ---------- HUD ---------- */
+const cv=$('cv'), ctx=cv.getContext('2d'), HW=1000, HH=562;
+function txt(t,x,y,size,col,align='center'){ ctx.font=`800 ${size}px 'Big Shoulders Display','Arial Narrow',sans-serif`; ctx.textAlign=align; ctx.lineWidth=Math.max(3,size/6); ctx.strokeStyle='rgba(0,0,0,.65)'; ctx.strokeText(t,x,y); ctx.fillStyle=col; ctx.fillText(t,x,y); }
+function rrct(x,y,w,h,r,c){ ctx.fillStyle=c; ctx.beginPath(); ctx.roundRect(x,y,w,h,r); ctx.fill(); }
+function drawHUD(){ ctx.clearRect(0,0,HW,HH);
+  if(!M){ txt('💪 Pick an opponent below and grip up',HW/2,HH-30,26,'#fde047'); return; }
+  const o=M.opp; txt(`YOU  ${M.me} – ${M.them}  ${o.n.toUpperCase()}`,HW/2,40,32,'#fff'); txt(`ROUND ${M.round} · best of 3`,HW/2,66,18,'#cbd5e1');
+  /* the tug meter */ const mx=HW/2-300, my=HH-70, mw=600; rrct(mx-6,my-6,mw+12,34,12,'rgba(5,10,24,.85)'); rrct(mx,my,mw/2,22,8,'rgba(239,68,68,.35)'); rrct(mx+mw/2,my,mw/2,22,8,'rgba(34,197,94,.35)');
+  const nx=mx+(M.ang*.5+.5)*mw; ctx.fillStyle='#fff'; ctx.fillRect(nx-4,my-8,8,38); txt('THEIR PIN',mx+4,my-12,15,'#fca5a5','left'); txt('YOUR PIN',mx+mw-4,my-12,15,'#86efac','right');
+  /* energy + effort */ rrct(30,120,34,260,10,'rgba(0,0,0,.5)'); const eh=260*M.stam; rrct(30,380-eh,34,eh,10,M.stam<.25?'#ef4444':'#38bdf8'); txt('ENERGY',47,110,14,'#fff');
+  rrct(80,120,20,260,8,'rgba(0,0,0,.5)'); const ph=260*clamp(M.eff/1.25,0,1); rrct(80,380-ph,20,ph,8,'#fbbf24'); txt('PUSH',90,398,13,'#fde68a');
+  if(M.phase==='ready') txt(M.t>.9?'READY…':'GRIP UP…',HW/2,HH/2-40,64,'#fde047');
+  if(M.phase==='go') txt('GO!',HW/2,HH/2-40,96,'#4ade80');
+  if(M.phase==='pull') txt('TAP SPACE TO PULL!',HW/2,HH-90,22,'#e2e8f0');
+  if(M.move){ const lim=1.0-M.opp.tech*.35, left=clamp(1-M.moveT/lim,0,1); rrct(HW/2-190,110,380,86,16,'rgba(127,29,29,.92)'); txt(`${M.move.n}!`,HW/2,150,40,'#fecaca'); txt(`press ${M.move.kl} to counter`,HW/2,180,20,'#fff');
+    rrct(HW/2-150,186,300,6,3,'rgba(255,255,255,.2)'); rrct(HW/2-150,186,300*left,6,3,'#fbbf24'); }
+  if(M.phase==='done'){ txt(M.result?'YOU WIN THE MATCH!':'YOU LOST THE MATCH',HW/2,HH/2-40,58,M.result?'#4ade80':'#f87171'); txt('Pick your next opponent below',HW/2,HH/2,22,'#e2e8f0'); }
+  if(M.msgT>0){ ctx.globalAlpha=clamp(M.msgT,0,1); txt(M.msg,HW/2,HH/2+40,40,M.msgCol); ctx.globalAlpha=1; } }
+
+/* ---------- panel ---------- */
+function renderMenu(){ $('ladder').innerHTML=LADDER.map((o,i)=>`<button data-o="${i}" class="${i<SV.beat?'beat':''} ${i===SV.sel?'sel':''}" ${i>SV.beat&&!owner()?'disabled':''}><b>${i<SV.beat?'✅':i>SV.beat&&!owner()?'🔒':'🥊'} ${esc(o.n)}</b><small>Power ${o.p.toFixed(2)} · tricks ${'★'.repeat(Math.round(o.tech*5))}</small></button>`).join('');
+  $('powTxt').textContent=`Your arm power: ${myPower().toFixed(2)}${owner()?' 👑':''} — train in the gym to raise it`;
+  $('stats').innerHTML=[['Wins',SV.wins],['Losses',SV.losses],['Pins',SV.pins],['Ladder',`${SV.beat}/${LADDER.length}`]].map(([n,v])=>`<div class="stat"><b>${v}</b><span>${n}</span></div>`).join('');
+  if(M&&M.phase==='done') $('menuIn').style.display=''; }
+$('ladder').addEventListener('click',e=>{ const b=e.target.closest('[data-o]'); if(b&&!b.disabled){ SV.sel=+b.dataset.o; saveSV(); renderMenu(); } });
+$('goBtn').onclick=()=>{ $('goBtn').blur(); startMatch(LADDER[SV.sel],false); };
+$('btnSnd').onclick=()=>{ muted=!muted; $('btnSnd').textContent=muted?'Sound off':'Sound on'; };
+$('btnFs').onclick=()=>{ try{ document.fullscreenElement?document.exitFullscreen():$('stage').requestFullscreen(); }catch(e){} };
+addEventListener('keydown',e=>{ const t=document.activeElement; if(t&&(t.tagName==='INPUT'||t.tagName==='TEXTAREA')) return; if(e.code==='Space') e.preventDefault(); if(e.repeat) return; press(e.code); });
+$('stage').addEventListener('pointerdown',e=>{ e.preventDefault(); press('Space'); });
+addEventListener('rrstr-change',renderMenu);
+
+/* ---------- online 1v1 ---------- */
+let NET=null;
+if(window.RRO) NET=RRO.init({game:'armwrestling',maxPlayers:2,minPlayers:2,blurb:'Arm wrestle a real person: same table, same GO, best of three. Your gym strength is your arm, and how fast you pull decides the rest.',
+  onStart:()=>{ const p=NET.peers[0]||{name:'Opponent'}; startMatch({n:p.name,p:1,ai:0,tech:0,skin:'#c68642',top:'#b91c1c'},true); },
+  onMsg:m=>{ if(!M||!M.net) return; if(m.t==='eff'){ M.remoteEff=+m.e||0; M.oppPow=+m.p||1; } if(m.t==='ang'&&!M.host){ M.ang=+m.a||0; } if(m.t==='rnd'&&!M.host){ const win=m.me>M.me; if(m.me!==M.me||m.them!==M.them){ M.me=m.me-(win?1:0); M.them=m.them-(win?0:1); endRound(win); } } },
+  onEnd:()=>{} });
+try{ window.RRL&&RRL.boards('armwrestling',[{id:'wins',name:'Match wins',mode:'sum'}]); }catch(e){}
+
+let last=performance.now();
+function frame(now){ const dt=Math.min(.05,(now-last)/1000); last=now; step(dt); render(dt); requestAnimationFrame(frame); }
+renderMenu(); requestAnimationFrame(frame);
+if(TEST) window.__aw=()=>M&&{phase:M.phase,ang:M.ang,me:M.me,them:M.them,eff:M.eff,oeff:M.oeff,stam:M.stam,move:M.move&&M.move.k,round:M.round,result:M.result};
+})();
+</script>
+<script src="site.js"></script>
+<script src="chat.js"></script>
+</body>
+</html>

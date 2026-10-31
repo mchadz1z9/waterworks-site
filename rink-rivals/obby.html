@@ -1,0 +1,299 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
+<title>Rink Rivals - Obby</title>
+<link href="https://fonts.googleapis.com/css2?family=Big+Shoulders+Display:wght@600;800&display=swap" rel="stylesheet">
+<style>
+:root{ --bg:#dfe6f2; --panel:#ffffff; --ink:#0f1730; --muted:#55627f; --line:#c3cde2; --led:#ffb703; --ledbg:#0a0d18; --acc:#3b82f6;
+  --font:'Big Shoulders Display','Arial Narrow','Helvetica Neue',Impact,sans-serif; }
+@media (prefers-color-scheme:dark){ :root:not([data-theme="light"]){ --bg:#0b1120; --panel:#141c33; --ink:#eef2fb; --muted:#93a0bd; --line:#27345a; } }
+:root[data-theme="dark"]{ --bg:#0b1120; --panel:#141c33; --ink:#eef2fb; --muted:#93a0bd; --line:#27345a; }
+*{box-sizing:border-box}
+body{ margin:0; min-height:100%; background:var(--bg); color:var(--ink); font-family:var(--font); font-weight:600; }
+main{ max-width:1100px; margin:0 auto; padding:12px 14px 30px; }
+.top{ display:flex; justify-content:space-between; align-items:center; margin-bottom:10px; gap:8px; flex-wrap:wrap; }
+.brand{ font-size:26px; font-weight:800 } .brand span{ color:var(--muted); font-weight:600 }
+.tools{ display:flex; gap:8px; flex-wrap:wrap }
+.tools button,.tools a{ font:inherit; font-size:16px; color:var(--ink); background:var(--panel); border:2px solid var(--line); border-radius:999px; padding:4px 14px; cursor:pointer; text-decoration:none }
+#stage{ position:relative; width:100%; height:min(70vh,620px); background:#7dd3fc; border:2px solid var(--line); border-radius:16px; overflow:hidden; touch-action:none; cursor:grab; user-select:none; -webkit-user-select:none }
+#gl,#cv{ position:absolute; inset:0; width:100%; height:100% } #cv{ pointer-events:none }
+.panel{ background:var(--panel); border:2px solid var(--line); border-radius:14px; padding:14px 16px; margin-top:14px }
+.row{ display:flex; gap:10px; flex-wrap:wrap; align-items:center }
+.pills{ display:flex; flex-wrap:wrap; align-items:center }
+.pills button,.btn{ font:inherit; font-size:17px; border:2px solid var(--line); background:var(--panel); color:var(--ink); border-radius:999px; padding:6px 15px; cursor:pointer; margin:3px }
+.pills button.on{ background:var(--acc); border-color:var(--acc); color:#fff }
+.pills .lbl{ color:var(--muted); margin:0 6px 0 2px; text-transform:uppercase; font-size:13px; letter-spacing:.06em }
+.gold{ background:var(--led)!important; border-color:var(--led)!important; color:#0a0d18!important; font-weight:800 }
+h1{ font-size:30px; margin:0 0 6px } .muted{ color:var(--muted) }
+.statrow{ display:grid; grid-template-columns:repeat(auto-fill,minmax(110px,1fr)); gap:10px 14px; margin-top:8px }
+.stat b{ font-size:25px } .stat span{ display:block; color:var(--muted); font-size:12px; text-transform:uppercase; letter-spacing:.05em }
+.hint{ color:var(--muted); font-size:15px; margin-top:8px; line-height:1.45 }
+kbd{ font:inherit; font-size:13px; background:var(--ledbg); color:#fff; border-radius:6px; padding:1px 7px }
+#touch{ position:absolute; inset:auto 0 0 0; height:150px; display:none; pointer-events:none }
+#touch .stick{ position:absolute; left:18px; bottom:18px; width:120px; height:120px; border-radius:50%; background:rgba(255,255,255,.18); border:2px solid rgba(255,255,255,.4); pointer-events:auto }
+#touch .knob{ position:absolute; left:40px; top:40px; width:40px; height:40px; border-radius:50%; background:rgba(255,255,255,.7) }
+#touch .jump{ position:absolute; right:22px; bottom:28px; width:96px; height:96px; border-radius:50%; background:rgba(34,197,94,.75); border:2px solid #fff; color:#fff; font:800 22px var(--font); pointer-events:auto }
+@media (pointer:coarse){ #touch{ display:block } }
+</style>
+</head>
+<body data-sport="obby">
+<main>
+  <div class="top">
+    <div class="brand">Rink Rivals <span>Obby</span></div>
+    <div class="tools"><a href="./">Home</a><a href="skate">Skate</a><button id="btnFs">Full screen</button><button id="btnSnd">Sound on</button></div>
+  </div>
+  <div id="stage"><canvas id="gl"></canvas><canvas id="cv" width="1000" height="562"></canvas>
+    <div id="touch"><div class="stick" id="stick"><div class="knob" id="knob"></div></div><button class="jump" id="jumpBtn">JUMP</button></div></div>
+  <div class="panel">
+    <div id="menuIn">
+      <h1>🧗 Neon Obby</h1>
+      <div class="muted">Run, jump and climb your way through 12 stages of floating platforms high above the lava: moving blocks, spinning bars, tiles that vanish under your feet, jump pads, conveyor belts and a final tower. Checkpoints save your progress. Race the clock — or race your friends online.</div>
+      <div class="pills" style="margin-top:8px"><span class="lbl">Mode</span><button data-mode="0">🙂 Normal</button><button data-mode="1">🔥 Hard (smaller platforms, faster traps)</button></div>
+      <div class="row" style="margin-top:6px"><button class="btn gold" id="goBtn" style="font-size:22px;padding:8px 26px">Start run ▶</button><button class="btn" id="resetBtn">Restart from the beginning</button></div>
+    </div>
+    <div class="statrow" id="stats"></div>
+    <div class="hint"><b>Move</b> <kbd>W</kbd><kbd>A</kbd><kbd>S</kbd><kbd>D</kbd> / arrows (the way the camera faces) · <b>Jump</b> <kbd>Space</kbd> · <b>Turn the camera</b> drag the screen or <kbd>Q</kbd> <kbd>E</kbd> · <kbd>R</kbd> back to the last checkpoint.
+      Red and orange glowing blocks are lava — don't touch them. Green pads launch you high, blue arrows are conveyor belts, flashing tiles drop away a moment after you land.</div>
+  </div>
+</main>
+<script src="r3lib.js"></script>
+<script src="strength.js"></script>
+<script src="physique.js"></script>
+<script src="online.js"></script>
+<script>
+(() => {
+'use strict';
+const $=id=>document.getElementById(id);
+const clamp=(v,a,b)=>Math.max(a,Math.min(b,v)), lerp=(a,b,t)=>a+(b-a)*t;
+const PI=Math.PI, K=100, TEST=/[?&]test\b/.test(location.search);
+const R3=makeR3($('gl'),$('stage')), PHY=RRPHY(R3,K);
+const owner=()=>!!(window.RRSTR&&RRSTR.owner);
+let muted=false, AC=null;
+function audio(){ if(!AC){ try{ AC=new (window.AudioContext||window.webkitAudioContext)(); }catch(e){} } if(AC&&AC.state==='suspended') AC.resume(); return AC; }
+function tone(f,d,type,v,slide,delay){ const a=audio(); if(!a||muted) return; const t=a.currentTime+(delay||0), o=a.createOscillator(), g=a.createGain(); o.type=type||'sine'; o.frequency.setValueAtTime(f,t); if(slide) o.frequency.linearRampToValueAtTime(f+slide,t+d); g.gain.setValueAtTime(v||.06,t); g.gain.exponentialRampToValueAtTime(.0001,t+d); o.connect(g); g.connect(a.destination); o.start(t); o.stop(t+d+.02); }
+const sfx={ jump:()=>tone(380,.14,'square',.035,260), land:()=>tone(120,.06,'sine',.05), pad:()=>tone(300,.35,'triangle',.06,700), die:()=>{ tone(300,.35,'sawtooth',.05,-250); }, cp:()=>{ tone(660,.12,'triangle',.06); tone(990,.2,'triangle',.06,0,.1); }, win:()=>{ [523,659,784,1047].forEach((f,i)=>tone(f,.25,'triangle',.07,0,i*.12)); } };
+
+/* ---------- the course ----------
+   Every part is a box: {x,y,z (centre), w,h,d (size), t:type}. Types: n solid, k lava (kills), p jump pad, c conveyor (cx,cz push),
+   v vanishing tile, m moving block (ax,ay,az amplitude, sp speed, ph phase), cp checkpoint, f finish. Spinning bars live in SPIN. */
+let B=[], SPIN=[], CPS=[], MODE=0, STAGES=[];
+function buildCourse(hard){ B=[]; SPIN=[]; CPS=[]; STAGES=[];
+  const sz=hard?.78:1, fast=hard?1.35:1;
+  const plat=(x,y,z,w,d,t,col,extra)=>{ const b=Object.assign({x,y:y-.25,z,w:w*(t==='n'||t==='v'||t==='m'?sz:1),h:.5,d:d*(t==='n'||t==='v'||t==='m'?sz:1),t:t||'n',col},extra||{}); B.push(b); return b; };
+  const cp=(x,y,z,name)=>{ const b=plat(x,y,z,5,5,'cp','#22c55e'); b.idx=CPS.length; CPS.push({x,y:y+.1,z,name}); STAGES.push(name); return b; };
+  const COLS=['#f472b6','#60a5fa','#a78bfa','#facc15','#34d399','#fb923c'];
+  let z=0, y=0;
+  cp(0,0,0,'Start');
+  /* 1. warm-up hops */
+  for(let i=0;i<6;i++){ z-=3.4; y+=i%2?.4:0; plat((i%2?1.4:-1.4),y,z,2.2,2.2,'n',COLS[i%6]); }
+  z-=4.2; cp(0,y,z,'Hop Field');
+  /* 2. stepping stones over a lava pool */
+  plat(0,y-.6,z-9,10,14,'k','#ef4444');
+  for(let i=0;i<6;i++){ plat(((i*7)%5-2)*1.3,y,z-3.2-i*2.3,1.8,1.8,'n','#e2e8f0'); }
+  z-=19; cp(0,y,z,'Lava Pool');
+  /* 3. moving platforms */
+  for(let i=0;i<4;i++){ plat(0,y,z-4.5-i*4,2.6,2.6,'m',COLS[(i+2)%6],{ax:3.2,ay:0,az:0,sp:1.1*fast,ph:i*1.3}); }
+  z-=21; cp(0,y,z,'Sliders');
+  /* 4. stairs up, the last ones are lava-trimmed */
+  for(let i=0;i<8;i++){ y+=.75; plat(i%2?-1:1,y,z-3.3-i*2.1,2.2,1.8,'n',COLS[i%6]); if(i>3) plat(i%2?-2.3:2.3,y+.15,z-3.3-i*2.1,.6,1.8,'k','#f97316'); }
+  z-=22; cp(0,y,z,'Staircase');
+  /* 5. spinning bars on round arenas */
+  for(let i=0;i<2;i++){ const cz=z-6-i*9; plat(0,y,cz,7,7,'n','#1e293b'); SPIN.push({x:0,y:y+.45,z:cz,len:3.4,sp:(i?-1.6:1.3)*fast,a:i*1.2}); }
+  plat(0,y,z-3,2,2,'n','#94a3b8'); plat(0,y,z-10.5,2,2,'n','#94a3b8');
+  z-=19; cp(0,y,z,'Spinners');
+  /* 6. vanishing tiles */
+  for(let i=0;i<7;i++){ plat(((i%3)-1)*1.6,y,z-3.4-i*2.6,1.8,1.8,'v','#fde047'); }
+  plat(0,y-3.5,z-12,12,20,'k','#ef4444');
+  z-=23; cp(0,y,z,'Vanish');
+  /* 7. jump pads up to a high ledge */
+  plat(0,y,z-4,2.4,2.4,'p','#4ade80'); y+=5.5; plat(0,y,z-10,4,4,'n','#a78bfa');
+  plat(0,y,z-14.5,2.2,2.2,'p','#4ade80'); y+=5; plat(2,y,z-21,4,4,'n','#60a5fa');
+  z-=25; cp(2,y,z,'Launch Pads');
+  /* 8. narrow beams with lava bumps */
+  plat(2,y,z-7,.7,10,'n','#cbd5e1'); plat(2,y+.35,z-6,.7,.4,'k','#f97316'); plat(-1,y,z-13,6.5,.7,'n','#cbd5e1'); plat(-4,y,z-19,.7,10,'n','#cbd5e1'); plat(-4,y+.35,z-17,.7,.4,'k','#f97316'); plat(-4,y+.35,z-21,.7,.4,'k','#f97316');
+  z-=27; cp(-4,y,z,'Tightrope');
+  /* 9. conveyor belts pushing you back, then sideways */
+  plat(-4,y,z-6,3,8,'c','#2563eb',{cx:0,cz:2.6*fast}); plat(-4,y,z-14,3,6,'c','#2563eb',{cx:-2.4*fast,cz:0}); plat(-4,y+1,z-20,3,4,'c','#2563eb',{cx:0,cz:3*fast});
+  z-=26; y+=1; cp(-4,y,z,'Conveyors');
+  /* 10. up-and-down lifts */
+  for(let i=0;i<3;i++){ plat(-4+i*2,y+1.5,z-5-i*4.5,2.4,2.4,'m','#f472b6',{ax:0,ay:1.6,az:0,sp:1.3*fast,ph:i*1.9}); }
+  y+=2.2; z-=18; cp(2,y,z,'Lifts');
+  /* 11. the tower: a spiral of small blocks around a lava core */
+  const TX=2, TZ=z-9; plat(4,y,z-4.9,2,2,'n','#94a3b8'); plat(TX,y+6,TZ,1.6,1.6,'k','#ef4444'); B[B.length-1].h=12; B[B.length-1].y=y+6;
+  for(let i=0;i<12;i++){ const a=i*.62, r=3.1; plat(TX+Math.cos(a)*r,y+.9+i*.85,TZ+Math.sin(a)*r,1.6,1.6,i%4===3?'v':'n',COLS[i%6]); }
+  y+=11.2; z=TZ-4.5; cp(TX+3,y,z,'Tower Top');
+  /* 12. the final gap: moving blocks to the finish */
+  const fz=z; for(let i=0;i<3;i++){ plat(TX,y,fz-5-i*4.2,2.2,2.2,'m','#facc15',{ax:2.4,ay:0,az:0,sp:1.5*fast,ph:i*2}); }
+  const fin=plat(TX,y,fz-19,6,6,'f','#fbbf24');
+  STAGES.push('Finish');
+  for(const b of B){ b.x0=b.x; b.y0=b.y; b.z0=b.z; }
+  return fin; }
+
+/* ---------- player ---------- */
+const P={x:0,y:0,z:0,vx:0,vy:0,vz:0,yaw:PI,on:null,coyote:0,buf:0,walk:0,spd:0,air:0};
+let camYaw=0, camPitch=.42, CP=0, RUN=null, deaths=0, SV=(()=>{ try{ return Object.assign({best:[0,0],runs:0,clears:0},JSON.parse(localStorage.getItem('rrObby')||'{}')); }catch(e){ return {best:[0,0],runs:0,clears:0}; } })();
+const saveSV=()=>{ try{ localStorage.setItem('rrObby',JSON.stringify(SV)); }catch(e){} };
+let msg='', msgT=0, msgCol='#fde047'; const say=(t,c,d)=>{ msg=t; msgCol=c||'#fde047'; msgT=d||1.6; };
+function spawn(){ const c=CPS[CP]; P.x=c.x; P.y=c.y; P.z=c.z; P.vx=P.vy=P.vz=0; P.on=null; P.air=0; for(const b of B) if(b.t==='v'){ b.gone=0; b.step=0; } }
+function die(){ deaths++; if(RUN) RUN.deaths++; sfx.die(); say('OOF!','#f87171',.9); spawn(); }
+function startRun(){ buildCourse(MODE===1); CP=0; deaths=0; RUN={t:0,deaths:0,done:false,mode:MODE}; spawn(); P.yaw=PI; camYaw=0; SV.runs++; saveSV(); built=false; say('GO!','#4ade80',1.2); audio(); renderStats(); }
+function boxAt(b,t){ if(b.t==='m'){ const s=Math.sin(t*b.sp+b.ph); return [b.x0+b.ax*s,b.y0+b.ay*s,b.z0+b.az*s]; } return [b.x,b.y,b.z]; }
+const keys=new Set(); let stick={x:0,y:0}, T=0;
+function physics(dt){ const t=T;
+  /* moving parts */
+  for(const b of B){ if(b.t==='m'){ const p=boxAt(b,t); b.dx=p[0]-b.x; b.dy=p[1]-b.y; b.dz=p[2]-b.z; b.x=p[0]; b.y=p[1]; b.z=p[2]; }
+    if(b.t==='v'){ if(b.step>0){ b.step+=dt; if(b.step>.75){ b.gone=2.6; b.step=0; } } if(b.gone>0){ b.gone-=dt; } } }
+  for(const s of SPIN) s.a+=s.sp*dt;
+  if(!RUN||RUN.done) return;
+  RUN.t+=dt;
+  /* ride what you stand on */
+  if(P.on&&P.on.t==='m'){ P.x+=P.on.dx; P.y+=P.on.dy; P.z+=P.on.dz; }
+  /* input relative to the camera */
+  let ix=(keys.has('KeyD')||keys.has('ArrowRight')?1:0)-(keys.has('KeyA')||keys.has('ArrowLeft')?1:0)+stick.x, iz=(keys.has('KeyW')||keys.has('ArrowUp')?1:0)-(keys.has('KeyS')||keys.has('ArrowDown')?1:0)-stick.y;
+  const m=Math.hypot(ix,iz); if(m>1){ ix/=m; iz/=m; }
+  const fx=-Math.sin(camYaw), fz=-Math.cos(camYaw), rx=Math.cos(camYaw), rz=-Math.sin(camYaw);
+  const wx=fx*iz+rx*ix, wz=fz*iz+rz*ix, sp=owner()?8.2:7.2, acc=P.on?40:26;
+  P.vx=lerp(P.vx,wx*sp,Math.min(1,acc*dt/sp)); P.vz=lerp(P.vz,wz*sp,Math.min(1,acc*dt/sp));
+  if(m>.1){ const ty=Math.atan2(wx,wz); let dy=ty-P.yaw; while(dy>PI) dy-=2*PI; while(dy<-PI) dy+=2*PI; P.yaw+=dy*Math.min(1,dt*14); }
+  /* conveyor */ if(P.on&&P.on.t==='c'){ P.x+=P.on.cx*dt; P.z+=P.on.cz*dt; }
+  /* jump (with a little forgiveness: coyote time + buffered presses) */
+  P.coyote=P.on?.11:Math.max(0,P.coyote-dt); P.buf=Math.max(0,P.buf-dt);
+  if(P.buf>0&&P.coyote>0){ P.vy=9.6; P.on=null; P.coyote=0; P.buf=0; sfx.jump(); }
+  P.vy-=26*dt; if(P.vy<-30) P.vy=-30;
+  const was=P.on; P.on=null; const N=3;
+  for(let k=0;k<N;k++){ P.x+=P.vx*dt/N; P.y+=P.vy*dt/N; P.z+=P.vz*dt/N; collide(); }
+  if(P.on&&!was){ sfx.land(); }
+  P.air=P.on?0:P.air+dt;
+  if(P.on){ const b=P.on; if(b.t==='p'){ P.vy=17.5; P.on=null; sfx.pad(); say('BOING!','#4ade80',.6); }
+    else if(b.t==='v'&&!b.step&&!(b.gone>0)) b.step=.001;
+    else if(b.t==='cp'&&b.idx>CP){ CP=b.idx; sfx.cp(); say(`CHECKPOINT ${CP} · ${CPS[CP].name.toUpperCase()}`,'#4ade80',1.6); if(NET&&NET.on) NET.send({t:'cp',cp:CP}); }
+    else if(b.t==='f') finish(); }
+  /* spinning bars */
+  for(const s of SPIN){ if(Math.abs(P.y+.5-s.y)>.6) continue; const ex=Math.sin(s.a)*s.len, ez=Math.cos(s.a)*s.len;
+    const dx=P.x-s.x, dz=P.z-s.z, L=s.len*s.len*4, tt=clamp((dx*ex*2+dz*ez*2+ s.len*s.len*2)/(L),0,1), qx=s.x-ex+2*ex*tt, qz=s.z-ez+2*ez*tt; if(Math.hypot(P.x-qx,P.z-qz)<.45){ die(); return; } }
+  if(P.y<lowest-6) die();
+  P.spd=Math.hypot(P.vx,P.vz); P.walk+=dt*P.spd*2.2; }
+const HX=.3, HY=.9;
+function collide(){ for(const b of B){ if(b.t==='v'&&b.gone>0) continue;
+    const dx=P.x-b.x, dy=(P.y+HY)-b.y, dz=P.z-b.z, ox=HX+b.w/2-Math.abs(dx), oy=HY+b.h/2-Math.abs(dy), oz=HX+b.d/2-Math.abs(dz);
+    if(ox<=0||oy<=0||oz<=0) continue;
+    if(b.t==='k'){ lastKill={x:b.x,y:b.y,z:b.z,w:b.w,h:b.h,d:b.d,px:P.x,py:P.y,pz:P.z}; die(); return; }
+    if(oy<ox&&oy<oz||(dy>0&&oy<.35&&P.vy<=0)){ if(dy>0){ P.y+=oy; if(P.vy<0) P.vy=0; P.on=b; } else { P.y-=oy; if(P.vy>0) P.vy=0; } }
+    else if(ox<oz){ P.x+=dx>0?ox:-ox; P.vx=0; } else { P.z+=dz>0?oz:-oz; P.vz=0; } } }
+let lowest=0, lastKill=null;
+function finish(){ if(RUN.done) return; RUN.done=true; sfx.win(); const t=RUN.t, m=RUN.mode;
+  const pb=!SV.best[m]||t<SV.best[m]; if(pb) SV.best[m]=Math.round(t*100)/100; SV.clears++; saveSV();
+  say(pb?`NEW BEST! ${fmt(t)}`:`FINISHED! ${fmt(t)}`,'#fbbf24',5);
+  try{ window.RRL&&RRL.post(m?'hard':'normal',-Math.round(t*100)/100,`${fmt(t)} · ${RUN.deaths} falls`); }catch(e){}
+  if(window.RRSTR) RRSTR.add(owner()?1:m?3:2);
+  if(NET&&NET.on) NET.send({t:'fin',time:t});
+  renderStats(); }
+const fmt=t=>`${Math.floor(t/60)}:${(t%60).toFixed(2).padStart(5,'0')}`;
+
+/* ---------- drawing ---------- */
+let built=false;
+function build(){ if(built||!R3.ok) return; built=true; lowest=Math.min(...B.map(b=>b.y))-1;
+  R3.setStatic((g,c,P2)=>{ const {primBox,primCyl,T:Tm,S,mm,RX}=P2, BX=primBox(), CY=primCyl(16);
+    const box=(x,y,z,w,h,d,col)=>g.add(BX,mm(Tm(x*K,y*K,z*K),S(w*K,h*K,d*K)),col);
+    box(0,lowest-2,-110,260,.4,320,'#b91c1c'); box(0,lowest-1.85,-110,250,.1,310,'#f97316');   /* the lava sea far below */
+    for(const b of B){ if(b.t==='m'||b.t==='v') continue; box(b.x,b.y,b.z,b.w,b.h,b.d,b.t==='k'?'#ef4444':b.col);
+      if(b.t==='k') box(b.x,b.y+b.h/2+.01,b.z,b.w*.9,.02,b.d*.9,'#fb923c');
+      if(b.t==='p'){ box(b.x,b.y+.3,b.z,b.w*.7,.1,b.d*.7,'#bbf7d0'); }
+      if(b.t==='c'){ const n=Math.max(2,Math.round(Math.max(b.w,b.d)/1.2)); for(let i=0;i<n;i++){ const f=(i+.5)/n-.5, ax=b.cz?0:1; box(b.x+(ax?f*b.w:0),b.y+.26,b.z+(ax?0:f*b.d),ax?.25:b.w*.6,.02,ax?b.d*.6:.25,'#93c5fd'); } }
+      if(b.t==='cp'||b.t==='f'){ box(b.x+b.w/2-.4,b.y+1.3,b.z-b.d/2+.4,.08,2.6,.08,'#e2e8f0'); box(b.x+b.w/2-.75,b.y+2.3,b.z-b.d/2+.4,.7,.5,.04,b.t==='f'?'#fbbf24':'#22c55e'); } }
+    /* floating islands of clouds for depth */
+    for(let i=0;i<30;i++){ const x=(i*37%60)-30, z=-(i*53%220), y=lowest+4+(i*7%14); box(x*1.4+(x>0?16:-16),y,z,3+(i%3),1.2,2.4,'#f1f5f9'); }
+  }); }
+const camE=[0,6,8], camC=[0,1,0];
+function render(dt){ if(!R3.ok) return; build(); T+=0;
+  const cd=7.2, eye=[P.x+Math.sin(camYaw)*cd*Math.cos(camPitch),P.y+1.4+Math.sin(camPitch)*cd,P.z+Math.cos(camYaw)*cd*Math.cos(camPitch)], ctr=[P.x,P.y+1.4,P.z];
+  const k=Math.min(1,dt*10); for(let i=0;i<3;i++){ camE[i]=lerp(camE[i],eye[i],k); camC[i]=lerp(camC[i],ctr[i],Math.min(1,dt*14)); }
+  R3.frame({eye:camE.map(v=>v*K),center:camC.map(v=>v*K),fov:60,near:8,far:30000},()=>{
+    for(const b of B){ if(b.t==='m') R3.part(R3.UB,R3.mm(R3.T(b.x*K,b.y*K,b.z*K),R3.S(b.w*K,b.h*K,b.d*K)),b.col);
+      if(b.t==='v'&&!(b.gone>0)){ const fl=b.step>0&&Math.sin(b.step*40)>0; R3.part(R3.UB,R3.mm(R3.T(b.x*K,b.y*K,b.z*K),R3.S(b.w*K,b.h*K,b.d*K)),fl?'#fff7ae':b.col); } }
+    for(const s of SPIN){ R3.part(R3.UC,R3.mm(R3.T(s.x*K,(s.y-.4)*K,s.z*K),R3.S(.25*K,.8*K,.25*K)),'#334155');
+      R3.part(R3.UB,R3.mm(R3.T(s.x*K,s.y*K,s.z*K),R3.RY(s.a),R3.S(.3*K,.3*K,s.len*2*K)),'#ef4444'); }
+    for(const o of OT.values()) drawPerson(o.x,o.y,o.z,o.yaw,o.spd,o.walk,o.air,o.look);
+    drawPerson(P.x,P.y,P.z,P.yaw,P.spd,P.walk,P.air,myLook());
+  },dt);
+  drawHUD(); }
+function myLook(){ if(owner()) return {olympia:true,skin:'#caa078',hi:'#dcb68f',shade:'#a37b55',top:'#1d4ed8',topHi:'#2b62f0',topDk:'#1a3a9e',shorts:'#0f1726',shoe:'#121a2a',hair:'#2a1f16'};
+  return {top:'#1d4ed8',legs:'#0f1726',skin:'#caa078',shoe:'#121a2a',hair:'#2a1f16',buff:window.RRSTR?RRSTR.muscle():1}; }
+function drawPerson(x,y,z,yaw,spd,walk,air,lk){ const w=lk.olympia?.27:.17*(1+((lk.buff||1)-1)*.6);
+  const J=air>.08?PHY.pose('run',0,1.2,w):PHY.pose(spd>.3?(spd>5?'run':'walk'):'stand',0,walk,w); PHY.drawBody(J,{x,z,yaw,y},lk); }
+
+/* ---------- HUD ---------- */
+const cv=$('cv'), ctx=cv.getContext('2d'), HW=1000, HH=562;
+function txt(t,x,y,size,col,align='center'){ ctx.font=`800 ${size}px 'Big Shoulders Display','Arial Narrow',sans-serif`; ctx.textAlign=align; ctx.lineWidth=Math.max(3,size/6); ctx.strokeStyle='rgba(0,0,0,.6)'; ctx.strokeText(t,x,y); ctx.fillStyle=col; ctx.fillText(t,x,y); }
+const scr=p=>{ const q=R3.proj(p[0]*K,p[1]*K,p[2]*K); return q?[q[0]*HW,q[1]*HH,q[2]]:null; };
+function drawHUD(){ ctx.clearRect(0,0,HW,HH);
+  for(const o of OT.values()){ const p=scr([o.x,o.y+2.2,o.z]); if(p) txt(`${o.name}${o.done?' 🏁':''}`,p[0],p[1],clamp(9000/p[2],12,20),'#a5f3fc'); }
+  if(!RUN){ txt('🧗 Press Start run below',HW/2,HH/2,36,'#fde047'); return; }
+  txt(fmt(RUN.t),HW/2,40,38,RUN.done?'#fbbf24':'#fff'); txt(`CHECKPOINT ${CP}/${CPS.length-1} · ${CPS[CP].name}`,18,32,20,'#e2e8f0','left'); txt(`FALLS ${RUN.deaths}`,18,58,20,'#fca5a5','left');
+  if(SV.best[RUN.mode]) txt(`BEST ${fmt(SV.best[RUN.mode])}`,HW-18,32,20,'#fde047','right');
+  if(NET&&NET.on){ const all=[{name:'You',cp:CP,done:RUN.done,t:RUN.t}].concat([...OT.values()].map(o=>({name:o.name,cp:o.cp||0,done:o.done,t:o.ft}))).sort((a,b)=>(b.done?100:0)+b.cp-((a.done?100:0)+a.cp)||(a.t||0)-(b.t||0));
+    all.forEach((p,i)=>txt(`${i+1}. ${p.name}${p.done?' 🏁 '+fmt(p.t):' · CP '+p.cp}`,HW-18,60+i*22,17,p.name==='You'?'#fde047':'#a5f3fc','right')); }
+  if(msgT>0){ ctx.globalAlpha=clamp(msgT,0,1); txt(msg,HW/2,HH/2-60,44,msgCol); ctx.globalAlpha=1; }
+  if(RUN.done) txt('Press Start run for another go',HW/2,HH-30,22,'#e2e8f0'); }
+
+/* ---------- input ---------- */
+addEventListener('keydown',e=>{ const t=document.activeElement; if(t&&(t.tagName==='INPUT'||t.tagName==='TEXTAREA')) return;
+  if(['Space','ArrowUp','ArrowDown','ArrowLeft','ArrowRight'].includes(e.code)) e.preventDefault();
+  keys.add(e.code); audio();
+  if(e.code==='Space'&&!e.repeat) P.buf=.13;
+  if(e.code==='KeyR'&&!e.repeat&&RUN&&!RUN.done) spawn();
+  if(e.code==='Enter'&&!RUN) startRun(); });
+addEventListener('keyup',e=>keys.delete(e.code)); addEventListener('blur',()=>keys.clear());
+let drag=null; const st=$('stage');
+st.addEventListener('pointerdown',e=>{ if(e.target.closest('#touch')) return; drag={x:e.clientX,y:e.clientY,yaw:camYaw,p:camPitch}; st.setPointerCapture(e.pointerId); audio(); });
+st.addEventListener('pointermove',e=>{ if(!drag) return; camYaw=drag.yaw-(e.clientX-drag.x)*.008; camPitch=clamp(drag.p+(e.clientY-drag.y)*.005,.05,1.2); });
+st.addEventListener('pointerup',()=>{ drag=null; });
+/* phones: a stick and a jump button */
+const sk=$('stick'), kn=$('knob'); let sid=null;
+sk.addEventListener('pointerdown',e=>{ sid=e.pointerId; sk.setPointerCapture(sid); mv(e); e.stopPropagation(); });
+sk.addEventListener('pointermove',e=>{ if(e.pointerId===sid) mv(e); });
+sk.addEventListener('pointerup',()=>{ sid=null; stick={x:0,y:0}; kn.style.left='40px'; kn.style.top='40px'; });
+function mv(e){ const r=sk.getBoundingClientRect(), dx=clamp((e.clientX-r.left-60)/50,-1,1), dy=clamp((e.clientY-r.top-60)/50,-1,1); stick={x:dx,y:dy}; kn.style.left=(40+dx*40)+'px'; kn.style.top=(40+dy*40)+'px'; }
+$('jumpBtn').addEventListener('pointerdown',e=>{ e.stopPropagation(); P.buf=.13; audio(); });
+
+/* ---------- panel ---------- */
+function renderStats(){ $('stats').innerHTML=[['Best (normal)',SV.best[0]?fmt(SV.best[0]):'—'],['Best (hard)',SV.best[1]?fmt(SV.best[1]):'—'],['Runs',SV.runs],['Clears',SV.clears]].map(([n,v])=>`<div class="stat"><b>${v}</b><span>${n}</span></div>`).join('');
+  document.querySelectorAll('[data-mode]').forEach(b=>b.classList.toggle('on',+b.dataset.mode===MODE)); }
+document.querySelectorAll('[data-mode]').forEach(b=>b.onclick=()=>{ MODE=+b.dataset.mode; renderStats(); });
+$('goBtn').onclick=()=>{ $('goBtn').blur(); startRun(); };
+$('resetBtn').onclick=()=>{ if(RUN){ CP=0; spawn(); RUN.t=0; RUN.deaths=0; RUN.done=false; } };
+$('btnSnd').onclick=()=>{ muted=!muted; $('btnSnd').textContent=muted?'Sound off':'Sound on'; };
+$('btnFs').onclick=()=>{ try{ document.fullscreenElement?document.exitFullscreen():st.requestFullscreen(); }catch(e){} };
+
+/* ---------- online race ---------- */
+const OT=new Map(); let NET=null, netT=0;
+const TOPS=['#dc2626','#16a34a','#9333ea','#ea580c','#0891b2','#db2777','#ca8a04'];
+if(window.RRO) NET=RRO.init({game:'obby',maxPlayers:8,minPlayers:1,blurb:'Race your friends through the same obby: everyone starts together, you see each other running, and the first to the finish wins.',
+  getOpts:()=>({mode:MODE}), onStart:m=>{ OT.clear(); if(m.opts) MODE=m.opts.mode|0; startRun(); },
+  onMsg:m=>{ const p=(NET.peers||[]).find(q=>q.id===m.from)||{}; let o=OT.get(m.from); if(!o){ o={name:p.name||'Player',x:0,y:0,z:0,yaw:0,spd:0,walk:0,air:0,look:{top:TOPS[(m.seat||1)%TOPS.length],legs:'#0f1726',skin:'#c68642',shoe:'#111',hair:'#222',buff:1.2}}; OT.set(m.from,o); }
+    if(m.t==='p'){ o.tx=m.x; o.ty=m.y; o.tz=m.z; if(o.x===0&&o.z===0){ o.x=m.x; o.y=m.y; o.z=m.z; } o.yaw=m.yaw; o.spd=m.s; o.air=m.a; if(m.o) o.look={olympia:true,skin:'#caa078',hi:'#dcb68f',shade:'#a37b55',top:'#b91c1c',topHi:'#dc2626',topDk:'#7f1d1d',shorts:'#0f1726',shoe:'#121a2a',hair:'#2a1f16'}; }
+    if(m.t==='cp') o.cp=m.cp; if(m.t==='fin'){ o.done=true; o.ft=m.time; say(`${o.name} finished! ${fmt(m.time)}`,'#a5f3fc',2); } },
+  onPeers:(api,kind,m)=>{ if(kind==='leave') OT.delete(m.id); }, onEnd:()=>OT.clear() });
+try{ window.RRL&&RRL.boards('obby',[{id:'normal',name:'Fastest (normal)',mode:'max'},{id:'hard',name:'Fastest (hard)',mode:'max'}]); }catch(e){}
+
+let last=performance.now();
+const SPEED=TEST?(+new URLSearchParams(location.search).get('speed')||1):1;
+let BOT=null;   /* test-only autopilot: walks to each target in turn and jumps near the edge */
+function botStep(){ if(!BOT||!RUN) return; if(RUN.deaths!==BOT.d){ BOT.d=RUN.deaths; const c=CPS[CP]; const k=BOT.list.findIndex(b=>b.t==='cp'&&Math.abs(b.x-c.x)<.01&&Math.abs(b.z-c.z)<.01); BOT.i=k>=0?k+1:BOT.i; BOT.fails=(BOT.fails||0)+1; } const tg=BOT.list[BOT.i]; if(!tg){ stick={x:0,y:0}; return; } const dx=tg.x-P.x, dz=tg.z-P.z, d=Math.hypot(dx,dz); camYaw=Math.atan2(-dx,-dz); stick={x:0,y:P.on&&!(BOT.list[BOT.i]===P.on)?-1:-clamp(d/1.0,.25,1)};
+  const onT=P.on&&Math.abs(P.on.x-tg.x)<.01&&Math.abs(P.on.z-tg.z)<.01; if(onT&&d<.5){ BOT.i++; return; } if(onT) return;
+  const edge=Math.max(0,d-Math.min(tg.w,tg.d)/2); if(P.on&&edge<(tg.y>P.y+.3?1.2:1.6)&&edge>.1) P.buf=.13; }
+function frame(now){ const dt=Math.min(.05,(now-last)/1000)*SPEED; last=now; T+=dt; botStep(); physics(dt);
+  for(const o of OT.values()){ if(o.tx==null) continue; const k=Math.min(1,dt*12); o.x=lerp(o.x,o.tx,k); o.y=lerp(o.y,o.ty,k); o.z=lerp(o.z,o.tz,k); o.walk+=dt*o.spd*2.2; }
+  if(NET&&NET.on&&RUN){ netT-=dt; if(netT<=0){ netT=.1; NET.send({t:'p',x:+P.x.toFixed(2),y:+P.y.toFixed(2),z:+P.z.toFixed(2),yaw:+P.yaw.toFixed(2),s:+P.spd.toFixed(1),a:P.air>.08?1:0,o:owner()?1:0}); } }
+  if(msgT>0) msgT-=dt; if(keys.has('KeyQ')) camYaw+=dt*2.2; if(keys.has('KeyE')) camYaw-=dt*2.2;
+  render(dt); requestAnimationFrame(frame); }
+buildCourse(false); spawn(); renderStats(); requestAnimationFrame(frame);
+if(TEST) window.__ob={ st:()=>({x:P.x,y:P.y,z:P.z,on:P.on&&P.on.t,cp:CP,run:RUN&&{t:RUN.t,deaths:RUN.deaths,done:RUN.done},n:B.length,cps:CPS.map(c=>[c.x,c.y,c.z])}), tp:(i)=>{ CP=i; spawn(); }, cam:(y)=>{ camYaw=y; }, bot:(from,to)=>{ const L=B.filter(b=>b.t!=='k'&&b.t!=='p'); BOT={list:L.slice(from,to).map(b=>b),i:0,d:RUN?RUN.deaths:0}; }, botI:()=>BOT&&BOT.i, kill:()=>lastKill, cps:()=>CPS, boxes:()=>B.map(b=>({t:b.t,x:b.x,y:b.y,z:b.z,w:b.w,d:b.d})) };
+})();
+</script>
+<script src="site.js"></script>
+<script src="chat.js"></script>
+</body>
+</html>
