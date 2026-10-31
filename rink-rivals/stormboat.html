@@ -1,0 +1,232 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
+<title>Rink Rivals - Storm Boat</title>
+<link href="https://fonts.googleapis.com/css2?family=Big+Shoulders+Display:wght@600;800&display=swap" rel="stylesheet">
+<style>
+:root{ --bg:#dfe6f2; --panel:#ffffff; --ink:#0f1730; --muted:#55627f; --line:#c3cde2; --led:#ffb703; --ledbg:#0a0d18; --acc:#3b82f6;
+  --font:'Big Shoulders Display','Arial Narrow','Helvetica Neue',Impact,sans-serif; }
+@media (prefers-color-scheme:dark){ :root:not([data-theme="light"]){ --bg:#0b1120; --panel:#141c33; --ink:#eef2fb; --muted:#93a0bd; --line:#27345a; } }
+:root[data-theme="dark"]{ --bg:#0b1120; --panel:#141c33; --ink:#eef2fb; --muted:#93a0bd; --line:#27345a; }
+*{box-sizing:border-box}
+body{ margin:0; min-height:100%; background:var(--bg); color:var(--ink); font-family:var(--font); font-weight:600; }
+main{ max-width:1100px; margin:0 auto; padding:12px 14px 30px; }
+.top{ display:flex; justify-content:space-between; align-items:center; margin-bottom:10px; gap:8px; flex-wrap:wrap; }
+.brand{ font-size:26px; font-weight:800 } .brand span{ color:var(--muted); font-weight:600 }
+.tools{ display:flex; gap:8px; flex-wrap:wrap }
+.tools button,.tools a{ font:inherit; font-size:16px; color:var(--ink); background:var(--panel); border:2px solid var(--line); border-radius:999px; padding:4px 14px; cursor:pointer; text-decoration:none }
+#stage{ position:relative; width:100%; height:min(70vh,620px); background:#05070d; border:2px solid var(--line); border-radius:16px; overflow:hidden; touch-action:none; user-select:none; -webkit-user-select:none }
+#gl,#cv{ position:absolute; inset:0; width:100%; height:100% } #cv{ pointer-events:none }
+.panel{ background:var(--panel); border:2px solid var(--line); border-radius:14px; padding:14px 16px; margin-top:14px }
+.row{ display:flex; gap:10px; flex-wrap:wrap; align-items:center }
+.pills{ display:flex; flex-wrap:wrap; align-items:center }
+.pills button,.btn{ font:inherit; font-size:17px; border:2px solid var(--line); background:var(--panel); color:var(--ink); border-radius:999px; padding:6px 15px; cursor:pointer; margin:3px }
+.pills button.on{ background:var(--acc); border-color:var(--acc); color:#fff }
+.pills .lbl{ color:var(--muted); margin:0 6px 0 2px; text-transform:uppercase; font-size:13px; letter-spacing:.06em }
+.gold{ background:var(--led)!important; border-color:var(--led)!important; color:#0a0d18!important; font-weight:800 }
+h1{ font-size:30px; margin:0 0 6px } .muted{ color:var(--muted) }
+.statrow{ display:grid; grid-template-columns:repeat(auto-fill,minmax(110px,1fr)); gap:10px 14px; margin-top:8px }
+.stat b{ font-size:25px } .stat span{ display:block; color:var(--muted); font-size:12px; text-transform:uppercase; letter-spacing:.05em }
+.hint{ color:var(--muted); font-size:15px; margin-top:8px; line-height:1.45 }
+kbd{ font:inherit; font-size:13px; background:var(--ledbg); color:#fff; border-radius:6px; padding:1px 7px }
+#touch{ position:absolute; inset:auto 0 0 0; height:150px; display:none; pointer-events:none }
+#touch button{ position:absolute; bottom:22px; width:74px; height:74px; border-radius:50%; border:2px solid #fff; background:rgba(255,255,255,.2); color:#fff; font:800 16px var(--font); pointer-events:auto }
+@media (pointer:coarse){ #touch{ display:block } }
+</style>
+</head>
+<body data-sport="boat">
+<main>
+  <div class="top">
+    <div class="brand">Rink Rivals <span>Storm Boat</span></div>
+    <div class="tools"><a href="./">Home</a><a href="sailing">⛵ Sailing</a><a href="fishing">🎣 Fishing</a><button id="btnFs">Full screen</button><button id="btnSnd">Sound on</button></div>
+  </div>
+  <div id="stage"><canvas id="gl"></canvas><canvas id="cv" width="1000" height="562"></canvas>
+    <div id="touch"><button id="tL" style="left:16px">◀</button><button id="tR" style="left:100px">▶</button><button id="tP" style="right:186px">PUMP</button><button id="tS" style="right:100px">SLOW</button><button id="tF" style="right:16px">GAS</button></div></div>
+  <div class="panel">
+    <div id="menuIn">
+      <h1>🌊 Storm Boat</h1>
+      <div class="muted">A storm has caught your trawler out at sea. Get her home through mountains of water: climb every wave bow-first, ease off at the crest so you don't launch off the top, and never let a wave catch you side-on. Pump out the water you take over the bow, watch your fuel, and look out for the rogue waves — twice the size of the rest.</div>
+      <div class="pills" style="margin-top:8px"><span class="lbl">Storm</span><button data-lvl="0">🌧️ Squall</button><button data-lvl="1">🌬️ Gale</button><button data-lvl="2">🌀 Hurricane</button><button data-lvl="3">♾️ Endless</button></div>
+      <div class="row" style="margin-top:6px"><button class="btn gold" id="goBtn" style="font-size:22px;padding:8px 26px">Cast off ▶</button><span class="muted" id="lvlTxt"></span></div>
+    </div>
+    <div class="statrow" id="stats"></div>
+    <div class="hint"><b>Throttle</b> <kbd>W</kbd> / <kbd>S</kbd> · <b>Steer</b> <kbd>A</kbd> <kbd>D</kbd> · <b>Pump</b> hold <kbd>E</kbd> (or <kbd>Space</kbd>) · <kbd>C</kbd> camera.
+      <b>How to survive:</b> point into the waves (a little off straight-on is best) · power up the face · back off at the top · don't race down the back or you'll bury the bow. If the roll meter fills you're about to capsize — turn back into the sea.</div>
+  </div>
+</main>
+<script src="r3lib.js"></script>
+<script src="strength.js"></script>
+<script src="online.js"></script>
+<script>
+(() => {
+'use strict';
+const $=id=>document.getElementById(id);
+const clamp=(v,a,b)=>Math.max(a,Math.min(b,v)), lerp=(a,b,t)=>a+(b-a)*t;
+const PI=Math.PI, K=100, TEST=/[?&]test\b/.test(location.search);
+const R3=makeR3($('gl'),$('stage'));
+let muted=false, AC=null, windG=null, rainG=null;
+function audio(){ if(!AC){ try{ AC=new (window.AudioContext||window.webkitAudioContext)(); }catch(e){} } if(AC&&AC.state==='suspended') AC.resume(); return AC; }
+function tone(f,d,type,v,slide,delay){ const a=audio(); if(!a||muted) return; const t=a.currentTime+(delay||0), o=a.createOscillator(), g=a.createGain(); o.type=type||'sine'; o.frequency.setValueAtTime(f,t); if(slide) o.frequency.linearRampToValueAtTime(f+slide,t+d); g.gain.setValueAtTime(v||.06,t); g.gain.exponentialRampToValueAtTime(.0001,t+d); o.connect(g); g.connect(a.destination); o.start(t); o.stop(t+d+.02); }
+function noise(d,v,f){ const a=audio(); if(!a||muted) return; const n=Math.floor(a.sampleRate*d), b=a.createBuffer(1,n,a.sampleRate), ch=b.getChannelData(0); for(let i=0;i<n;i++) ch[i]=(Math.random()*2-1)*Math.pow(1-i/n,2);
+  const s=a.createBufferSource(), fl=a.createBiquadFilter(), g=a.createGain(); fl.type='lowpass'; fl.frequency.value=f||400; g.gain.value=v||.2; s.buffer=b; s.connect(fl); fl.connect(g); g.connect(a.destination); s.start(); }
+/* a constant storm roar under everything, louder with the wind */
+function storm(){ const a=audio(); if(!a||windG) return; const n=a.sampleRate*2, b=a.createBuffer(1,n,a.sampleRate), ch=b.getChannelData(0); for(let i=0;i<n;i++) ch[i]=Math.random()*2-1;
+  const s=a.createBufferSource(); s.buffer=b; s.loop=true; const f=a.createBiquadFilter(); f.type='bandpass'; f.frequency.value=500; f.Q.value=.4; windG=a.createGain(); windG.gain.value=0; s.connect(f); f.connect(windG); windG.connect(a.destination); s.start(); }
+const sfx={ slam:v=>noise(.5,clamp(v,.1,.6),180), thunder:()=>{ noise(2.4,.5,140); }, splash:()=>noise(.6,.25,900), alarm:()=>{ tone(880,.15,'square',.04); tone(660,.15,'square',.04,0,.18); }, horn:()=>{ tone(150,.9,'sawtooth',.05); tone(152,.9,'sawtooth',.04); }, win:()=>{ [523,659,784,1047].forEach((f,i)=>tone(f,.3,'triangle',.07,0,i*.14)); } };
+
+/* ---------- the storm ----------
+   Waves roll in from the north (−z) toward +z. Each level sets the swell height (metres), the wavelength and how often a rogue comes through. */
+const LV=[{n:'Squall',A:2.4,L:48,rogue:.05,goal:600,fuel:1,wind:.45},{n:'Gale',A:4.2,L:62,rogue:.08,goal:900,fuel:1,wind:.7},{n:'Hurricane',A:6.4,L:78,rogue:.11,goal:1200,fuel:1.05,wind:1},{n:'Endless',A:3,L:56,rogue:.08,goal:0,fuel:1.4,wind:.7}];
+let LVL=0, S=null;
+const hash=n=>{ const x=Math.sin(n*127.1+311.7)*43758.5453; return x-Math.floor(x); };
+function amp(n){ if(!S) return LV[LVL].A; let a=S.A*(.8+.4*hash(n*1.7)); if(hash(n)<S.rogue) a*=2; return a; }   /* wave n's height; some are rogues */
+/* height of the sea at (x,z) at time t */
+function seaH(x,z,t){ if(!S) return 0; const k=2*PI/S.L, w=Math.sqrt(9.81*k), ph=k*z+k*.12*x-w*t, n=Math.floor((ph+PI/2)/(2*PI)), f=(Math.sin(ph)+1)/2;
+  const main=amp(n)*(Math.pow(f,2.6)*1.55-.42);                                                    /* sharp crests, long troughs */
+  const k2=k*1.9, sec=S.A*.18*Math.sin(k2*(z*.8-x*.6)-Math.sqrt(9.81*k2)*t), chop=.22*S.wind*Math.sin(x*.9+t*2.3)*Math.sin(z*.7-t*1.9);
+  return main+sec+chop; }
+
+/* ---------- the boat ---------- */
+const B={x:0,z:0,y:0,vy:0,yaw:PI,v:0,thr:.3,pitch:0,roll:0,rollV:0,water:0,hull:1,fuel:1,cap:0,air:0,steer:0};
+const LEN=11, BEAM=4;
+function reset(){ Object.assign(B,{x:0,z:0,y:0,vy:0,yaw:PI,v:3,thr:.35,pitch:0,roll:0,rollV:0,water:0,hull:1,fuel:1,cap:0,air:0,steer:0}); }
+const keys=new Set(); let tch={l:0,r:0,p:0,s:0,f:0};
+function start(){ audio(); storm(); const L=LV[LVL]; S={A:L.A,L:L.L,rogue:L.rogue,goal:L.goal,wind:L.wind,lvl:LVL,t:0,dist:0,over:false,win:false,why:'',msg:'',msgT:0,flash:0,nextBolt:4+Math.random()*6,rogueWarn:-1,slams:0,maxWave:0,endless:LVL===3};
+  reset(); S.burn=1/L.fuel; B.y=seaH(0,0,0); $('menuIn').style.display='none'; say(`${L.n.toUpperCase()} — head for the harbour, into the waves`,'#7dd3fc',3); }
+function say(t,c,d){ S.msg=t; S.msgCol=c||'#fde047'; S.msgT=d||2; }
+function sink(why){ if(S.over) return; S.over=true; S.why=why; sfx.splash(); say(why,'#f87171',6); finish(false); }
+function finish(win){ S.win=win; const SV=load(); SV.trips++; const d=Math.round(S.dist);
+  if(win){ SV.home++; sfx.win(); sfx.horn(); say('SAFE IN HARBOUR! ⚓','#4ade80',8); if(window.RRSTR) RRSTR.add(RRSTR.owner?1:2+S.lvl); }
+  if(S.endless&&d>SV.endless) SV.endless=d; if(S.maxWave>SV.biggest) SV.biggest=Math.round(S.maxWave*10)/10; save(SV);
+  try{ if(window.RRL){ if(S.endless) RRL.post('endless',d,`${d} m in the storm`); if(win) RRL.post('home',1,'1'); } }catch(e){}
+  renderStats(); setTimeout(()=>{ $('menuIn').style.display=''; },1200); }
+const load=()=>{ try{ return Object.assign({trips:0,home:0,endless:0,biggest:0},JSON.parse(localStorage.getItem('rrStormBoat')||'{}')); }catch(e){ return {trips:0,home:0,endless:0,biggest:0}; } };
+const save=v=>{ try{ localStorage.setItem('rrStormBoat',JSON.stringify(v)); }catch(e){} };
+
+function physics(dt){ if(!S||S.over) return; S.t+=dt; const t=S.t; if(S.msgT>0) S.msgT-=dt;
+  /* controls */
+  const up=keys.has('KeyW')||keys.has('ArrowUp')||tch.f, dn=keys.has('KeyS')||keys.has('ArrowDown')||tch.s;
+  if(up) B.thr=Math.min(1,B.thr+dt*.9); if(dn) B.thr=Math.max(-.3,B.thr-dt*.9);
+  const st=(keys.has('KeyD')||keys.has('ArrowRight')||tch.r?1:0)-(keys.has('KeyA')||keys.has('ArrowLeft')||tch.l?1:0); B.steer=lerp(B.steer,st,Math.min(1,dt*5));
+  if(TEST&&window.__thrWant!=null) B.thr=lerp(B.thr,window.__thrWant,Math.min(1,dt*4));
+  if(B.fuel<=0){ B.thr=0; }
+  const fx=Math.sin(B.yaw), fz=Math.cos(B.yaw);   /* the bow points along (fx,fz) */
+  /* sample the sea at bow, stern and both sides */
+  const hb=seaH(B.x+fx*LEN/2,B.z+fz*LEN/2,t), hs=seaH(B.x-fx*LEN/2,B.z-fz*LEN/2,t), hp=seaH(B.x-fz*BEAM/2,B.z+fx*BEAM/2,t), hsb=seaH(B.x+fz*BEAM/2,B.z-fx*BEAM/2,t), hc=seaH(B.x,B.z,t);
+  const water=(hb+hs+hp+hsb+hc*2)/6, slopeL=(hb-hs)/LEN, slopeB=(hsb-hp)/BEAM;
+  /* buoyancy: she rides the surface, but can fly off a crest that drops away faster than gravity */
+  const sinkage=B.water*.7, target=water-sinkage;
+  if(B.y>target+.7){ B.vy-=9.81*dt; B.air+=dt; } else { const was=B.vy; B.vy+=((target-B.y)*22-B.vy*6)*dt; if(B.air>.35&&was<-7){ const hit=(-was-7)/3*(Math.pow(Math.max(0,B.v-4.6),1.5)+.05);   /* easing off over the crest (under ~9 knots) barely hurts; flying off it at full speed does */   /* coming off a crest slowly barely hurts; flying off it at speed does */ B.hull=Math.max(0,B.hull-hit*.03); S.slams++; if(TEST) (window.__slams=window.__slams||[]).push([+B.v.toFixed(1),+was.toFixed(1)]); sfx.slam(.15+hit*.06); if(hit>.3) say(hit>1?'MASSIVE SLAM! Ease off at the crests':'SLAM!','#fb923c',1.2); S.flashRed=.5; } B.air=0; }
+  B.y+=B.vy*dt; if(B.y<target-1.5){ B.y=target-1.5; B.vy=Math.max(B.vy,0); }
+  /* pitch follows the slope (with a little lag), roll is a springy pendulum driven by the slope across the beam */
+  B.pitch=lerp(B.pitch,Math.atan(slopeL)*(B.air>0?.6:1),Math.min(1,dt*6));
+  const rollT=Math.atan(slopeB)*1.15; B.rollV+=((rollT-B.roll)*9-B.rollV*1.6)*dt; B.roll+=B.rollV*dt;
+  /* speed: engine vs drag, and gravity along the slope — climbing a face costs speed, surfing down the back adds it */
+  const eng=(B.fuel>0?B.thr:0)*9.5*(1-B.water*.5)*(B.air>0?.2:1), drag=B.v*Math.abs(B.v)*.09+B.v*.12;
+  B.v+=(eng-drag-9.81*Math.sin(Math.atan(slopeL))*.55)*dt; B.v=clamp(B.v,-4,13);
+  /* waves push the boat with them, and a wave catching her quarter tries to swing her broadside (a broach) */
+  const beamAng=Math.atan2(fx,-fz);   /* how far she is turned away from heading straight into the sea */
+  const surf=B.v>7&&slopeL<-.12; if(surf) B.yaw+=Math.sin(beamAng)*dt*.9*Math.min(2,-slopeL*5);
+  B.yaw+=B.steer*dt*(.35+Math.min(1,Math.abs(B.v)/6)*.55)*(B.air>0?.2:1);
+  B.x+=fx*B.v*dt; B.z+=fz*B.v*dt;
+  /* roll danger: lying broadside to a steep sea fills the capsize meter */
+  const rollDeg=Math.abs(B.roll)*180/PI; if(rollDeg>32) B.cap=Math.min(1.2,B.cap+(rollDeg-32)/22*dt*1.6); else B.cap=Math.max(0,B.cap-dt*.35);
+  if(B.cap>=1) return sink('CAPSIZED — caught broadside by a wave');
+  /* water aboard: stuffing the bow into the next wave, or green water over a low side */
+  const bowDig=Math.max(0,hb-(B.y+1.3+B.pitch*LEN/2)), sideDig=rollDeg>26?(rollDeg-26)/40:0;
+  if(bowDig>0&&B.v>2){ B.water+=bowDig*.03*dt*(B.v/4)*6; if(!S.splashT||S.t-S.splashT>1){ S.splashT=S.t; sfx.splash(); say('GREEN WATER OVER THE BOW!','#7dd3fc',1); } }
+  B.water+=sideDig*.05*dt+(1-B.hull)*.012*dt;                                                      /* a damaged hull leaks */
+  const pumping=keys.has('KeyE')||keys.has('Space')||tch.p; B.water=Math.max(0,B.water-(.006+(pumping?.06:0))*dt);
+  if(B.water>=1) return sink('SWAMPED — she filled with water and went down');
+  if(B.hull<=0) return sink('THE HULL BROKE UP');
+  /* fuel */ B.fuel=Math.max(0,B.fuel-Math.abs(B.thr)*dt*.0045*(B.thr>.8?1.4:1)*(S.burn||1)); if(B.fuel<=0&&!S.outFuel){ S.outFuel=1; say('OUT OF FUEL — you are drifting!','#f87171',3); sfx.alarm(); }
+  if(B.water>.6&&(!S.wAl||S.t-S.wAl>2.5)){ S.wAl=S.t; sfx.alarm(); }
+  /* progress toward the harbour (north, −z) */
+  S.dist=Math.max(S.dist,-B.z); const here=amp(Math.floor((2*PI/S.L*B.z-Math.sqrt(9.81*2*PI/S.L)*t+PI/2)/(2*PI))); S.maxWave=Math.max(S.maxWave,here*1.55);
+  /* a rogue wave on its way: warn when one is a wave or two out */
+  { const k=2*PI/S.L, w=Math.sqrt(9.81*k), ph=k*B.z-w*t, n=Math.floor((ph+PI/2)/(2*PI)); for(let m=n-2;m<=n-1;m++){ if(hash(m)<S.rogue&&S.rogueWarn!==m){ S.rogueWarn=m; say('⚠ ROGUE WAVE AHEAD!','#f87171',2.5); sfx.alarm(); } } }
+  if(S.endless){ S.A=LV[3].A+S.t/45; }   /* endless: the storm keeps building */
+  else if(S.dist>=S.goal){ S.over=true; finish(true); }
+  /* lightning */ S.nextBolt-=dt; if(S.nextBolt<=0){ S.flash=1; S.nextBolt=3+Math.random()*(9-S.lvl*2); setTimeout(()=>sfx.thunder(),300+Math.random()*900); }
+  S.flash=Math.max(0,S.flash-dt*3); if(S.flashRed) S.flashRed=Math.max(0,S.flashRed-dt*2);
+  if(windG&&AC) windG.gain.value=muted?0:.05+S.wind*.08; }
+
+/* ---------- drawing ---------- */
+let seaMesh=null;
+function drawSea(cx,cz,t){ const N=64, cs=5, ox=Math.round(cx/cs)*cs-N*cs/2, oz=Math.round(cz/cs)*cs-N*cs*.62, fl=S?S.flash:0;
+  const H=new Float32Array((N+1)*(N+1)); for(let i=0;i<=N;i++) for(let j=0;j<=N;j++) H[i*(N+1)+j]=seaH(ox+i*cs,oz+j*cs,t);
+  seaMesh=R3.mkMesh(g=>{ for(let i=0;i<N;i++) for(let j=0;j<N;j++){ const q=[[i,j],[i+1,j],[i+1,j+1],[i,j+1]];
+      for(const tri of [[0,1,2],[0,2,3]]) for(const kk of tri){ const a=q[kk][0], b=q[kk][1], h=H[a*(N+1)+b], x=ox+a*cs, z=oz+b*cs;
+        const hx=(H[Math.min(N,a+1)*(N+1)+b]-H[Math.max(0,a-1)*(N+1)+b])/(2*cs), hz=(H[a*(N+1)+Math.min(N,b+1)]-H[a*(N+1)+Math.max(0,b-1)])/(2*cs), nl=Math.hypot(hx,1,hz);
+        const foam=clamp((h-(S?S.A*.45:1.2))/(S?S.A*.45:1)+Math.max(0,Math.hypot(hx,hz)-.35)*1.8,0,1), far=clamp(Math.hypot(x-cx,z-cz)/170,0,1), face=clamp(-hz*1.5,0,1);
+        g.p.push(x*K,h*K,z*K); g.n.push(-hx/nl,1/nl,-hz/nl);
+        g.c.push(lerp(lerp(.06+face*.05,.85,foam),.04,far*.8)+fl*.3,lerp(lerp(.2+face*.14,.9,foam),.06,far*.8)+fl*.3,lerp(lerp(.27+face*.12,.93,foam),.12,far*.8)+fl*.35); g.ph.push(0); } } },seaMesh);
+  R3.part(seaMesh,R3.I(),[1,1,1]); }
+function boatM(){ return R3.mm(R3.T(B.x*K,(B.y+.25)*K,B.z*K),R3.RY(B.yaw),R3.RX(-B.pitch),R3.RZ(B.roll)); }
+function drawBoat(){ const M=boatM(), P=(x,y,z,w,h,d,col,extra)=>R3.part(R3.UB,R3.mm(M,R3.T(x*K,y*K,z*K),extra||R3.I(),R3.S(w*K,h*K,d*K)),col);
+  P(0,.2,0,BEAM*.86,1.4,LEN*.78,'#b91c1c'); P(0,.95,0,BEAM*.9,.12,LEN*.8,'#f8fafc');                                   /* hull + rubbing strake */
+  P(0,.2,LEN*.42,BEAM*.6,1.3,1.6,'#b91c1c',R3.RY(PI/4)); P(0,.92,LEN*.42,BEAM*.62,.1,1.65,'#f8fafc',R3.RY(PI/4));       /* bow */
+  P(0,1.0,0,BEAM*.8,.06,LEN*.76,'#475569');                                                                          /* deck */
+  P(0,1.9,.6,2.4,1.8,3.0,'#e2e8f0'); P(0,2.86,.6,2.6,.16,3.2,'#1e293b'); P(0,2.3,2.12,2.2,.6,.04,'#38bdf8');           /* wheelhouse + windows */
+  P(0,4.2,-.2,.12,2.8,.12,'#cbd5e1'); P(0,4.6,-.2,1.6,.08,.08,'#cbd5e1'); P(0,5.6,-.2,.25,.25,.25,S&&Math.sin(S.t*6)>0?'#fbbf24':'#78350f');   /* mast + light */
+  P(0,1.6,-3.6,.12,1.6,.12,'#64748b'); P(0,2.4,-3.2,.08,.08,1.6,'#64748b');                                             /* gantry */
+  for(const s of [-1,1]) P(s*1.3,1.3,-2.2,.5,.5,.5,'#f97316');                                                        /* life rings */
+  if(B.water>.05){ P(0,1.05+B.water*.3,-1.4,BEAM*.7,.04,LEN*.4,'#1e3a8a'); } }
+const camE=[0,9,24], camC=[0,0,0]; let camMode=0, T0=0;
+function render(dt){ if(!R3.ok) return; T0+=dt; const t=S?S.t:T0;
+  const fx=Math.sin(B.yaw), fz=Math.cos(B.yaw), back=camMode?8:17, ht=camMode?4:5.5;
+  const eye=[B.x-fx*back+fz*(camMode?0:4),B.y+ht,B.z-fz*back-fx*(camMode?0:4)], ctr=[B.x+fx*14,B.y+2.6,B.z+fz*14], k=Math.min(1,dt*3);
+  for(let i=0;i<3;i++){ camE[i]=lerp(camE[i],eye[i],k); camC[i]=lerp(camC[i],ctr[i],k*1.5); }
+  const ws=S?seaH(camE[0],camE[2],t):0; if(camE[1]<ws+2.5) camE[1]=ws+2.5;
+  R3.frame({eye:camE.map(v=>v*K),center:camC.map(v=>v*K),fov:58,near:20,far:30000},()=>{ drawSea(B.x+fx*40,B.z+fz*40,t); drawBoat();
+    /* the harbour lighthouse on the horizon (when there is one) */ if(S&&S.goal){ const hz=-S.goal-60; R3.part(R3.UC,R3.mm(R3.T(30*K,0,hz*K),R3.S(4*K,22*K,4*K)),'#f8fafc'); R3.part(R3.UC,R3.mm(R3.T(30*K,22*K,hz*K),R3.S(3*K,3*K,3*K)),Math.sin(t*3)>0?'#fde047':'#713f12'); R3.part(R3.UB,R3.mm(R3.T(0,-1*K,(hz-30)*K),R3.S(260*K,6*K,40*K)),'#1f2937'); }
+  },dt);
+  drawHUD(dt); }
+/* ---------- HUD ---------- */
+const cv=$('cv'), ctx=cv.getContext('2d'), HW=1000, HH=562;
+function txt(t,x,y,size,col,align='center'){ ctx.font=`800 ${size}px 'Big Shoulders Display','Arial Narrow',sans-serif`; ctx.textAlign=align; ctx.lineWidth=Math.max(3,size/6); ctx.strokeStyle='rgba(0,0,0,.65)'; ctx.strokeText(t,x,y); ctx.fillStyle=col; ctx.fillText(t,x,y); }
+function rrct(x,y,w,h,r,c){ ctx.fillStyle=c; ctx.beginPath(); ctx.roundRect(x,y,w,h,r); ctx.fill(); }
+const drops=Array.from({length:140},()=>({x:Math.random()*HW,y:Math.random()*HH,s:.6+Math.random()*.8}));
+function gauge(x,y,label,v,col,warn){ rrct(x,y,150,16,8,'rgba(0,0,0,.55)'); rrct(x,y,150*clamp(v,0,1),16,8,warn?'#ef4444':col); txt(label,x,y-5,14,'#e2e8f0','left'); }
+function drawHUD(dt){ ctx.clearRect(0,0,HW,HH);
+  /* rain */ const wind=S?S.wind:.5; ctx.strokeStyle='rgba(180,200,230,.35)'; ctx.lineWidth=1.2; ctx.beginPath(); for(const d of drops){ d.y+=dt*900*d.s; d.x+=dt*300*wind*d.s; if(d.y>HH){ d.y=-10; d.x=Math.random()*HW; } if(d.x>HW) d.x-=HW; ctx.moveTo(d.x,d.y); ctx.lineTo(d.x-6*wind,d.y-18*d.s); } ctx.stroke();
+  if(S&&S.flash>0){ ctx.fillStyle=`rgba(220,230,255,${S.flash*.5})`; ctx.fillRect(0,0,HW,HH); }
+  if(S&&S.flashRed){ ctx.fillStyle=`rgba(255,80,40,${S.flashRed*.25})`; ctx.fillRect(0,0,HW,HH); }
+  if(!S){ txt('🌊 Choose a storm below and cast off',HW/2,HH-30,26,'#7dd3fc'); return; }
+  /* gauges */ gauge(20,40,'THROTTLE',(B.thr+.3)/1.3,'#38bdf8'); gauge(20,84,`WATER ABOARD ${Math.round(B.water*100)}%`,B.water,'#60a5fa',B.water>.6); gauge(20,128,`HULL ${Math.round(B.hull*100)}%`,B.hull,'#4ade80',B.hull<.35);
+  gauge(20,172,`FUEL ${Math.round(B.fuel*100)}%`,B.fuel,'#facc15',B.fuel<.15); gauge(20,216,'ROLL — CAPSIZE RISK',B.cap,'#fb923c',B.cap>.6);
+  txt(`${(Math.abs(B.v)*1.94).toFixed(0)} KNOTS`,HW-20,40,26,'#fff','right');
+  if(S.goal) txt(`HARBOUR ${Math.max(0,Math.round(S.goal-S.dist))} m`,HW-20,70,22,'#fde047','right'); else txt(`${Math.round(S.dist)} m · storm ${S.A.toFixed(1)} m swell`,HW-20,70,20,'#fde047','right');
+  /* heading vs the waves: a little compass showing where the sea comes from */
+  const cx=HW-80, cy=150; ctx.strokeStyle='rgba(255,255,255,.6)'; ctx.lineWidth=2; ctx.beginPath(); ctx.arc(cx,cy,40,0,PI*2); ctx.stroke();
+  const off=Math.atan2(Math.sin(B.yaw-PI),Math.cos(B.yaw-PI)); ctx.save(); ctx.translate(cx,cy); ctx.rotate(off); ctx.fillStyle='#fbbf24'; ctx.beginPath(); ctx.moveTo(0,-34); ctx.lineTo(8,8); ctx.lineTo(-8,8); ctx.fill(); ctx.restore();
+  txt('WAVES ↓',cx,cy-48,13,'#7dd3fc'); const offD=Math.abs(off*180/PI); txt(offD<35?'GOOD ANGLE':offD<60?'TURN INTO THEM':'BROADSIDE!',cx,cy+58,15,offD<35?'#4ade80':offD<60?'#fbbf24':'#f87171');
+  if(B.air>.15) txt('AIRBORNE!',HW/2,140,40,'#fb923c');
+  if(S.msgT>0){ ctx.globalAlpha=clamp(S.msgT,0,1); txt(S.msg,HW/2,HH/2-60,38,S.msgCol); ctx.globalAlpha=1; }
+  if(S.over) txt(S.win?'You brought her home.':S.why,HW/2,HH/2,26,'#fff'); }
+
+/* ---------- input + panel ---------- */
+addEventListener('keydown',e=>{ const t=document.activeElement; if(t&&(t.tagName==='INPUT'||t.tagName==='TEXTAREA')) return; if(['Space','ArrowUp','ArrowDown','ArrowLeft','ArrowRight'].includes(e.code)) e.preventDefault(); keys.add(e.code); audio(); if(e.code==='KeyC'&&!e.repeat) camMode=1-camMode; });
+addEventListener('keyup',e=>keys.delete(e.code)); addEventListener('blur',()=>keys.clear());
+for(const [id,k] of [['tL','l'],['tR','r'],['tP','p'],['tS','s'],['tF','f']]){ const b=$(id); b.addEventListener('pointerdown',e=>{ tch[k]=1; audio(); e.preventDefault(); }); for(const ev of ['pointerup','pointerleave','pointercancel']) b.addEventListener(ev,()=>{ tch[k]=0; }); }
+function renderStats(){ const SV=load(); $('stats').innerHTML=[['Trips',SV.trips],['Made it home',SV.home],['Endless best',SV.endless?SV.endless+' m':'—'],['Biggest wave',SV.biggest?SV.biggest+' m':'—']].map(([n,v])=>`<div class="stat"><b>${v}</b><span>${n}</span></div>`).join('');
+  document.querySelectorAll('[data-lvl]').forEach(b=>b.classList.toggle('on',+b.dataset.lvl===LVL)); const L=LV[LVL]; $('lvlTxt').textContent=L.goal?`${L.A} m swell · ${(L.goal/1000).toFixed(1)} km to the harbour`:'The storm keeps building — how far can you get?'; }
+document.querySelectorAll('[data-lvl]').forEach(b=>b.onclick=()=>{ LVL=+b.dataset.lvl; renderStats(); });
+$('goBtn').onclick=()=>{ $('goBtn').blur(); start(); };
+$('btnSnd').onclick=()=>{ muted=!muted; $('btnSnd').textContent=muted?'Sound off':'Sound on'; if(windG) windG.gain.value=0; };
+$('btnFs').onclick=()=>{ try{ document.fullscreenElement?document.exitFullscreen():$('stage').requestFullscreen(); }catch(e){} };
+try{ window.RRL&&RRL.boards('stormboat',[{id:'endless',name:'Endless distance',mode:'max'},{id:'home',name:'Trips home',mode:'sum'}]); }catch(e){}
+
+let last=performance.now();
+const SPEED=TEST?(+new URLSearchParams(location.search).get('speed')||1):1;
+function frame(now){ const dt=Math.min(.05,(now-last)/1000)*SPEED; last=now; physics(dt); render(dt); requestAnimationFrame(frame); }
+S=null; renderStats(); requestAnimationFrame(frame);
+if(TEST) window.__sb=()=>S&&{t:S.t,dist:S.dist,over:S.over,win:S.win,why:S.why,v:B.v,y:B.y,water:B.water,hull:B.hull,fuel:B.fuel,cap:B.cap,roll:B.roll,pitch:B.pitch,yaw:B.yaw,slams:S.slams,A:S.A};
+})();
+</script>
+<script src="site.js"></script>
+<script src="chat.js"></script>
+</body>
+</html>

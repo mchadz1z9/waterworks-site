@@ -278,6 +278,10 @@ void main(){vec4 t=texture2D(uTex,vUV*uUVR.zw+uUVR.xy);if(t.a<0.04)discard;gl_Fr
   function unproject(u,v){ const M=inv(VP), x=u*2-1, y=1-v*2, P=(z)=>{ const r=[M[0]*x+M[4]*y+M[8]*z+M[12],M[1]*x+M[5]*y+M[9]*z+M[13],M[2]*x+M[6]*y+M[10]*z+M[14],M[3]*x+M[7]*y+M[11]*z+M[15]]; return [r[0]/r[3],r[1]/r[3],r[2]/r[3]]; }; const a=P(-1), b=P(1); const t=a[1]/(a[1]-b[1]); return [a[0]+(b[0]-a[0])*t,a[2]+(b[2]-a[2])*t]; }
   const ball=(x,y,z,r,col)=>part(US,mm(T(x,y,z),S(r,r,r)),col);
   const shadow=(x,z,s)=>shadows.push([x,z,s]);
-  return {ok:true,setGround,setStatic,crowdRow,frame,part,athlete,ball,shadow,proj,unproject,UB,UC,US,T,S,RX,RY,RZ,mm,beam,I};
+  /* a mesh you rebuild every frame (water, cloth…): pass the old one back in and its buffers are reused */
+  function mkMesh(fn,old){ const g=new Geo(); fn(g,{primBox,primCyl,primSphere}); if(!old) return upload(g);
+    for(const [k,arr] of [['pos',g.p],['nor',g.n],['col',g.c],['ph',g.ph]]){ gl.bindBuffer(gl.ARRAY_BUFFER,old[k]); gl.bufferData(gl.ARRAY_BUFFER,new Float32Array(arr),gl.DYNAMIC_DRAW); }
+    old.n=g.p.length/3; curMesh=null; return old; }
+  return {ok:true,setGround,setStatic,crowdRow,frame,part,athlete,ball,shadow,proj,unproject,mkMesh,freeMesh,UB,UC,US,T,S,RX,RY,RZ,mm,beam,I};
 }
 
