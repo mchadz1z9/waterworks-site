@@ -1,5 +1,5 @@
 /* Rink Rivals online play: rooms with a short code, relayed through the rink-rivals-rooms worker.
-   A game calls RRO.init({game, maxPlayers, onStart, onMsg, onPeers}) and gets RRO.send / RRO.me / RRO.peers / RRO.isHost(). */
+   A game calls RRO.init({game, maxPlayers, onStart, onMsg, onPeers}) (dropIn: true skips the waiting room; publicRoom: 'GYM' makes "Play anyone" join one shared open room) and gets RRO.send / RRO.me / RRO.peers / RRO.isHost(). */
 (function(){
   const qs=new URLSearchParams(location.search);
   const SERVER=qs.get('server')||'wss://rink-rivals-rooms.mitchellchad2026.workers.dev';
@@ -7,7 +7,7 @@
   const TESTPAGE=/[?&]test\b/.test(location.search)||location.protocol==='file:';
   const NAMEK='rrOnlineName';
   let ws=null, cfg=null, me=null, peers=[], code=null, panel=null, started=false, closing=false;
-  let lob=null, lobGame='home', counts=null, seeking=false, seekT=0, quickN=0, quick=false, inviteEl=null, invDismiss=0, watchers=[], lobTry=0;
+  let lob=null, lobGame='home', counts=null, seeking=false, seekT=0, quickN=0, quick=false, inviteEl=null, invDismiss=0, watchers=[], lobTry=0, pubIdx=0;
   const esc=s=>String(s).replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
   const getName=()=>{ try{ return localStorage.getItem(NAMEK)||''; }catch(e){ return ''; } };
   const setName=n=>{ try{ localStorage.setItem(NAMEK,n); }catch(e){} };
@@ -44,7 +44,7 @@
     panel.innerHTML=`<div class="box"><h2>Finding a match…</h2><p class="live">${so?'Someone is searching too, matching you now…':n?`${n} other ${n>1?'people are':'person is'} on this game. We will match you the moment one of them searches.`:'Waiting for someone to join this game.'}</p>
     <p>${w>20?'Tip: send a friend the link to this game, anyone who opens it sees you are looking and can join with one tap.':'Keep this tab open.'}</p><button id="rroSx">Cancel</button></div>`;
     panel.querySelector('#rroSx').onclick=()=>{ unseek(); showStart(); }; }
-  function seek(name){ if(!lob||lob.readyState!==1){ lobby(cfg.game); showStart('Still connecting to the lobby, try again in a second.'); return; } seeking=true; seekT=performance.now(); hideInvite();
+  function seek(name){ if(cfg.publicRoom){ pubIdx=1; hideUI(); connect(cfg.publicRoom+pubIdx,name); return; } if(!lob||lob.readyState!==1){ lobby(cfg.game); showStart('Still connecting to the lobby, try again in a second.'); return; } seeking=true; seekT=performance.now(); hideInvite();
     lob.send(JSON.stringify({t:'seek',name,want:cfg.maxPlayers||2})); showSeek(); }
   function unseek(){ if(seeking&&lob&&lob.readyState===1) lob.send(JSON.stringify({t:'unseek'})); seeking=false; }
   /* someone else on this game page is searching: offer to play them */
@@ -86,7 +86,8 @@
     panel.innerHTML=`<div class="box"><h2>Room</h2><div class="code">${code}</div><p>Send this code (or the link) to a friend.</p><input readonly value="${esc(link)}" onclick="this.select()">
     <ul>${[me].concat(peers).sort((a,b)=>a.seat-b.seat).map(p=>`<li>${p.seat===0?'👑':'🎮'} ${esc(p.name)}${p.id===me.id?' (you)':''}</li>`).join('')}</ul>
     <div id="rroInv"></div>
-    ${host?`<button class="gold" id="rroGo" ${peers.length<(cfg.minPlayers||1)?'disabled style="opacity:.5"':''}>Start</button>`:'<p>Waiting for the host to start…</p>'}<button id="rroLeave">Leave</button></div>`;
+    ${started?'<button class="gold" id="rroC">Done</button>':host?`<button class="gold" id="rroGo" ${peers.length<(cfg.minPlayers||1)?'disabled style="opacity:.5"':''}>Start</button>`:'<p>Waiting for the host to start…</p>'}<button id="rroLeave">Leave</button></div>`;
+    if(started){ panel.querySelector('#rroC').onclick=hideUI; panel.querySelector('#rroLeave').onclick=()=>{ leave(); hideUI(); }; invList(); return; }
     if(host) panel.querySelector('#rroGo').onclick=()=>{ const msg={t:'start',seed:Math.floor(Math.random()*1e9),opts:cfg.getOpts?cfg.getOpts():null}; send(msg); begin(msg); };
     panel.querySelector('#rroLeave').onclick=()=>{ leave(); hideUI(); }; invList(); }
   /* invite anyone who is on the site right now: they get a big card with a Join button */
@@ -95,15 +96,15 @@
     const inRoom=new Set([me].concat(peers).map(p=>p.name)), list=(RRC.roster||[]).filter(p=>!p.me&&p.id&&!inRoom.has(p.name)).slice(0,8);
     el.innerHTML=`<p>Invite someone who's online:</p>${list.length?list.map(p=>`<div style="display:flex;align-items:center;gap:8px;margin:4px 0"><span style="flex:1;font-size:18px">${esc(p.name)}</span><button data-inv="${esc(p.id)}" ${invSent[p.id]?'disabled style="opacity:.6"':''}>${invSent[p.id]||'Invite'}</button></div>`).join(''):'<p style="font-size:14px">Nobody else is online right now.</p>'}`;
     el.querySelectorAll('[data-inv]').forEach(b=>b.onclick=()=>{ const id=b.dataset.inv; invSent[id]='Sending…'; invList(); RRC.invite(id,PAGE,code,r=>{ invSent[r.to]=r.ok?'Invited ✓':'Not online'; if(!r.ok) setTimeout(()=>{ delete invSent[r.to]; invList(); },4000); invList(); }); }); }
-  addEventListener('rrc-who',()=>{ if(panel&&ws&&!started&&!quick) invList(); });
+  addEventListener('rrc-who',()=>{ if(panel&&ws&&!quick) invList(); });
   function begin(msg){ started=true; hideUI(); badge(); cfg.onStart&&cfg.onStart(msg,api); }
   function badge(){ let b=document.getElementById('rroB'); if(!b){ b=document.createElement('button'); b.id='rroB'; document.body.appendChild(b); b.onclick=()=>{ if(confirm('Leave the online game?')) leave(); }; } b.textContent=`Online · ${code} · ${peers.length+1} players`; }
   function connect(c,name){ code=c; closing=false; if(!/^Q/.test(c)) quick=false; hideInvite(); ui(); panel.innerHTML=`<div class="box"><h2>Connecting…</h2><p>Room ${esc(c)}</p></div>`;
     try{ ws=new WebSocket(`${SERVER}/room/${c}`); }catch(e){ showStart('Could not reach the game server.'); return; }
     ws.onopen=()=>ws.send(JSON.stringify({t:'hello',name,game:cfg.game}));
     ws.onmessage=e=>{ let m; try{ m=JSON.parse(e.data); }catch(er){ return; }
-      if(m.t==='full'){ closing=true; showStart('That room is full.'); return; }
-      if(m.t==='welcome'){ me={id:m.id,seat:m.seat,name:m.name}; peers=m.peers.filter(p=>p.game===cfg.game||!p.game); if(m.peers.some(p=>p.game&&p.game!==cfg.game)){ closing=true; ws.close(); showStart('That room is playing a different game.'); return; } showLobby(); cfg.onPeers&&cfg.onPeers(api); return; }
+      if(m.t==='full'){ closing=true; if(cfg.publicRoom&&code===cfg.publicRoom+pubIdx&&pubIdx<9){ pubIdx++; connect(cfg.publicRoom+pubIdx,name); return; } showStart('That room is full.'); return; }
+      if(m.t==='welcome'){ me={id:m.id,seat:m.seat,name:m.name}; peers=m.peers.filter(p=>p.game===cfg.game||!p.game); if(m.peers.some(p=>p.game&&p.game!==cfg.game)){ closing=true; ws.close(); showStart('That room is playing a different game.'); return; } if(cfg.dropIn){ begin({t:'start',dropIn:true}); cfg.onPeers&&cfg.onPeers(api); return; } showLobby(); cfg.onPeers&&cfg.onPeers(api); return; }
       if(m.t==='join'){ peers.push({id:m.id,seat:m.seat,name:m.name}); if(!started) showLobby(); else { badge(); cfg.onPeers&&cfg.onPeers(api,'join',m); } return; }
       if(m.t==='leave'){ peers=peers.filter(p=>p.id!==m.id); if(!started) showLobby(); else { badge(); cfg.onPeers&&cfg.onPeers(api,'leave',m); } return; }
       if(m.t==='start'&&!started){ begin(m); return; }
@@ -112,7 +113,7 @@
     ws.onerror=()=>{}; }
   function send(obj){ if(ws&&ws.readyState===1) ws.send(JSON.stringify(obj)); }
   function leave(){ closing=true; started=false; quick=false; try{ ws&&ws.close(); }catch(e){} ws=null; peers=[]; me=null; const b=document.getElementById('rroB'); if(b) b.remove(); cfg&&cfg.onEnd&&cfg.onEnd('left'); }
-  const api={ send, leave, open:()=>showStart(), get me(){ return me; }, get peers(){ return peers; }, get code(){ return code; }, get on(){ return started; },
+  const api={ send, leave, open:()=>showStart(), quick:()=>{ if(started||ws) return; seek(getName()||'Player'); }, invite:()=>{ if(code) showLobby(); }, get me(){ return me; }, get peers(){ return peers; }, get code(){ return code; }, get on(){ return started; },
     isHost(){ return !!me&&[me].concat(peers).every(p=>p.seat>=me.seat); }, all(){ return me?[me].concat(peers).sort((a,b)=>a.seat-b.seat):[]; } };
   window.RRO={ watch(f){ watchers.push(f); lobby('home'); if(counts) f(counts); }, counts:()=>counts, init(c){ cfg=c; lobby(c.game); setTimeout(()=>{ topBtn(); watchMenu(); },0); const r=(qs.get('room')||'').toUpperCase(); if(/^[A-Z0-9]{4,8}$/.test(r)) setTimeout(()=>connect(r,getName()||'Player'),300); return api; } };
 })();

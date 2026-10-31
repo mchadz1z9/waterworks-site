@@ -42,6 +42,9 @@ kbd{ font:inherit; font-size:13px; background:var(--ledbg); color:#fff; border-r
 .wod div{ border:2px solid var(--line); border-radius:12px; padding:8px 12px } .wod div.done{ border-color:var(--good) }
 .wod b{ font-size:18px } .wod small{ display:block; color:var(--muted); font-size:14px }
 .split{ display:grid; grid-template-columns:1.3fr 1fr; gap:16px } @media(max-width:760px){ .split{ grid-template-columns:1fr } }
+#netRow{display:flex;flex-wrap:wrap;align-items:center;gap:8px;margin:12px 0 4px;padding:8px 10px;border:2px solid #22c55e;border-radius:14px;background:rgba(34,197,94,.1)}
+#netRow button{font:inherit;font-weight:800;font-size:16px;padding:6px 12px;border-radius:999px;border:2px solid #27345a;background:#1e293b;color:#fff;cursor:pointer}
+#netRow button.gold{background:#22c55e;border-color:#22c55e;color:#052e16} #netRow #netSt{font-size:14px;flex:1 1 220px}
 </style>
 </head>
 <body data-sport="gym">
@@ -85,6 +88,10 @@ kbd{ font:inherit; font-size:13px; background:var(--ledbg); color:#fff; border-r
           <div class="muted" id="wodMsg" style="font-size:14px;margin-top:6px"></div>
         </div>
       </div>
+      <div class="netrow" id="netRow"><b>🌐 Work out together</b>
+        <button class="gold" id="netAny">Play with anyone</button><button id="netParty">👥 Friends / party (room code)</button>
+        <button id="netInv" style="display:none">➕ Invite</button><button id="netCheer" style="display:none">👏 Cheer <kbd>H</kbd></button><button id="netLeave" style="display:none">Leave</button>
+        <span class="muted" id="netSt">Train with up to 7 other people in the same gym. Stand next to a friend's station to spot them.</span></div>
       <div class="hint"><b>Walk</b> with <kbd>W</kbd><kbd>A</kbd><kbd>S</kbd><kbd>D</kbd> or the arrows (hold <kbd>Shift</kbd> to run), or <b>click the floor</b> to walk there. Walk up to a station and press <kbd>E</kbd> (or click it) to use it.
         <b>Lifting:</b> each rep, hit <kbd>Space</kbd> or click when the needle is in the <span style="color:#22c55e">green</span> zone — dead centre in the <span style="color:#d97706">gold</span> is a <b>PERFECT</b> rep and builds your combo. Miss and you grind it out slowly and burn energy; run out and the rep fails.
         <kbd>[</kbd> <kbd>]</kbd> change weight · <kbd>E</kbd> leave · <kbd>C</kbd> camera.</div>
@@ -94,6 +101,7 @@ kbd{ font:inherit; font-size:13px; background:var(--ledbg); color:#fff; border-r
 
 <script src="r3lib.js"></script>
 <script src="strength.js"></script>
+<script src="online.js"></script>
 <script>
 (() => {
 'use strict';
@@ -132,10 +140,10 @@ const SV=(()=>{ let v=null; try{ v=JSON.parse(localStorage.getItem(SKEY)||'null'
   v.best=v.best||{}; v.w=v.w||{}; return v; })();
 const saveSV=()=>{ try{ localStorage.setItem(SKEY,JSON.stringify(SV)); }catch(e){} };
 const owner=()=>!!(window.RRSTR&&RRSTR.owner);
-const wCap=s=>owner()?10000:(s.each?200:1200);
+const wCap=s=>owner()?100000:(s.each?200:1200);
 const weightOf=s=>clamp(SV.w[s.k]||s.start,s.each?5:45,wCap(s));
 /* how strong you are: 1 = brand new, ~2.5 at 100 strength; the owner can move anything */
-const power=()=>!window.RRSTR?1:RRSTR.owner?160:1+RRSTR.frac*1.5;
+const power=()=>!window.RRSTR?1:RRSTR.owner?1600:1+RRSTR.frac*1.5;
 
 /* ---------- workout of the day ---------- */
 const WPOOL=[{k:'pushup',n:15},{k:'pullup',n:6},{k:'situp',n:20},{k:'bench',n:5,w:135},{k:'squat',n:5,w:185},{k:'dead',n:3,w:225},{k:'press',n:5,w:95},{k:'curl',n:12,w:25},{k:'perfect',n:10},{k:'pushup',n:30},{k:'pullup',n:10}];
@@ -169,11 +177,12 @@ function loadOf(s){ return s.t==='w'?s.hard*(weightOf(s)/s.start)/power():s.hard
 function newNeedle(){ const l=loadOf(X.s), fat=1-X.stam;
   const w=clamp(.46-.17*Math.min(l,2)-fat*.2-Math.min(X.combo,15)*.006,.075,.5);
   X.zone={c:.22+Math.random()*.56,w,pw:Math.max(.035,w*.3)}; X.ph=Math.random()*PI*2; X.spd=clamp(2.3+l*.35+Math.sqrt(X.combo)*.25,2.2,5.2); X.state='aim'; X.idle=0; }
-function enter(s){ if(X) endSet('change'); PL.at=s.k; PL.goTo=null; PL.target=null; PL.x=s.x; PL.z=s.z; PL.yaw=s.yaw;
+function enter(s){ const u=busyBy(s.k); if(u){ banner('STATION IN USE',`${u.name} is on the ${s.n} — stand next to them to spot, or pick another`,'#fb923c'); return; } if(X) endSet('change'); PL.at=s.k; PL.goTo=null; PL.target=null; PL.x=s.x; PL.z=s.z; PL.yaw=s.yaw;
   X={s,reps:0,combo:0,best:0,stam:1,b:0,state:'aim',t:0,gained:0,perfects:0,grade:'',gradeT:0,fail:false}; newNeedle(); audio(); syncUI(); }
 function leave(){ if(!PL.at) return; endSet('leave'); const s=SK[PL.at]; const a=approach(s); PL.x=a.x; PL.z=a.z; PL.yaw=s.yaw; PL.at=null; X=null; syncUI(); }
 function endSet(reason){ if(!X||X.ended) return; X.ended=true; SV.sets+=X.reps?1:0; saveSV();
   if(reason==='fail') sfx.fail(); else if(X.reps) sfx.rack();
+  if(X.reps&&X.reps>=5) netEv(`finished ${X.reps} ${X.s.n.toLowerCase()}${X.s.t==='w'?` at ${weightOf(X.s).toLocaleString()} lb`:''}${X.best>=5?` · ${X.best}x combo`:''}`);
   if(X.reps){ const gn=X.gained, g=gn>=1000?Math.round(gn).toLocaleString():Math.round(gn*10)/10; banner(reason==='fail'?'REP FAILED — SET OVER':'SET DONE',`${X.reps} rep${X.reps===1?'':'s'} · ${X.perfects} perfect · best combo ${X.best}${gn>=.05?` · +${g} strength`:''}`,reason==='fail'?'#f87171':'#fde047'); }
   refreshStats(); }
 function restart(){ if(!PL.at) return; const s=SK[PL.at]; X={s,reps:0,combo:0,best:0,stam:1,b:0,state:'aim',t:0,gained:0,perfects:0,grade:'',gradeT:0,fail:false}; newNeedle(); }
@@ -181,6 +190,7 @@ function restart(){ if(!PL.at) return; const s=SK[PL.at]; X={s,reps:0,combo:0,be
 function hit(){ if(!X) return; audio(); if(X.ended){ restart(); return; } if(X.state!=='aim') return;
   const u=.5+.5*Math.sin(X.ph), d=Math.abs(u-X.zone.c), s=X.s, l=loadOf(s), cost=.07+.12*Math.min(l,2.5);
   let grade; if(d<=X.zone.pw/2) grade='PERFECT'; else if(d<=X.zone.w/2) grade='GOOD'; else grade='MISS';
+  if(grade==='MISS'&&X.stam-cost*2.2<=0&&spotter()&&!X.spotUsed){ X.spotUsed=true; X.stam=.35; floaters.push({text:`🤝 ${spotter().name} spotted you!`,t:0,size:26,col:'#4ade80'}); netEv(`spotted a rep on the ${s.n}`); }
   if(grade==='MISS'&&X.stam-cost*2.2<=0){ X.state='fail'; X.t=0; X.grade='FAILED'; X.gradeT=1.2; X.combo=0; return; }
   if(grade==='PERFECT'){ X.combo++; X.perfects++; X.stam=clamp(X.stam-cost*.4,0,1); X.dur=.38; sfx.perfect(X.combo); shake=Math.max(shake,.05); }
   else if(grade==='GOOD'){ X.stam=clamp(X.stam-cost,0,1); X.dur=.62; sfx.good(); }
@@ -192,8 +202,8 @@ function repDone(){ const s=X.s, w=weightOf(s), mult=X.lastGrade==='PERFECT'?1.6
   if(window.RRSTR){ if(owner()){ RRSTR.add(1); X.gained+=10000; } else { X.gained+=inc; RRSTR.add(inc); } }   /* the owner gets +10,000 a rep */
   /* records: heaviest weight moved, or most reps in one set */
   const best=SV.best[s.k]||0;
-  if(s.t==='w'&&w>best){ SV.best[s.k]=w; banner('NEW PERSONAL RECORD!',`${s.n} · ${w} lb${s.each?' each':''}`,'#fde047'); sfx.pr(); }
-  if(s.t==='b'&&X.reps>best){ SV.best[s.k]=X.reps; if(best>0&&X.reps===best+1){ banner('NEW RECORD!',`${X.reps} ${s.n.toLowerCase()} in one set`,'#fde047'); sfx.pr(); } }
+  if(s.t==='w'&&w>best){ SV.best[s.k]=w; netEv(`hit a PR: ${s.n} ${w.toLocaleString()} lb${s.each?' each':''} 🏆`); banner('NEW PERSONAL RECORD!',`${s.n} · ${w} lb${s.each?' each':''}`,'#fde047'); sfx.pr(); }
+  if(s.t==='b'&&X.reps>best){ SV.best[s.k]=X.reps; if(best>0&&X.reps===best+1){ netEv(`set a record: ${X.reps} ${s.n.toLowerCase()} 🏆`); banner('NEW RECORD!',`${X.reps} ${s.n.toLowerCase()} in one set`,'#fde047'); sfx.pr(); } }
   saveSV(); wodRep(s.k,w,X.lastGrade==='PERFECT'); refreshStats(); }
 
 /* ---------- walking ---------- */
@@ -220,7 +230,7 @@ function nearest(){ let best=null, bd=1e9; for(const s of ST){ const a=approach(
 function goStation(s){ if(PL.at===s.k){ return; } if(PL.at) leave(); PL.goTo=s.k; const a=approach(s); PL.target=a; audio(); }
 
 /* ---------- the set over time ---------- */
-function step(dt){ move(dt); if(shake>0) shake=Math.max(0,shake-dt); if(bannerT>0) bannerT-=dt; for(const f of floaters) f.t+=dt; while(floaters.length&&floaters[0].t>1.4) floaters.shift();
+function step(dt){ move(dt); netStep(dt); if(shake>0) shake=Math.max(0,shake-dt); if(bannerT>0) bannerT-=dt; for(const f of floaters) f.t+=dt; while(floaters.length&&floaters[0].t>1.4) floaters.shift();
   if(!X||X.ended) return; X.t+=dt; if(X.gradeT>0) X.gradeT-=dt;
   if(X.state==='aim'){ X.ph+=X.spd*dt; X.idle+=dt; X.stam=clamp(X.stam+dt*.035,0,1); X.b=Math.max(0,X.b-dt*2); if(X.idle>(X.reps?8:14)) endSet('rest'); }
   else if(X.state==='up'){ X.b=smooth(X.t/X.dur); if(X.t>=X.dur){ X.b=1; repDone(); X.state='down'; X.t=0; } }
@@ -346,8 +356,8 @@ function drawOlympia(J,f,lk){ const W=p=>wp(f,p), D=v=>nrm3(wd(f,v)), sk=lk.skin
   R3.shadow(f.x*K,f.z*K,56); }
 /* a barbell across the person's x axis at local point c; plates depend on the weight */
 function barbell(f,c,weight,tilt){ const p=wp(f,c); R3.part(R3.UC,R3.mm(R3.T(p[0]*K,p[1]*K,p[2]*K),R3.RY(f.yaw),R3.RZ(PI/2+(tilt||0)),R3.S(.028*K,1.0*K,.028*K)),'#cbd5e1');
-  const per=Math.max(0,(weight-45)/2), n=clamp(Math.ceil(per/45),1,9), big=weight>1500;
-  for(const sx of [-1,1]) for(let i=0;i<n;i++){ const q=wp(f,[c[0]+sx*(.6+i*.052),c[1],c[2]]); R3.part(R3.UC,R3.mm(R3.T(q[0]*K,q[1]*K,q[2]*K),R3.RY(f.yaw),R3.RZ(PI/2+(tilt||0)),R3.S((big?.23:.19)*K,.024*K,(big?.23:.19)*K)),big?(i%2?'#b45309':'#f59e0b'):(i%2?'#20304f':'#1a2338')); } }
+  const per=Math.max(0,(weight-45)/2), n=clamp(Math.ceil(per/45),1,9), big=weight>1500, huge=weight>15000;
+  for(const sx of [-1,1]) for(let i=0;i<n;i++){ const q=wp(f,[c[0]+sx*(.6+i*.052),c[1],c[2]]); R3.part(R3.UC,R3.mm(R3.T(q[0]*K,q[1]*K,q[2]*K),R3.RY(f.yaw),R3.RZ(PI/2+(tilt||0)),R3.S((huge?.29:big?.23:.19)*K,(huge?.03:.024)*K,(huge?.29:big?.23:.19)*K)),huge?(i%2?'#7f1d1d':'#dc2626'):big?(i%2?'#b45309':'#f59e0b'):(i%2?'#20304f':'#1a2338')); } }
 const LOOK={me:{top:'#1d4ed8',legs:'#0f1726',skin:'#caa078',shoe:'#121a2a',hair:'#2a1f16'},
   olympia:{olympia:true,skin:'#caa078',hi:'#dcb68f',shade:'#a37b55',top:'#1d4ed8',topHi:'#2b62f0',topDk:'#1a3a9e',shorts:'#0f1726',shoe:'#121a2a',hair:'#2a1f16',buff:1.7},
   n1:{top:'#dc2626',legs:'#111827',skin:'#8d5524',shoe:'#e5e7eb',hair:'#111',buff:1.25},
@@ -367,10 +377,11 @@ function render(dt){ if(!R3.ok) return; buildGym(); T0+=dt;
   const sh=shake*.6;
   R3.frame({eye:[(camEye[0]+(Math.random()-.5)*sh)*K,camEye[1]*K,(camEye[2]+(Math.random()-.5)*sh)*K],center:[camCtr[0]*K,camCtr[1]*K,camCtr[2]*K],fov,near:8,far:8000},()=>{
     /* racked bars / dumbbells at weighted stations nobody is using */
-    for(const s of ST){ if(s.t!=='w'||PL.at===s.k||s.k==='curl') continue; const wt=weightOf(s); barbell(s,s.k==='bench'?[0,.99,-.55]:s.k==='squat'?[0,1.47,.42]:s.k==='press'?[0,1.45,-.42]:[0,.24,.2],wt); }
+    for(const s of ST){ if(s.t!=='w'||PL.at===s.k||s.k==='curl'||busyBy(s.k)) continue; const wt=weightOf(s); barbell(s,s.k==='bench'?[0,.99,-.55]:s.k==='squat'?[0,1.47,.42]:s.k==='press'?[0,1.45,-.42]:[0,.24,.2],wt); }
     /* gym-goers: a runner on a treadmill and someone curling by the water cooler */
     drawBody(pose('run',0,T0*9,.19),{x:-5.1,z:6.4,yaw:PI},{...LOOK.n1,buff:1.25});
     drawBody(pose('curl',(Math.sin(T0*2.2)*.5+.5),0,.18),{x:-10.6,z:-6.6,yaw:PI/2.4},LOOK.n2);
+    drawOthers();
     if(PL.at&&X){ const s=SK[PL.at], J=pose(s.k,X.b,T0,w,(X.state==='up'&&X.lastGrade==='MISS'?Math.sin(T0*40)*.015:0)); drawBody(J,s,me);
       if(J.bar) barbell(s,J.bar,weightOf(s),X.state==='up'&&X.lastGrade==='MISS'?Math.sin(T0*30)*.04:0); }
     else drawBody(pose(PL.spd>.05?(PL.spd>1.2?'run':'walk'):'stand',0,PL.walk,w),{x:PL.x,z:PL.z,yaw:PL.yaw},me);
@@ -387,8 +398,9 @@ function drawHUD(){ ctx.clearRect(0,0,HW,HH); const st=window.RRSTR?RRSTR.state(
   if(!PL.at){
     const near=nearest();
     for(const s of ST){ const p=scr([s.x,s.k==='pullup'?2.85:2.15,s.z]); if(!p) continue; const sz=clamp(16000/p[2],13,24), on=near===s;
-      rrct(p[0]-sz*4.2,p[1]-sz*1.05,sz*8.4,sz*1.45,8,on?'rgba(251,191,36,.92)':'rgba(5,10,24,.72)'); txt(`${s.ic} ${s.n}`,p[0],p[1],sz,on?'#111':'#e2e8f0'); }
-    if(near) { rrct(HW/2-230,HH-104,460,52,14,'rgba(5,10,24,.82)'); txt(`Press E or click to use ${near.n}`,HW/2,HH-70,26,'#fde047'); }
+      const u=busyBy(s.k); rrct(p[0]-sz*4.2,p[1]-sz*1.05,sz*8.4,sz*1.45,8,u?'rgba(127,29,29,.8)':on?'rgba(251,191,36,.92)':'rgba(5,10,24,.72)'); txt(u?`${s.ic} ${u.name.slice(0,12)} is here`:`${s.ic} ${s.n}`,p[0],p[1],sz,on&&!u?'#111':'#e2e8f0'); }
+    if(near&&busyBy(near.k)) { rrct(HW/2-260,HH-104,520,52,14,'rgba(5,10,24,.82)'); txt(`${busyBy(near.k).name} is using it — you're spotting them 🤝`,HW/2,HH-70,24,'#4ade80'); }
+    else if(near) { rrct(HW/2-230,HH-104,460,52,14,'rgba(5,10,24,.82)'); txt(`Press E or click to use ${near.n}`,HW/2,HH-70,26,'#fde047'); }
     else txt('WASD / arrows to walk · click the floor to walk there · click a station to use it',HW/2,HH-24,19,'#cbd5e1');
   } else if(X){ const s=X.s, w=weightOf(s);
     txt(`${s.ic} ${s.n}${s.t==='w'?` · ${w.toLocaleString()} lb${s.each?' each':''}`:''}`,HW/2,40,26,'#e2e8f0');
@@ -404,16 +416,17 @@ function drawHUD(){ ctx.clearRect(0,0,HW,HH); const st=window.RRSTR?RRSTR.state(
     if(X.gradeT>0&&X.grade){ const a=clamp(X.gradeT,0,1), col=X.grade==='PERFECT'?'#fbbf24':X.grade==='GOOD'?'#4ade80':'#f87171'; ctx.globalAlpha=a; txt(X.grade==='MISS'?'GRIND!':X.grade+'!',HW/2,HH/2-40-(1-a)*30,X.grade==='PERFECT'?64:50,col); ctx.globalAlpha=1; } }
   floaters.forEach((f,i)=>{ ctx.globalAlpha=clamp(1.4-f.t,0,1); txt(f.text,HW/2+140,180-f.t*60-i*4,f.size,f.col); ctx.globalAlpha=1; });
   if(bannerT>0){ ctx.globalAlpha=clamp(bannerT,0,1); rrct(HW/2-300,150,600,92,16,'rgba(5,10,24,.88)'); txt(bannerTxt[0],HW/2,196,38,bannerCol); txt(bannerTxt[1],HW/2,228,19,'#e2e8f0'); ctx.globalAlpha=1; }
+  netHUD();
   const done=WOD.tasks.filter(t=>t.got>=t.n).length; txt(`WORKOUT ${done}/3${WOD.done?' ✓':''}`,HW-18,30,19,WOD.done?'#4ade80':'#cbd5e1','right');
   txt('STRENGTH '+st.level.toLocaleString()+(st.badge?'  '+st.badge:''),18,30,19,'#e2e8f0','left'); }
 
 /* ---------- panel ---------- */
 function refreshStats(){ const st=window.RRSTR?RRSTR.state():{level:0,frac:0,badge:'',owner:false}, own=st.owner;
-  const best=k=>{ const s=SK[k], v=SV.best[k]; if(own) return '10,000'; return v?(s.t==='w'?v.toLocaleString():v):'—'; };
-  $('stats').innerHTML=[['Strength',st.level.toLocaleString()],['Bench',best('bench')],['Squat',best('squat')],['Deadlift',best('dead')],['Press',best('press')],['Curls',best('curl')],['Pull-ups',best('pullup')],['Push-ups',best('pushup')],['Sit-ups',best('situp')],['Perfect reps',(SV.perfect||0).toLocaleString()],['Lifted (lb)',own?'10,000':Math.round(SV.vol||0).toLocaleString()]]
+  const best=k=>{ const s=SK[k], v=SV.best[k]; if(own) return '100,000'; return v?(s.t==='w'?v.toLocaleString():v):'—'; };
+  $('stats').innerHTML=[['Strength',st.level.toLocaleString()],['Bench',best('bench')],['Squat',best('squat')],['Deadlift',best('dead')],['Press',best('press')],['Curls',best('curl')],['Pull-ups',best('pullup')],['Push-ups',best('pushup')],['Sit-ups',best('situp')],['Perfect reps',(SV.perfect||0).toLocaleString()],['Lifted (lb)',own?'100,000':Math.round(SV.vol||0).toLocaleString()]]
     .map(([n,v])=>`<div class="stat"><b>${v}</b><span>${n}</span></div>`).join('');
   $('sBarFill').style.width=(st.frac*100)+'%';
-  $('sBarTxt').textContent=own?'Owner — +10,000 strength every rep, and you can lift up to 10,000 lb 👑':st.tier==='VIP'?'VIP — you start maxed at 100 strength ⭐':st.level>=100?'Maxed out — you are a Professional! 💪':st.tier==='PRO'?`PRO — you started at 75 · ${100-st.level} to max`:`${100-st.level} strength to go until Professional`;
+  $('sBarTxt').textContent=own?'Owner — +10,000 strength every rep, and you can lift up to 100,000 lb 👑':st.tier==='VIP'?'VIP — you start maxed at 100 strength ⭐':st.level>=100?'Maxed out — you are a Professional! 💪':st.tier==='PRO'?`PRO — you started at 75 · ${100-st.level} to max`:`${100-st.level} strength to go until Professional`;
   $('tagWrap').innerHTML=own?'<span class="tag owner">👑 OWNER</span>':st.tier==='VIP'?'<span class="tag owner">⭐ VIP</span>':(st.tier==='PRO'||st.level>=100)?'<span class="tag">💪 PRO</span>':(st.badge?`<span class="tag">${st.badge}</span>`:'<span class="muted">No tag yet — keep training</span>');
   syncUI(); }
 function syncUI(){ const s=PL.at?SK[PL.at]:null, wt=s&&s.t==='w';
@@ -444,7 +457,8 @@ addEventListener('keydown',e=>{ const t=document.activeElement; if(t&&(t.tagName
   else if(e.code==='Escape'){ leave(); }
   else if(e.code==='BracketLeft'||e.code==='Minus') setWeight(-(e.shiftKey?25:5));
   else if(e.code==='BracketRight'||e.code==='Equal') setWeight(e.shiftKey?25:5);
-  else if(e.code==='KeyC') camMode=(camMode+1)%2; });
+  else if(e.code==='KeyC') camMode=(camMode+1)%2;
+  else if(e.code==='KeyH') cheer(); });
 addEventListener('keyup',e=>keys.delete(e.code));
 addEventListener('blur',()=>keys.clear());
 /* click / tap: during a set it's your rep button; otherwise walk where you clicked, or to the station you clicked */
@@ -455,8 +469,61 @@ $('stage').addEventListener('pointerdown',e=>{ e.preventDefault(); audio(); if(P
   for(const s of ST){ if(Math.hypot(gx-s.x,gz-s.z)<1.1){ if(nearest()===s) enter(s); else goStation(s); return; } }
   PL.goTo=null; PL.target={x:clamp(gx,-11.2,11.2),z:clamp(gz,-7.2,7.5)}; });
 addEventListener('rrstr-change',refreshStats);
+
+/* ---------- working out together (online) ----------
+   Everyone in the room walks the same gym: you see the others train, a station someone is on is taken,
+   and standing right next to a friend's station spots them (one failed rep a set gets saved). */
+const OT=new Map(); let NET=null, netT=0;
+const feed=[]; function feedAdd(t,col){ feed.push({t,col:col||'#e2e8f0',age:0}); if(feed.length>5) feed.shift(); }
+const pal=['#dc2626','#16a34a','#9333ea','#ea580c','#0891b2','#db2777','#ca8a04','#4f46e5'];
+const lookFor=o=>o.o?{...LOOK.olympia,top:'#b91c1c',topHi:'#dc2626',topDk:'#7f1d1d'}:{...LOOK.me,top:pal[o.seat%pal.length],buff:o.bf||1};
+function busyBy(k){ for(const o of OT.values()) if(o.at===k) return o; return null; }
+/* a friend standing beside my station spots me */
+function spotter(){ if(!PL.at) return null; const s=SK[PL.at]; for(const o of OT.values()){ if(!o.at&&Math.hypot(o.x-s.x,o.z-s.z)<2.2) return o; } return null; }
+function netEv(text){ if(NET&&NET.on) NET.send({t:'ev',text}); }
+function cheer(){ if(!NET||!NET.on) return; NET.send({t:'cheer'}); feedAdd('👏 You cheered everyone on','#4ade80'); }
+function netState(){ const own=owner(), bf=window.RRSTR?RRSTR.muscle():1, s=PL.at?SK[PL.at]:null;
+  return {t:'g',x:+PL.x.toFixed(2),z:+PL.z.toFixed(2),y:+PL.yaw.toFixed(2),v:+PL.spd.toFixed(2),at:PL.at||'',b:X?+X.b.toFixed(2):0,st:X?(X.ended?'end':X.state):'',lg:X&&X.lastGrade||'',
+    o:own?1:0,bf:+bf.toFixed(2),wt:s?weightOf(s):0,r:X?X.reps:0,c:X?X.combo:0,lv:window.RRSTR?RRSTR.level:0}; }
+function netStep(dt){ for(const f of feed) f.age+=dt; while(feed.length&&feed[0].age>9) feed.shift();
+  for(const o of OT.values()){ const k=Math.min(1,dt*10); o.x=lerp(o.x,o.tx,k); o.z=lerp(o.z,o.tz,k); o.b=lerp(o.b,o.tb,Math.min(1,dt*14));
+    let dy=o.ty-o.yaw; while(dy>PI) dy-=2*PI; while(dy<-PI) dy+=2*PI; o.yaw+=dy*k; o.walk+=dt*(o.v>1.2?11:7)*Math.min(1,o.v);
+    if(o.at&&!SK[o.at]) o.at=null; }
+  if(!NET||!NET.on) return; netT-=dt; if(netT<=0){ netT=.1; NET.send(netState()); } }
+function netMsg(m){ if(!m.from) return; let o=OT.get(m.from);
+  if(m.t==='g'){ const p=(NET.peers||[]).find(q=>q.id===m.from)||{};
+    if(!o){ o={id:m.from,name:p.name||'Player',seat:m.seat||p.seat||1,x:m.x,z:m.z,yaw:m.y,walk:0,b:0}; OT.set(m.from,o); }
+    Object.assign(o,{tx:m.x,tz:m.z,ty:m.y,v:m.v,at:SK[m.at]?m.at:null,tb:m.b,st:m.st,lg:m.lg,o:m.o,bf:m.bf,wt:m.wt,r:m.r,c:m.c,lv:m.lv});
+    /* if they took my station at the same moment, the earlier seat keeps it */
+    if(o.at&&o.at===PL.at&&o.seat<(NET.me?NET.me.seat:0)){ leave(); banner('STATION TAKEN',`${o.name} got there first`,'#fb923c'); }
+    return; }
+  const nm=o?o.name:((NET.peers||[]).find(q=>q.id===m.from)||{}).name||'Someone';
+  if(m.t==='ev') feedAdd(`${nm} ${String(m.text).slice(0,90)}`,'#fde047');
+  if(m.t==='cheer'){ feedAdd(`👏 ${nm} is cheering you on!`,'#4ade80'); if(X&&!X.ended){ X.stam=clamp(X.stam+.15,0,1); floaters.push({text:'👏 +energy',t:0,size:24,col:'#4ade80'}); } if(sfx.good) sfx.good(); } }
+function netPeers(api,kind,m){ if(kind==='join') feedAdd(`👋 ${m.name} walked into the gym`,'#4ade80');
+  if(kind==='leave'){ const o=OT.get(m.id); feedAdd(`🚪 ${o?o.name:'Someone'} left the gym`,'#93a0bd'); OT.delete(m.id); }
+  netT=0; netUI(); }
+function netUI(){ const on=NET&&NET.on, n=on?NET.peers.length:0;
+  $('netAny').style.display=on?'none':''; $('netParty').style.display=on?'none':''; ['netInv','netCheer','netLeave'].forEach(i=>$(i).style.display=on?'':'none');
+  $('netSt').innerHTML=on?`<b style="color:#4ade80">Online · room ${esc(NET.code||'')}</b> · ${n?`${n} other${n>1?'s':''} here: ${NET.peers.map(p=>esc(p.name)).join(', ')}`:'nobody else yet — send a friend the room code'}`:'Train with up to 7 other people in the same gym. Stand next to a friend\'s station to spot them.'; }
+function drawOthers(){ for(const o of OT.values()){ const lk=lookFor(o), w=o.o?.25:.17*(1+((o.bf||1)-1)*.6);
+    if(o.at){ const s=SK[o.at], J=pose(s.k,o.b,T0,w,(o.st==='up'&&o.lg==='MISS'?Math.sin(T0*40)*.015:0)); drawBody(J,s,lk); if(J.bar) barbell(s,J.bar,o.wt||s.start||45,0); }
+    else drawBody(pose(o.v>.05?(o.v>1.2?'run':'walk'):'stand',0,o.walk,w),{x:o.x,z:o.z,yaw:o.yaw},lk); } }
+function netHUD(){ for(const o of OT.values()){ const s=o.at?SK[o.at]:null, p=scr(s?[s.x,s.k==='pullup'?2.75:2.05,s.z]:[o.x,2.1,o.z]); if(!p||p[2]<=0) continue;
+    const sz=clamp(15000/p[2],12,20), tg=o.o?'👑 ':o.lv>=100?'💪 ':'', t=`${tg}${o.name}${s&&o.r?` · ${o.r} rep${o.r>1?'s':''}`:''}${s&&o.c>=3?` 🔥${o.c}`:''}`;
+    ctx.font=`800 ${sz}px 'Big Shoulders Display','Arial Narrow',sans-serif`; const tw=ctx.measureText(t).width+16;
+    rrct(p[0]-tw/2,p[1]-sz*1.05-(s?sz*1.6:0),tw,sz*1.4,7,'rgba(5,10,24,.75)'); txt(t,p[0],p[1]-(s?sz*1.6:0),sz,o.o?'#fde047':'#a5f3fc'); }
+  if(PL.at&&X&&!X.ended){ const sp=spotter(); if(sp) txt(`🤝 ${sp.name} is spotting you${X.spotUsed?' (used)':''}`,HW/2,152,20,'#4ade80'); }
+  feed.forEach((f,i)=>{ ctx.globalAlpha=clamp(9-f.age,0,1); txt(f.t,18,62+i*24,17,f.col,'left',700); ctx.globalAlpha=1; });
+  if(NET&&NET.on) txt(`🌐 ${NET.peers.length+1} in the gym`,HW-18,56,17,'#4ade80','right'); }
+if(window.RRO){ NET=RRO.init({game:'weightlifting',maxPlayers:8,minPlayers:1,dropIn:true,publicRoom:'GYMA',
+    blurb:'Work out in the same gym as other people: you see each other train, and standing next to a friend\'s station spots them. Party up or share a room code to lift with friends.',
+    onStart:()=>{ OT.clear(); feedAdd(`🌐 You're in the online gym (room ${NET.code})`,'#4ade80'); netT=0; netUI(); },
+    onMsg:netMsg, onPeers:netPeers, onEnd:why=>{ OT.clear(); feedAdd(why==='left'?'You left the online gym':'Online gym: '+why,'#f87171'); netUI(); } });
+  $('netAny').onclick=()=>NET.quick(); $('netParty').onclick=()=>NET.open(); $('netInv').onclick=()=>NET.invite(); $('netCheer').onclick=cheer; $('netLeave').onclick=()=>{ NET.leave(); netUI(); }; }
+else $('netRow').style.display='none';
 /* read-only view for automated tests (only on ?test pages) */
-if(TEST) window.__gym=()=>({at:PL.at,x:PL.x,z:PL.z,near:(nearest()||{}).k||null,set:X?{reps:X.reps,state:X.state,ended:!!X.ended,combo:X.combo,stam:X.stam,b:X.b,zone:X.zone,u:.5+.5*Math.sin(X.ph)}:null,weight:PL.at?weightOf(SK[PL.at]):null,wod:WOD.tasks.map(t=>t.got),best:SV.best});
+if(TEST) window.__gym=()=>({at:PL.at,x:PL.x,z:PL.z,near:(nearest()||{}).k||null,set:X?{reps:X.reps,state:X.state,ended:!!X.ended,combo:X.combo,stam:X.stam,b:X.b,zone:X.zone,u:.5+.5*Math.sin(X.ph)}:null,weight:PL.at?weightOf(SK[PL.at]):null,wod:WOD.tasks.map(t=>t.got),best:SV.best,online:!!(NET&&NET.on),others:[...OT.values()].map(o=>({name:o.name,x:o.x,z:o.z,at:o.at,r:o.r})),feed:feed.map(f=>f.t),spotter:(spotter()||{}).name||null});
 
 renderWOD(); refreshStats(); requestAnimationFrame(frame);
 })();
