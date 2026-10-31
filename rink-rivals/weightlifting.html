@@ -67,7 +67,7 @@ kbd{ font:inherit; font-size:13px; background:var(--ledbg); color:#fff; border-r
 
       <div class="row" style="margin-top:14px"><span class="muted">Lift:</span><div class="pills" id="liftPills"></div></div>
       <div class="row" style="margin-top:6px"><span class="muted">Bar weight:</span>
-        <div class="pills"><button data-w="-10">−10</button><button data-w="-5">−5</button><b id="barW" style="font-size:22px;min-width:92px;text-align:center">135 lb</b><button data-w="5">+5</button><button data-w="25">+25</button></div>
+        <div class="pills"><button data-w="-10">−10</button><button data-w="-5">−5</button><b id="barW" style="font-size:22px;min-width:92px;text-align:center">135 lb</b><button data-w="5">+5</button><button data-w="25">+25</button><button data-w="100">+100</button><button id="maxW" class="gold" style="display:none" title="Load the heaviest bar">👑 MAX</button></div>
       </div>
       <div class="row" style="margin-top:10px">
         <button class="gold" id="startBtn">Start the set <kbd>Enter</kbd></button>
@@ -112,13 +112,18 @@ const sfx={ up:()=>tone(150,.14,'triangle',.07,170), rack:()=>{ tone(90,.08,'squ
 /* ---------- a set: hold to drive the bar up, it lowers under control, repeat to failure ---------- */
 let S=null, phase='idle';
 let lastTS=performance.now();
-function startSet(){ audio(); const diff=lift.hard*Math.max(.6,barW/lift.start);
-  S={bar:0,vel:0,stam:1,reps:0,gained:0,sticking:0,strain:0,lowering:false,shake:0,msg:'',msgT:0,t:0,diff,ended:false}; phase='lift';
-  $('hint').innerHTML='Hold <kbd>Space</kbd> to drive the bar up and <b>lock it out</b>. It lowers on its own — then go again. The set ends when you fail.'; }
-function endSet(reason){ phase='done'; S.ended=true; sfx.fail(); SV.sets++;
+/* how strong you are: 1 = brand new, ~2.5 at 100 strength, the owner can move the heaviest bar */
+function power(){ if(!window.RRSTR) return 1; return RRSTR.owner?11:1+RRSTR.frac*1.5; }
+function startSet(){ audio(); const diff=lift.hard*Math.max(.6,barW/lift.start)/power();
+  S={bar:0,vel:0,stam:1,reps:0,gained:0,sticking:0,strain:0,lowering:false,shake:0,msg:'',msgT:0,t:0,idle:0,diff,ended:false}; phase='lift'; syncBtns();
+  $('hint').innerHTML='Hold <kbd>Space</kbd> to drive the bar up and <b>lock it out</b>. It lowers on its own — then go again. Fail a rep, rest a few seconds, or hit <b>End set</b> to finish.'; }
+function endSet(reason){ phase='done'; S.ended=true; if(reason==='fail'||reason==='nolift') sfx.fail(); else sfx.rack(); SV.sets++; syncBtns();
   const vol=S.reps*barW, g=Math.round(S.gained); SV.vol+=vol; SV.reps+=S.reps; saveSV();
   S.msg=S.reps?`Set done — ${S.reps} rep${S.reps===1?'':'s'} at ${barW} lb.${g>0?`  +${g} strength`:''}`:'No reps — try a lighter bar.'; S.msgT=4.5; refreshStats(); }
-function restSet(){ if(phase==='lift') return; phase='idle'; S=null; $('hint').innerHTML='Rested up. Hold <kbd>Space</kbd> to lift again.'; }
+function restSet(){ finishSet(); phase='idle'; S=null; syncBtns(); $('hint').innerHTML='Rested up. Hold <kbd>Space</kbd> to lift again.'; }
+/* wrap up a set in progress (keeps the reps you did) so you can change anything at any time */
+function finishSet(){ if(S&&phase==='lift') endSet('stop'); }
+function syncBtns(){ const b=$('startBtn'); if(b) b.innerHTML=phase==='lift'?'End set <kbd>Enter</kbd>':'Start the set <kbd>Enter</kbd>'; }
 
 const keys=new Set();
 function step(dt){ if(!S||phase!=='lift') return; S.t+=dt; if(S.msgT>0) S.msgT-=dt; if(S.shake>0) S.shake-=dt;
@@ -133,9 +138,10 @@ function step(dt){ if(!S||phase!=='lift') return; S.t+=dt; if(S.msgT>0) S.msgT-=
   S.strain=clamp((held?1:0)*(0.3+stick)*(1.2-S.stam)+(S.sticking>.5&&S.vel<.1?.6:0),0,1);
   if(held&&S.stam>0){ S.stam=Math.max(0,S.stam-dt*(0.075+0.05*dif+stick*0.09)); if(Math.random()<dt*20*(1+stick)) sfx.grind(); if(S.strain>.6) S.shake=Math.max(S.shake,.2); }
   else S.stam=Math.min(1,S.stam+dt*0.24);
+  S.idle=(!held&&S.bar<0.02)?S.idle+dt:0; if(S.reps>0&&S.idle>5) return endSet('rest');
   if(S.bar>=0.999&&S.vel>-0.05) rep();
   if(S.bar<=0.001&&S.reps>0&&S.t>0.5&&S.stam<0.22) endSet('fail');
-  if(S.reps===0&&S.t>4.5&&S.bar<0.12) endSet('nolift'); }
+  if(S.reps===0&&S.t>4.5&&S.bar<0.12&&held) endSet('nolift'); if(S.reps===0&&S.idle>8) endSet('rest'); }
 function rep(){ S.reps++; S.lowering=true; S.vel=0; S.shake=.3; sfx.up();
   const fatigue=Math.max(0.35,1-S.reps*0.06), inc=(barW/110)*lift.gain*fatigue*1.6;
   S.gained+=inc; if(window.RRSTR) RRSTR.add(inc);
@@ -283,20 +289,22 @@ function drawHUD(){ ctx.clearRect(0,0,HW,HH);
 
 /* ---------- stats panel ---------- */
 function refreshStats(){ const st=window.RRSTR?RRSTR.state():{level:0,frac:0,badge:'',owner:false};
+  { const mw=$('maxW'); if(mw) mw.style.display=st.owner?'':'none'; }
   /* owner starts with everything maxed at 1,000 */
   $('sLvl').textContent=st.level;
   $('sBench').textContent=st.owner?1000:(SV.bench||'—'); $('sSquat').textContent=st.owner?1000:(SV.squat||'—'); $('sDead').textContent=st.owner?1000:(SV.dead||'—');
   $('sVol').textContent=st.owner?(1000).toLocaleString():(SV.vol||0).toLocaleString();
   $('sBarFill').style.width=(st.frac*100)+'%';
-  $('sBarTxt').textContent=st.owner?'Owner — maxed out 💪':st.level>=100?'Maxed out — you are a Professional! 💪':`${100-st.level} strength to go until Professional`;
-  $('tagWrap').innerHTML=st.owner?'<span class="tag owner">👑 OWNER</span>':(st.level>=100?'<span class="tag">💪 Professional</span>':(st.badge?`<span class="tag">${st.badge}</span>`:'<span class="muted">No tag yet — keep lifting</span>')); }
+  $('sBarTxt').textContent=st.owner?'Owner — maxed out, and you can lift the heaviest bar 👑':st.tier==='VIP'?'VIP — you start maxed at 100 strength ⭐':st.level>=100?'Maxed out — you are a Professional! 💪':st.tier==='PRO'?`PRO — you started at 75 · ${100-st.level} to max`:`${100-st.level} strength to go until Professional`;
+  $('tagWrap').innerHTML=st.owner?'<span class="tag owner">👑 OWNER</span>':st.tier==='VIP'?'<span class="tag owner">⭐ VIP</span>':(st.tier==='PRO'||st.level>=100)?'<span class="tag">💪 PRO</span>':(st.badge?`<span class="tag">${st.badge}</span>`:'<span class="muted">No tag yet — keep lifting</span>'); }
 
 /* ---------- menu ---------- */
 function renderLifts(){ $('liftPills').innerHTML=LIFTS.map(l=>`<button data-l="${l.k}" class="${l.k===lift.k?'on':''}">${l.n}</button>`).join(''); }
 function setW(){ $('barW').textContent=barW+' lb'; }
-$('liftPills').addEventListener('click',e=>{ const b=e.target.closest('[data-l]'); if(!b||phase==='lift') return; lift=LIFTS.find(l=>l.k===b.dataset.l); barW=Math.max(lift.start,Math.round((SV[lift.k]||lift.start)/5)*5); renderLifts(); setW(); });
-document.querySelectorAll('[data-w]').forEach(b=>b.onclick=()=>{ if(phase==='lift') return; barW=clamp(Math.round((barW+ +b.dataset.w)/5)*5,45,1200); setW(); sfx.clank(); });
-$('startBtn').onclick=()=>{ if(phase!=='lift') startSet(); };
+$('liftPills').addEventListener('click',e=>{ const b=e.target.closest('[data-l]'); if(!b) return; finishSet(); lift=LIFTS.find(l=>l.k===b.dataset.l); barW=Math.max(lift.start,Math.round((SV[lift.k]||lift.start)/5)*5); renderLifts(); setW(); });
+document.querySelectorAll('[data-w]').forEach(b=>b.onclick=()=>{ finishSet(); barW=clamp(Math.round((barW+ +b.dataset.w)/5)*5,45,1200); setW(); sfx.clank(); });
+$('startBtn').onclick=()=>{ if(phase==='lift') finishSet(); else startSet(); };
+$('maxW').onclick=()=>{ finishSet(); barW=1200; setW(); sfx.clank(); };
 $('restBtn').onclick=restSet;
 $('camBtn').onclick=()=>{ camMode=(camMode+1)%3; };
 $('btnSnd').onclick=()=>{ muted=!muted; $('btnSnd').textContent=muted?'Sound off':'Sound on'; if(!muted) audio(); };
@@ -304,7 +312,7 @@ $('btnFs').onclick=()=>{ try{ document.fullscreenElement?document.exitFullscreen
 
 addEventListener('keydown',e=>{ const t=document.activeElement; if(t&&(t.tagName==='INPUT'||t.tagName==='TEXTAREA')) return;
   if(e.code==='Space'){ e.preventDefault(); if(phase!=='lift') startSet(); keys.add('Space'); audio(); }
-  else if(e.code==='Enter'){ if(phase!=='lift') startSet(); }
+  else if(e.code==='Enter'){ if(phase==='lift') finishSet(); else startSet(); }
   else if(e.code==='KeyR'){ restSet(); }
   else if(e.code==='KeyC'){ camMode=(camMode+1)%3; } });
 addEventListener('keyup',e=>{ if(e.code==='Space') keys.delete('Space'); });

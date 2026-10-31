@@ -25,6 +25,7 @@
   const css=document.createElement('style'); css.textContent=`
 #rrpF{position:fixed;left:14px;bottom:14px;z-index:9990;border:1px solid rgba(255,255,255,.18);border-radius:999px;padding:8px 14px;font:800 15px system-ui,sans-serif;color:#fff;cursor:pointer;background:linear-gradient(135deg,rgba(124,58,237,.92),rgba(219,39,119,.92));box-shadow:0 6px 18px rgba(0,0,0,.45),0 0 16px rgba(168,85,247,.45)}
 #rrpF:hover{filter:brightness(1.1)} #rrpF.idle{background:rgba(15,23,42,.85);box-shadow:0 6px 18px rgba(0,0,0,.4)}
+#rrpF.mini{width:40px;height:40px;padding:0;font-size:19px;opacity:.75} #rrpF.mini:hover{opacity:1}
 #rrpP{position:fixed;left:14px;bottom:62px;z-index:9991;width:min(370px,calc(100vw - 28px));max-height:min(78vh,640px);overflow:auto;display:none;color:#e5e7eb;font:500 14px/1.4 system-ui,sans-serif;
   background:linear-gradient(170deg,#1a1033,#0b1022);border:1px solid rgba(168,85,247,.5);border-radius:18px;box-shadow:0 20px 60px rgba(0,0,0,.6),0 0 30px rgba(168,85,247,.25)}
 #rrpP.on{display:block}
@@ -90,7 +91,8 @@
   function topPick(){ const c=tally(), e=Object.entries(c).sort((a,b)=>b[1].length-a[1].length); if(!e.length) return null; const best=e[0][1].length, tied=e.filter(x=>x[1].length===best).map(x=>x[0]); const lv=st&&st.votes&&st.votes[st.leader]; return tied.includes(lv)?lv:tied[0]; }
 
   function render(){ if(!fab) return; const n=st?st.members.length:0, on=st?st.members.filter(m=>m.on).length:0;
-    fab.className=code?'':'idle'; fab.textContent=code?(st?`🎉 Party · ${on}/${n}`:'🎉 Party…'):'🎉 Party';
+    const home=PAGE==='home'||PAGE==='index';  /* inside a game, stay a small round button until you're in a party */
+    fab.className=code?'':(home?'idle':'idle mini'); fab.title='Party up with friends'; fab.textContent=code?(st?`🎉 ${on}/${n}`:'🎉…'):(home?'🎉 Party':'🎉');
     if(!open) return;
     if(!code){ panel.innerHTML=`<header><b>🎉 PARTY UP</b><button class="x" data-a="close" aria-label="Close">✕</button></header>
       <div class="sec"><p style="margin:0 0 10px">Team up with friends, vote on a game, then launch into it together. Works from the lobby or inside any game.</p><button class="pri" data-a="create" style="width:100%;padding:11px;font-size:15px">Create a party</button></div>
