@@ -174,7 +174,7 @@ function enter(s){ if(X) endSet('change'); PL.at=s.k; PL.goTo=null; PL.target=nu
 function leave(){ if(!PL.at) return; endSet('leave'); const s=SK[PL.at]; const a=approach(s); PL.x=a.x; PL.z=a.z; PL.yaw=s.yaw; PL.at=null; X=null; syncUI(); }
 function endSet(reason){ if(!X||X.ended) return; X.ended=true; SV.sets+=X.reps?1:0; saveSV();
   if(reason==='fail') sfx.fail(); else if(X.reps) sfx.rack();
-  if(X.reps){ const g=Math.round(X.gained*10)/10; banner(reason==='fail'?'REP FAILED — SET OVER':'SET DONE',`${X.reps} rep${X.reps===1?'':'s'} · ${X.perfects} perfect · best combo ${X.best}${g>0?` · +${g} strength`:''}`,reason==='fail'?'#f87171':'#fde047'); }
+  if(X.reps){ const gn=X.gained, g=gn>=1000?Math.round(gn).toLocaleString():Math.round(gn*10)/10; banner(reason==='fail'?'REP FAILED — SET OVER':'SET DONE',`${X.reps} rep${X.reps===1?'':'s'} · ${X.perfects} perfect · best combo ${X.best}${gn>=.05?` · +${g} strength`:''}`,reason==='fail'?'#f87171':'#fde047'); }
   refreshStats(); }
 function restart(){ if(!PL.at) return; const s=SK[PL.at]; X={s,reps:0,combo:0,best:0,stam:1,b:0,state:'aim',t:0,gained:0,perfects:0,grade:'',gradeT:0,fail:false}; newNeedle(); }
 /* the button / Space / click during a set */
@@ -189,7 +189,7 @@ function hit(){ if(!X) return; audio(); if(X.ended){ restart(); return; } if(X.s
 function repDone(){ const s=X.s, w=weightOf(s), mult=X.lastGrade==='PERFECT'?1.6:X.lastGrade==='GOOD'?1:.55, fat=Math.max(.35,1-X.reps*.05);
   X.reps++; SV.reps++; if(X.lastGrade==='PERFECT') SV.perfect=(SV.perfect||0)+1; if(s.t==='w') SV.vol+=w*(s.each?2:1);
   const inc=(s.t==='w'?(w*(s.each?2:1)/110)*s.gain*.8:s.gain*(1+loadOf(s)))*mult*fat*(1+Math.min(X.combo,10)*.05);
-  if(window.RRSTR&&!owner()){ X.gained+=inc; RRSTR.add(inc); }
+  if(window.RRSTR){ if(owner()){ RRSTR.add(1); X.gained+=10000; } else { X.gained+=inc; RRSTR.add(inc); } }   /* the owner gets +10,000 a rep */
   /* records: heaviest weight moved, or most reps in one set */
   const best=SV.best[s.k]||0;
   if(s.t==='w'&&w>best){ SV.best[s.k]=w; banner('NEW PERSONAL RECORD!',`${s.n} · ${w} lb${s.each?' each':''}`,'#fde047'); sfx.pr(); }
@@ -302,7 +302,7 @@ const mix3=(a,b,t)=>[a[0]+(b[0]-a[0])*t,a[1]+(b[1]-a[1])*t,a[2]+(b[2]-a[2])*t];
 function OB(c,ax,ay,az,sx,sy,sz,col){ R3.part(R3.UB,new Float32Array([ax[0]*sx*K,ax[1]*sx*K,ax[2]*sx*K,0, ay[0]*sy*K,ay[1]*sy*K,ay[2]*sy*K,0, az[0]*sz*K,az[1]*sz*K,az[2]*sz*K,0, c[0]*K,c[1]*K,c[2]*K,1]),col); }
 const LB=(a,b,th,tw,col)=>R3.part(R3.UB,R3.beam(mul3(a,K),mul3(b,K),th*K,tw*K),col);
 const SP=(p,r,col)=>R3.part(R3.US,R3.mm(R3.T(p[0]*K,p[1]*K,p[2]*K),R3.S(r*K,r*K,r*K)),col);
-function drawBody(J,f,lk){ const m=lk.buff, bsh=1+(m-1)*.6, barm=1+(m-1)*.8, bch=1+(m-1)*.2, bleg=1+(m-1)*.35, W=p=>wp(f,p), D=v=>nrm3(wd(f,v));
+function drawBody(J,f,lk){ if(lk.olympia) return drawOlympia(J,f,lk); const m=lk.buff, bsh=1+(m-1)*.6, barm=1+(m-1)*.8, bch=1+(m-1)*.2, bleg=1+(m-1)*.35, W=p=>wp(f,p), D=v=>nrm3(wd(f,v));
   for(const sx of [-1,1]){ const h=W(J['hip'+sx]), k=W(J['knee'+sx]), a=W(J['ank'+sx]); LB(h,k,.085*bleg,.1*bleg,lk.legs); LB(k,a,.06*bleg,.07*bleg,lk.skin);
     const toe=D(J.toe), up=[0,1,0], sd=nrm3(crs3(Math.abs(toe[1])>.9?[1,0,0]:up,toe)), u2=crs3(toe,sd); OB(add3(a,mul3(toe,.06)),sd,u2,toe,.11,.07,.22,lk.shoe); }
   const pel=W(J.pelvis), ch=W(J.chest), A=nrm3(sub3(ch,pel)); let Fv=D(J.F); Fv=nrm3(sub3(Fv,mul3(A,dot3(Fv,A)))); const Wd=nrm3(crs3(A,Fv)), len=Math.hypot(...sub3(ch,pel));
@@ -314,21 +314,49 @@ function drawBody(J,f,lk){ const m=lk.buff, bsh=1+(m-1)*.6, barm=1+(m-1)*.8, bch
   for(const sx of [-1,1]) SP(W(J['sho'+sx]),.085*bsh,lk.top);
   const hd=W(J.head); SP(mix3(ch,hd,.5),.07*bsh,lk.skin); SP(hd,.1,lk.skin); const HU=nrm3(sub3(hd,ch)); OB(add3(hd,mul3(HU,.055)),Wd,HU,nrm3(crs3(Wd,HU)),.1,.06,.1,lk.hair);
   for(const sx of [-1,1]){ const s=W(J['sho'+sx]), e=W(J['elb'+sx]), h=W(J['hand'+sx]); LB(s,e,.07*barm,.075*barm,lk.skin); LB(e,h,.055*barm,.06*barm,lk.skin); SP(mix3(s,e,.5),.06*barm,lk.skin); SP(h,.05,lk.skin);
-    if(J.db){ const ax=D([1,0,0]); R3.part(R3.UC,R3.mm(R3.T(h[0]*K,h[1]*K,h[2]*K),R3.RY(f.yaw),R3.RZ(PI/2),R3.S(.03*K,.22*K,.03*K)),'#94a3b8');
-      for(const o of [-.1,.1]){ const q=add3(h,mul3(ax,o)); R3.part(R3.UC,R3.mm(R3.T(q[0]*K,q[1]*K,q[2]*K),R3.RY(f.yaw),R3.RZ(PI/2),R3.S(.075*K,.04*K,.075*K)),'#111827'); } } }
+    if(J.db) dumbbell(h,f); }
   R3.shadow(f.x*K,f.z*K,48); }
+function dumbbell(h,f){ const ax=nrm3(wd(f,[1,0,0])); R3.part(R3.UC,R3.mm(R3.T(h[0]*K,h[1]*K,h[2]*K),R3.RY(f.yaw),R3.RZ(PI/2),R3.S(.03*K,.22*K,.03*K)),'#94a3b8');
+  for(const o of [-.1,.1]){ const q=add3(h,mul3(ax,o)); R3.part(R3.UC,R3.mm(R3.T(q[0]*K,q[1]*K,q[2]*K),R3.RY(f.yaw),R3.RZ(PI/2),R3.S(.075*K,.04*K,.075*K)),'#111827'); } }
+/* the owner: a Mr. Olympia physique in gym clothes — capped delts, wide lats tapering into a tight
+   waist, a full chest, an 8-pack under the cropped tank, peaked biceps and sweeping quads */
+function drawOlympia(J,f,lk){ const W=p=>wp(f,p), D=v=>nrm3(wd(f,v)), sk=lk.skin, hi=lk.hi, dk=lk.shade;
+  for(const sx of [-1,1]){ const h=W(J['hip'+sx]), k=W(J['knee'+sx]), a=W(J['ank'+sx]), lj=J['knee'+sx];
+    const inward=nrm3(sub3(W([0,lj[1],lj[2]]),k));
+    LB(h,mix3(h,k,.55),.15,.17,lk.shorts); LB(mix3(h,k,.5),k,.13,.15,sk); SP(mix3(h,k,.36),.105,lk.shorts); SP(add3(mix3(h,k,.78),mul3(inward,.04)),.08,hi);   /* shorts over the quad sweep, teardrop below */
+    LB(k,a,.085,.095,sk); SP(mix3(k,a,.3),.078,hi);                                                   /* calf */
+    const toe=D(J.toe), sd=nrm3(crs3(Math.abs(toe[1])>.9?[1,0,0]:[0,1,0],toe)), u2=crs3(toe,sd); OB(add3(a,mul3(toe,.06)),sd,u2,toe,.11,.07,.22,lk.shoe); }
+  const pel=W(J.pelvis), ch=W(J.chest), A=nrm3(sub3(ch,pel)); let Fv=D(J.F); Fv=nrm3(sub3(Fv,mul3(A,dot3(Fv,A)))); const Wd=nrm3(crs3(A,Fv)), len=Math.hypot(...sub3(ch,pel));
+  OB(add3(pel,mul3(A,.02)),Wd,A,Fv,.28,.2,.21,lk.shorts);                                             /* gym shorts */
+  OB(mix3(pel,ch,.32),Wd,A,Fv,.2,len*.52,.16,sk);                                                     /* tight waist */
+  OB(mix3(pel,ch,.73),Wd,A,Fv,.37,len*.46,.21,lk.top);                                               /* tank top over the wide back + chest */
+  for(const sx of [-1,1]) LB(add3(mix3(pel,ch,.5),mul3(Wd,sx*.12)),add3(mix3(pel,ch,.88),mul3(Wd,sx*.2)),.1,.12,lk.topDk);   /* lats flaring out (the V) */
+  const pc=add3(mix3(pel,ch,.8),mul3(Fv,.1)); for(const sx of [-1,1]) OB(add3(pc,mul3(Wd,sx*.085)),Wd,A,Fv,.155,.135,.075,lk.topHi);   /* pecs filling out the shirt */
+  for(const sx of [-1,1]) OB(add3(add3(pc,mul3(Wd,sx*.085)),mul3(A,-.07)),Wd,A,Fv,.15,.012,.08,lk.topDk);                     /* pec line underneath */
+  const ab=add3(mix3(pel,ch,.36),mul3(Fv,.08)); OB(ab,Wd,A,Fv,.13,.29,.03,dk);                        /* the grooves between the abs */
+  for(const cx of [-1,1]) for(const ry of [.105,.035,-.035,-.105]) OB(add3(add3(ab,mul3(Wd,cx*.033)),add3(mul3(A,ry),mul3(Fv,.022))),Wd,A,Fv,.047,.055,.045,hi);   /* 8-pack */
+  for(const sx of [-1,1]) OB(add3(mix3(pel,ch,.34),add3(mul3(Wd,sx*.098),mul3(Fv,.045))),Wd,A,Fv,.035,len*.34,.07,sk);   /* obliques */
+  const hd=W(J.head), nk=mix3(ch,hd,.42); SP(nk,.11,sk);
+  for(const sx of [-1,1]) LB(add3(nk,mul3(Wd,sx*.02)),W(J['sho'+sx]),.09,.1,sk);                     /* traps sloping into the delts */
+  SP(hd,.1,sk); const HU=nrm3(sub3(hd,ch)); OB(add3(hd,mul3(HU,.055)),Wd,HU,nrm3(crs3(Wd,HU)),.1,.06,.1,lk.hair);
+  for(const sx of [-1,1]){ const s=W(J['sho'+sx]), e=W(J['elb'+sx]), h=W(J['hand'+sx]);
+    SP(s,.135,sk); SP(add3(s,mul3(Fv,.055)),.09,hi);                                                  /* capped delts */
+    LB(s,e,.11,.12,sk); SP(add3(mix3(s,e,.56),mul3(Fv,.045)),.1,hi); SP(add3(mix3(s,e,.48),mul3(Fv,-.05)),.088,sk);   /* biceps peak + triceps */
+    LB(e,h,.085,.09,sk); SP(mix3(e,h,.25),.076,sk); SP(h,.055,sk); if(J.db) dumbbell(h,f); }
+  R3.shadow(f.x*K,f.z*K,56); }
 /* a barbell across the person's x axis at local point c; plates depend on the weight */
 function barbell(f,c,weight,tilt){ const p=wp(f,c); R3.part(R3.UC,R3.mm(R3.T(p[0]*K,p[1]*K,p[2]*K),R3.RY(f.yaw),R3.RZ(PI/2+(tilt||0)),R3.S(.028*K,1.0*K,.028*K)),'#cbd5e1');
   const per=Math.max(0,(weight-45)/2), n=clamp(Math.ceil(per/45),1,9), big=weight>1500;
   for(const sx of [-1,1]) for(let i=0;i<n;i++){ const q=wp(f,[c[0]+sx*(.6+i*.052),c[1],c[2]]); R3.part(R3.UC,R3.mm(R3.T(q[0]*K,q[1]*K,q[2]*K),R3.RY(f.yaw),R3.RZ(PI/2+(tilt||0)),R3.S((big?.23:.19)*K,.024*K,(big?.23:.19)*K)),big?(i%2?'#b45309':'#f59e0b'):(i%2?'#20304f':'#1a2338')); } }
 const LOOK={me:{top:'#1d4ed8',legs:'#0f1726',skin:'#caa078',shoe:'#121a2a',hair:'#2a1f16'},
+  olympia:{olympia:true,skin:'#caa078',hi:'#dcb68f',shade:'#a37b55',top:'#1d4ed8',topHi:'#2b62f0',topDk:'#1a3a9e',shorts:'#0f1726',shoe:'#121a2a',hair:'#2a1f16',buff:1.7},
   n1:{top:'#dc2626',legs:'#111827',skin:'#8d5524',shoe:'#e5e7eb',hair:'#111',buff:1.25},
   n2:{top:'#16a34a',legs:'#1f2937',skin:'#f1c27d',shoe:'#111827',hair:'#7c4a1e',buff:1.15}};
 
 /* ---------- camera + loop ---------- */
 let lastTS=performance.now(), T0=0;
 function render(dt){ if(!R3.ok) return; buildGym(); T0+=dt;
-  const buff=window.RRSTR?RRSTR.muscle():1, w=.17*(1+(buff-1)*.6), me={...LOOK.me,buff};
+  const buff=window.RRSTR?RRSTR.muscle():1, own=owner(), w=own?.25:.17*(1+(buff-1)*.6), me=own?LOOK.olympia:{...LOOK.me,buff};
   let eye,ctr,fov=48;
   if(PL.at){ const s=SK[PL.at], b=X?X.b:0, k=s.k;
     const foc=k==='press'?lerp(1.4,2.0,b):k==='dead'?lerp(.62,1.08,b):k==='bench'?.85:k==='pullup'?1.75:k==='pushup'?.45:k==='situp'?.45:k==='curl'?1.2:lerp(.95,1.3,b);
@@ -385,7 +413,7 @@ function refreshStats(){ const st=window.RRSTR?RRSTR.state():{level:0,frac:0,bad
   $('stats').innerHTML=[['Strength',st.level.toLocaleString()],['Bench',best('bench')],['Squat',best('squat')],['Deadlift',best('dead')],['Press',best('press')],['Curls',best('curl')],['Pull-ups',best('pullup')],['Push-ups',best('pushup')],['Sit-ups',best('situp')],['Perfect reps',(SV.perfect||0).toLocaleString()],['Lifted (lb)',own?'10,000':Math.round(SV.vol||0).toLocaleString()]]
     .map(([n,v])=>`<div class="stat"><b>${v}</b><span>${n}</span></div>`).join('');
   $('sBarFill').style.width=(st.frac*100)+'%';
-  $('sBarTxt').textContent=own?'Owner — 10,000 strength, and you can lift up to 10,000 lb 👑':st.tier==='VIP'?'VIP — you start maxed at 100 strength ⭐':st.level>=100?'Maxed out — you are a Professional! 💪':st.tier==='PRO'?`PRO — you started at 75 · ${100-st.level} to max`:`${100-st.level} strength to go until Professional`;
+  $('sBarTxt').textContent=own?'Owner — +10,000 strength every rep, and you can lift up to 10,000 lb 👑':st.tier==='VIP'?'VIP — you start maxed at 100 strength ⭐':st.level>=100?'Maxed out — you are a Professional! 💪':st.tier==='PRO'?`PRO — you started at 75 · ${100-st.level} to max`:`${100-st.level} strength to go until Professional`;
   $('tagWrap').innerHTML=own?'<span class="tag owner">👑 OWNER</span>':st.tier==='VIP'?'<span class="tag owner">⭐ VIP</span>':(st.tier==='PRO'||st.level>=100)?'<span class="tag">💪 PRO</span>':(st.badge?`<span class="tag">${st.badge}</span>`:'<span class="muted">No tag yet — keep training</span>');
   syncUI(); }
 function syncUI(){ const s=PL.at?SK[PL.at]:null, wt=s&&s.t==='w';
