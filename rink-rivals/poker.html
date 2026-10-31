@@ -267,7 +267,7 @@ function actP(T,i,a,to){ if(T.toAct!==i||T.street==='idle'||T.street==='show') r
   if(a==='fold'){ p.folded=true; p.last='Fold'; tlog(T,`${p.name} folds`); }
   else if(a==='check'){ if(!L.check) return false; p.last='Check'; tlog(T,`${p.name} checks`); }
   else if(a==='call'){ if(!L.call) return false; postBet(T,i,L.call); p.last=p.allin?'All in':`Call ${L.call}`; tlog(T,`${p.name} calls ${L.call}`); }
-  else if(a==='raise'){ if(!L.canRaise) return false; to=Math.round(clamp(to,L.minTo,L.maxTo)); const add=to-p.bet; if(to>T.curBet){ const inc=to-T.curBet; if(inc>=T.minRaise) T.minRaise=inc; T.curBet=to; T.lastAgg=i; T.acted=[]; } postBet(T,i,add); p.last=p.allin?`All in ${p.total}`:(T.curBet===to&&add===to?`Bet ${to}`:`Raise to ${to}`); tlog(T,`${p.name} ${p.allin?'is all in for '+p.bet:(p.last.toLowerCase())}`); }
+  else if(a==='raise'){ if(!L.canRaise) return false; to=Math.round(clamp(to,L.minTo,L.maxTo)); const add=to-p.bet, prev=T.curBet; if(to>T.curBet){ const inc=to-T.curBet; if(inc>=T.minRaise) T.minRaise=inc; T.curBet=to; T.lastAgg=i; T.acted=[]; } postBet(T,i,add); p.last=p.allin?`All in ${p.total}`:(prev===0?`Bet ${to}`:`Raise to ${to}`); tlog(T,`${p.name} ${p.allin?'is all in for '+p.bet:(p.last.toLowerCase())}`); }
   T.acted.push(i); T.ver++;
   if(inHand(T).length===1) return awardFold(T);
   const nx=nextSeat(T,i,q=>!q.out&&!q.folded&&!q.allin); const done=T.pl.every(q=>q.out||q.folded||q.allin||(q.bet===T.curBet&&T.acted.includes(q.id)));
@@ -340,13 +340,13 @@ function nextHand(){ if(!T) return; if(T.mode2==='cash'){ const m=me(); if(m&&m.
 
 /* ---------- actions: local or on the host they change the table; a guest sends them to the host ---------- */
 function act(a,to){ if(!myTurn()) return; if(online()&&!net.isHost()){ net.send({t:'act',pid:myId,a,to,h:T.hands}); return; } doAct(myId,a,to); }
-function doAct(i,a,to){ if(!T||T.toAct!==i) return false; const L=legal(T,i); if(a==='fold'&&L.check) a='check'; let ok=actP(T,i,a,to); if(!ok&&a==='check') ok=actP(T,i,'call'); if(!ok&&a==='call') ok=actP(T,i,'check'); if(ok){ actT=0; aiT=0; broadcast(); } return ok; }
+function doAct(i,a,to){ if(!T||T.toAct!==i) return false; let ok=actP(T,i,a,to); if(!ok&&a==='check') ok=actP(T,i,'call'); if(!ok&&a==='call') ok=actP(T,i,'check'); if(ok){ actT=0; aiT=0; broadcast(); } return ok; }
 function aiMove(i){ const [a,to]=aiAct(T,i,Math.random); if(!actP(T,i,a,to)&&!actP(T,i,'check')&&!actP(T,i,'call')) actP(T,i,'fold'); actT=0; broadcast(); }
 
 /* ---------- the loop ---------- */
 function step(dt){ if(toastT>0){ toastT-=dt; if(toastT<=0) $('toast').classList.remove('on'); } if(bannerT>0){ bannerT-=dt; if(bannerT<=0) $('banner').classList.remove('on'); }
   if(peekT>0) peekT-=dt; if(!T||phase!=='play') return; sounds();
-  if(T.ver!==lastVer){ lastVer=T.ver; updateBoard(); if(T.toAct!==raiseFor){ raiseFor=T.toAct; if(myTurn()){ raiseTo=defaultRaise(); sfx.turn(); } } }
+  if(T.ver!==lastVer){ lastVer=T.ver; updateBoard(); const turnKey=T.hands+'|'+T.street+'|'+T.toAct+'|'+T.curBet; if(turnKey!==raiseFor){ const was=raiseFor; raiseFor=turnKey; if(myTurn()){ raiseTo=defaultRaise(); if(String(was).split('|')[2]!==String(T.toAct)||String(was).split('|')[1]!==T.street) sfx.turn(); } } }
   if(T.winner!=null&&T.street==='done'){ doneT+=dt; if(doneT>2.5) finish(); return; }
   const m=me(); if(!online()&&m&&m.out&&T.mode2!=='cash'){ doneT+=dt; if(doneT>2.4) finish(); return; }
   if(!isHostOrLocal()){ actT+=dt; return; }
@@ -432,10 +432,12 @@ function banner(big,sub,glow='#000',dur=2){ const b=$('banner'); b.innerHTML=`<s
 function clickAt(mx,my){ for(const b of BTN){ if(mx>=b.x&&mx<=b.x+b.w&&my>=b.y&&my<=b.y+b.h){ if(b.dis) return true; if(b.id==='slide'){ const L=legal(T,myId), f=clamp((mx-b.x-6)/(b.w-12),0,1); raiseTo=f>=.99?L.maxTo:clamp(Math.round((L.minTo+(L.maxTo-L.minTo)*f)/5)*5,L.minTo,L.maxTo); dragging=true; return true; } sfx.click(); onButton(b.id,b.arg); return true; } } return false; }
 let dragging=false;
 function onButton(id,arg){ if(!myTurn()) return; if(id==='fold') act('fold'); else if(id==='call'){ const L=legal(T,myId); act(L.check?'check':'call'); } else if(id==='raise') act('raise',raiseTo); else if(id==='up') adjRaise(1); else if(id==='dn') adjRaise(-1); else if(id==='pot') potSize(arg); else if(id==='allin') raiseTo=legal(T,myId).maxTo; }
-const sxy=ev=>{ const r=$('stage').getBoundingClientRect(); return [(ev.clientX-r.left)/r.width*W,(ev.clientY-r.top)/r.height*H]; };
-$('stage').addEventListener('mousedown',ev=>{ if(!T||phase!=='play') return; if(ev.target.closest('button')) return; audio(); const [mx,my]=sxy(ev); clickAt(mx,my); });
-addEventListener('mousemove',ev=>{ if(!dragging||!myTurn()) return; const b=BTN.find(q=>q.id==='slide'); if(!b) return; const [mx]=sxy(ev), L=legal(T,myId), f=clamp((mx-b.x-6)/(b.w-12),0,1); raiseTo=f>=.99?L.maxTo:clamp(Math.round((L.minTo+(L.maxTo-L.minTo)*f)/5)*5,L.minTo,L.maxTo); });
-addEventListener('mouseup',()=>{ dragging=false; });
+/* map a click onto the canvas itself (it can be letterboxed inside the stage, e.g. in full screen) */
+const sxy=ev=>{ const r=$('cv').getBoundingClientRect(); return [(ev.clientX-r.left)/r.width*W,(ev.clientY-r.top)/r.height*H]; };
+/* pointer events: mouse, touchpad taps, pen and touch all land here (mousedown alone missed some touchpads and touch screens) */
+$('stage').addEventListener('pointerdown',ev=>{ if(!T||phase!=='play') return; if(ev.button>0) return; if(ev.target.closest('button')) return; audio(); const [mx,my]=sxy(ev); if(clickAt(mx,my)) ev.preventDefault(); });
+addEventListener('pointermove',ev=>{ if(!dragging||!myTurn()) return; const b=BTN.find(q=>q.id==='slide'); if(!b) return; const [mx]=sxy(ev), L=legal(T,myId), f=clamp((mx-b.x-6)/(b.w-12),0,1); raiseTo=f>=.99?L.maxTo:clamp(Math.round((L.minTo+(L.maxTo-L.minTo)*f)/5)*5,L.minTo,L.maxTo); });
+addEventListener('pointerup',()=>{ dragging=false; }); addEventListener('pointercancel',()=>{ dragging=false; });
 $('stage').addEventListener('wheel',ev=>{ if(!myTurn()) return; ev.preventDefault(); adjRaise(ev.deltaY<0?1:-1); },{passive:false});
 addEventListener('keydown',e=>{ const tag=document.activeElement&&document.activeElement.tagName; if(tag==='INPUT'||tag==='SELECT'||tag==='TEXTAREA') return; if(['Space','ArrowUp','ArrowDown'].includes(e.code)) e.preventDefault(); audio();
   if(e.code==='KeyZ'&&!e.repeat){ toggleFs(); return; } if(e.code==='KeyV'&&!e.repeat){ setView3(!view3); return; }
@@ -836,6 +838,8 @@ const LBG=((location.pathname.split('/').pop()||'').replace(/\.html$/,'')||'game
 lbBoards([{id:'sng',name:'Sit & Gos won vs the pros',mode:'sum'},{id:'hu',name:'Heads-up wins vs the pros',mode:'sum'},{id:'cash',name:'Best cash game session',mode:'max'},{id:'online',name:'Online games won',mode:'sum'}]);
 { const _f=finish; finish=function(){ const was=phase, r=_f.apply(this,arguments); try{ if(was==='play'&&T){ const m=T.pl[myId]; if(online()){ if(T.winner===myId) lbPost('online',1,`${T.pl.length} players`); } else if(T.mode2==='cash'){ const pr=m.chips-buyins; if(pr>0) lbPost('cash',pr,`${sessHands} hands`); } else if(T.winner===myId) lbPost(T.mode2==='hu'?'hu':'sng',1,T.mode2==='hu'?T.pl.find(p=>p.id!==myId).name:`${T.pl.length} players`); } }catch(e){} return r; }; }
 
+/* read-only view of the table for automated tests (only on ?test pages) */
+if(/[?&]test\b/.test(location.search)) window.__pk=()=>{ if(!T) return null; const m=T.pl[myId]; return {turn:myTurn(),street:T.street,hand:T.hands,last:m.last,folded:m.folded,chips:m.chips,bet:m.bet,check:legal(T,myId).check,log:T.log[0]}; };
 })();
 </script>
 <script>window.RR_TOUCH={"stick": "none", "buttons": [["Fold", "KeyF"], ["Check<br>Call", "Space"], ["Bet<br>Raise", "KeyR"], ["Size +", "ArrowUp"], ["Size \u2212", "ArrowDown"], ["All in", "KeyA"], ["Cam", "KeyC"]], "sys": [["Enter", "Enter"], ["Leave", "Escape"], ["View", "KeyV"]]};</script>
