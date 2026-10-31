@@ -13,6 +13,8 @@ export default {
     if(url.pathname==='/tourney'||url.pathname==='/play'||url.pathname==='/daily'){ if(req.method==='OPTIONS') return new Response(null,{headers:CORS}); return env.SITE.get(env.SITE.idFromName('SITE')).fetch(req); }
     const lb=url.pathname.match(/^\/lb\/([a-z0-9]{2,16})$/);
     if(lb){ if(req.method==='OPTIONS') return new Response(null,{headers:CORS}); return env.BOARDS.get(env.BOARDS.idFromName(lb[1])).fetch(req); }
+    const pm=url.pathname.match(/^\/party\/([A-Z0-9]{4,8})$/);
+    if(pm){ if(req.headers.get('Upgrade')!=='websocket') return new Response('Expected a WebSocket',{status:426}); return env.PARTY.get(env.PARTY.idFromName(pm[1])).fetch(req); }
     if(url.pathname==='/chat'){
       if(req.headers.get('Upgrade')!=='websocket') return new Response('Expected a WebSocket',{status:426});
       return env.CHAT.get(env.CHAT.idFromName('SITE')).fetch(req);
@@ -360,4 +362,53 @@ export class Site {
       return J({err:'op'},400); }
     return J({err:'path'},404);
   }
+}
+
+/* Parties: a group of up to 8 that hangs out in the lobby or any game, votes on what to play,
+   and launches together. One object per party code. Members stay in the party for a few minutes
+   while their page changes (e.g. after GO everyone reloads into the new game). */
+const partyPage=g=>String(g||'').toLowerCase().replace(/[^a-z0-9-]/g,'').slice(0,16);
+const topVote=v=>{ const c={}; for(const g of Object.values(v||{})) c[g]=(c[g]||0)+1; const e=Object.entries(c).sort((a,b)=>b[1]-a[1]); return e.length?e[0][0]:null; };
+export class Party {
+  constructor(ctx){ this.ctx=ctx; this.s=ctx.storage; }
+  socks(){ return this.ctx.getWebSockets().filter(ws=>ws.deserializeAttachment()); }
+  send(ws,o){ try{ ws.send(JSON.stringify(o)); }catch(e){} }
+  all(o){ const s=JSON.stringify(o); for(const ws of this.socks()) try{ ws.send(s); }catch(e){} }
+  async st(){ return (await this.s.get('p'))||{leader:null,members:{},votes:{},pick:null,launch:null,chat:[]}; }
+  online(){ const on=new Set(); for(const ws of this.socks()) on.add(ws.deserializeAttachment().pid); return on; }
+  prune(p){ const on=this.online(), now=Date.now();
+    for(const [pid,m] of Object.entries(p.members)) if(!on.has(pid)&&now-(m.seen||0)>180000){ delete p.members[pid]; delete p.votes[pid]; }
+    if(!p.leader||!p.members[p.leader]){ const ids=Object.entries(p.members).sort((a,b)=>a[1].joined-b[1].joined).map(x=>x[0]); p.leader=ids.find(id=>on.has(id))||ids[0]||null; } }
+  view(p){ const on=this.online(); return {t:'state',leader:p.leader,pick:p.pick,launch:p.launch,votes:p.votes,chat:p.chat.slice(-30),
+    members:Object.entries(p.members).map(([pid,m])=>({pid,name:m.name,page:m.page,on:on.has(pid),joined:m.joined})).sort((a,b)=>a.joined-b.joined)}; }
+  async push(p){ this.prune(p); if(Object.keys(p.members).length) await this.s.put('p',p); else await this.s.delete('p'); this.all(this.view(p)); }
+  async fetch(req){ if(req.headers.get('Upgrade')!=='websocket') return new Response('Expected a WebSocket',{status:426});
+    const pair=new WebSocketPair(); const [client,server]=Object.values(pair); this.ctx.acceptWebSocket(server); return new Response(null,{status:101,webSocket:client}); }
+  async webSocketMessage(ws,raw){ if(typeof raw!=='string'||raw.length>1500) return; let m; try{ m=JSON.parse(raw); }catch(e){ return; }
+    if(m.t==='ping'){ this.send(ws,{t:'pong'}); return; }
+    const p=await this.st(), now=Date.now(); let a=ws.deserializeAttachment();
+    if(m.t==='hello'){ const pid=String(m.pid||'').replace(/[^a-z0-9]/gi,'').slice(0,24); if(pid.length<8) return;
+      this.prune(p); if(!p.members[pid]&&Object.keys(p.members).length>=8){ this.send(ws,{t:'full'}); try{ ws.close(4000,'full'); }catch(e){} return; }
+      a={pid,name:cleanName(m.name),ts:[]}; ws.serializeAttachment(a);
+      const mem=p.members[pid]||{joined:now}; mem.name=a.name; mem.page=partyPage(m.page)||'home'; mem.seen=now; p.members[pid]=mem; if(!p.leader) p.leader=pid;
+      this.send(ws,{t:'you',pid}); await this.push(p); return; }
+    if(!a) return; const me=a.pid;
+    if(!p.members[me]){ this.send(ws,{t:'gone'}); ws.serializeAttachment(null); try{ ws.close(1000,'gone'); }catch(e){} return; }
+    p.members[me].seen=now; const lead=p.leader===me||!this.online().has(p.leader);   /* if the leader is away, anyone can launch */
+    if(m.t==='where'){ p.members[me].page=partyPage(m.page)||'home'; await this.push(p); return; }
+    if(m.t==='vote'){ const g=partyPage(m.game); if(g) p.votes[me]=g; else delete p.votes[me]; await this.push(p); return; }
+    if(m.t==='go'&&lead){ const g=partyPage(m.game)||p.pick||topVote(p.votes); if(!g) return; p.pick=g; p.launch={game:g,ts:now,by:a.name}; p.votes={}; await this.push(p); this.all({t:'go',game:g,by:a.name}); return; }
+    if(m.t==='chat'){ let text=String(m.text||'').replace(/[\u0000-\u001f]/g,' ').replace(/\s+/g,' ').trim().slice(0,160); if(!text) return;
+      if(PERSONAL.test(text)){ this.send(ws,{t:'sys',text:"For your safety, don't share personal info."}); return; }
+      for(const r of CHAT_BAD){ r.lastIndex=0; text=text.replace(r,w=>'*'.repeat(w.length)); }
+      a.ts=(a.ts||[]).filter(x=>now-x<10000); if(a.ts.length>=6){ this.send(ws,{t:'sys',text:'Slow down a moment.'}); return; } a.ts.push(now); ws.serializeAttachment(a);
+      p.chat.push({name:a.name,text,ts:now}); p.chat=p.chat.slice(-30); await this.push(p); return; }
+    if(m.t==='leave'){ delete p.members[me]; delete p.votes[me]; if(p.leader===me) p.leader=null; ws.serializeAttachment(null); await this.push(p); try{ ws.close(1000,'left'); }catch(e){} return; }
+    if((m.t==='kick'||m.t==='promote')&&p.leader===me){ const k=String(m.pid||''); if(!k||k===me||!p.members[k]) return;
+      if(m.t==='promote') p.leader=k;
+      else { delete p.members[k]; delete p.votes[k]; for(const s of this.socks()) if(s.deserializeAttachment().pid===k){ this.send(s,{t:'kicked'}); s.serializeAttachment(null); try{ s.close(1000,'kicked'); }catch(e){} } }
+      await this.push(p); return; } }
+  async webSocketClose(ws){ const a=ws.deserializeAttachment(); try{ ws.serializeAttachment(null); ws.close(); }catch(e){}
+    if(a){ const p=await this.st(); if(p.members[a.pid]) p.members[a.pid].seen=Date.now(); await this.push(p); } }
+  async webSocketError(ws){ return this.webSocketClose(ws); }
 }

@@ -2,7 +2,8 @@
    in a game it is a 💬 button that opens a panel. Typing in the chat never moves your player. */
 (function(){
   if(window.RRC) return;
-  const URL_WS='wss://rink-rivals-rooms.mitchellchad2026.workers.dev/chat';
+  /* a ?server= override (used by local tests) keeps test pages off the live chat */
+  const URL_WS=(new URLSearchParams(location.search).get('server')||'wss://rink-rivals-rooms.mitchellchad2026.workers.dev').replace(/^http/,'ws')+'/chat';
   /* automated tests open the pages from disk or with ?test: never connect those to the real chat */
   const OFF=/[?&]test\b/.test(location.search)||(location.protocol==='file:'&&!/[?&]chat\b/.test(location.search));
   let GAME=((location.pathname.split('/').pop()||'').replace(/\.html$/,'')||'home').toLowerCase().replace(/[^a-z0-9]/g,'')||'home'; if(GAME==='index') GAME='home';
@@ -94,10 +95,10 @@
   let popInv=false;
   function mkPop(){ if(pop) return; pop=document.createElement('div'); pop.id='rrcPop'; pop.setAttribute('role','status'); document.body.appendChild(pop); pop.addEventListener('click',e=>{ if(popInv) return; pop.classList.remove('on'); toggle(true); }); }
   /* someone invited you into their online room: a big card with Join */
-  function inviteCard(m){ mkPop(); popInv=true; ping(); const gn=GN[m.game.replace(/[^a-z0-9]/g,'')]||m.game;
-    pop.classList.add('inv'); pop.innerHTML=`<b style="color:hsl(${hue(m.from)},85%,70%)">${esc(m.from)}</b> invited you to play <b>${esc(gn)}</b>!<div class="ib"><button class="y">Join game</button><button class="n">No thanks</button></div>`;
+  function inviteCard(m){ mkPop(); popInv=true; ping(); const party=m.game==='party', gn=party?'their party':(GN[m.game.replace(/[^a-z0-9]/g,'')]||m.game);
+    pop.classList.add('inv'); pop.innerHTML=party?`🎉 <b style="color:hsl(${hue(m.from)},85%,70%)">${esc(m.from)}</b> invited you to <b>their party</b>!<div class="ib"><button class="y">Join party</button><button class="n">No thanks</button></div>`:`<b style="color:hsl(${hue(m.from)},85%,70%)">${esc(m.from)}</b> invited you to play <b>${esc(gn)}</b>!<div class="ib"><button class="y">Join game</button><button class="n">No thanks</button></div>`;
     const close=()=>{ popInv=false; pop.classList.remove('on','inv'); clearTimeout(popT); };
-    pop.querySelector('.y').onclick=ev=>{ ev.stopPropagation(); close(); location.href=`${m.game==='home'?'./':m.game}?room=${encodeURIComponent(m.room)}`; };
+    pop.querySelector('.y').onclick=ev=>{ ev.stopPropagation(); close(); if(party){ if(window.RRPARTY) RRPARTY.join(m.room); else location.href=`./?party=${encodeURIComponent(m.room)}`; return; } location.href=`${m.game==='home'?'./':m.game}?room=${encodeURIComponent(m.room)}`; };
     pop.querySelector('.n').onclick=ev=>{ ev.stopPropagation(); close(); };
     pop.classList.add('on'); clearTimeout(popT); popT=setTimeout(close,45000);
     if(document.hidden){ try{ if(window.Notification&&Notification.permission==='granted') new Notification(`${m.from} invited you to ${gn}`,{body:'Open Rink Rivals to join',tag:'rrinv'}); }catch(e){} } }

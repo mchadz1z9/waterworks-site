@@ -112,6 +112,9 @@ body.rrHasBanner #rrTourBtn{top:48px}
     pid };
   window.RRSITE=RRSITE;
 
+  /* parties work on every page */
+  if(PAGE!=='admin'&&!window.RRPARTY&&!document.querySelector('script[src$="party.js"]')){ const sc=document.createElement('script'); sc.src='party.js'; sc.defer=true; (document.head||document.documentElement).appendChild(sc); }
+
   /* count play time: a heartbeat every minute while the page is open and visible */
   function beat(){ if(OFF||PAGE==='admin'||document.visibilityState!=='visible') return;
     fetch(SERVER+'/play',{method:'POST',headers:{'content-type':'application/json'},keepalive:true,body:JSON.stringify({pid:pid(),name:ls.get('rrOnlineName')||'Player',game:PAGE||'home'})}).catch(()=>{}); }
