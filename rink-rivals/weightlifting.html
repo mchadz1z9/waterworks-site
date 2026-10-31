@@ -42,6 +42,11 @@ kbd{ font:inherit; font-size:13px; background:var(--ledbg); color:#fff; border-r
 .wod div{ border:2px solid var(--line); border-radius:12px; padding:8px 12px } .wod div.done{ border-color:var(--good) }
 .wod b{ font-size:18px } .wod small{ display:block; color:var(--muted); font-size:14px }
 .split{ display:grid; grid-template-columns:1.3fr 1fr; gap:16px } @media(max-width:760px){ .split{ grid-template-columns:1fr } }
+.fxrow{display:grid;grid-template-columns:repeat(auto-fit,minmax(300px,1fr));gap:14px;margin-top:12px;padding:10px 12px;border:2px solid #a855f7;border-radius:14px;background:rgba(168,85,247,.09)}
+.fxrow .pills button{font:inherit;font-weight:800} .fxrow button.like{background:#2563eb;border-color:#2563eb;color:#fff} .fxrow button.like.on{background:#22c55e;border-color:#22c55e;color:#052e16}
+.boosts{display:flex;flex-wrap:wrap;gap:8px;margin-top:8px} .boosts button{font:inherit;font-weight:800;font-size:15px;padding:7px 12px;border-radius:12px;border:2px solid #27345a;background:#1e293b;color:#fff;cursor:pointer;text-align:left}
+.boosts button.act{background:#facc15;border-color:#facc15;color:#111} .boosts button:disabled{opacity:.55;cursor:default} .boosts button.act:disabled{opacity:1} .boosts small{display:block;font-size:12px;font-weight:600;opacity:.85}
+#auraPills button.lock{opacity:.5}
 #netRow{display:flex;flex-wrap:wrap;align-items:center;gap:8px;margin:12px 0 4px;padding:8px 10px;border:2px solid #22c55e;border-radius:14px;background:rgba(34,197,94,.1)}
 #netRow button{font:inherit;font-weight:800;font-size:16px;padding:6px 12px;border-radius:999px;border:2px solid #27345a;background:#1e293b;color:#fff;cursor:pointer}
 #netRow button.gold{background:#22c55e;border-color:#22c55e;color:#052e16} #netRow #netSt{font-size:14px;flex:1 1 220px}
@@ -87,6 +92,12 @@ kbd{ font:inherit; font-size:13px; background:var(--ledbg); color:#fff; border-r
           <div class="wod" id="wod"></div>
           <div class="muted" id="wodMsg" style="font-size:14px;margin-top:6px"></div>
         </div>
+      </div>
+      <div class="fxrow">
+        <div><h3 style="margin:0 0 6px">👍 Like the gym, get free boosts</h3>
+          <div class="pills"><button id="likeBtn" class="like">👍 Like</button><span class="muted" id="likeN"></span></div>
+          <div class="boosts" id="boosts"></div></div>
+        <div><h3 style="margin:0 0 6px">✨ Aura</h3><div class="pills" id="auraPills"></div><div class="muted" id="auraMsg" style="font-size:13px;margin-top:4px"></div></div>
       </div>
       <div class="netrow" id="netRow"><b>🌐 Work out together</b>
         <button class="gold" id="netAny">Play with anyone</button><button id="netParty">👥 Friends / party (room code)</button>
@@ -188,7 +199,7 @@ function endSet(reason){ if(!X||X.ended) return; X.ended=true; SV.sets+=X.reps?1
 function restart(){ if(!PL.at) return; const s=SK[PL.at]; X={s,reps:0,combo:0,best:0,stam:1,b:0,state:'aim',t:0,gained:0,perfects:0,grade:'',gradeT:0,fail:false}; newNeedle(); }
 /* the button / Space / click during a set */
 function hit(){ if(!X) return; audio(); if(X.ended){ restart(); return; } if(X.state!=='aim') return;
-  const u=.5+.5*Math.sin(X.ph), d=Math.abs(u-X.zone.c), s=X.s, l=loadOf(s), cost=.07+.12*Math.min(l,2.5);
+  const u=.5+.5*Math.sin(X.ph), d=Math.abs(u-X.zone.c), s=X.s, l=loadOf(s), cost=(.07+.12*Math.min(l,2.5))*(boostOn('trn')?.5:1);
   let grade; if(d<=X.zone.pw/2) grade='PERFECT'; else if(d<=X.zone.w/2) grade='GOOD'; else grade='MISS';
   if(grade==='MISS'&&X.stam-cost*2.2<=0&&spotter()&&!X.spotUsed){ X.spotUsed=true; X.stam=.35; floaters.push({text:`🤝 ${spotter().name} spotted you!`,t:0,size:26,col:'#4ade80'}); netEv(`spotted a rep on the ${s.n}`); }
   if(grade==='MISS'&&X.stam-cost*2.2<=0){ X.state='fail'; X.t=0; X.grade='FAILED'; X.gradeT=1.2; X.combo=0; return; }
@@ -199,12 +210,12 @@ function hit(){ if(!X) return; audio(); if(X.ended){ restart(); return; } if(X.s
 function repDone(){ const s=X.s, w=weightOf(s), mult=X.lastGrade==='PERFECT'?1.6:X.lastGrade==='GOOD'?1:.55, fat=Math.max(.35,1-X.reps*.05);
   X.reps++; SV.reps++; if(X.lastGrade==='PERFECT') SV.perfect=(SV.perfect||0)+1; if(s.t==='w') SV.vol+=w*(s.each?2:1);
   const inc=(s.t==='w'?(w*(s.each?2:1)/110)*s.gain*.8:s.gain*(1+loadOf(s)))*mult*fat*(1+Math.min(X.combo,10)*.05);
-  if(window.RRSTR){ if(owner()){ RRSTR.add(1); X.gained+=10000; } else { X.gained+=inc; RRSTR.add(inc); } }   /* the owner gets +10,000 a rep */
+  const bx=boostOn('str')?2:1; if(window.RRSTR){ if(owner()){ for(let i=0;i<bx;i++) RRSTR.add(1); X.gained+=10000*bx; } else { X.gained+=inc*bx; RRSTR.add(inc*bx); } }   /* the owner gets +10,000 a rep */
   /* records: heaviest weight moved, or most reps in one set */
   const best=SV.best[s.k]||0;
   if(s.t==='w'&&w>best){ SV.best[s.k]=w; netEv(`hit a PR: ${s.n} ${w.toLocaleString()} lb${s.each?' each':''} 🏆`); banner('NEW PERSONAL RECORD!',`${s.n} · ${w} lb${s.each?' each':''}`,'#fde047'); sfx.pr(); }
   if(s.t==='b'&&X.reps>best){ SV.best[s.k]=X.reps; if(best>0&&X.reps===best+1){ netEv(`set a record: ${X.reps} ${s.n.toLowerCase()} 🏆`); banner('NEW RECORD!',`${X.reps} ${s.n.toLowerCase()} in one set`,'#fde047'); sfx.pr(); } }
-  saveSV(); wodRep(s.k,w,X.lastGrade==='PERFECT'); refreshStats(); }
+  saveSV(); wodRep(s.k,w,X.lastGrade==='PERFECT'); if(boostOn('trn')) wodRep(s.k,w,X.lastGrade==='PERFECT'); refreshStats(); }
 
 /* ---------- walking ---------- */
 const COL=[]; /* round obstacles {x,z,r} */
@@ -416,7 +427,7 @@ function drawHUD(){ ctx.clearRect(0,0,HW,HH); const st=window.RRSTR?RRSTR.state(
     if(X.gradeT>0&&X.grade){ const a=clamp(X.gradeT,0,1), col=X.grade==='PERFECT'?'#fbbf24':X.grade==='GOOD'?'#4ade80':'#f87171'; ctx.globalAlpha=a; txt(X.grade==='MISS'?'GRIND!':X.grade+'!',HW/2,HH/2-40-(1-a)*30,X.grade==='PERFECT'?64:50,col); ctx.globalAlpha=1; } }
   floaters.forEach((f,i)=>{ ctx.globalAlpha=clamp(1.4-f.t,0,1); txt(f.text,HW/2+140,180-f.t*60-i*4,f.size,f.col); ctx.globalAlpha=1; });
   if(bannerT>0){ ctx.globalAlpha=clamp(bannerT,0,1); rrct(HW/2-300,150,600,92,16,'rgba(5,10,24,.88)'); txt(bannerTxt[0],HW/2,196,38,bannerCol); txt(bannerTxt[1],HW/2,228,19,'#e2e8f0'); ctx.globalAlpha=1; }
-  netHUD();
+  drawAuras(); netHUD(); boostHUD();
   const done=WOD.tasks.filter(t=>t.got>=t.n).length; txt(`WORKOUT ${done}/3${WOD.done?' ✓':''}`,HW-18,30,19,WOD.done?'#4ade80':'#cbd5e1','right');
   txt('STRENGTH '+st.level.toLocaleString()+(st.badge?'  '+st.badge:''),18,30,19,'#e2e8f0','left'); }
 
@@ -484,7 +495,7 @@ function netEv(text){ if(NET&&NET.on) NET.send({t:'ev',text}); }
 function cheer(){ if(!NET||!NET.on) return; NET.send({t:'cheer'}); feedAdd('👏 You cheered everyone on','#4ade80'); }
 function netState(){ const own=owner(), bf=window.RRSTR?RRSTR.muscle():1, s=PL.at?SK[PL.at]:null;
   return {t:'g',x:+PL.x.toFixed(2),z:+PL.z.toFixed(2),y:+PL.yaw.toFixed(2),v:+PL.spd.toFixed(2),at:PL.at||'',b:X?+X.b.toFixed(2):0,st:X?(X.ended?'end':X.state):'',lg:X&&X.lastGrade||'',
-    o:own?1:0,bf:+bf.toFixed(2),wt:s?weightOf(s):0,r:X?X.reps:0,c:X?X.combo:0,lv:window.RRSTR?RRSTR.level:0}; }
+    o:own?1:0,bf:+bf.toFixed(2),wt:s?weightOf(s):0,r:X?X.reps:0,c:X?X.combo:0,lv:window.RRSTR?RRSTR.level:0,au:FX.aura,bs:(boostOn('str')?1:0)+(boostOn('trn')?2:0)}; }
 function netStep(dt){ for(const f of feed) f.age+=dt; while(feed.length&&feed[0].age>9) feed.shift();
   for(const o of OT.values()){ const k=Math.min(1,dt*10); o.x=lerp(o.x,o.tx,k); o.z=lerp(o.z,o.tz,k); o.b=lerp(o.b,o.tb,Math.min(1,dt*14));
     let dy=o.ty-o.yaw; while(dy>PI) dy-=2*PI; while(dy<-PI) dy+=2*PI; o.yaw+=dy*k; o.walk+=dt*(o.v>1.2?11:7)*Math.min(1,o.v);
@@ -493,7 +504,7 @@ function netStep(dt){ for(const f of feed) f.age+=dt; while(feed.length&&feed[0]
 function netMsg(m){ if(!m.from) return; let o=OT.get(m.from);
   if(m.t==='g'){ const p=(NET.peers||[]).find(q=>q.id===m.from)||{};
     if(!o){ o={id:m.from,name:p.name||'Player',seat:m.seat||p.seat||1,x:m.x,z:m.z,yaw:m.y,walk:0,b:0}; OT.set(m.from,o); }
-    Object.assign(o,{tx:m.x,tz:m.z,ty:m.y,v:m.v,at:SK[m.at]?m.at:null,tb:m.b,st:m.st,lg:m.lg,o:m.o,bf:m.bf,wt:m.wt,r:m.r,c:m.c,lv:m.lv});
+    Object.assign(o,{tx:m.x,tz:m.z,ty:m.y,v:m.v,at:SK[m.at]?m.at:null,tb:m.b,st:m.st,lg:m.lg,o:m.o,bf:m.bf,wt:m.wt,r:m.r,c:m.c,lv:m.lv,au:AURAS.some(a=>a.k===m.au)?m.au:'none',bs:m.bs|0});
     /* if they took my station at the same moment, the earlier seat keeps it */
     if(o.at&&o.at===PL.at&&o.seat<(NET.me?NET.me.seat:0)){ leave(); banner('STATION TAKEN',`${o.name} got there first`,'#fb923c'); }
     return; }
@@ -522,8 +533,77 @@ if(window.RRO){ NET=RRO.init({game:'weightlifting',maxPlayers:8,minPlayers:1,dro
     onMsg:netMsg, onPeers:netPeers, onEnd:why=>{ OT.clear(); feedAdd(why==='left'?'You left the online gym':'Online gym: '+why,'#f87171'); netUI(); } });
   $('netAny').onclick=()=>NET.quick(); $('netParty').onclick=()=>NET.open(); $('netInv').onclick=()=>NET.invite(); $('netCheer').onclick=cheer; $('netLeave').onclick=()=>{ NET.leave(); netUI(); }; }
 else $('netRow').style.display='none';
+
+/* ---------- likes, free boosts and auras ----------
+   Liking the gym unlocks two free boosts: 2x Strength (every rep gives double strength) and 2x Training
+   (sets cost half the energy and every rep counts twice toward the workout of the day). Each lasts 15 minutes,
+   then recharges for 45 minutes. Liking also gives both right away, and unlocks the Rainbow aura. */
+const FXK='rrGymFx', BOOST_LEN=15*60000, BOOST_CD=45*60000;
+const FX=(()=>{ try{ return Object.assign({liked:false,aura:'none',b:{str:{until:0,ready:0},trn:{until:0,ready:0}}},JSON.parse(localStorage.getItem(FXK)||'{}')); }catch(e){ return {liked:false,aura:'none',b:{str:{until:0,ready:0},trn:{until:0,ready:0}}}; } })();
+FX.b=FX.b||{}; for(const k of ['str','trn']) FX.b[k]=FX.b[k]||{until:0,ready:0};
+const saveFX=()=>{ try{ localStorage.setItem(FXK,JSON.stringify(FX)); }catch(e){} };
+const BOOSTS=[{k:'str',n:'2x Strength',ic:'💪',d:'double strength from every rep'},{k:'trn',n:'2x Training',ic:'⚡',d:'half the energy, reps count double'}];
+function boostOn(k){ return FX.b[k].until>Date.now(); }
+function claimBoost(k){ const b=FX.b[k], now=Date.now(); if(!FX.liked){ banner('LIKE THE GYM FIRST','Tap 👍 Like to unlock free boosts','#60a5fa'); return; } if(b.until>now||b.ready>now) return;
+  b.until=now+BOOST_LEN; b.ready=b.until+BOOST_CD; saveFX(); const B=BOOSTS.find(x=>x.k===k); banner(`${B.ic} ${B.n.toUpperCase()} ON!`,`15 minutes · ${B.d}`,'#facc15'); if(sfx.pr) sfx.pr(); renderFX(); }
+const mmss=ms=>{ const t=Math.max(0,Math.ceil(ms/1000)); return `${Math.floor(t/60)}:${String(t%60).padStart(2,'0')}`; };
+const LIKE_API=(new URLSearchParams(location.search).get('server')||'wss://rink-rivals-rooms.mitchellchad2026.workers.dev').replace(/^ws/,'http')+'/like';
+const OFFLINE=TEST&&!/[?&]server=/.test(location.search)||location.protocol==='file:'&&!/[?&]server=/.test(location.search);
+let likeN=null;
+const myPid=()=>{ try{ let p=localStorage.getItem('rrPid'); if(!p||p.length<8){ p=Array.from({length:12},()=>'abcdefghijklmnopqrstuvwxyz0123456789'[Math.floor(Math.random()*36)]).join(''); localStorage.setItem('rrPid',p); } return p; }catch(e){ return ''; } };
+function likeCall(op){ if(OFFLINE) return Promise.resolve(null); return fetch(LIKE_API,{method:'POST',headers:{'content-type':'application/json'},body:JSON.stringify({op,game:'weightlifting',pid:myPid()})}).then(r=>r.json()).then(j=>{ if(j&&j.ok){ likeN=j.n; renderFX(); } return j; }).catch(()=>null); }
+function toggleLike(){ audio(); if(FX.liked){ FX.liked=false; saveFX(); likeCall('unlike'); if(likeN) likeN--; renderFX(); return; }
+  FX.liked=true; const now=Date.now(); for(const k of ['str','trn']){ const b=FX.b[k]; if(b.until<=now){ b.until=now+BOOST_LEN; b.ready=b.until+BOOST_CD; } } saveFX();
+  if(likeN!=null) likeN++; likeCall('like'); banner('THANKS FOR THE LIKE! 👍','2x Strength + 2x Training for 15 minutes · Rainbow aura unlocked','#4ade80'); if(sfx.pr) sfx.pr(); renderFX(); }
+/* auras: glow around your character (everyone in an online gym sees it). Stronger lifters unlock more. */
+const AURAS=[{k:'none',n:'None',ic:'⭕',need:0},{k:'fire',n:'Fire',ic:'🔥',need:0,c:['#f97316','#facc15','#ef4444']},{k:'ice',n:'Ice',ic:'❄️',need:10,c:['#38bdf8','#e0f2fe','#60a5fa']},
+  {k:'electric',n:'Lightning',ic:'⚡',need:25,c:['#facc15','#fef9c3','#a78bfa']},{k:'toxic',n:'Toxic',ic:'☢️',need:40,c:['#84cc16','#d9f99d','#22c55e']},
+  {k:'shadow',n:'Shadow',ic:'🌑',need:60,c:['#7c3aed','#1e1b4b','#a855f7']},{k:'gold',n:'Gold',ic:'🏆',need:100,c:['#fbbf24','#fef3c7','#d97706']},
+  {k:'rainbow',n:'Rainbow',ic:'🌈',like:true},{k:'galaxy',n:'Galaxy',ic:'🌌',own:true,c:['#c084fc','#f0abfc','#60a5fa']}];
+function auraOk(a){ if(owner()) return true; const st=window.RRSTR?RRSTR.state():{level:0,tier:''}; if(st.tier==='VIP'&&!a.own) return true; if(a.own) return false; if(a.like) return FX.liked; return st.level>=a.need; }
+function auraWhy(a){ return a.own?'Owner only':a.like?'Like the gym to unlock':`Needs ${a.need} strength`; }
+function pickAura(k){ const a=AURAS.find(x=>x.k===k); if(!a) return; if(!auraOk(a)){ $('auraMsg').textContent=`🔒 ${a.n}: ${auraWhy(a)}.`; return; } FX.aura=k; saveFX(); netT=0; renderFX(); }
+const setH=(id,h)=>{ const e=$(id); if(e.__h!==h){ e.__h=h; e.innerHTML=h; } };
+function renderFX(){ const now=Date.now();
+  { const lb=$('likeBtn'), c='like'+(FX.liked?' on':''), t=FX.liked?'👍 Liked!':'👍 Like'; if(lb.className!==c) lb.className=c; if(lb.textContent!==t) lb.textContent=t; }
+  $('likeN').textContent=likeN!=null?`${likeN.toLocaleString()} like${likeN===1?'':'s'}`:(FX.liked?'Thanks!':'Like it to unlock free boosts');
+  setH('boosts',BOOSTS.map(B=>{ const b=FX.b[B.k], on=b.until>now, cd=!on&&b.ready>now;
+    return `<button data-boost="${B.k}" class="${on?'act':''}" ${(on||cd||!FX.liked)?'disabled':''}>${B.ic} ${B.n}<small>${on?`ACTIVE · ${mmss(b.until-now)} left`:cd?`Recharging · ready in ${mmss(b.ready-now)}`:FX.liked?`Free! Tap to start (15 min) · ${B.d}`:'🔒 Like the gym to unlock'}</small></button>`; }).join(''));
+  if(!auraOk(AURAS.find(a=>a.k===FX.aura)||AURAS[0])) FX.aura='none';
+  setH('auraPills',AURAS.map(a=>{ const ok=auraOk(a); return `<button data-aura="${a.k}" class="${FX.aura===a.k?'on':''} ${ok?'':'lock'}" title="${ok?a.n:auraWhy(a)}">${ok?'':'🔒 '}${a.ic} ${a.n}</button>`; }).join(''));
+  const cur=AURAS.find(a=>a.k===FX.aura); if(!$('auraMsg').textContent.startsWith('🔒')||FX.aura!=='none') $('auraMsg').textContent=FX.aura==='none'?'Pick an aura — it glows around you, and people in your online gym see it too.':`${cur.ic} ${cur.n} aura on.`; }
+$('likeBtn').onclick=toggleLike;
+$('boosts').addEventListener('click',e=>{ const b=e.target.closest('[data-boost]'); if(b) claimBoost(b.dataset.boost); });
+$('auraPills').addEventListener('click',e=>{ const b=e.target.closest('[data-aura]'); if(b){ $('auraMsg').textContent=''; pickAura(b.dataset.aura); } });
+setInterval(()=>{ const was=renderFX.sig, sig=['str','trn'].map(k=>boostOn(k)?1:0).join(); if(was&&was!==sig&&sig==='0,0') feedAdd('Boosts ran out — they recharge in 45 minutes','#93a0bd'); renderFX.sig=sig; renderFX(); },1000);
+addEventListener('rrstr-change',renderFX);
+/* where a body is, for the aura: [x, waist y, z, height] */
+function bodySpot(at,x,z){ if(at){ const s=SK[at], k=s.k; return [s.x,k==='pullup'?1.75:k==='bench'?.75:k==='pushup'||k==='situp'?.35:.95,s.z,k==='bench'||k==='pushup'||k==='situp'?1.1:1.9]; } return [x,.95,z,1.9]; }
+function drawAura(k,spot,seed,boosted){ const a=AURAS.find(x=>x.k===k); if((!a||k==='none')&&!boosted) return;
+  const c=scr([spot[0],spot[1],spot[2]]), top=scr([spot[0],spot[1]+spot[3]*.62,spot[2]]), ft=scr([spot[0],Math.max(0,spot[1]-spot[3]*.5),spot[2]]); if(!c||!top||!ft||c[2]<=0) return;
+  const h=Math.max(20,Math.abs(ft[1]-top[1])), wdt=h*.42, t=T0+seed;
+  ctx.save(); ctx.globalCompositeOperation='lighter';
+  if(a&&k!=='none'){ const col=i=>k==='rainbow'?`hsl(${(t*120+i*120)%360},95%,60%)`:a.c[i%a.c.length];
+    /* rim glow: clear in the middle so you can still see the lifter */
+    const g=ctx.createRadialGradient(c[0],c[1],wdt*.35,c[0],c[1],wdt*1.25); g.addColorStop(0,'rgba(0,0,0,0)'); g.addColorStop(.55,'rgba(0,0,0,0)'); g.addColorStop(.8,col(0)); g.addColorStop(1,'rgba(0,0,0,0)');
+    ctx.globalAlpha=.32+.1*Math.sin(t*4); ctx.fillStyle=g; ctx.beginPath(); ctx.ellipse(c[0],c[1],wdt*1.25,h*.72,0,0,PI*2); ctx.fill();
+    /* ring on the floor */ ctx.globalAlpha=.55; ctx.strokeStyle=col(0); ctx.lineWidth=Math.max(2,h/60); ctx.beginPath(); ctx.ellipse(ft[0],ft[1],wdt*1.1,wdt*.3,0,0,PI*2); ctx.stroke();
+    /* rising sparks / flames / flakes */
+    const n=k==='galaxy'?26:18;
+    for(let i=0;i<n;i++){ const ph=((t*(k==='fire'?.9:.55)+i*.6180339)%1), ang=i*2.399+t*(k==='galaxy'?1.2:.3), rx=Math.cos(ang)*wdt*(.75+.35*Math.sin(i*1.7)), y=ft[1]-ph*h*1.15;
+      const sz=Math.max(1.5,h/(k==='fire'?28:45))*(1-ph*.6); ctx.globalAlpha=(1-ph)*.9; ctx.fillStyle=col(i);
+      if(k==='ice'){ ctx.save(); ctx.translate(c[0]+rx,y); ctx.rotate(t+i); ctx.fillRect(-sz,-sz*.25,sz*2,sz*.5); ctx.fillRect(-sz*.25,-sz,sz*.5,sz*2); ctx.restore(); }
+      else if(k==='galaxy'&&i%3===0){ ctx.beginPath(); ctx.arc(c[0]+rx,y,sz*.7,0,PI*2); ctx.fill(); ctx.globalAlpha*=.5; ctx.fillRect(c[0]+rx-sz*2,y-.5,sz*4,1); ctx.fillRect(c[0]+rx-.5,y-sz*2,1,sz*4); }
+      else { ctx.beginPath(); ctx.ellipse(c[0]+rx,y,sz*(k==='fire'?.8:.6),sz*(k==='fire'?1.6:.6),0,0,PI*2); ctx.fill(); } }
+    if(k==='electric'){ ctx.globalAlpha=.85; ctx.lineWidth=Math.max(1.5,h/90); for(let j=0;j<2;j++){ if(Math.sin(t*23+j*5)<.2) continue; ctx.strokeStyle=col(j); ctx.beginPath();
+        let px=c[0]+(j?-1:1)*wdt*.9, py=top[1]; ctx.moveTo(px,py); for(let q=0;q<6;q++){ px=c[0]+(j?-1:1)*wdt*(.7+.4*Math.sin(t*37+q*3.1)); py+=h/6; ctx.lineTo(px,py); } ctx.stroke(); } } }
+  if(boosted){ ctx.globalAlpha=.5+.3*Math.sin(t*6); ctx.strokeStyle='#facc15'; ctx.lineWidth=Math.max(2,h/50); ctx.beginPath(); ctx.ellipse(ft[0],ft[1],wdt*1.35,wdt*.38,0,0,PI*2); ctx.stroke(); }
+  ctx.restore(); }
+function drawAuras(){ drawAura(FX.aura,bodySpot(PL.at,PL.x,PL.z),0,boostOn('str')||boostOn('trn')); for(const o of OT.values()) drawAura(o.au||'none',bodySpot(o.at,o.x,o.z),o.seat*1.7,!!o.bs); }
+function boostHUD(){ const now=Date.now(), on=BOOSTS.filter(B=>FX.b[B.k].until>now); on.forEach((B,i)=>txt(`${B.ic} ${B.n} · ${mmss(FX.b[B.k].until-now)}`,HW-18,82+i*22,17,'#facc15','right')); }
+renderFX(); likeCall('get');
 /* read-only view for automated tests (only on ?test pages) */
-if(TEST) window.__gym=()=>({at:PL.at,x:PL.x,z:PL.z,near:(nearest()||{}).k||null,set:X?{reps:X.reps,state:X.state,ended:!!X.ended,combo:X.combo,stam:X.stam,b:X.b,zone:X.zone,u:.5+.5*Math.sin(X.ph)}:null,weight:PL.at?weightOf(SK[PL.at]):null,wod:WOD.tasks.map(t=>t.got),best:SV.best,online:!!(NET&&NET.on),others:[...OT.values()].map(o=>({name:o.name,x:o.x,z:o.z,at:o.at,r:o.r})),feed:feed.map(f=>f.t),spotter:(spotter()||{}).name||null});
+if(TEST) window.__gym=()=>({at:PL.at,x:PL.x,z:PL.z,near:(nearest()||{}).k||null,set:X?{reps:X.reps,state:X.state,ended:!!X.ended,combo:X.combo,stam:X.stam,b:X.b,zone:X.zone,u:.5+.5*Math.sin(X.ph)}:null,weight:PL.at?weightOf(SK[PL.at]):null,wod:WOD.tasks.map(t=>t.got),best:SV.best,online:!!(NET&&NET.on),others:[...OT.values()].map(o=>({name:o.name,x:o.x,z:o.z,at:o.at,r:o.r})),feed:feed.map(f=>f.t),spotter:(spotter()||{}).name||null,fx:{liked:FX.liked,aura:FX.aura,str:boostOn('str'),trn:boostOn('trn'),likes:likeN}});
 
 renderWOD(); refreshStats(); requestAnimationFrame(frame);
 })();

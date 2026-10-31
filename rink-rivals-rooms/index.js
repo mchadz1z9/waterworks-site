@@ -10,7 +10,7 @@ export default {
       return env.ROOMS.get(id).fetch(req);
     }
     if(url.pathname==='/site'){ if(req.method==='OPTIONS') return new Response(null,{headers:CORS}); return env.SITE.get(env.SITE.idFromName('SITE')).fetch(req); }
-    if(url.pathname==='/tourney'||url.pathname==='/play'||url.pathname==='/daily'){ if(req.method==='OPTIONS') return new Response(null,{headers:CORS}); return env.SITE.get(env.SITE.idFromName('SITE')).fetch(req); }
+    if(url.pathname==='/tourney'||url.pathname==='/play'||url.pathname==='/daily'||url.pathname==='/like'){ if(req.method==='OPTIONS') return new Response(null,{headers:CORS}); return env.SITE.get(env.SITE.idFromName('SITE')).fetch(req); }
     const lb=url.pathname.match(/^\/lb\/([a-z0-9]{2,16})$/);
     if(lb){ if(req.method==='OPTIONS') return new Response(null,{headers:CORS}); return env.BOARDS.get(env.BOARDS.idFromName(lb[1])).fetch(req); }
     const pm=url.pathname.match(/^\/party\/([A-Z0-9]{4,8})$/);
@@ -295,6 +295,12 @@ export class Site {
       r.s+=inc; r.l=now; r.n=name; map[pid]=r; await this.s.put(k,map); await this.trackDay(d);
       if(inc){ const all=(await this.s.get('pta'))||{}, a=all[pid]||{n:name,s:0}; a.s+=inc; a.n=name; all[pid]=a; await this.s.put('pta',all); }
       return J({ok:true,s:Math.round(r.s)}); }
+    /* likes: one per player per game; the count is public */
+    if(url.pathname==='/like'){ let m={}; try{ m=await req.json(); }catch(e){}
+      const pid=cleanPid(m.pid), game=String(m.game||'').replace(/[^a-z0-9]/g,'').slice(0,16); if(!game) return J({err:'bad'},400);
+      const k='lk:'+game, map=(await this.s.get(k))||{};
+      if((m.op==='like'||m.op==='unlike')&&pid.length>=8){ if(m.op==='like') map[pid]=1; else delete map[pid]; await this.s.put(k,map); }
+      return J({ok:true,n:Object.keys(map).length,me:!!(pid&&map[pid])}); }
     if(url.pathname==='/daily'){ let m={}; try{ m=await req.json(); }catch(e){}
       const pid=cleanPid(m.pid), name=cleanName(m.name), d=this.day(); const c=await this.s.get('chal'); const live=c&&c.day===d?c:null;
       if(m.op==='get'){ const b=await this.board(d), i=b.findIndex(x=>x.pid===pid), pd=await this.prevDay(d), yb=pd?await this.board(pd):[];
