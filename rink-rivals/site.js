@@ -112,6 +112,14 @@ body.rrHasBanner #rrTourBtn{top:48px}
     pid };
   window.RRSITE=RRSITE;
 
+  /* game pages get the arcade lobby behind them (a still picture, so it costs the game nothing) and dark colors */
+  if(PAGE&&PAGE!=='index'&&PAGE!=='admin'&&!document.getElementById('arena')&&document.body){
+    const de=document.documentElement; de.dataset.theme='dark'; de.classList.add('rrArc');
+    const css2=document.createElement('style'); css2.textContent='html.rrArc{background:#04060e} html.rrArc body{background:transparent!important} #arena.rrBg{position:fixed;inset:0;width:100vw;height:100vh;z-index:-1;pointer-events:none;display:block}';
+    (document.head||de).appendChild(css2);
+    const c=document.createElement('canvas'); c.id='arena'; c.className='rrBg'; c.dataset.still='1'; c.dataset.dim='.35'; c.setAttribute('aria-hidden','true'); document.body.insertBefore(c,document.body.firstChild);
+    const sc=document.createElement('script'); sc.src='lobby3d.js'; sc.defer=true; (document.head||de).appendChild(sc); }
+
   /* parties work on every page */
   if(PAGE!=='admin'&&!window.RRPARTY&&!document.querySelector('script[src$="party.js"]')){ const sc=document.createElement('script'); sc.src='party.js'; sc.defer=true; (document.head||document.documentElement).appendChild(sc); }
 

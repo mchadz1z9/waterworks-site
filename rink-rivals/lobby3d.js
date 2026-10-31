@@ -5,7 +5,8 @@
    The camera drifts slowly and follows the mouse a little. Draws on <canvas id="arena">.
    Holds still for reduced motion; pauses while the tab is hidden. */
 (function(){ const cv=document.getElementById('arena'); if(!cv||!cv.getContext) return; const ctx=cv.getContext('2d');
-  const still=window.matchMedia&&matchMedia('(prefers-reduced-motion: reduce)').matches;
+  /* game pages use it as a still backdrop (data-still) so it costs the game nothing; data-dim darkens it */
+  const still=cv.dataset.still==='1'||(window.matchMedia&&matchMedia('(prefers-reduced-motion: reduce)').matches), dim=+cv.dataset.dim||0;
   const FONT="'Big Shoulders Display','Arial Narrow',Impact,sans-serif";
   let W=0,H=0,DPR=1,raf=0,last=0,mx=0,my=0,tmx=0,tmy=0;
   const R=Math.random;
@@ -167,7 +168,8 @@
     for(const p of parts){ const q=P(V(p.x+Math.sin(t*.3+p.ph)*.3,p.y,p.z)); if(!q) continue; const r=Math.max(.6,p.s*FOC/q.z); ctx.fillStyle=`rgba(200,220,255,${.25+.25*Math.sin(t*2+p.ph)})`; ctx.fillRect(q.x-r/2,q.y-r/2,r,r); }
     ctx.globalCompositeOperation='source-over';
     /* vignette */
-    const vg=ctx.createRadialGradient(W/2,H*.45,Math.min(W,H)*.3,W/2,H*.45,Math.max(W,H)*.78); vg.addColorStop(0,'rgba(2,3,10,0)'); vg.addColorStop(1,'rgba(2,3,10,.78)'); ctx.fillStyle=vg; ctx.fillRect(0,0,W,H); }
+    const vg=ctx.createRadialGradient(W/2,H*.45,Math.min(W,H)*.3,W/2,H*.45,Math.max(W,H)*.78); vg.addColorStop(0,'rgba(2,3,10,0)'); vg.addColorStop(1,'rgba(2,3,10,.78)'); ctx.fillStyle=vg; ctx.fillRect(0,0,W,H);
+    if(dim){ ctx.fillStyle=`rgba(3,5,12,${dim})`; ctx.fillRect(0,0,W,H); } }
 
   /* ---------- props ---------- */
   function upright(o,a,front,screen,col){ const L=box(o,.86,2.05,.82,a,{front:'#0b1022',side:'#0a0f20',left:'#0d1328',right:'#0d1328',top:'#111a33'},col);
