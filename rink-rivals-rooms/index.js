@@ -303,6 +303,7 @@ export class Site {
           yTop:yb[0]?{name:yb[0].name,s:yb[0].s}:null,
           chal:live?{game:live.game,page:live.page,goal:live.goal,prizes:live.prizes,winner:live.winner?live.winner.name:null,prize:live.pick?live.pick.prize:null,
             claimed:!!(live.claims||[]).find(x=>x.pid===pid),youWon:!!(live.winner&&live.winner.pid===pid),claims:(live.claims||[]).length}:null,
+          champs:[...(live&&live.winner?[{name:live.winner.name,game:live.game,day:live.day}]:[]),...hist.filter(h=>h.winner).slice(-8).reverse().map(h=>({name:h.winner,game:h.game,day:h.day}))].slice(0,8),
           lastChal:c&&c.day!==d?{game:c.game,goal:c.goal,winner:c.winner?c.winner.name:null,prize:c.pick?c.pick.prize:null}:(last?{game:last.game,goal:last.goal,winner:last.winner,prize:last.prize}:null)}); }
       if(m.op==='claim'){ if(!live) return J({err:'none'},400); if(live.winner) return J({err:'done'},400); if(pid.length<8) return J({err:'bad'},400);
         live.claims=(live.claims||[]).filter(x=>x.pid!==pid); live.claims.push({pid,name,ts:Date.now()}); live.claims=live.claims.slice(-300); await this.s.put('chal',live); return J({ok:true}); }
