@@ -120,6 +120,16 @@ const WKINDS={clear:{rain:0,fog:0,cloud:0},cloudy:{rain:0,fog:0,cloud:.6},rain:{
 function weatherStep(dt){ WX.t-=dt; if(WX.t<=0){ const r=Math.random(); WX.kind=r<.4?'clear':r<.62?'cloudy':r<.8?'rain':r<.9?'storm':'fog'; WX.want=WKINDS[WX.kind]; WX.t=90+Math.random()*120; if(WX.kind!=='clear'&&WX.kind!=='cloudy') say({rain:'🌧️ It\'s starting to rain — the roads are slippery',storm:'⛈️ A storm is rolling in',fog:'🌫️ Fog is coming down'}[WX.kind],'#93c5fd',3); }
   for(const k of ['rain','fog','cloud']) WX[k]=lerp(WX[k],WX.want[k],Math.min(1,dt*.08)); WX.flash=Math.max(0,WX.flash-dt*3); if(WX.kind==='storm'&&Math.random()<dt*.12){ WX.flash=1; setTimeout(()=>noise(2.2,.45,140),400+Math.random()*900); }
   if(rainG) rainG.gain.value=muted?0:WX.rain*.05; }
+/* the view from the driver's seat: bonnet, dashboard, a wheel that turns with you, a speedo needle */
+function drawCockpit(c,night){ const M=c.M, m=R3.mm(R3.T(c.x*K,(c.y||0)*K,c.z*K),R3.RY(c.yaw)), B=(x,y,z,w,h,d,col,e)=>R3.part(R3.UB,R3.mm(m,R3.T(x*K,y*K,z*K),e||R3.I(),R3.S(w*K,h*K,d*K)),col), hy=M.h*.82+.12;
+  B(0,hy-.5,M.len*.32,M.w*.95,.08,M.len*.38,c.col); B(0,hy-.38,.62,M.w*.92,.22,.35,'#111827'); B(0,hy+.55,.55,M.w*.92,.06,1.2,'#1f2937');
+  for(const sx of [-1,1]) B(sx*M.w*.47,hy+.05,.55,.08,1.1,.08,'#1f2937',R3.RX(-.5));
+  const wm=R3.mm(m,R3.T(.36*K,(hy-.28)*K,.42*K),R3.RX(-1.1),R3.RY(0),R3.RZ(c.steer*4)); for(let k=0;k<12;k++){ const a=k/12*PI*2; R3.part(R3.UB,R3.mm(wm,R3.T(Math.cos(a)*.17*K,0,Math.sin(a)*.17*K),R3.RY(-a),R3.S(.04*K,.04*K,.1*K)),'#0f172a'); } R3.part(R3.UB,R3.mm(wm,R3.S(.34*K,.03*K,.05*K)),'#0f172a');
+  const sp=clamp(Math.abs(c.v)/M.top,0,1), na=-2.2+sp*4.4; R3.part(R3.UB,R3.mm(m,R3.T(.36*K,(hy-.24)*K,.6*K),R3.RX(-.4),R3.RZ(-na),R3.T(0,.04*K,0),R3.S(.01*K,.08*K,.01*K)),night?[3,.6,.2]:'#ef4444');
+  R3.part(R3.UC,R3.mm(m,R3.T(.36*K,(hy-.24)*K,.61*K),R3.RX(-.4+PI/2),R3.S(.11*K,.01*K,.11*K)),night?[.6,.9,1.4]:'#e5e7eb');
+  B(0,hy+.42,.35,.25,.06,.02,'#64748b'); }
+/* tyre screech: a squeal that rises when you slide */
+let screechG=null; function screech(){ const a=AC; if(!a||screechG) return; const n=a.sampleRate*2, b=a.createBuffer(1,n,a.sampleRate), ch=b.getChannelData(0); for(let i=0;i<n;i++) ch[i]=Math.random()*2-1; const src=a.createBufferSource(); src.buffer=b; src.loop=true; const f=a.createBiquadFilter(); f.type='bandpass'; f.frequency.value=2300; f.Q.value=5; screechG=a.createGain(); screechG.gain.value=0; src.connect(f); f.connect(screechG); screechG.connect(a.destination); src.start(); }
 let rainG=null; function rainSound(){ const a=audio(); if(!a||rainG) return; const n=a.sampleRate*2, b=a.createBuffer(1,n,a.sampleRate), ch=b.getChannelData(0); for(let i=0;i<n;i++) ch[i]=Math.random()*2-1; const src=a.createBufferSource(); src.buffer=b; src.loop=true; const f=a.createBiquadFilter(); f.type='highpass'; f.frequency.value=1800; rainG=a.createGain(); rainG.gain.value=0; src.connect(f); f.connect(rainG); rainG.connect(a.destination); src.start(); }
 /* ---------- the car radio: three little stations made on the fly ---------- */
 const STATIONS=[null,{n:'📻 Neon 88.1',bpm:100},{n:'🎸 Rink Rock 101',bpm:126},{n:'🎧 Lo-Fi 94.5',bpm:74}];
@@ -639,7 +649,9 @@ function render(dt){ if(!R3.ok) return; build();
   let sky=[lerp(.03,.45,day)+dusk*.25,lerp(.04,.62,day)+dusk*.08,lerp(.09,.85,day)-dusk*.1]; const grey=lerp(.06,.5,day); sky=sky.map(v=>lerp(v,grey,WX.cloud*.75)+WX.flash*.5); brightNow=lerp(.32,1,day)*(1-WX.cloud*.22)+WX.flash*.4; const night=day<.45||WX.cloud>.8&&day<.7;
   for(const c of CARS){ c.rx=lerp(c.rx,c.x,Math.min(1,dt*14)); c.rz=lerp(c.rz,c.z,Math.min(1,dt*14)); c.ryaw+=wrapA(c.yaw-c.ryaw)*Math.min(1,dt*10); }
   const me=ME.car||ME; let eye, ctr;
-  if(ME.car){ const c=ME.car, yaw=c.yaw+camYaw, back=camMode?6:10, up=camMode?2.4:4.2; eye=[c.x-Math.sin(yaw)*back,up,c.z-Math.cos(yaw)*back]; ctr=[c.x+Math.sin(yaw)*6,1.2,c.z+Math.cos(yaw)*6]; if(!camDrag) camYaw*=Math.pow(.05,dt); }
+  if(ME.car&&camMode===2&&!ME.car.M.bike&&!ME.car.M.boat){ /* in the driver's seat */ const c=ME.car, yaw=c.yaw+camYaw, sx=Math.cos(c.yaw)*.36, sz=-Math.sin(c.yaw)*.36, hy=(c.y||0)+(c.M.kg>5000?2.6:c.M.h*.82+.12);
+    eye=[c.x+sx+Math.sin(c.yaw)*(c.M.kg>5000?c.M.len/2-1:.1),hy,c.z+sz+Math.cos(c.yaw)*(c.M.kg>5000?c.M.len/2-1:.1)]; ctr=[eye[0]+Math.sin(yaw)*10,hy-.4,eye[2]+Math.cos(yaw)*10]; for(let i=0;i<3;i++){ camE[i]=eye[i]; camC[i]=ctr[i]; } if(!camDrag) camYaw*=Math.pow(.05,dt); }
+  else if(ME.car){ const c=ME.car, yaw=c.yaw+camYaw, big=c.M.kg>5000?1.7:1, back=(camMode?6:10)*big, up=(camMode?2.4:4.2)*big; eye=[c.x-Math.sin(yaw)*back,up+(c.y||0),c.z-Math.cos(yaw)*back]; ctr=[c.x+Math.sin(yaw)*6,1.2+(c.y||0),c.z+Math.cos(yaw)*6]; if(!camDrag) camYaw*=Math.pow(.05,dt); }
   else if(ME.ride){ const yaw=ME.yaw+camYaw; eye=[ME.x-Math.sin(yaw)*22,TR.y+9,ME.z-Math.cos(yaw)*22]; ctr=[ME.x+Math.sin(yaw)*10,TR.y+2,ME.z+Math.cos(yaw)*10]; }
   else { eye=[ME.x+Math.sin(camYaw)*6.5,3.6,ME.z+Math.cos(camYaw)*6.5]; ctr=[ME.x,1.4,ME.z]; }
   /* keep the camera out of walls: slide it in toward you until the view is clear */
@@ -658,7 +670,7 @@ function render(dt){ if(!R3.ok) return; build();
     for(let i=0;i<NL;i++) for(let j=0;j<NL;j++){ const x=i*P, z=j*P; if(Math.hypot(x-me.x,z-me.z)>140) continue; for(const [ax,ox,oz] of [['z',ROAD+1.5,ROAD+1.5],['x',-ROAD-1.5,ROAD+1.5],['z',-ROAD-1.5,-ROAD-1.5],['x',ROAD+1.5,-ROAD-1.5]]){
         const li=light(i,j,ax); R3.part(R3.UB,R3.mm(R3.T((x+ox)*K,2.2*K,(z+oz)*K),R3.S(.14*K,4.4*K,.14*K)),'#1f2937'); R3.part(R3.UB,R3.mm(R3.T((x+ox)*K,4.6*K,(z+oz)*K),R3.S(.5*K,1.2*K,.5*K)),'#111827');
         const lc=li==='g'?'#22c55e':li==='y'?'#facc15':'#ef4444', boost=night?2.2:1.3; const cc=lc.match(/\w\w/g).map(h=>parseInt(h,16)/255*boost); R3.part(R3.US,R3.mm(R3.T((x+ox)*K,(li==='g'?4.25:li==='y'?4.6:4.95)*K,(z+oz)*K),R3.S(.26*K,.26*K,.26*K)),cc); } }
-    for(const c of CARS) if(Math.hypot(c.x-me.x,c.z-me.z)<220) carDraw(c,night); heliDraw(night);
+    const cockpit=ME.car&&camMode===2&&!ME.car.M.bike&&!ME.car.M.boat; for(const c of CARS) if(Math.hypot(c.x-me.x,c.z-me.z)<220){ if(cockpit&&c===ME.car) drawCockpit(c,night); else carDraw(c,night); } heliDraw(night);
     trainDraw(night); skidDraw(); if(Math.sin(T*3)>.3) for(const l of AIRLIGHTS) R3.part(R3.US,R3.mm(R3.T(l[0]*K,l[1]*K,l[2]*K),R3.S(.7*K,.7*K,.7*K)),night?[4,.3,.3]:'#ef4444'); for(const sp of SPIKES) for(let k=-5;k<=5;k+=.5) R3.part(R3.UB,R3.mm(R3.T((sp.x+(sp.alongX?0:k))*K,.06*K,(sp.z+(sp.alongX?k:0))*K),R3.RY(PI/4),R3.S(.18*K,.12*K,.18*K)),'#9ca3af');
     for(const r of RAMPS){ const ang=Math.atan(r.rise/r.len); R3.part(R3.UB,R3.mm(R3.T(r.x*K,(r.rise/2)*K,r.z*K),R3.RY(r.yaw),R3.RX(-ang),R3.S(r.w*K,.25*K,Math.hypot(r.len,r.rise)*K)),'#f59e0b'); R3.part(R3.UB,R3.mm(R3.T(r.x*K,(r.rise/2)*K,r.z*K),R3.RY(r.yaw),R3.RX(-ang),R3.T(0,.13*K,0),R3.S(r.w*.15*K,.02*K,Math.hypot(r.len,r.rise)*K)),'#111'); }
     for(const p of PKGS){ if(SV.pk.includes(p.i)||Math.hypot(p.x-me.x,p.z-me.z)>120) continue; R3.part(R3.UB,R3.mm(R3.T(p.x*K,(.6+Math.sin(T*3+p.i)*.12)*K,p.z*K),R3.RY(T*2+p.i),R3.S(.6*K,.6*K,.6*K)),[.3,2.2,.5]); }
@@ -802,7 +814,7 @@ $('btnFs').onclick=()=>{ try{ document.fullscreenElement?document.exitFullscreen
 
 /* ---------- input ---------- */
 addEventListener('keydown',e=>{ const t=document.activeElement; if(t&&(t.tagName==='INPUT'||t.tagName==='TEXTAREA')) return; if(['Space','ArrowUp','ArrowDown','ArrowLeft','ArrowRight'].includes(e.code)) e.preventDefault(); keys.add(e.code); audio(); engine();
-  if(e.repeat) return; if(e.code==='KeyF') getIn(); if(e.code==='KeyC') camMode=1-camMode; if(e.code==='KeyM'){ BIGMAP=!BIGMAP; } if(e.code==='KeyT'&&BIGMAP) takeCab(); if(e.code==='KeyR'&&ME.car) setRadio((radio+1)%STATIONS.length); if(e.code==='KeyH'&&ME.car){ if(ME.car.model==='police'){ ME.car.siren=!ME.car.siren; if(ME.car.siren) sfx.siren(); } else sfx.horn(); } });
+  if(e.repeat) return; if(e.code==='KeyF') getIn(); if(e.code==='KeyC'){ camMode=(camMode+1)%3; say(['📷 Chase camera','📷 Close camera','📷 Cockpit view'][camMode],'#cbd5e1',1); } if(e.code==='KeyM'){ BIGMAP=!BIGMAP; } if(e.code==='KeyT'&&BIGMAP) takeCab(); if(e.code==='KeyR'&&ME.car) setRadio((radio+1)%STATIONS.length); if(e.code==='KeyH'&&ME.car){ if(ME.car.model==='police'){ ME.car.siren=!ME.car.siren; if(ME.car.siren) sfx.siren(); } else sfx.horn(); } });
 addEventListener('keyup',e=>keys.delete(e.code)); addEventListener('blur',()=>keys.clear());
 const st=$('stage'); let drag=null; st.addEventListener('pointerdown',e=>{ if(e.target.closest('#touch')) return; if(BIGMAP){ const r=st.getBoundingClientRect(), u=(e.clientX-r.left)/r.width*HW, v=(e.clientY-r.top)/r.height*HH; if(u>=BM.x&&u<=BM.x+BM.s&&v>=BM.y&&v<=BM.y+BM.s){ WAYPT={x:bmInvX(u),z:bmInvZ(v)}; tone(880,.08,'sine',.05); } return; } drag={x:e.clientX,yaw:camYaw}; camDrag=1; audio(); }); addEventListener('pointermove',e=>{ if(drag) camYaw=drag.yaw-(e.clientX-drag.x)*.008; }); addEventListener('pointerup',()=>{ drag=null; camDrag=0; });
 const sk=$('stick'), kn=$('knob'); let sid=null; sk.addEventListener('pointerdown',e=>{ sid=e.pointerId; sk.setPointerCapture(sid); mv(e); e.stopPropagation(); }); sk.addEventListener('pointermove',e=>{ if(e.pointerId===sid) mv(e); }); sk.addEventListener('pointerup',()=>{ sid=null; stick={x:0,y:0}; kn.style.left='40px'; kn.style.top='40px'; });
@@ -827,7 +839,7 @@ for(const [m,dz,dx] of [['boat',-6.5,-8],['jetski',6.2,-6],['boat',6.5,-18]]) CA
 TOD=SV.tod||8.5; renderPanel();
 let last=performance.now(), panelT=0;
 const SPEED=TEST?(+new URLSearchParams(location.search).get('speed')||1):1;
-function frame(now){ const dt=Math.min(.05,(now-last)/1000)*SPEED; last=now; step(dt); render(dt); radioTick(); chaseMusic(); if(AC&&!rainG) rainSound();
+function frame(now){ const dt=Math.min(.05,(now-last)/1000)*SPEED; last=now; step(dt); render(dt); radioTick(); chaseMusic(); if(AC&&!rainG) rainSound(); if(AC){ screech(); const c=ME.car; screechG.gain.value=muted||!c||c.M.boat?0:lerp(screechG.gain.value,c.skid&&Math.abs(c.v)>7&&c.y<=.05?.05:0,.2); }
   if(engG&&AC){ const c=ME.car; engG.gain.value=muted||!c?0:.025+Math.min(.03,Math.abs(c.v)/1500); if(c){ const r=c.rpm||900; engO.frequency.value=(c.M.body==='bike'?55:28)+r*(c.M.body==='bike'?.032:.017)*(c.M.hp>400?.85:1); } }
   panelT-=dt; if(panelT<=0){ panelT=.5; const pl=nearPlace(); if(pl!==lastPlace) renderPanel(); $('wallet').textContent='$'+SV.money.toLocaleString(); if(Math.random()<.05) saveSV(); }
   requestAnimationFrame(frame); }
