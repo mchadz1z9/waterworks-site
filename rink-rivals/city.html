@@ -55,6 +55,7 @@ kbd{ font:inherit; font-size:13px; background:var(--ledbg); color:#fff; border-r
       <div class="card"><h3 style="margin-top:0">💼 Jobs</h3><div class="row">
         <button class="btn" data-job="taxi">🚕 Taxi shift</button><button class="btn" data-job="deliver">📦 Delivery shift</button><button class="btn" data-job="police">🚓 Police shift</button>
         <button class="btn" data-job="race">🏁 Street race</button><button class="btn" data-job="getaway">💰 Getaway job</button><button class="btn" id="quitJob">End job</button></div>
+        <div class="row" style="margin-top:6px"><button class="btn gold" data-job="story" id="storyBtn">📖 Story: Marco's Garage</button></div>
         <div class="muted" id="jobTxt" style="font-size:14px;margin-top:6px"></div></div>
       <div class="card"><h3 style="margin-top:0" id="placeH">📍 Around town</h3><div id="place"></div></div>
       <div class="card"><h3 style="margin-top:0">🚗 My cars</h3><div class="shop" id="garage"></div><div class="muted" style="font-size:13px;margin-top:4px">Tap a car to have it delivered to the nearest road ($50).</div></div>
@@ -300,7 +301,7 @@ function randomCurb(minD){ const me=ME.car||ME; for(let t=0;t<40;t++){ const b=B
     if(Math.hypot(x-me.x,z-me.z)>=(minD||0)) return {x,z}; } return {x:P,z:P}; }
 function giveCar(model,col){ if(ME.car){ ME.car.driver=false; ME.car=null; } const p=nearestRoadSpot(ME.x,ME.z); const c=mkCar(model,p.x,p.z,p.yaw,col); CARS.push(c); ME.car=c; c.driver=true; c.mine=true; sfx.door(); return c; }
 function nearestRoadSpot(x,z){ const lx=Math.round(x/P)*P, lz=Math.round(z/P)*P; if(Math.abs(x-lx)<Math.abs(z-lz)) return {x:lx+4.4,z:clamp(z,4,CW-4),yaw:0}; return {x:clamp(x,4,CW-4),z:lz-4.4,yaw:PI/2}; }
-function startJob(type){ audio(); engine(); if(heat>0&&type!=='getaway'){ say('Lose the police first!','#f87171'); return; } endJob(); JOB={type,t:0,stage:'go',done:0,pay:0};
+function startJob(type){ audio(); engine(); if(type==='story'){ if(heat>0){ say('Lose the police first!','#f87171'); return; } endJob(); JOB={type:'story',t:0}; startStory(); renderPanel(); return; } if(heat>0&&type!=='getaway'){ say('Lose the police first!','#f87171'); return; } endJob(); JOB={type,t:0,stage:'go',done:0,pay:0};
   if(type==='taxi'){ giveCar('taxi'); JOB.n=0; nextFare(); }
   if(type==='deliver'){ giveCar('van'); JOB.stops=[randomCurb(80),randomCurb(80),randomCurb(80)]; JOB.left=150; say('📦 Deliver 3 parcels — 2:30 on the clock','#7dd3fc',3); }
   if(type==='police'){ giveCar('police'); JOB.left=0; say('🚓 On duty. Wait for dispatch… H for the siren','#7dd3fc',3); JOB.next=4; }
@@ -308,10 +309,34 @@ function startJob(type){ audio(); engine(); if(heat>0&&type!=='getaway'){ say('L
     JOB.cps=pts; JOB.i=0; const sp=nearestRoadSpot(ME.car.x+Math.sin(ME.car.yaw)*9,ME.car.z+Math.cos(ME.car.yaw)*9), rc=mkCar('sports',sp.x,sp.z,ME.car.yaw,'#f97316'); rc.racer=true; CARS.push(rc); JOB.rival=rc; JOB.ri=0; JOB.count=3; JOB.stage='count'; say('🏁 Street race: 6 checkpoints. 3…','#fde047',1); }
   if(type==='getaway'){ JOB.pick=randomCurb(150); JOB.stage='pick'; say('💰 Pick up the crew at the marker','#fbbf24',3); }
   renderPanel(); }
-function endJob(failed){ if(JOB&&JOB.rival){ const i=CARS.indexOf(JOB.rival); if(i>=0) CARS.splice(i,1); } if(JOB&&JOB.suspect){ JOB.suspect.flee=false; } JOB=null; renderPanel(); }
+/* ---------- the story: Marco runs the garage and has work for a good driver ---------- */
+const STORY=[{n:'Test Drive',d:'Marco wants his muscle car run through 3 checkpoints in 75 s — and brought back without a scratch over 25%.',pay:800},
+  {n:'Borrowed Wheels',d:'A client wants a yellow sports car parked across town. Take it (that\'s a crime — 1 star) and bring it to the garage.',pay:1500},
+  {n:'The Tail',d:'Follow the grey sedan for 60 s. Stay within 70 m — but closer than 12 m and they\'ll spot you.',pay:2000},
+  {n:'Leap of Faith',d:'Prove you can drive: hit a stunt ramp and land it with the car still in one piece.',pay:2500},
+  {n:'Hot Delivery',d:'Pick up the package across town. Every cop in the city will want it. Bring it to the garage clean.',pay:6000}];
+function startStory(){ const i=SV.story||0; if(i>=STORY.length){ say('Marco: "You\'re the best driver in Rival City. Nothing left to teach you."','#4ade80',4); JOB=null; return; } const m=STORY[i]; JOB.si=i; JOB.stage=0; say(`📖 ${i+1}/5 ${m.n}: ${m.d}`,'#fde047',5);
+  const g=PLACES.find(p=>p.type==='garage');
+  if(i===0){ giveCar('muscle','#7f1d1d'); ME.car.hp=100; JOB.cps=[randomCurb(80),randomCurb(80),randomCurb(80)]; JOB.left=75; }
+  if(i===1){ const sp=randomCurb(170); const c=mkCar('sports',sp.x,sp.z,0,'#facc15'); c.target=true; CARS.push(c); JOB.tcar=c; }
+  if(i===2){ const tr=CARS.filter(o=>o.ai&&o.model==='sedan'); const c=tr[Math.floor(Math.random()*tr.length)]||CARS.find(o=>o.ai); c.col='#94a3b8'; c.tail=true; JOB.tcar=c; JOB.ok=0; if(!ME.car) giveCar('hatch'); }
+  if(i===3){ if(!ME.car) giveCar('muscle','#7f1d1d'); JOB.hp0=ME.car.hp; JOB.jumped=false; }
+  if(i===4){ JOB.pick=randomCurb(200); }
+  JOB.drop=g; }
+function storyStep(dt){ const i=JOB.si, m=STORY[i], c=ME.car, me=c||ME, near=(p,r)=>p&&Math.hypot(p.x-me.x,p.z-me.z)<(r||9), slow=c&&Math.abs(c.v)<3;
+  const win=()=>{ SV.story=i+1; SV.jobs++; pay(m.pay,`— mission passed: ${m.n}!`); say(`✅ MISSION PASSED: ${m.n}`,'#4ade80',4); tone(523,.2,'triangle',.07); tone(784,.3,'triangle',.07,0,.15); endJob(); };
+  const fail=why=>{ say(`❌ MISSION FAILED: ${why}`,'#f87171',4); endJob(true); };
+  if(i===0){ JOB.left-=dt; if(JOB.left<=0) return fail('too slow'); if(!c||c.model!=='muscle') return; if(c.hp<75) return fail('you dented Marco\'s car');
+    if(JOB.stage<3&&near(JOB.cps[JOB.stage],12)){ JOB.stage++; tone(880,.1,'square',.05); } if(JOB.stage>=3&&near(JOB.drop,12)&&slow) win(); }
+  if(i===1){ const t=JOB.tcar; if(t.hp<=10) return fail('the car is wrecked'); if(c===t&&JOB.stage===0){ JOB.stage=1; crime(1,'car theft'); say('Got it — get it to the 🔧 garage','#4ade80',2.5); } if(c===t&&near(JOB.drop,12)&&slow){ if(heat>0) say('Lose the cops before you drop it off!','#fbbf24',1.5); else { const k=CARS.indexOf(t); if(k>=0) CARS.splice(k,1); ME.car=null; win(); } } }
+  if(i===2){ const t=JOB.tcar, d=Math.hypot(t.x-me.x,t.z-me.z); if(!c) return; if(d<12) return fail('they spotted you'); if(d>70){ JOB.lost=(JOB.lost||0)+dt; if(JOB.lost>6) return fail('you lost them'); } else { JOB.lost=0; JOB.ok+=dt; } if(JOB.ok>=60) win(); }
+  if(i===3){ if(c&&c.jumpR&&c.air>.5) JOB.jumped=true; if(JOB.jumped&&c&&c.y<=0&&!c.jumpR){ if(c.hp>40) win(); else fail('the landing wrecked the car'); } }
+  if(i===4){ if(JOB.stage===0&&near(JOB.pick,9)){ if(!c) return say('You\'ll need a car','#fbbf24',1); JOB.stage=1; crime(4,'the package'); say('Every cop in town is coming. Get to the garage!','#f87171',3); }
+    if(JOB.stage===1&&near(JOB.drop,12)&&slow){ if(heat>0) say('Lose the police first — Marco won\'t open up with cops outside','#fbbf24',1.5); else win(); } } }
+function endJob(failed){ if(JOB&&JOB.tcar){ JOB.tcar.target=false; JOB.tcar.tail=false; } if(JOB&&JOB.rival){ const i=CARS.indexOf(JOB.rival); if(i>=0) CARS.splice(i,1); } if(JOB&&JOB.suspect){ JOB.suspect.flee=false; } JOB=null; renderPanel(); }
 function nextFare(){ JOB.from=randomCurb(60); JOB.to=null; JOB.stage='pick'; say('🚕 A fare is waiting — follow the marker','#fde047',2.5); }
 function getawayLost(){ JOB.stage='drop'; JOB.drop=PLACES.find(p=>p.type==='garage'); say('Clean! Take the car to the 🔧 garage','#4ade80',3); }
-function jobStep(dt){ if(!JOB) return; JOB.t+=dt; const c=ME.car, me=c||ME, near=(p,r)=>p&&Math.hypot(p.x-me.x,p.z-me.z)<(r||9), slow=c&&Math.abs(c.v)<3;
+function jobStep(dt){ if(!JOB) return; JOB.t+=dt; if(JOB.type==='story'){ storyStep(dt); return; } const c=ME.car, me=c||ME, near=(p,r)=>p&&Math.hypot(p.x-me.x,p.z-me.z)<(r||9), slow=c&&Math.abs(c.v)<3;
   if(JOB&&JOB.type==='taxi'){ if(!c||c.model!=='taxi'){ JOB.warn=(JOB.warn||0)+dt; if(JOB.warn>8){ say('Shift over — you left the taxi','#f87171'); endJob(true); } return; } JOB.warn=0;
     if(JOB.stage==='pick'&&near(JOB.from)&&slow){ JOB.stage='drive'; JOB.to=randomCurb(160); JOB.t0=T; JOB.dmg0=c.hp; JOB.dist=Math.hypot(JOB.to.x-JOB.from.x,JOB.to.z-JOB.from.z); sfx.door(); say('Passenger in! Take them to the marker','#4ade80',2.5); }
     else if(JOB.stage==='drive'&&near(JOB.to)&&slow){ const time=T-JOB.t0, fare=Math.round(30+JOB.dist*.9), tip=Math.max(0,Math.round((JOB.dist/9-time)*4))-Math.round((JOB.dmg0-c.hp)*5); JOB.n++; SV.jobs++; pay(Math.max(10,fare+tip),`fare${tip>0?' + tip':tip<0?' (they didn\'t enjoy the ride)':''}`); nextFare(); } }
@@ -490,6 +515,7 @@ function markers(){ const out=[]; if(!JOB) return out; const mk=(p,col,r)=>p&&ou
   if(JOB.type==='deliver') for(const s of JOB.stops) mk(s,[.3,1.4,2.2]);
   if(JOB.type==='race'&&JOB.cps[JOB.i]) mk(JOB.cps[JOB.i],[2,.6,.2],2.5);
   if(JOB.type==='getaway') mk(JOB.stage==='pick'?JOB.pick:JOB.stage==='drop'?JOB.drop:null,[2,1.6,.2],1.2);
+  if(JOB.type==='story'){ const i=JOB.si; if(i===0) mk(JOB.stage<3?JOB.cps[JOB.stage]:JOB.drop,[2,.8,.2],1.6); if(i===1) mk(ME.car===JOB.tcar?JOB.drop:JOB.tcar,[2,1.8,.2],1.2); if(i===2) mk(JOB.tcar,[.3,.8,2.4],.6); if(i===3){ let best=null,bd=1e9; for(const r of RAMPS){ const d=Math.hypot(r.x-(ME.car||ME).x,r.z-(ME.car||ME).z); if(d<bd){ bd=d; best=r; } } mk(best,[2,1.4,.2],1.6); } if(i===4) mk(JOB.stage===0?JOB.pick:JOB.drop,[2,.4,.2],1.2); }
   return out; }
 
 /* ---------- HUD ---------- */
@@ -518,7 +544,7 @@ function drawHUD(night){ ctx.clearRect(0,0,HW,HH); const me=ME.car||ME;
   if(heat>0){ const n=Math.ceil(heat); txt('★'.repeat(n)+'☆'.repeat(5-n),HW-18,94,28,Math.sin(T*8)>0?'#fbbf24':'#f87171','right'); if(seenT>0) txt(`hiding ${Math.floor(seenT)}/${6+n*3}s`,HW-18,116,15,'#cbd5e1','right'); if(bustT>.3) txt('STOPPING YOU…',HW/2,140,34,'#f87171'); }
   if(ME.car){ const c=ME.car; rrct(18,HH-92,170,76,14,'rgba(5,10,24,.75)'); txt(`${Math.round(Math.abs(c.v)*3.6)}`,70,HH-40,42,'#fff'); txt('KM/H',140,HH-44,16,'#93a0bd'); rrct(28,HH-30,150,8,4,'rgba(255,255,255,.15)'); rrct(28,HH-30,150*c.hp/100,8,4,c.hp<35?'#ef4444':'#22c55e'); txt(c.M.n,103,HH-70,15,'#cbd5e1'); }
   else { let near=null, nd=4.2; for(const c of CARS){ const d=Math.hypot(c.x-ME.x,c.z-ME.z); if(d<nd&&!c.flee&&!c.racer&&(!c.cop||JOB&&JOB.type==='police')){ nd=d; near=c; } } if(near) txt(near.driver&&near.ai?`F — carjack the ${near.M.n} (crime!)`:`F — get in the ${near.M.n}`,HW/2,HH-30,22,near.driver&&near.ai?'#fca5a5':'#fde047'); }
-  /* job line */ if(JOB){ let t=''; if(JOB.type==='taxi') t=JOB.stage==='pick'?'🚕 Pick up the fare (yellow marker)':'🚕 Drop them at the green marker'; if(JOB.type==='deliver') t=`📦 ${JOB.stops.length} parcels left · ${Math.ceil(JOB.left)}s`; if(JOB.type==='police') t=JOB.suspect?`🚓 Stop the suspect! ${Math.round(Math.hypot(JOB.suspect.x-me.x,JOB.suspect.z-me.z))} m`:'🚓 Patrolling — waiting for dispatch'; if(JOB.type==='race') t=`🏁 Checkpoint ${JOB.i+1}/${JOB.cps.length} · rival at ${Math.min(JOB.ri+1,JOB.cps.length)}`; if(JOB.type==='getaway') t=JOB.stage==='pick'?'💰 Pick up the crew':JOB.stage==='lose'?'💰 Lose the police!':'💰 Get to the 🔧 garage';
+  /* job line */ if(JOB){ let t=''; if(JOB.type==='story'){ const i=JOB.si, nm=STORY[i].n; t=i===0?`📖 ${nm}: ${JOB.stage<3?'checkpoint '+(JOB.stage+1)+'/3':'back to the garage'} · ${Math.ceil(JOB.left)}s`:i===1?`📖 ${nm}: ${ME.car===JOB.tcar?'drive it to the 🔧 garage':'find the yellow sports car'}`:i===2?`📖 ${nm}: ${Math.floor(JOB.ok)}/60 s · ${Math.round(Math.hypot(JOB.tcar.x-(ME.car||ME).x,JOB.tcar.z-(ME.car||ME).z))} m`:i===3?`📖 ${nm}: hit a stunt ramp`:`📖 ${nm}: ${JOB.stage===0?'grab the package':'get it to the 🔧 garage'}`; } if(JOB.type==='taxi') t=JOB.stage==='pick'?'🚕 Pick up the fare (yellow marker)':'🚕 Drop them at the green marker'; if(JOB.type==='deliver') t=`📦 ${JOB.stops.length} parcels left · ${Math.ceil(JOB.left)}s`; if(JOB.type==='police') t=JOB.suspect?`🚓 Stop the suspect! ${Math.round(Math.hypot(JOB.suspect.x-me.x,JOB.suspect.z-me.z))} m`:'🚓 Patrolling — waiting for dispatch'; if(JOB.type==='race') t=`🏁 Checkpoint ${JOB.i+1}/${JOB.cps.length} · rival at ${Math.min(JOB.ri+1,JOB.cps.length)}`; if(JOB.type==='getaway') t=JOB.stage==='pick'?'💰 Pick up the crew':JOB.stage==='lose'?'💰 Lose the police!':'💰 Get to the 🔧 garage';
     rrct(HW/2-260,12,520,34,12,'rgba(5,10,24,.75)'); txt(t,HW/2,37,20,'#fde047'); }
   drawMap(me);
   if(msgT>0){ ctx.globalAlpha=clamp(msgT,0,1); txt(msg,HW/2,HH/2-80,32,msgCol); ctx.globalAlpha=1; } }
@@ -553,6 +579,7 @@ function renderPanel(){ $('wallet').textContent='$'+SV.money.toLocaleString(); c
   else if(pl.type==='police') h='<div class="muted">The police station. Busted players end up here.</div>';
   else if(pl.type==='depot') h='<div class="muted">The depot — taxi and delivery shifts start from anywhere, but the vans live here.</div>';
   $('placeH').textContent=pl?`${PLACE_IC[pl.type]} ${PLACE_N[pl.type]}`:`📍 ${ME.dist||'Around town'}`; $('place').innerHTML=h;
+  { const sb=$('storyBtn'), si=SV.story||0; sb.textContent=si>=STORY.length?'📖 Story complete ✓':`📖 Story ${si+1}/5: ${STORY[si].n}`; }
   $('jobTxt').textContent+=` · 📦 Packages ${SV.pk.length}/20 · 🛹 Stunt jumps ${SV.stunts.length}/${RAMPS.length}`;
   $('garage').innerHTML=SV.cars.map(k=>`<button data-call="${k}"><b>${MODELS[k].n}</b><small>${Math.round(MODELS[k].top*3.6)} km/h</small></button>`).join(''); }
 $('place').addEventListener('click',e=>{ const t=e.target;
@@ -611,7 +638,7 @@ function frame(now){ const dt=Math.min(.05,(now-last)/1000)*SPEED; last=now; ste
   panelT-=dt; if(panelT<=0){ panelT=.5; const pl=nearPlace(); if(pl!==lastPlace) renderPanel(); $('wallet').textContent='$'+SV.money.toLocaleString(); if(Math.random()<.05) saveSV(); }
   requestAnimationFrame(frame); }
 requestAnimationFrame(frame);
-if(TEST) window.__city={ st:()=>({me:{x:ME.x,z:ME.z,car:ME.car&&ME.car.model,v:ME.car&&ME.car.v,hp:ME.car&&ME.car.hp,yaw:ME.car?ME.car.yaw:ME.yaw},heat,money:SV.money,tod:TOD,job:JOB&&{type:JOB.type,stage:JOB.stage},cops:COPS.length,cars:CARS.length,peds:PEDS.length}), job:()=>JOB&&{type:JOB.type,stage:JOB.stage,from:JOB.from,to:JOB.to,stops:JOB.stops,n:JOB.n,pick:JOB.pick,i:JOB.i,ri:JOB.ri,sus:JOB.suspect&&{x:JOB.suspect.x,z:JOB.suspect.z,v:JOB.suspect.v},rival:JOB.rival&&{x:JOB.rival.x,z:JOB.rival.z,v:JOB.rival.v}}, places:()=>PLACES.map(p=>({t:p.type,x:p.x,z:p.z})), cops:()=>COPS.map(c=>({x:+c.x.toFixed(1),z:+c.z.toFixed(1),v:+c.v.toFixed(1),hp:Math.round(c.hp),d:+Math.hypot(c.x-(ME.car||ME).x,c.z-(ME.car||ME).z).toFixed(1)})), bust:()=>bustT, wx:k=>{ WX.kind=k; WX.want=WKINDS[k]; for(const q of ['rain','fog','cloud']) WX[q]=WKINDS[k][q]; }, ramps:()=>RAMPS, pkgs:()=>PKGS, car:()=>ME.car&&{y:ME.car.y,v:ME.car.v,fuel:ME.car.fuel}, setv:(v,yaw)=>{ if(ME.car){ ME.car.v=v; if(yaw!=null) ME.car.yaw=yaw; } }, ambs:()=>AMBS.length, hit:()=>{ const p=PEDS.find(q=>q.down<=0&&!q.free); p.down=4; callAmbulance(p); return {x:p.x,z:p.z}; }, tp:(x,z)=>{ ME.x=x; ME.z=z; if(ME.car){ ME.car.x=x; ME.car.z=z; } }, heat:n=>{ heat=n; }, tod:t=>{ TOD=t; }, getIn };
+if(TEST) window.__city={ st:()=>({me:{x:ME.x,z:ME.z,car:ME.car&&ME.car.model,v:ME.car&&ME.car.v,hp:ME.car&&ME.car.hp,yaw:ME.car?ME.car.yaw:ME.yaw},heat,money:SV.money,tod:TOD,job:JOB&&{type:JOB.type,stage:JOB.stage},cops:COPS.length,cars:CARS.length,peds:PEDS.length}), story:()=>JOB&&JOB.type==='story'&&{si:JOB.si,stage:JOB.stage,cps:JOB.cps,drop:JOB.drop,tcar:JOB.tcar&&{x:JOB.tcar.x,z:JOB.tcar.z},pick:JOB.pick}, svStory:()=>SV.story||0, job:()=>JOB&&{type:JOB.type,stage:JOB.stage,from:JOB.from,to:JOB.to,stops:JOB.stops,n:JOB.n,pick:JOB.pick,i:JOB.i,ri:JOB.ri,sus:JOB.suspect&&{x:JOB.suspect.x,z:JOB.suspect.z,v:JOB.suspect.v},rival:JOB.rival&&{x:JOB.rival.x,z:JOB.rival.z,v:JOB.rival.v}}, places:()=>PLACES.map(p=>({t:p.type,x:p.x,z:p.z})), cops:()=>COPS.map(c=>({x:+c.x.toFixed(1),z:+c.z.toFixed(1),v:+c.v.toFixed(1),hp:Math.round(c.hp),d:+Math.hypot(c.x-(ME.car||ME).x,c.z-(ME.car||ME).z).toFixed(1)})), bust:()=>bustT, wx:k=>{ WX.kind=k; WX.want=WKINDS[k]; for(const q of ['rain','fog','cloud']) WX[q]=WKINDS[k][q]; }, ramps:()=>RAMPS, pkgs:()=>PKGS, car:()=>ME.car&&{y:ME.car.y,v:ME.car.v,fuel:ME.car.fuel}, setv:(v,yaw)=>{ if(ME.car){ ME.car.v=v; if(yaw!=null) ME.car.yaw=yaw; } }, ambs:()=>AMBS.length, hit:()=>{ const p=PEDS.find(q=>q.down<=0&&!q.free); p.down=4; callAmbulance(p); return {x:p.x,z:p.z}; }, tp:(x,z)=>{ ME.x=x; ME.z=z; if(ME.car){ ME.car.x=x; ME.car.z=z; } }, heat:n=>{ heat=n; }, tod:t=>{ TOD=t; }, getIn };
 })();
 </script>
 <script src="site.js"></script>
