@@ -265,7 +265,7 @@ function drive(c,thr,brk,steer,hand,dt){ const M=c.M, sp=c.v;
   if(c.y>.05){ c.yaw=wrapA(c.yaw+yr*dt*.9); c.v-=a*dt*.9; }   /* in the air: no grip, no drive */
   const fx=Math.sin(c.yaw), fz=Math.cos(c.yaw); c.x+=(fx*c.v+fz*c.vs)*dt; c.z+=(fz*c.v-fx*c.vs)*dt;
   rampStep(c,fx,fz,dt);
-  /* buildings */ for(const [ox,oz] of [[0,0],[fx*M.len*.32,fz*M.len*.32],[-fx*M.len*.32,-fz*M.len*.32]]){ const h=hitRect(c.x+ox,c.z+oz,M.w*.62); if(h){ c.x+=h.nx*h.pen; c.z+=h.nz*h.pen; const imp=Math.abs(c.v*(fx*h.nx+fz*h.nz)); if(imp>4){ c.hp=Math.max(0,c.hp-imp*.9); if(c===ME.car){ sfx.crash(imp/40); hurt((imp-11)*2.2,'crash'); } } c.v*=imp>4?-.18:.9; } }
+  /* buildings */ for(const [ox,oz] of [[0,0],[fx*M.len*.32,fz*M.len*.32],[-fx*M.len*.32,-fz*M.len*.32]]){ const h=hitRect(c.x+ox,c.z+oz,M.w*.62); if(h){ c.x+=h.nx*h.pen; c.z+=h.nz*h.pen; const imp=Math.abs(c.v*(fx*h.nx+fz*h.nz)); if(imp>6){ const frontHit=(fx*h.nx+fz*h.nz)*Math.sign(c.v||1)<0; if(frontHit) c.dmgF=Math.min(M.len*.14,(c.dmgF||0)+imp*.012); else c.dmgR=Math.min(M.len*.12,(c.dmgR||0)+imp*.012); } if(imp>4){ c.hp=Math.max(0,c.hp-imp*.9); if(c===ME.car){ sfx.crash(imp/40); hurt((imp-11)*2.2,'crash'); } } c.v*=imp>4?-.18:.9; } }
   for(const [ox,oz] of [[fx*M.len*.32,fz*M.len*.32],[-fx*M.len*.32,-fz*M.len*.32]]){ const h=hitPost(c.x+ox,c.z+oz,M.w*.5); if(h){ c.x+=h.nx*h.pen; c.z+=h.nz*h.pen; const imp=Math.abs(c.v); if(imp>5){ c.hp=Math.max(0,c.hp-imp*.5); if(c===ME.car) sfx.crash(imp/45); } c.v*=.4; } }
   if(M.boat){ const onPier=c.x<PIER.x1+2&&c.z>PIER.z0-1.2&&c.z<PIER.z1+1.2; if(!inSea(c.x,c.z)||onPier){ c.x-=(fx*c.v+fz*c.vs)*dt*1.05; c.z-=(fz*c.v-fx*c.vs)*dt*1.05; c.v*=-.25; if(c===ME.car&&Math.abs(c.v)>2) sfx.crash(.1); } }
   c.x=clamp(c.x,-14,CW+420); c.z=clamp(c.z,-300,CW+300); }
@@ -513,6 +513,7 @@ function step(dt){ T+=dt; TOD=(TOD+dt/30)%24; if(msgT>0) msgT-=dt;
   for(let i=0;i<CARS.length;i++) for(let j=i+1;j<CARS.length;j++){ const a=CARS[i], b=CARS[j]; if(a.off||b.off) continue; const dx=b.x-a.x, dz=b.z-a.z, d=Math.hypot(dx,dz), R=(a.M.len+b.M.len)*.28; if(d>=R||d<1e-4) continue;
     const nx=dx/d, nz=dz/d, pen=R-d, ma=a.ai?.5:1, mb=b.ai?.5:1; a.x-=nx*pen*ma*.5; a.z-=nz*pen*ma*.5; b.x+=nx*pen*mb*.5; b.z+=nz*pen*mb*.5;
     const va=a.v*(Math.sin(a.yaw)*nx+Math.cos(a.yaw)*nz), vb=b.v*(Math.sin(b.yaw)*nx+Math.cos(b.yaw)*nz), imp=Math.abs(va-vb);
+    if(imp>6) for(const [q,sg] of [[a,1],[b,-1]]){ const f2=Math.sin(q.yaw)*nx*sg+Math.cos(q.yaw)*nz*sg; if(f2>0) q.dmgF=Math.min(q.M.len*.14,(q.dmgF||0)+imp*.01); else q.dmgR=Math.min(q.M.len*.12,(q.dmgR||0)+imp*.01); }   /* crumple the end that took the hit */
     if(imp>3){ a.hp=Math.max(0,a.hp-imp*.6); b.hp=Math.max(0,b.hp-imp*.6); a.v*=.55; b.v*=.55; if(a.ai) a.stop=3; if(b.ai) b.stop=3; if(a===ME.car||b===ME.car){ sfx.crash(imp/30); hurt((imp-12)*1.8,'crash'); const other=a===ME.car?b:a;
         if(other.cop&&Math.abs(ME.car.v)>Math.abs(other.v)+2) crime(1,'rammed a police car'); else if(other.driver&&!(JOB&&JOB.type==='police')&&imp>9) crime(.5,'hit-and-run'); } } }
   /* people: walk their loop, dodge cars, get knocked down (and get back up) */
@@ -620,8 +621,8 @@ function carBody(c,M,dk,B,m,night){ const L=M.len, W=M.w, glass=night?'#1e293b':
     if(M.body==='fire'){ B(0,1.4,zb,W,1.9,bodyL,dk); B(0,1.4,zb,W+.02,.2,bodyL,'#f8fafc'); for(const sx of [-.5,.5]) B(sx,2.6,zb,.12,.12,bodyL+1,'#d1d5db'); for(let k=0;k<8;k++) B(0,2.6,zb-bodyL/2+k*bodyL/8,1,.08,.08,'#d1d5db'); const on=Math.sin(T*15)>0; B(-.5,2.75,zc,.4,.15,.3,on?'#ef4444':'#7f1d1d'); B(.5,2.75,zc,.4,.15,.3,!on?'#ef4444':'#7f1d1d'); }
     B(0,.55,L/2+.02,W*.9,.4,.1,'#374151'); for(const sx of [-1,1]){ wheel(sx*W*.47,L/2-1.2,wr); wheel(sx*W*.47,-L/2+1.4,wr); wheel(sx*W*.47,-L/2+2.6,wr); } return; }
   const cl=bd.cl, bh=M.h*.4*(bd.low||1), belt=cl+bh, rh=Math.max(.3,M.h-belt), zF=L*bd.zF, zR=L*bd.zR, cw=W*(bd.narrow||.86), cz=(zF+zR)/2, cL=zF-zR;
-  B(0,cl+bh/2,0,W,bh,L,dk); B(0,cl+.1,0,W+.04,.16,L*.8,'#1f2937');                                       /* body + sills */
-  B(0,cl+bh*.5,L/2+.01,W*.46,bh*.4,.04,'#0b0f19');                                                    /* grille */
+  const dF=c.dmgF||0, dR=c.dmgR||0; B(0,cl+bh/2-dF*.15,(dR-dF)/2,W-dF*.1,bh,L-dF-dR,dk); B(0,cl+.1,0,W+.04,.16,L*.8,'#1f2937'); if(dF>.15) B(0,cl+bh+.02,L/2-dF-.35,W*.85,.06,.7,dk,R3.RX(-.35-dF*.6));   /* crumpled bonnet buckling up */                                       /* body + sills */
+  B(0,cl+bh*.5,L/2+.01-dF,W*.46,bh*.4,.04,'#0b0f19');                                                    /* grille */
   if(!bd.open){ B(0,belt+rh/2,cz,cw,rh,cL,M.cop?'#f8fafc':(bd.chrome?'#f8fafc':dk)); B(0,belt+rh*.45,cz,cw+.03,rh*.62,cL*.9,glass);
     const ws=rh/Math.cos(bd.rake*.6); B(0,belt+rh/2,zF+Math.tan(bd.rake*.6)*rh/2,cw*.98,ws,.04,glass,R3.RX(-bd.rake*.6)); B(0,belt+rh/2,zR-Math.tan(bd.back*.5)*rh/2,cw*.98,rh/Math.cos(bd.back*.5),.04,glass,R3.RX(bd.back*.5)); }
   else { B(0,belt+.25,zF,cw,.5,.05,glass,R3.RX(-.5)); for(const sx of [-.3,.3]){ B(sx*W,belt+.2,cz-.2,.45,.5,.45,'#3f2a1d'); B(sx*W,belt+.02,cz+.1,.45,.12,.6,'#3f2a1d'); } }
@@ -812,7 +813,7 @@ function renderPanel(){ $('wallet').textContent='$'+SV.money.toLocaleString(); c
   $('garage').innerHTML=SV.cars.map(k=>`<button data-call="${k}"><b>${MODELS[k].n}</b><small>${Math.round(MODELS[k].top*3.6)} km/h</small></button>`).join(''); }
 $('place').addEventListener('click',e=>{ const t=e.target;
   if(t.dataset.buy){ const k=t.dataset.buy, m=MODELS[k]; if(SV.cars.includes(k)){ callCar(k,true); return; } if(SV.money<m.price){ say('Not enough money','#f87171'); return; } SV.cars.push(k); pay(-m.price,`— bought a ${m.n}!`); callCar(k,true); }
-  if(t.id==='repair'&&ME.car){ const cost=Math.round((100-ME.car.hp)*12)+(ME.car.flat?150:0); if(SV.money<cost){ say('Not enough money','#f87171'); return; } ME.car.hp=100; ME.car.dead=false; ME.car.flat=false; pay(-cost,'— repaired'); }
+  if(t.id==='repair'&&ME.car){ const cost=Math.round((100-ME.car.hp)*12)+(ME.car.flat?150:0); if(SV.money<cost){ say('Not enough money','#f87171'); return; } ME.car.hp=100; ME.car.dead=false; ME.car.flat=false; ME.car.dmgF=0; ME.car.dmgR=0; pay(-cost,'— repaired'); }
   if(t.dataset.paint&&ME.car){ if(SV.money<200) return; ME.car.col=t.dataset.paint; if(ME.car.mine) SV.colors[ME.car.model]=t.dataset.paint; if(heat>0&&heat<3){ heat=0; say('New paint — the police lost track of you!','#4ade80'); } pay(-200,'— resprayed'); }
   if(t.id==='buyHouse'){ if(SV.money<60000){ say('Not enough money — $60,000','#f87171'); return; } SV.home=PLACES.indexOf(lastPlace); pay(-60000,'— welcome home! 🏠'); }
   const myMods=()=>{ const c=ME.car; if(!c||!c.mine) return null; c.mods=SV.mods[c.model]=SV.mods[c.model]||{}; return c.mods; };
