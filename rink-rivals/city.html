@@ -129,6 +129,16 @@ function drawCockpit(c,night){ const M=c.M, m=R3.mm(R3.T(c.x*K,(c.y||0)*K,c.z*K)
   R3.part(R3.UC,R3.mm(m,R3.T(.36*K,(hy-.24)*K,.61*K),R3.RX(-.4+PI/2),R3.S(.11*K,.01*K,.11*K)),night?[.6,.9,1.4]:'#e5e7eb');
   B(0,hy+.42,.35,.25,.06,.02,'#64748b'); }
 /* tyre screech: a squeal that rises when you slide */
+/* city ambience: the hum of traffic, birds by day, crickets at night, waves on the beach, footsteps */
+let humG=null, waveG=null, stepPh=0;
+function loopNoise(type,freq,q){ const a=AC, n=a.sampleRate*2, b=a.createBuffer(1,n,a.sampleRate), ch=b.getChannelData(0); for(let i=0;i<n;i++) ch[i]=Math.random()*2-1; const src=a.createBufferSource(); src.buffer=b; src.loop=true; const f=a.createBiquadFilter(); f.type=type; f.frequency.value=freq; if(q) f.Q.value=q; const g=a.createGain(); g.gain.value=0; src.connect(f); f.connect(g); g.connect(a.destination); src.start(); return g; }
+function ambience(dt){ if(!AC) return; if(!humG){ humG=loopNoise('lowpass',260); waveG=loopNoise('lowpass',600); } const me=ME.car||ME, day=TOD>6&&TOD<20.5, busy=TOD>=7&&TOD<9.5||TOD>=16&&TOD<19?1:day?.7:.35;
+  humG.gain.value=muted?0:.03*busy; const beach=clamp(1-(SEA_X-me.x)/80,0,1); waveG.gain.value=muted?0:beach*(.05+.04*Math.sin(T*.6))*(1+WX.rain);
+  if(muted||ME.car&&camMode===2) return;
+  const park=district(me.x,me.z)==='Central Park'?3:1;
+  if(day&&WX.rain<.3&&Math.random()<dt*.35*park){ const f=2400+Math.random()*1400; tone(f,.08,'sine',.012,600); tone(f*1.1,.07,'sine',.01,-400,.1); }
+  if(!day&&WX.rain<.3&&Math.random()<dt*1.2){ const f=4200+Math.random()*300; for(let k=0;k<3;k++) tone(f,.03,'square',.004,0,k*.06); }
+  if(!ME.car&&ME.spd>.5){ const prev=stepPh; stepPh+=dt*ME.spd*.9; if(Math.floor(prev)!==Math.floor(stepPh)) noise(.05,ME.spd>4.5?.05:.03,WX.rain>.3?1600:500); } }
 let screechG=null; function screech(){ const a=AC; if(!a||screechG) return; const n=a.sampleRate*2, b=a.createBuffer(1,n,a.sampleRate), ch=b.getChannelData(0); for(let i=0;i<n;i++) ch[i]=Math.random()*2-1; const src=a.createBufferSource(); src.buffer=b; src.loop=true; const f=a.createBiquadFilter(); f.type='bandpass'; f.frequency.value=2300; f.Q.value=5; screechG=a.createGain(); screechG.gain.value=0; src.connect(f); f.connect(screechG); screechG.connect(a.destination); src.start(); }
 let rainG=null; function rainSound(){ const a=audio(); if(!a||rainG) return; const n=a.sampleRate*2, b=a.createBuffer(1,n,a.sampleRate), ch=b.getChannelData(0); for(let i=0;i<n;i++) ch[i]=Math.random()*2-1; const src=a.createBufferSource(); src.buffer=b; src.loop=true; const f=a.createBiquadFilter(); f.type='highpass'; f.frequency.value=1800; rainG=a.createGain(); rainG.gain.value=0; src.connect(f); f.connect(rainG); rainG.connect(a.destination); src.start(); }
 /* ---------- the car radio: three little stations made on the fly ---------- */
@@ -852,7 +862,7 @@ for(const [m,dz,dx] of [['boat',-6.5,-8],['jetski',6.2,-6],['boat',6.5,-18]]) CA
 TOD=SV.tod||8.5; renderPanel();
 let last=performance.now(), panelT=0;
 const SPEED=TEST?(+new URLSearchParams(location.search).get('speed')||1):1;
-function frame(now){ const dt=Math.min(.05,(now-last)/1000)*SPEED; last=now; step(dt); render(dt); radioTick(); chaseMusic(); if(AC&&!rainG) rainSound(); if(AC){ screech(); const c=ME.car; screechG.gain.value=muted||!c||c.M.boat?0:lerp(screechG.gain.value,c.skid&&Math.abs(c.v)>7&&c.y<=.05?.05:0,.2); }
+function frame(now){ const dt=Math.min(.05,(now-last)/1000)*SPEED; last=now; step(dt); render(dt); radioTick(); chaseMusic(); ambience(dt); if(AC&&!rainG) rainSound(); if(AC){ screech(); const c=ME.car; screechG.gain.value=muted||!c||c.M.boat?0:lerp(screechG.gain.value,c.skid&&Math.abs(c.v)>7&&c.y<=.05?.05:0,.2); }
   if(engG&&AC){ const c=ME.car; engG.gain.value=muted||!c?0:.025+Math.min(.03,Math.abs(c.v)/1500); if(c){ const r=c.rpm||900; engO.frequency.value=(c.M.body==='bike'?55:28)+r*(c.M.body==='bike'?.032:.017)*(c.M.hp>400?.85:1); } }
   panelT-=dt; if(panelT<=0){ panelT=.5; const pl=nearPlace(); if(pl!==lastPlace) renderPanel(); $('wallet').textContent='$'+SV.money.toLocaleString(); if(Math.random()<.05) saveSV(); }
   requestAnimationFrame(frame); }
