@@ -61,7 +61,7 @@ kbd{ font:inherit; font-size:13px; background:var(--ledbg); color:#fff; border-r
       <div class="card"><h3 style="margin-top:0">🚗 My cars</h3><div class="shop" id="garage"></div><div class="muted" style="font-size:13px;margin-top:4px">Tap a car to have it delivered to the nearest road ($50).</div></div>
     </div>
     <div class="card" style="margin-top:12px"><h3 style="margin-top:0">📊 Your stats</h3><div id="stats" style="display:grid;grid-template-columns:repeat(auto-fill,minmax(130px,1fr));gap:6px 12px;font-size:15px"></div></div>
-    <div class="hint"><b>On foot:</b> <kbd>W</kbd><kbd>A</kbd><kbd>S</kbd><kbd>D</kbd> walk · <kbd>Shift</kbd> run · <kbd>F</kbd> get in the nearest car (a car with a driver is a carjack — that's a crime). <b>Driving:</b> <kbd>W</kbd> gas · <kbd>S</kbd> brake / reverse · <kbd>A</kbd><kbd>D</kbd> steer · <kbd>Space</kbd> handbrake · <kbd>H</kbd> horn / siren · <kbd>R</kbd> radio · <kbd>F</kbd> get out · <kbd>C</kbd> camera · drag the screen to look around.
+    <div class="hint"><b>On foot:</b> <kbd>W</kbd><kbd>A</kbd><kbd>S</kbd><kbd>D</kbd> walk · <kbd>Shift</kbd> run · <kbd>F</kbd> get in the nearest car (a car with a driver is a carjack — that's a crime). <b>Driving:</b> <kbd>W</kbd> gas · <kbd>S</kbd> brake / reverse · <kbd>A</kbd><kbd>D</kbd> steer · <kbd>Space</kbd> handbrake · <kbd>H</kbd> horn / siren · <kbd>R</kbd> radio · <kbd>M</kbd> map (click for a waypoint, <kbd>T</kbd> for a cab) · <kbd>F</kbd> get out · <kbd>C</kbd> camera · drag the screen to look around.
       <b>The law:</b> running a red light or speeding past a police car, hitting people or cars, and carjacking raise your wanted stars. Get out of sight to lose them — stop near a cop with stars and you're busted. Visit the 🚘 dealer, 🔧 garage and 🏠 houses on the map.</div>
   </div>
 </main>
@@ -552,7 +552,8 @@ function render(dt){ if(!R3.ok) return; build();
 function drawHat(x,z,yaw,hat){ if(!hat) return; const m=R3.mm(R3.T(x*K,0,z*K),R3.RY(yaw)), B=(px,py,pz,w,h,d,col)=>R3.part(R3.UB,R3.mm(m,R3.T(px*K,py*K,pz*K),R3.S(w*K,h*K,d*K)),col);
   if(hat==='cap'){ B(0,1.78,0,.24,.1,.26,'#dc2626'); B(0,1.74,.17,.22,.03,.14,'#dc2626'); } if(hat==='beanie') B(0,1.79,0,.24,.15,.24,'#1e3a8a'); if(hat==='cowboy'){ B(0,1.74,0,.5,.03,.5,'#78350f'); B(0,1.82,0,.24,.14,.24,'#78350f'); } if(hat==='crown') B(0,1.8,0,.24,.12,.24,'#facc15'); }
 function myLook(){ const sh=SV.style.shirt||'#1d4ed8'; return owner()?{olympia:true,skin:'#caa078',hi:'#dcb68f',shade:'#a37b55',top:sh,topHi:sh,topDk:sh,shorts:'#0f1726',shoe:'#121a2a',hair:'#2a1f16'}:{top:sh,legs:'#0f1726',skin:'#caa078',shoe:'#121a2a',hair:'#2a1f16',buff:window.RRSTR?RRSTR.muscle():1}; }
-function markers(){ const out=[]; if(!JOB) return out; const mk=(p,col,r)=>p&&out.push({x:p.x,z:p.z,col:col,r:r||.9});
+let WAYPT=null, BIGMAP=false;
+function markers(){ const out=[]; const mk=(p,col,r)=>p&&out.push({x:p.x,z:p.z,col:col,r:r||.9}); if(!JOB){ if(WAYPT) mk(WAYPT,[1.6,.4,2.2],1); return out; }
   if(JOB.type==='taxi') mk(JOB.stage==='pick'?JOB.from:JOB.to,JOB.stage==='pick'?[2,1.8,.2]:[.2,2,.4]);
   if(JOB.type==='deliver') for(const s of JOB.stops) mk(s,[.3,1.4,2.2]);
   if(JOB.type==='race'&&JOB.cps[JOB.i]) mk(JOB.cps[JOB.i],[2,.6,.2],2.5);
@@ -590,8 +591,26 @@ function drawHUD(night){ ctx.clearRect(0,0,HW,HH); const me=ME.car||ME;
   else { let near=null, nd=4.2; for(const c of CARS){ const d=Math.hypot(c.x-ME.x,c.z-ME.z); if(d<nd&&!c.flee&&!c.racer&&(!c.cop||JOB&&JOB.type==='police')){ nd=d; near=c; } } if(near) txt(near.driver&&near.ai?`F — carjack the ${near.M.n} (crime!)`:`F — get in the ${near.M.n}`,HW/2,HH-30,22,near.driver&&near.ai?'#fca5a5':'#fde047'); }
   /* job line */ if(JOB){ let t=''; if(JOB.type==='story'){ const i=JOB.si, nm=STORY[i].n; t=i===0?`📖 ${nm}: ${JOB.stage<3?'checkpoint '+(JOB.stage+1)+'/3':'back to the garage'} · ${Math.ceil(JOB.left)}s`:i===1?`📖 ${nm}: ${ME.car===JOB.tcar?'drive it to the 🔧 garage':'find the yellow sports car'}`:i===2?`📖 ${nm}: ${Math.floor(JOB.ok)}/60 s · ${Math.round(Math.hypot(JOB.tcar.x-(ME.car||ME).x,JOB.tcar.z-(ME.car||ME).z))} m`:i===3?`📖 ${nm}: hit a stunt ramp`:`📖 ${nm}: ${JOB.stage===0?'grab the package':'get it to the 🔧 garage'}`; } if(JOB.type==='taxi') t=JOB.stage==='pick'?'🚕 Pick up the fare (yellow marker)':'🚕 Drop them at the green marker'; if(JOB.type==='deliver') t=`📦 ${JOB.stops.length} parcels left · ${Math.ceil(JOB.left)}s`; if(JOB.type==='police') t=JOB.suspect?`🚓 Stop the suspect! ${Math.round(Math.hypot(JOB.suspect.x-me.x,JOB.suspect.z-me.z))} m`:'🚓 Patrolling — waiting for dispatch'; if(JOB.type==='race') t=`🏁 Checkpoint ${JOB.i+1}/${JOB.cps.length} · rival at ${Math.min(JOB.ri+1,JOB.cps.length)}`; if(JOB.type==='getaway') t=JOB.stage==='pick'?'💰 Pick up the crew':JOB.stage==='lose'?'💰 Lose the police!':'💰 Get to the 🔧 garage';
     rrct(HW/2-260,12,520,34,12,'rgba(5,10,24,.75)'); txt(t,HW/2,37,20,'#fde047'); }
-  drawMap(me);
+  drawMap(me); if(BIGMAP) drawBigMap(me);
+  if(WAYPT&&!JOB&&Math.hypot(WAYPT.x-me.x,WAYPT.z-me.z)<12){ WAYPT=null; say('📍 You\'ve arrived','#c084fc',1.6); }
   if(msgT>0){ ctx.globalAlpha=clamp(msgT,0,1); txt(msg,HW/2,HH/2-80,32,msgCol); ctx.globalAlpha=1; } }
+/* the big map (M): see the whole city, click to drop a waypoint, or take a cab there */
+const BM={x:150,y:20,s:522};
+const bmX=v=>BM.x+(v+30)/(CW+140)*BM.s, bmZ=v=>BM.y+(v+30)/(CW+60)*BM.s, bmInvX=u=>(u-BM.x)/BM.s*(CW+140)-30, bmInvZ=v=>(v-BM.y)/BM.s*(CW+60)-30;
+function drawBigMap(me){ ctx.fillStyle='rgba(5,10,24,.92)'; ctx.fillRect(0,0,HW,HH); ctx.fillStyle='#3f5d35'; ctx.fillRect(BM.x,BM.y,BM.s,BM.s); ctx.fillStyle='#2b2f36'; ctx.fillRect(bmX(-15),bmZ(-15),bmX(CW+15)-bmX(-15),bmZ(CW+15)-bmZ(-15));
+  ctx.fillStyle='#e9d5a1'; ctx.fillRect(bmX(CW+10),BM.y,bmX(SEA_X)-bmX(CW+10),BM.s); ctx.fillStyle='#1d6fa5'; ctx.fillRect(bmX(SEA_X),BM.y,BM.x+BM.s-bmX(SEA_X),BM.s); ctx.fillStyle='#8b6b4a'; ctx.fillRect(bmX(PIER.x0),bmZ(PIER.z0),bmX(PIER.x1)-bmX(PIER.x0),4);
+  for(const b of BLOCKS){ ctx.fillStyle=b.type==='park'?'#3f7d2a':b.type==='tower'?'#64748b':PLACE_IC[b.type]?'#a16207':'#475569'; ctx.fillRect(bmX(b.x0),bmZ(b.z0),bmX(b.x1)-bmX(b.x0),bmZ(b.z1)-bmZ(b.z0)); }
+  ctx.strokeStyle='#0ea5e9'; ctx.lineWidth=3; ctx.strokeRect(bmX(TR.x0),bmZ(TR.z0),bmX(TR.x1)-bmX(TR.x0),bmZ(TR.z1)-bmZ(TR.z0));
+  ctx.font='16px sans-serif'; ctx.textAlign='center'; for(const pl of PLACES) ctx.fillText(PLACE_IC[pl.type],bmX(pl.x),bmZ(pl.z)); for(const st of STNS) ctx.fillText('🚉',bmX(st.bx),bmZ(st.bz)+5);
+  for(const p of PKGS) if(!SV.pk.includes(p.i)&&SV.pk.length>=10){ ctx.fillStyle='#4ade80'; ctx.fillRect(bmX(p.x)-2,bmZ(p.z)-2,4,4); }
+  for(const m of markers()){ ctx.fillStyle='#fde047'; ctx.beginPath(); ctx.arc(bmX(m.x),bmZ(m.z),6,0,PI*2); ctx.fill(); }
+  const yaw=ME.car?ME.car.yaw:ME.yaw; ctx.save(); ctx.translate(bmX(me.x),bmZ(me.z)); ctx.rotate(-yaw+PI); ctx.fillStyle='#fff'; ctx.beginPath(); ctx.moveTo(0,-10); ctx.lineTo(7,7); ctx.lineTo(-7,7); ctx.fill(); ctx.restore();
+  txt('🗺️ RIVAL CITY',BM.x-10,48,26,'#fde68a','right'); txt('Click to set a waypoint',BM.x-10,76,15,'#cbd5e1','right'); txt('M to close',BM.x-10,98,15,'#cbd5e1','right');
+  if(WAYPT){ txt(`Waypoint: ${Math.round(Math.hypot(WAYPT.x-me.x,WAYPT.z-me.z))} m`,BM.x-10,140,17,'#c084fc','right'); txt('T — take a cab there',BM.x-10,162,15,'#fde047','right'); txt(`($${cabFare()})`,BM.x-10,182,15,'#fde047','right'); }
+  if(SV.pk.length<10){ txt('Find 10 packages and',BM.x-10,HH-48,13,'#86efac','right'); txt('the map shows the rest',BM.x-10,HH-30,13,'#86efac','right'); } }
+const cabFare=()=>WAYPT?Math.round(20+Math.hypot(WAYPT.x-(ME.car||ME).x,WAYPT.z-(ME.car||ME).z)*.25):0;
+function takeCab(){ if(!WAYPT) return; if(heat>0){ say('No cab will stop for someone the police are chasing','#f87171'); return; } const f=cabFare(); if(SV.money<f){ say('Not enough for the fare','#f87171'); return; } if(ME.car){ ME.car.driver=false; ME.car=null; }
+  const p=nearestRoadSpot(WAYPT.x,WAYPT.z); ME.x=p.x+(p.yaw?0:3); ME.z=p.z+(p.yaw?3:0); BIGMAP=false; TOD=(TOD+.4)%24; pay(-f,'— cab fare 🚕'); say('🚕 The cab drops you off','#fde047',2); }
 function drawMap(me){ const S=150, x0=18, y0=18, sc=S/(CW+100), mx=v=>x0+(v+20)*sc, mz=v=>y0+(v+20)*sc;
   rrct(x0-4,y0-4,S+8,S+8,10,'rgba(5,10,24,.78)');
   for(const b of BLOCKS){ ctx.fillStyle=b.type==='park'?'#3f7d2a':b.type==='tower'?'#64748b':PLACE_IC[b.type]?'#a16207':'#475569'; ctx.fillRect(mx(b.x0),mz(b.z0),(b.x1-b.x0)*sc,(b.z1-b.z0)*sc); }
@@ -654,9 +673,9 @@ $('btnFs').onclick=()=>{ try{ document.fullscreenElement?document.exitFullscreen
 
 /* ---------- input ---------- */
 addEventListener('keydown',e=>{ const t=document.activeElement; if(t&&(t.tagName==='INPUT'||t.tagName==='TEXTAREA')) return; if(['Space','ArrowUp','ArrowDown','ArrowLeft','ArrowRight'].includes(e.code)) e.preventDefault(); keys.add(e.code); audio(); engine();
-  if(e.repeat) return; if(e.code==='KeyF') getIn(); if(e.code==='KeyC') camMode=1-camMode; if(e.code==='KeyR'&&ME.car) setRadio((radio+1)%STATIONS.length); if(e.code==='KeyH'&&ME.car){ if(ME.car.model==='police'){ ME.car.siren=!ME.car.siren; if(ME.car.siren) sfx.siren(); } else sfx.horn(); } });
+  if(e.repeat) return; if(e.code==='KeyF') getIn(); if(e.code==='KeyC') camMode=1-camMode; if(e.code==='KeyM'){ BIGMAP=!BIGMAP; } if(e.code==='KeyT'&&BIGMAP) takeCab(); if(e.code==='KeyR'&&ME.car) setRadio((radio+1)%STATIONS.length); if(e.code==='KeyH'&&ME.car){ if(ME.car.model==='police'){ ME.car.siren=!ME.car.siren; if(ME.car.siren) sfx.siren(); } else sfx.horn(); } });
 addEventListener('keyup',e=>keys.delete(e.code)); addEventListener('blur',()=>keys.clear());
-const st=$('stage'); let drag=null; st.addEventListener('pointerdown',e=>{ if(e.target.closest('#touch')) return; drag={x:e.clientX,yaw:camYaw}; camDrag=1; audio(); }); addEventListener('pointermove',e=>{ if(drag) camYaw=drag.yaw-(e.clientX-drag.x)*.008; }); addEventListener('pointerup',()=>{ drag=null; camDrag=0; });
+const st=$('stage'); let drag=null; st.addEventListener('pointerdown',e=>{ if(e.target.closest('#touch')) return; if(BIGMAP){ const r=st.getBoundingClientRect(), u=(e.clientX-r.left)/r.width*HW, v=(e.clientY-r.top)/r.height*HH; if(u>=BM.x&&u<=BM.x+BM.s&&v>=BM.y&&v<=BM.y+BM.s){ WAYPT={x:bmInvX(u),z:bmInvZ(v)}; tone(880,.08,'sine',.05); } return; } drag={x:e.clientX,yaw:camYaw}; camDrag=1; audio(); }); addEventListener('pointermove',e=>{ if(drag) camYaw=drag.yaw-(e.clientX-drag.x)*.008; }); addEventListener('pointerup',()=>{ drag=null; camDrag=0; });
 const sk=$('stick'), kn=$('knob'); let sid=null; sk.addEventListener('pointerdown',e=>{ sid=e.pointerId; sk.setPointerCapture(sid); mv(e); e.stopPropagation(); }); sk.addEventListener('pointermove',e=>{ if(e.pointerId===sid) mv(e); }); sk.addEventListener('pointerup',()=>{ sid=null; stick={x:0,y:0}; kn.style.left='40px'; kn.style.top='40px'; });
 function mv(e){ const r=sk.getBoundingClientRect(), dx=clamp((e.clientX-r.left-60)/50,-1,1), dy=clamp((e.clientY-r.top-60)/50,-1,1); stick={x:dx,y:dy}; kn.style.left=(40+dx*40)+'px'; kn.style.top=(40+dy*40)+'px'; }
 for(const [id,f] of [['tG',v=>tGas=v],['tB',v=>tBrk=v]]){ const b=$(id); b.addEventListener('pointerdown',e=>{ f(1); e.stopPropagation(); audio(); }); for(const ev of ['pointerup','pointerleave','pointercancel']) b.addEventListener(ev,()=>f(0)); }
