@@ -187,7 +187,7 @@ const MODELS={
   amb:V('Ambulance','amb',170,250,3500,'rwd',8.6,5.6,2.1,2.4,-1,'#f8fafc',{amb:1})};
 for(const k in MODELS){ const M=MODELS[k]; if(M.boat){ M.top=Math.min(M.top,40); } }
 /* how common each vehicle is in traffic and parked on the street */
-const TRAFFIC_MIX=[['hatch',10],['compact',8],['sedan',12],['wagon',5],['suv',9],['pickup',6],['minivan',5],['coupe',3],['convert',2],['muscle',2],['classic',2],['sports',1.5],['offroad',2],['taxi',7],['van',5],['boxtruck',3],['garbage',1],['icecream',1],['bus',4],['moto',3],['scooter',3],['chopper',1],['limo',1]];
+const TRAFFIC_MIX=[['police',2],['policesuv',1],['hatch',10],['compact',8],['sedan',12],['wagon',5],['suv',9],['pickup',6],['minivan',5],['coupe',3],['convert',2],['muscle',2],['classic',2],['sports',1.5],['offroad',2],['taxi',7],['van',5],['boxtruck',3],['garbage',1],['icecream',1],['bus',4],['moto',3],['scooter',3],['chopper',1],['limo',1]];
 const pickMix=(r,mix)=>{ const tot=mix.reduce((a,b)=>a+b[1],0); let x=r*tot; for(const [k,w] of mix){ if((x-=w)<=0) return k; } return mix[0][0]; };
 const TCOL=['#64748b','#1e3a8a','#b91c1c','#e2e8f0','#0f172a','#16a34a','#92400e','#facc15','#94a3b8','#7c3aed','#f8fafc','#1f2937','#9f1239','#0e7490','#d97706','#4b5563','#e2e8f0','#111827'];
 function mkCar(model,x,z,yaw,col){ const M=MODELS[model]; return {model,M,x,z,yaw,y:0,vy:0,fuel:.55+Math.random()*.45,v:0,vs:0,steer:0,col:col||M.col,hp:100,ai:null,driver:false,siren:false,skid:0,rx:x,rz:z,ryaw:yaw,stop:0,id:Math.random().toString(36).slice(2,8)}; }
@@ -301,7 +301,8 @@ function trafficStep(c,dt){ const a=c.ai; if(c.stop>0){ c.stop-=dt; a.spd=lerp(a
   /* red or yellow light ahead: stop at the line */
   if(nextK>=0&&nextK<NL){ const li=a.axis==='x'?light(nextK,a.L,'x'):light(a.L,nextK,'z'); if(li!=='g'&&dStop>0&&dStop<Math.max(6,a.spd*a.spd/6+4)) want=Math.min(want,Math.max(0,(dStop-1)*1.2)); }
   /* the car in front, in my lane */
-  for(const o of CARS){ if(o===c||!o.ai) continue; const b=o.ai; if(b.axis!==a.axis||b.L!==a.L||b.dir!==a.dir||b.lane!==a.lane) continue; const ds=(b.s-a.s)*a.dir; if(ds>0&&ds<26) want=Math.min(want,Math.max(0,(ds-7)*.9)); }
+  let slowAhead=null; for(const o of CARS){ if(o===c||!o.ai||o.off) continue; const b=o.ai; if(b.axis!==a.axis||b.L!==a.L||b.dir!==a.dir||b.lane!==a.lane) continue; const ds=(b.s-a.s)*a.dir; if(ds>0&&ds<26){ want=Math.min(want,Math.max(0,(ds-7)*.9)); if(b.spd<a.want*.6&&b.spd>.5) slowAhead=o; } }
+  /* stuck behind a bus or truck? move over if the other lane is clear */ if(slowAhead){ a.passT=(a.passT||0)+dt; if(a.passT>1.6){ const other=1-a.lane, clear=!CARS.some(o=>o!==c&&o.ai&&!o.off&&o.ai.axis===a.axis&&o.ai.L===a.L&&o.ai.dir===a.dir&&o.ai.lane===other&&Math.abs(o.ai.s-a.s)<14); if(clear){ a.lane=other; a.passT=0; } } } else a.passT=0;
   /* you (on foot or in a car) in front of me */
   const me=ME.car||ME; const fx=a.axis==='x'?a.dir:0, fz=a.axis==='z'?a.dir:0, dx=me.x-c.x, dz=me.z-c.z, ahead=dx*fx+dz*fz, side=Math.abs(dx*fz-dz*fx); if(ahead>0&&ahead<20&&side<2.6){ want=Math.min(want,Math.max(0,(ahead-6)*.8)); c.blockT=(c.blockT||0)+dt; if(c.blockT>2.2&&(!c.honkT||T-c.honkT>4)&&Math.hypot(dx,dz)<35){ c.honkT=T; sfx.horn(); } } else c.blockT=0;
   if(sirenOn()&&Math.hypot(dx,dz)<45) want=Math.min(want,3);
@@ -483,11 +484,12 @@ function step(dt){ T+=dt; TOD=(TOD+dt/30)%24; if(msgT>0) msgT-=dt;
     for(const c of CARS){ if(c===ME.car) continue; const d=Math.hypot(ME.x-c.x,ME.z-c.z); if(d<1.9&&Math.abs(c.v)>5&&ME.down<=0){ hurt(Math.abs(c.v)*2.2,'hit by a car'); ME.down=1.6; sfx.crash(.15); } }
     const h=hitRect(ME.x,ME.z,.4); if(h){ ME.x+=h.nx*h.pen; ME.z+=h.nz*h.pen; } for(const c of CARS){ const d=Math.hypot(ME.x-c.x,ME.z-c.z); if(d<1.6){ ME.x=c.x+(ME.x-c.x)/d*1.6; ME.z=c.z+(ME.z-c.z)/d*1.6; } } ME.x=clamp(ME.x,-14,CW+130); ME.z=clamp(ME.z,-14,CW+14); { const h2=hitPost(ME.x,ME.z,.35); if(h2){ ME.x+=h2.nx*h2.pen; ME.z+=h2.nz*h2.pen; } } }
   /* traffic, cops, suspects */
-  for(const c of CARS){ if(c.ai) trafficStep(c,dt); else if(c.flee) fleeStep(c,dt); else if(!c.cop&&c!==ME.car&&!c.racer&&!c.ambTo){ if(Math.abs(c.v)>.1) drive(c,0,1,0,false,dt); } }
+  { const busy=TOD>=7&&TOD<9.5||TOD>=16&&TOD<19?1:TOD>=22||TOD<5.5?.45:.75; for(const c of CARS) if(c.ai&&c.rush!=null){ const want=c.rush<busy, me2=ME.car||ME; if(!want&&!c.off&&Math.hypot(c.x-me2.x,c.z-me2.z)>140){ c.off=true; c.x=c.rx=-99999; c.z=c.rz=-99999; } else if(want&&c.off){ const q=laneXZ(c.ai); if(Math.hypot(q[0]-me2.x,q[1]-me2.z)>140){ c.off=false; c.x=c.rx=q[0]; c.z=c.rz=q[1]; } } } }
+  for(const c of CARS){ if(c.off) continue; if(c.ai) trafficStep(c,dt); else if(c.flee) fleeStep(c,dt); else if(!c.cop&&c!==ME.car&&!c.racer&&!c.ambTo){ if(Math.abs(c.v)>.1) drive(c,0,1,0,false,dt); } }
   copsStep(dt); jobStep(dt); ambStep(dt); pkgStep(); trainStep(dt); skidStep(dt); policeChatter(dt); spikeStep();
   SV.st=SV.st||{km:0,top:0,stolen:0,mins:0}; SV.st.mins+=dt/60; if(ME.car){ SV.st.km+=Math.abs(ME.car.v)*dt/1000; SV.st.top=Math.max(SV.st.top,Math.abs(ME.car.v)*3.6); } heliStep(dt); roadblockStep(); weatherStep(dt);
   /* car vs car: shove apart, swap some speed, dent both */
-  for(let i=0;i<CARS.length;i++) for(let j=i+1;j<CARS.length;j++){ const a=CARS[i], b=CARS[j], dx=b.x-a.x, dz=b.z-a.z, d=Math.hypot(dx,dz), R=(a.M.len+b.M.len)*.28; if(d>=R||d<1e-4) continue;
+  for(let i=0;i<CARS.length;i++) for(let j=i+1;j<CARS.length;j++){ const a=CARS[i], b=CARS[j]; if(a.off||b.off) continue; const dx=b.x-a.x, dz=b.z-a.z, d=Math.hypot(dx,dz), R=(a.M.len+b.M.len)*.28; if(d>=R||d<1e-4) continue;
     const nx=dx/d, nz=dz/d, pen=R-d, ma=a.ai?.5:1, mb=b.ai?.5:1; a.x-=nx*pen*ma*.5; a.z-=nz*pen*ma*.5; b.x+=nx*pen*mb*.5; b.z+=nz*pen*mb*.5;
     const va=a.v*(Math.sin(a.yaw)*nx+Math.cos(a.yaw)*nz), vb=b.v*(Math.sin(b.yaw)*nx+Math.cos(b.yaw)*nz), imp=Math.abs(va-vb);
     if(imp>3){ a.hp=Math.max(0,a.hp-imp*.6); b.hp=Math.max(0,b.hp-imp*.6); a.v*=.55; b.v*=.55; if(a.ai) a.stop=3; if(b.ai) b.stop=3; if(a===ME.car||b===ME.car){ sfx.crash(imp/30); hurt((imp-12)*1.8,'crash'); const other=a===ME.car?b:a;
@@ -670,7 +672,7 @@ function render(dt){ if(!R3.ok) return; build();
     for(let i=0;i<NL;i++) for(let j=0;j<NL;j++){ const x=i*P, z=j*P; if(Math.hypot(x-me.x,z-me.z)>140) continue; for(const [ax,ox,oz] of [['z',ROAD+1.5,ROAD+1.5],['x',-ROAD-1.5,ROAD+1.5],['z',-ROAD-1.5,-ROAD-1.5],['x',ROAD+1.5,-ROAD-1.5]]){
         const li=light(i,j,ax); R3.part(R3.UB,R3.mm(R3.T((x+ox)*K,2.2*K,(z+oz)*K),R3.S(.14*K,4.4*K,.14*K)),'#1f2937'); R3.part(R3.UB,R3.mm(R3.T((x+ox)*K,4.6*K,(z+oz)*K),R3.S(.5*K,1.2*K,.5*K)),'#111827');
         const lc=li==='g'?'#22c55e':li==='y'?'#facc15':'#ef4444', boost=night?2.2:1.3; const cc=lc.match(/\w\w/g).map(h=>parseInt(h,16)/255*boost); R3.part(R3.US,R3.mm(R3.T((x+ox)*K,(li==='g'?4.25:li==='y'?4.6:4.95)*K,(z+oz)*K),R3.S(.26*K,.26*K,.26*K)),cc); } }
-    const cockpit=ME.car&&camMode===2&&!ME.car.M.bike&&!ME.car.M.boat; for(const c of CARS) if(Math.hypot(c.x-me.x,c.z-me.z)<220){ if(cockpit&&c===ME.car) drawCockpit(c,night); else carDraw(c,night); } heliDraw(night);
+    const cockpit=ME.car&&camMode===2&&!ME.car.M.bike&&!ME.car.M.boat; for(const c of CARS) if(!c.off&&Math.hypot(c.x-me.x,c.z-me.z)<220){ if(cockpit&&c===ME.car) drawCockpit(c,night); else carDraw(c,night); } heliDraw(night);
     trainDraw(night); skidDraw(); if(Math.sin(T*3)>.3) for(const l of AIRLIGHTS) R3.part(R3.US,R3.mm(R3.T(l[0]*K,l[1]*K,l[2]*K),R3.S(.7*K,.7*K,.7*K)),night?[4,.3,.3]:'#ef4444'); for(const sp of SPIKES) for(let k=-5;k<=5;k+=.5) R3.part(R3.UB,R3.mm(R3.T((sp.x+(sp.alongX?0:k))*K,.06*K,(sp.z+(sp.alongX?k:0))*K),R3.RY(PI/4),R3.S(.18*K,.12*K,.18*K)),'#9ca3af');
     for(const r of RAMPS){ const ang=Math.atan(r.rise/r.len); R3.part(R3.UB,R3.mm(R3.T(r.x*K,(r.rise/2)*K,r.z*K),R3.RY(r.yaw),R3.RX(-ang),R3.S(r.w*K,.25*K,Math.hypot(r.len,r.rise)*K)),'#f59e0b'); R3.part(R3.UB,R3.mm(R3.T(r.x*K,(r.rise/2)*K,r.z*K),R3.RY(r.yaw),R3.RX(-ang),R3.T(0,.13*K,0),R3.S(r.w*.15*K,.02*K,Math.hypot(r.len,r.rise)*K)),'#111'); }
     for(const p of PKGS){ if(SV.pk.includes(p.i)||Math.hypot(p.x-me.x,p.z-me.z)>120) continue; R3.part(R3.UB,R3.mm(R3.T(p.x*K,(.6+Math.sin(T*3+p.i)*.12)*K,p.z*K),R3.RY(T*2+p.i),R3.S(.6*K,.6*K,.6*K)),[.3,2.2,.5]); }
@@ -833,7 +835,7 @@ if(window.RRO) NET=RRO.init({game:'city',maxPlayers:8,minPlayers:1,dropIn:true,p
   onPeers:(api,kind,m)=>{ if(kind==='leave') OT.delete(m.id); }, onEnd:()=>OT.clear() });
 
 /* ---------- start ---------- */
-spawnTraffic(32); spawnParked(26); spawnPeds(46);
+spawnTraffic(46); CARS.filter(c=>c.ai).forEach((c,i)=>{ c.rush=i/46; });   /* each car has a 'how busy before I'm out' level */ spawnParked(26); spawnPeds(46);
 for(const [m,dz,dx] of [['boat',-6.5,-8],['jetski',6.2,-6],['boat',6.5,-18]]) CARS.push(mkCar(m,PIER.x1+dx,CW/2+dz,PI/2,m==='boat'?(dx<-10?'#b91c1c':'#f8fafc'):null));
 { const home=SV.home!=null&&PLACES[SV.home]?PLACES[SV.home]:PLACES.find(p=>p.type==='depot'); ME.x=home.x; ME.z=home.z; const p=nearestRoadSpot(ME.x,ME.z+6); const c=mkCar(SV.cars.includes('hatch')?'hatch':SV.cars[0],p.x,p.z,p.yaw,SV.colors.hatch); c.mine=true; CARS.push(c); }
 TOD=SV.tod||8.5; renderPanel();
