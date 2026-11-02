@@ -75,6 +75,16 @@
   function leaveTour(t,btn,d){ btn.disabled=true; btn.textContent='Leaving…';
     fetch(SERVER+'/tourney',{method:'POST',headers:{'content-type':'application/json'},body:JSON.stringify({op:'leave',id:t.id,pid:pid()})}).then(()=>{ setJoined(joinedIds().filter(x=>x!==t.id)); btn.disabled=false; btn.classList.remove('on'); btn.textContent='Join tournament'; const bb=document.getElementById('rrTourBtn'); if(bb) bb.innerHTML='🏆 Tournament'; }).catch(()=>{ btn.disabled=false; btn.textContent="✓ You're in — tap to leave"; }); }
 
+  /* ---------- graphics: a colour grade and vignette over every 3D game, with a High / Low switch ---------- */
+  const GFX=()=>ls.get('rrGfx')==='low'?'low':'high';
+  if(GFX()==='low'){ try{ Object.defineProperty(window,'devicePixelRatio',{get:()=>1,configurable:true}); }catch(e){} }
+  function gfxApply(){ const gl=document.getElementById('gl'); if(!gl) return; const hi=GFX()==='high';
+    gl.style.filter=hi?'saturate(1.22) contrast(1.1) brightness(1.04)':''; let v=document.getElementById('rrVig');
+    if(hi&&!v&&gl.parentNode){ v=document.createElement('div'); v.id='rrVig'; v.style.cssText='position:absolute;inset:0;pointer-events:none;background:radial-gradient(ellipse at 50% 45%,rgba(0,0,0,0) 55%,rgba(0,0,0,.34) 100%);border-radius:inherit'; gl.insertAdjacentElement('afterend',v); }
+    if(!hi&&v) v.remove();
+    const tools=document.querySelector('.tools'); if(tools&&!document.getElementById('rrGfxBtn')){ const b=document.createElement('button'); b.id='rrGfxBtn'; b.title='Graphics quality (Low runs faster on slow computers)'; tools.appendChild(b); b.onclick=()=>{ ls.set('rrGfx',GFX()==='high'?'low':'high'); location.reload(); }; }
+    const b=document.getElementById('rrGfxBtn'); if(b) b.textContent=hi?'✨ Graphics: High':'⚡ Graphics: Low'; }
+  if(PAGE!=='admin'){ if(document.readyState==='loading') addEventListener('DOMContentLoaded',gfxApply); else gfxApply(); }
   /* ---------- admin controls that reach every page ---------- */
   const admDev=()=>!!ls.get('rrAdmUrl');
   function cover2(id,html){ let o=document.getElementById(id); if(!html){ if(o) o.remove(); return; } if(!document.body) return void addEventListener('DOMContentLoaded',()=>cover2(id,html)); if(!o){ o=document.createElement('div'); o.id=id; o.style.cssText='position:fixed;inset:0;z-index:'+(id==='rrBan'?2147483640:2147483600)+';display:flex;align-items:center;justify-content:center;padding:20px;background:#05080f;color:#f8fafc;font:600 18px system-ui,sans-serif;text-align:center'; document.body.appendChild(o); } o.innerHTML=html; }
