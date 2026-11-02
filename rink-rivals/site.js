@@ -75,7 +75,28 @@
   function leaveTour(t,btn,d){ btn.disabled=true; btn.textContent='Leaving…';
     fetch(SERVER+'/tourney',{method:'POST',headers:{'content-type':'application/json'},body:JSON.stringify({op:'leave',id:t.id,pid:pid()})}).then(()=>{ setJoined(joinedIds().filter(x=>x!==t.id)); btn.disabled=false; btn.classList.remove('on'); btn.textContent='Join tournament'; const bb=document.getElementById('rrTourBtn'); if(bb) bb.innerHTML='🏆 Tournament'; }).catch(()=>{ btn.disabled=false; btn.textContent="✓ You're in — tap to leave"; }); }
 
-  function apply(st){ if(!st) return; if('ov' in st) cacheOv(st.ov); try{ ls.set('rrSiteAt',String(Date.now())); }catch(e){} if(st.ann) showAnn(st.ann); if(st.settings) showBanner(st.settings); showTourney(st.tourneys||[]); }
+  /* ---------- admin controls that reach every page ---------- */
+  const admDev=()=>!!ls.get('rrAdmUrl');
+  function cover2(id,html){ let o=document.getElementById(id); if(!html){ if(o) o.remove(); return; } if(!document.body) return void addEventListener('DOMContentLoaded',()=>cover2(id,html)); if(!o){ o=document.createElement('div'); o.id=id; o.style.cssText='position:fixed;inset:0;z-index:'+(id==='rrBan'?2147483640:2147483600)+';display:flex;align-items:center;justify-content:center;padding:20px;background:#05080f;color:#f8fafc;font:600 18px system-ui,sans-serif;text-align:center'; document.body.appendChild(o); } o.innerHTML=html; }
+  function gate(set){ set=set||{}; try{ ls.set('rrSiteGate',JSON.stringify({maint:set.maint,maintMsg:set.maintMsg,off:set.off,hidden:set.hidden,events:set.events})); ls.set('rrSiteEvents',JSON.stringify(set.events||{})); }catch(e){}
+    if(PAGE==='admin') return; const adm=admDev();
+    cover2('rrMaint',set.maint&&!adm?`<div><div style="font-size:64px">🛠️</div><h2 style="margin:8px 0">Rink Rivals is down for maintenance</h2><p style="color:#cbd5e1;max-width:520px">${esc(set.maintMsg||'We\'re making some changes. Check back soon!')}</p></div>`:'');
+    const off=(set.off||[]).includes(PAGE); cover2('rrOff',off&&!adm?`<div><div style="font-size:64px">⛔</div><h2 style="margin:8px 0">This game is switched off for now</h2><p style="color:#cbd5e1">An admin has turned it off for a while. Try another game!</p><a href="./" style="display:inline-block;margin-top:10px;background:#fbbf24;color:#0a0d18;padding:10px 18px;border-radius:999px;text-decoration:none;font-weight:800">🏠 Home</a></div>`:'');
+    if(PAGE===''||PAGE==='index'){ const hide=set.hidden||[], offs=set.off||[], run=()=>document.querySelectorAll('a.card').forEach(a=>{ const g=(a.getAttribute('href')||'').replace(/\.html$/,'').replace(/^\.?\//,''); a.style.display=hide.includes(g)&&!adm?'none':''; a.style.opacity=offs.includes(g)?'.45':''; a.title=offs.includes(g)?'Switched off by an admin':''; }); if(document.readyState==='loading') addEventListener('DOMContentLoaded',run); else run(); } }
+  try{ gate(JSON.parse(ls.get('rrSiteGate')||'null')); }catch(e){}
+  function banScreen(b){ cover2('rrBan',b?`<div><div style="font-size:64px">🚫</div><h2 style="margin:8px 0">You've been banned from Rink Rivals</h2>${b.reason?`<p style="color:#fca5a5">Reason: ${esc(b.reason)}</p>`:''}<p style="color:#cbd5e1">${b.until?'The ban ends '+new Date(b.until).toLocaleString():'This ban does not expire.'}</p></div>`:''); try{ b?ls.set('rrBanned',JSON.stringify(b)):localStorage.removeItem('rrBanned'); }catch(e){} }
+  try{ const b=JSON.parse(ls.get('rrBanned')||'null'); if(b&&(!b.until||b.until>Date.now())&&PAGE!=='admin') banScreen(b); }catch(e){}
+  function popup(title,text){ if(!document.body) return void addEventListener('DOMContentLoaded',()=>popup(title,text)); const o=document.createElement('div'); o.style.cssText='position:fixed;inset:0;z-index:2147483500;display:flex;align-items:center;justify-content:center;padding:18px;background:rgba(0,0,0,.6);font:600 17px system-ui,sans-serif';
+    o.innerHTML=`<div style="max-width:440px;width:100%;background:#0f172a;color:#f8fafc;border:2px solid #fbbf24;border-radius:18px;padding:20px 22px;text-align:center"><div style="font-size:40px">📨</div><h3 style="margin:6px 0 8px;font-size:22px">${esc(title)}</h3><p style="color:#e2e8f0;white-space:pre-wrap">${esc(text)}</p><button style="margin-top:10px;font:800 16px system-ui;background:#fbbf24;border:0;border-radius:999px;padding:9px 22px;cursor:pointer">OK</button></div>`;
+    o.querySelector('button').onclick=()=>o.remove(); document.body.appendChild(o); }
+  function runCmds(cmds){ for(const c of cmds||[]){ const d=c.data||{};
+      if(c.kind==='msg') popup(d.title||'Message from the admin',d.text||'');
+      if(c.kind==='reload') setTimeout(()=>location.reload(),300);
+      if(c.kind==='kick'){ popup('Kicked',d.text||'You were kicked by an admin.'); setTimeout(()=>{ location.href='./'; },2500); }
+      if(c.kind==='rename'&&d.name){ ls.set('rrOnlineName',d.name); popup('Your name was changed',`An admin changed your name to "${d.name}".`); }
+      if(c.kind==='gift'){ const n=+d.n||0; if(d.what==='str'&&window.RRSTR){ RRSTR.add(Math.min(100,n)); popup('🎁 Gift from the admin',`+${n} strength${d.note?'\n'+d.note:''}`); }
+        if(d.what==='cash'){ if(PAGE==='city') dispatchEvent(new CustomEvent('rr-gift',{detail:{cash:n}})); else { try{ const sv=JSON.parse(ls.get('rrCity')||'{}'); sv.money=(sv.money||2500)+n; ls.set('rrCity',JSON.stringify(sv)); }catch(e){} } popup('🎁 Gift from the admin',`+$${n.toLocaleString()} in Rival City${d.note?'\n'+d.note:''}`); } } } }
+  function apply(st){ if(!st) return; gate(st.settings||{}); if('ov' in st) cacheOv(st.ov); try{ ls.set('rrSiteAt',String(Date.now())); }catch(e){} if(st.ann) showAnn(st.ann); if(st.settings) showBanner(st.settings); showTourney(st.tourneys||[]); }
 
   const css=document.createElement('style'); css.textContent=`#rrAnn,#rrTour{position:fixed;inset:0;z-index:100000;display:flex;align-items:center;justify-content:center;padding:18px;background:rgba(3,6,14,.82);backdrop-filter:blur(3px);font-family:'DM Sans',system-ui,sans-serif;animation:rraIn .25s ease}
 @keyframes rraIn{from{opacity:0}to{opacity:1}}
@@ -125,8 +146,8 @@ body.rrHasBanner #rrTourBtn{top:48px}
 
   /* count play time: a heartbeat every minute while the page is open and visible */
   function beat(){ if(OFF||PAGE==='admin'||document.visibilityState!=='visible') return;
-    fetch(SERVER+'/play',{method:'POST',headers:{'content-type':'application/json'},keepalive:true,body:JSON.stringify({pid:pid(),name:ls.get('rrOnlineName')||'Player',game:PAGE||'home'})}).catch(()=>{}); }
-  if(!OFF&&PAGE!=='admin'){ setTimeout(beat,4000); setInterval(beat,60000); document.addEventListener('visibilitychange',()=>{ if(document.visibilityState==='visible') beat(); }); }
+    fetch(SERVER+'/play',{method:'POST',headers:{'content-type':'application/json'},keepalive:true,body:JSON.stringify({pid:pid(),name:ls.get('rrOnlineName')||'Player',game:PAGE||'home'})}).then(r=>r.json()).then(d=>{ if(!d) return; banScreen(d.ban||null); runCmds(d.cmds); }).catch(()=>{}); }
+  if(!OFF&&PAGE!=='admin'){ setTimeout(beat,2500); setInterval(beat,30000); setInterval(()=>RRSITE.refresh(),120000); document.addEventListener('visibilitychange',()=>{ if(document.visibilityState==='visible') beat(); }); }
   /* show a cached announcement instantly, then refresh from the server */
   try{ const c=JSON.parse(ls.get('rrSiteCfgCache')||'null'); if(c&&c.ann) showAnn(c.ann); }catch(e){}
   if(!OFF) RRSITE.refresh().then(st=>{ if(st) try{ ls.set('rrSiteCfgCache',JSON.stringify({ann:st.ann})); }catch(e){} });
