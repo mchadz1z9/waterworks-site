@@ -223,6 +223,8 @@ export class Chat {
       if(m.op==='grant'){ if(!full) return J({err:'forbidden'},403); const pub=String(m.pubid||'').slice(0,12), lvl=m.lvl==='full'?'full':'mod', nm=String(m.name||'').slice(0,24); if(!pub) return J({err:'bad'},400); const live=this.socksByPub(pub); if(!live.length) return J({err:'offline'},409);
         const who=live[0].deserializeAttachment().who; this.sql.exec('INSERT OR REPLACE INTO grnt2(sh,pubid,lvl,name,ts) VALUES(?,?,?,?,?)',await sha('rr-grant:'+who),pub,lvl,nm,Date.now()); for(const ws of live) this.send(ws,{t:'role',lvl,url:ADMIN_URL}); return J({ok:true}); }
       if(m.op==='ungrant'&&m.pubid){ if(!full) return J({err:'forbidden'},403); this.sql.exec('DELETE FROM grnt WHERE pubid=?',String(m.pubid)); this.sql.exec('DELETE FROM grnt2 WHERE pubid=?',String(m.pubid)); for(const ws of this.socksByPub(String(m.pubid))) this.send(ws,{t:'role',lvl:null}); return J({ok:true}); }
+      if(m.op==='grantself'){ if(!full) return J({err:'forbidden'},403); const pid=String(m.pid||'').replace(/[^a-z0-9]/gi,'').slice(0,24); if(pid.length<8) return J({err:'bad'},400); const pub=pubId(pid);
+        this.sql.exec('INSERT OR REPLACE INTO grnt2(sh,pubid,lvl,name,ts) VALUES(?,?,?,?,?)',await sha('rr-grant:'+pid),pub,'full',String(m.name||'Owner').slice(0,24),Date.now()); for(const ws of this.socksByPub(pub)) this.send(ws,{t:'role',lvl:'full',url:ADMIN_URL}); return J({ok:true}); }
       if(m.op==='grants') return J({grants:this.sql.exec('SELECT pubid,lvl,name,ts FROM grnt2 ORDER BY ts DESC').toArray()});
       if(m.op==='who'){ const seen=new Set(), out=[]; for(const ws of this.socks()){ const a=ws.deserializeAttachment(); if(seen.has(a.who)) continue; seen.add(a.who); out.push({name:a.name,game:a.game,id:pubId(a.who),tag:this.tagOf(a.name)}); } return J({who:out}); }
       if(m.op==='recent'){ const rows=this.sql.exec('SELECT name FROM m WHERE hid=0 ORDER BY id DESC LIMIT 300').toArray(); const seen=new Set(), out=[]; for(const r of rows){ const k=r.name.toLowerCase(); if(seen.has(k)) continue; seen.add(k); out.push({name:r.name,tag:this.tagOf(r.name),banned:!!this.isBanned(r.name)}); if(out.length>=40) break; } return J({recent:out}); }
@@ -255,7 +257,7 @@ export class Chat {
     if(m.t==='hello'){ const who=String(m.pid||'').replace(/[^a-z0-9]/gi,'').slice(0,24)||crypto.randomUUID().slice(0,12); const nm=cleanName(m.name);
       const b=this.isBanned(nm,who); if(b){ this.send(ws,{t:'kicked',perm:b.until===0,mins:b.until===0?0:Math.ceil((b.until-Date.now())/60000)}); try{ ws.close(4003,'banned'); }catch(e){} return; }
       a={name:nm,game:String(m.game||'home').replace(/[^a-z0-9]/g,'').slice(0,16)||'home',who,ts:[],last:''}; ws.serializeAttachment(a);
-      const g=await this.grantOfWho(who); if(g) this.send(ws,{t:'role',lvl:g,url:ADMIN_URL}); this.count(); return; }
+      const g=await this.grantOfWho(who); this.send(ws,g?{t:'role',lvl:g,url:ADMIN_URL}:{t:'role',lvl:null}); this.count(); return; }
     if(!a) return;
     if(m.t==='where'){ a.game=String(m.game||'home').replace(/[^a-z0-9]/g,'').slice(0,16)||'home'; ws.serializeAttachment(a); this.who(); return; }
     if(m.t==='dm'){ const now=Date.now(), to=String(m.to||'').slice(0,12); if(!to) return;

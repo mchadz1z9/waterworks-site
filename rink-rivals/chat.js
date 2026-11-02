@@ -63,7 +63,7 @@
       <div class="rules">Be kind · no swearing · never share personal info · no spam · ⚑ reports a message</div>
       <form autocomplete="off"><input maxlength="200" placeholder="${name?'Message everyone…':'Pick a name to chat…'}" aria-label="Chat message"><button>Send</button></form>`;
     log=root.querySelector('.log'); inp=root.querySelector('input'); cnt=root.querySelector('.cnt'); dmv=root.querySelector('.dmv');
-    { const a=root.querySelector('.adm'); let u=''; try{ u=sessionStorage.getItem('rrAdmUrl')||''; }catch(e){} if(a&&myRole&&u){ a.href=u; a.style.display=''; a.textContent=myRole==='full'?'⚙ Admin':'⚙ Mod'; } }
+    { const a=root.querySelector('.adm'); let u=''; try{ u=localStorage.getItem('rrAdmUrl')||''; }catch(e){} if(a&&myRole&&u){ a.href=u; a.style.display=''; a.textContent=myRole==='full'?'⚙ Admin':'⚙ Mod'; } }
     /* keys typed into the chat must never reach the game */
     for(const ev of ['keydown','keyup','keypress']) inp.addEventListener(ev,e=>{ e.stopPropagation(); if(ev==='keydown'&&e.key==='Escape'){ inp.blur(); if(!dock()) toggle(false); } });
     root.querySelector('form').addEventListener('submit',e=>{ e.preventDefault(); send(); });
@@ -120,7 +120,7 @@
       else if(m.t==='invite') inviteCard(m);
       else if(m.t==='invsent'){ if(invCb) try{ invCb(m); }catch(e){} }
       else if(m.t==='dm') onDM(m);
-      else if(m.t==='role'){ myRole=m.lvl; try{ m.lvl?sessionStorage.setItem('rrRole',m.lvl):sessionStorage.removeItem('rrRole'); if(m.lvl&&m.url) sessionStorage.setItem('rrAdmUrl',m.url); if(!m.lvl) sessionStorage.removeItem('rrAdmUrl'); }catch(e){} applyRole(); }
+      else if(m.t==='role'){ myRole=m.lvl; try{ m.lvl?sessionStorage.setItem('rrRole',m.lvl):sessionStorage.removeItem('rrRole'); if(m.lvl&&m.url) localStorage.setItem('rrAdmUrl',m.url); if(!m.lvl) localStorage.removeItem('rrAdmUrl'); }catch(e){} applyRole(); }
       else if(m.t==='kicked') kicked(m);
       else if(m.t==='sys') sys(m.text); };
     ws.onclose=()=>{ clearInterval(pingT); cnt.textContent='reconnecting…'; later(); }; ws.onerror=()=>{ try{ ws.close(); }catch(e){} }; }
@@ -143,7 +143,8 @@
     el.innerHTML=`<h4>👥 ${roster.length} on Rink Rivals right now</h4>`+(roster.length?games.map(g=>by[g].map(p=>`<div class="wr"><b style="color:hsl(${hue(p.name)},85%,70%)">${esc(p.name)}${p.tag?` <span class="tg">${esc(p.tag)}</span>`:''}${p.me?' (you)':''}</b>${p.me?'':`<button class="dmb" data-dm="${esc(p.id)}" data-nm="${esc(p.name)}" title="Private message">💬</button>`}<span>${g==='home'?'🏠 browsing':esc(GN[g]||g)}</span>${g==='home'?'':g===GAME?'<a class="here">Here</a>':`<a href="${esc(g)}" title="Go play ${esc(GN[g]||g)} with them">Play →</a>`}</div>`).join('')).join(''):'<div class="empty">Nobody else yet.</div>')+'<div class="rules" style="border:0;padding:6px 2px">Tip: in a game press <b>Online → Play with anyone</b> to get matched with the people there.</div>';
     el.querySelectorAll('.dmb').forEach(b=>b.onclick=ev=>{ ev.stopPropagation(); openDM(b.dataset.dm,b.dataset.nm); }); }
   /* ---------- private messages ---------- */
-  function applyRole(){ const a=root&&root.querySelector('.adm'); if(!a) return; let u=''; try{ u=sessionStorage.getItem('rrAdmUrl')||''; }catch(e){} if(myRole&&u){ a.href=u; a.style.display=''; a.textContent=myRole==='full'?'⚙ Admin':'⚙ Mod'; } else a.style.display='none'; }
+  function admBtn(u){ let b=document.getElementById('rrAdmBtn'); if(!u||!myRole){ if(b) b.remove(); return; } if(window.RR_ADMIN) return; if(!b){ b=document.createElement('a'); b.id='rrAdmBtn'; b.style.cssText='position:fixed;left:12px;bottom:12px;z-index:2147483000;font:800 14px system-ui,sans-serif;color:#0a0d18;background:#fde68a;border-radius:999px;padding:8px 14px;text-decoration:none;box-shadow:0 6px 18px rgba(0,0,0,.35)'; document.body.appendChild(b); } b.href=u; b.textContent=myRole==='full'?'⚙ Admin':'⚙ Mod tools'; }
+  function applyRole(){ let u=''; try{ u=localStorage.getItem('rrAdmUrl')||''; }catch(e){} admBtn(u); const a=root&&root.querySelector('.adm'); if(!a) return; if(myRole&&u){ a.href=u; a.style.display=''; a.textContent=myRole==='full'?'⚙ Admin':'⚙ Mod'; } else a.style.display='none'; }
   function dmGet(id,nm){ let t=dms.get(id); if(!t){ t={name:nm||'Player',msgs:[],unread:0}; dms.set(id,t); } if(nm) t.name=nm; return t; }
   function openDM(id,nm){ if(!name){ askName(); if(!name) return; } dmCur={id,name:nm}; const t=dmGet(id,nm); t.unread=0; if(!open&&!dock()) toggle(true); root.classList.remove('showwho'); root.classList.add('dmopen'); renderDM(); dmBadge(); setTimeout(()=>inp&&inp.focus(),30); }
   function closeDM(){ dmCur=null; root.classList.remove('dmopen'); if(inp) inp.placeholder=name?'Message everyone…':'Pick a name to chat…'; }
