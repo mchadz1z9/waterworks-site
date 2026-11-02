@@ -93,7 +93,7 @@
       if(c.kind==='msg') popup(d.title||'Message from the admin',d.text||'');
       if(c.kind==='reload') setTimeout(()=>location.reload(),300);
       if(c.kind==='kick'){ popup('Kicked',d.text||'You were kicked by an admin.'); setTimeout(()=>{ location.href='./'; },2500); }
-      if(c.kind==='rename'&&d.name){ ls.set('rrOnlineName',d.name); popup('Your name was changed',`An admin changed your name to "${d.name}".`); }
+      if(c.kind==='rename'&&d.name){ ls.set('rrOnlineName',d.name); popup(d.why==='reserved'?'That name is taken':'Your name was changed',d.why==='reserved'?`"${d.was||'That name'}" is reserved for someone else, so for now you're "${d.name}". You can pick a different name any time.`:`An admin changed your name to "${d.name}".`); }
       if(c.kind==='goto'&&d.page) setTimeout(()=>{ location.href=d.page==='home'?'./':d.page; },400);
       const city=o=>{ if(PAGE==='city') dispatchEvent(new CustomEvent('rr-gift',{detail:o})); else { try{ const sv=JSON.parse(ls.get('rrCity')||'{}'); if(o.setcash!=null) sv.money=o.setcash; if(o.car){ sv.cars=sv.cars||['hatch']; if(!sv.cars.includes(o.car)) sv.cars.push(o.car); } if(o.gun){ sv.guns=sv.guns||{}; sv.guns[o.gun]=(sv.guns[o.gun]||0)+60; } if(o.reset){ localStorage.removeItem('rrCity'); return; } ls.set('rrCity',JSON.stringify(sv)); }catch(e){} } };
       if(c.kind==='setcash'){ city({setcash:+d.n||0}); popup('💵 Rival City cash set',`An admin set your Rival City money to $${(+d.n||0).toLocaleString()}.`); }

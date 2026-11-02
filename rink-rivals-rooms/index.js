@@ -49,7 +49,7 @@ export default {
       const r2=new Request(u,{method:'POST',headers:h,body});
       if(ad[1]==='lb'&&ad[2]) return env.BOARDS.get(env.BOARDS.idFromName(ad[2])).fetch(r2);
       if(ad[1]==='chat'||ad[1]==='sec') return env.CHAT.get(env.CHAT.idFromName('SITE')).fetch(r2);
-      if(ad[1]==='site') return env.SITE.get(env.SITE.idFromName('SITE')).fetch(r2);
+      if(ad[1]==='site'){ const res=await env.SITE.get(env.SITE.idFromName('SITE')).fetch(r2); try{ const bj=JSON.parse(body||'{}'); if(/^(reserve|unreserve|reservePid)$/.test(bj.op)){ const d=await res.clone().json(); if(d&&d.reserved){ const h2=new Headers(); h2.set('content-type','application/json'); h2.set('x-admin-role','full'); await chat.fetch(new Request('https://do/admin',{method:'POST',headers:h2,body:JSON.stringify({op:'reservedSet',list:d.reserved})})); } } }catch(e){} return res; }
       return J({err:'bad'},400); }
     if(url.pathname==='/lobby'){
       if(req.headers.get('Upgrade')!=='websocket') return new Response('Expected a WebSocket',{status:426});
@@ -121,6 +121,10 @@ const ADMIN_URL='/hq-owa9rwwt9kplpdbu';
 const CORS={'Access-Control-Allow-Origin':'*','Access-Control-Allow-Methods':'GET,POST,OPTIONS','Access-Control-Allow-Headers':'content-type,x-admin-token,x-admin-pid'};
 /* SHA-256 as hex, and a comparison that takes the same time whether the guess is close or not */
 async function sha(x){ const b=await crypto.subtle.digest('SHA-256',new TextEncoder().encode(String(x))); return [...new Uint8Array(b)].map(v=>v.toString(16).padStart(2,'0')).join(''); }
+/* reserved names: "Aiden", "A1den", "aiden_99", "AIDEN pro"… all count as Aiden. Only the devices it's reserved for may use it. */
+const nameKey=n=>String(n||'').toLowerCase().replace(/[0@4]/g,c=>({'0':'o','@':'a','4':'a'}[c])).replace(/[1!|]/g,'i').replace(/3/g,'e').replace(/[5$]/g,'s').replace(/7/g,'t').replace(/[^a-z]/g,'');
+function reservedFor(name,pid,list){ const k=nameKey(name); for(const r of list||[]){ if(r&&r.n&&k.startsWith(r.n)&&!(r.pids||[]).includes(pid)) return r; } return null; }
+const devOf=u=>{ u=String(u||''); return /CrOS/.test(u)?'Chromebook':/iPhone/.test(u)?'iPhone':/iPad/.test(u)?'iPad':/Android/.test(u)?'Android':/Windows/.test(u)?'Windows PC':/Macintosh|Mac OS/.test(u)?'Mac':/Linux/.test(u)?'Linux PC':'Unknown'; };
 const B32='ABCDEFGHIJKLMNOPQRSTUVWXYZ234567';
 function b32enc(bytes){ let bits=0, v=0, out=''; for(const b of bytes){ v=(v<<8)|b; bits+=8; while(bits>=5){ out+=B32[(v>>>(bits-5))&31]; bits-=5; } } if(bits>0) out+=B32[(v<<(5-bits))&31]; return out; }
 function b32dec(str){ const s=String(str).toUpperCase().replace(/[^A-Z2-7]/g,''); let bits=0, v=0; const out=[]; for(const ch of s){ v=(v<<5)|B32.indexOf(ch); bits+=5; if(bits>=8){ out.push((v>>>(bits-8))&255); bits-=8; } } return new Uint8Array(out); }
@@ -263,6 +267,7 @@ export class Chat {
       if(m.op==='grants') return J({grants:this.sql.exec('SELECT pubid,lvl,name,ts FROM grnt2 ORDER BY ts DESC').toArray()});
       if(m.op==='who'){ const seen=new Set(), out=[]; for(const ws of this.socks()){ const a=ws.deserializeAttachment(); if(seen.has(a.who)) continue; seen.add(a.who); out.push({name:a.name,game:a.game,id:pubId(a.who),tag:this.tagOf(a.name)}); } return J({who:out}); }
       if(m.op==='recent'){ const rows=this.sql.exec('SELECT name FROM m WHERE hid=0 ORDER BY id DESC LIMIT 300').toArray(); const seen=new Set(), out=[]; for(const r of rows){ const k=r.name.toLowerCase(); if(seen.has(k)) continue; seen.add(k); out.push({name:r.name,tag:this.tagOf(r.name),banned:!!this.isBanned(r.name)}); if(out.length>=40) break; } return J({recent:out}); }
+      if(m.op==='reservedSet'){ if(!full) return J({err:'forbidden'},403); this.cfgSet('reserved',JSON.stringify(Array.isArray(m.list)?m.list:[])); return J({ok:true}); }
       if(m.op==='msgs') return J({msgs:this.sql.exec('SELECT id,ts,name,text,game,hid FROM m ORDER BY id DESC LIMIT 200').toArray(),slow:+(this.cfgGet('slow')||0),words:JSON.parse(this.cfgGet('words')||'[]')});
       if(m.op==='slow'){ this.cfgSet('slow',Math.max(0,Math.min(600,Math.round(+m.secs||0)))); return J({ok:true}); }
       if(m.op==='words'){ const w=(Array.isArray(m.words)?m.words:[]).map(x=>String(x).toLowerCase().trim().slice(0,30)).filter(Boolean).slice(0,200); this.cfgSet('words',JSON.stringify(w)); return J({ok:true}); }
@@ -292,9 +297,11 @@ export class Chat {
     return new Response(null,{status:101,webSocket:client}); }
   async webSocketMessage(ws,raw){ if(typeof raw!=='string'||raw.length>1500) return; let m; try{ m=JSON.parse(raw); }catch(e){ return; }
     let a=ws.deserializeAttachment();
-    if(m.t==='hello'){ const who=String(m.pid||'').replace(/[^a-z0-9]/gi,'').slice(0,24)||crypto.randomUUID().slice(0,12); const nm=cleanName(m.name);
+    if(m.t==='hello'){ const who=String(m.pid||'').replace(/[^a-z0-9]/gi,'').slice(0,24)||crypto.randomUUID().slice(0,12); let nm=cleanName(m.name); let swapped=false;
+      if(reservedFor(nm,who,JSON.parse(this.cfgGet('reserved')||'[]'))){ nm='Player'+Math.floor(1000+Math.random()*9000); swapped=true; }
       const b=this.isBanned(nm,who); if(b){ this.send(ws,{t:'kicked',perm:b.until===0,mins:b.until===0?0:Math.ceil((b.until-Date.now())/60000)}); try{ ws.close(4003,'banned'); }catch(e){} return; }
       a={name:nm,game:String(m.game||'home').replace(/[^a-z0-9]/g,'').slice(0,16)||'home',who,ts:[],last:''}; ws.serializeAttachment(a);
+      if(swapped){ this.send(ws,{t:'you',name:nm}); this.send(ws,{t:'sys',text:'That name is reserved, so you were given a different one. Pick a new name with ✎ Name.'}); }
       const g=await this.grantOfWho(who); this.send(ws,g?{t:'role',lvl:g,url:ADMIN_URL}:{t:'role',lvl:null}); this.count(); return; }
     if(!a) return;
     if(m.t==='where'){ a.game=String(m.game||'home').replace(/[^a-z0-9]/g,'').slice(0,16)||'home'; ws.serializeAttachment(a); this.who(); return; }
@@ -316,7 +323,7 @@ export class Chat {
       a.inv.push(now); ws.serializeAttachment(a); const tn=targets[0].deserializeAttachment().name;
       for(const s of targets) this.send(s,{t:'invite',from:a.name,game,room});
       this.send(ws,{t:'invsent',ok:true,to,name:tn}); return; }
-    if(m.t==='name'){ const nm=cleanName(m.name); if(this.isBanned(nm,a.who)){ this.send(ws,{t:'kicked',perm:true}); try{ ws.close(4003,'banned'); }catch(e){} return; } a.name=nm; ws.serializeAttachment(a); this.send(ws,{t:'you',name:a.name}); this.who(); return; }
+    if(m.t==='name'){ const nm=cleanName(m.name); if(reservedFor(nm,a.who,JSON.parse(this.cfgGet('reserved')||'[]'))){ this.send(ws,{t:'sys',text:'That name is reserved — please choose another one.'}); this.send(ws,{t:'you',name:a.name}); return; } if(this.isBanned(nm,a.who)){ this.send(ws,{t:'kicked',perm:true}); try{ ws.close(4003,'banned'); }catch(e){} return; } a.name=nm; ws.serializeAttachment(a); this.send(ws,{t:'you',name:a.name}); this.who(); return; }
     if(m.t==='ping'){ this.send(ws,{t:'pong'}); return; }
     if(m.t==='report'){ const id=+m.id; if(!id) return; this.sql.exec('INSERT OR IGNORE INTO r(mid,who) VALUES(?,?)',id,a.who); const c=this.sql.exec('SELECT COUNT(*) AS c FROM r WHERE mid=?',id).toArray()[0].c;
       if(c>=3){ const row=this.sql.exec('SELECT who FROM m WHERE id=?',id).toArray()[0]; this.sql.exec('UPDATE m SET hid=1 WHERE id=?',id); this.all({t:'del',id}); if(row){ const n=this.sql.exec('SELECT COUNT(*) AS c FROM m WHERE who=? AND hid=1 AND ts>?',row.who,Date.now()-86400000).toArray()[0].c; if(n>=2) this.sql.exec('INSERT OR REPLACE INTO mute(who,until) VALUES(?,?)',row.who,Date.now()+3600000*(n>=4?24:1)); } }
@@ -353,7 +360,8 @@ export class Site {
     this.sql.exec('CREATE TABLE IF NOT EXISTS pnames(pid TEXT, name TEXT, first INTEGER, last INTEGER, PRIMARY KEY(pid,name))');
     this.sql.exec('CREATE TABLE IF NOT EXISTS pnote(pid TEXT PRIMARY KEY, text TEXT, ts INTEGER)');
     this.sql.exec('CREATE TABLE IF NOT EXISTS allow(pid TEXT PRIMARY KEY, ts INTEGER)');
-    this.sql.exec('CREATE TABLE IF NOT EXISTS vote(poll TEXT, pid TEXT, opt INTEGER, PRIMARY KEY(poll,pid))'); }
+    this.sql.exec('CREATE TABLE IF NOT EXISTS vote(poll TEXT, pid TEXT, opt INTEGER, PRIMARY KEY(poll,pid))');
+    try{ this.sql.exec('ALTER TABLE pl ADD COLUMN dev TEXT'); }catch(e){} }
   pollRes(p){ const r=p.opts.map(()=>0); for(const v of this.sql.exec('SELECT opt FROM vote WHERE poll=?',p.id).toArray()) if(r[v.opt]!=null) r[v.opt]++; return r; }
   queue(pid,kind,data){ this.sql.exec('INSERT INTO cmd(pid,kind,data,ts) VALUES(?,?,?,?)',pid,kind,JSON.stringify(data||{}),Date.now()); }
   banFor(pid,iph,name){ const now=Date.now(); for(const k of ['p:'+pid,'i:'+iph,'n:'+String(name||'').toLowerCase()]){ const r=this.sql.exec('SELECT reason,until FROM sban WHERE k=?',k).toArray()[0]; if(r&&(r.until===0||r.until>now)) return {reason:r.reason||'',until:r.until}; } return null; }
@@ -374,8 +382,10 @@ export class Site {
       const ex=this.sql.exec('SELECT last FROM pl WHERE pid=?',pid).toArray()[0], gap=ex?now0-ex.last:0;
       if(ex) this.sql.exec('UPDATE pl SET name=?,last=?,beats=beats+1,game=?,iph=?,secs=secs+? WHERE pid=?',name,now0,game,iph,gap>0&&gap<=90000?gap/1000:0,pid);
       else this.sql.exec('INSERT INTO pl(pid,name,first,last,beats,game,iph,secs) VALUES(?,?,?,?,1,?,?,0)',pid,name,now0,now0,game,iph);
-      this.sql.exec('INSERT INTO pnames(pid,name,first,last) VALUES(?,?,?,?) ON CONFLICT(pid,name) DO UPDATE SET last=excluded.last',pid,name,now0,now0);
+      this.sql.exec('UPDATE pl SET dev=? WHERE pid=?',devOf(req.headers.get('user-agent')),pid);
       const set=(await this.s.get('settings'))||{};
+      /* a reserved name used by anyone else is swapped for a random one on the spot */ if(reservedFor(name,pid,set.reserved)){ const nn='Player'+Math.floor(1000+Math.random()*9000); this.queue(pid,'rename',{name:nn,why:'reserved',was:name}); this.sql.exec('UPDATE pl SET name=? WHERE pid=?',nn,pid); }
+      else this.sql.exec('INSERT INTO pnames(pid,name,first,last) VALUES(?,?,?,?) ON CONFLICT(pid,name) DO UPDATE SET last=excluded.last',pid,name,now0,now0);
       /* blocked words in names: renamed on the spot */ const nb=(set.nameBlock||[]).find(w=>w&&name.toLowerCase().includes(w)); if(nb){ const nn='Player'+Math.floor(1000+Math.random()*9000); this.queue(pid,'rename',{name:nn}); this.sql.exec('UPDATE pl SET name=? WHERE pid=?',nn,pid); }
       let ban=this.banFor(pid,iph,name);
       /* invite-only: accounts first seen after the lock was switched on wait for approval */
@@ -469,10 +479,10 @@ export class Site {
       if(m.op==='players'&&!(await this.s.get('plSeeded'))){ const all=(await this.s.get('pta'))||{}, days=(await this.s.get('ptDays'))||[]; for(const d of days){ const mp=(await this.s.get('pt:'+d))||{}; for(const [p2,v] of Object.entries(mp)) if(!all[p2]) all[p2]={n:v.n,s:v.s,l:v.l}; }
         for(const [p2,v] of Object.entries(all)){ if(String(p2).length<8) continue; this.sql.exec('INSERT OR IGNORE INTO pl(pid,name,first,last,beats,game,iph,secs) VALUES(?,?,?,?,0,?,?,?)',p2,String(v.n||'Player').slice(0,20),v.l||0,v.l||0,'','',+v.s||0); } await this.s.put('plSeeded',1); }
       if(m.op==='players'){ const q=String(m.q||'').trim().toLowerCase(), now=Date.now(), sort={last:'last DESC',first:'first DESC',time:'secs DESC',name:'name COLLATE NOCASE'}[m.sort]||'last DESC', lim=Math.min(500,Math.max(10,+m.limit||200));
-        const rows=q?this.sql.exec(`SELECT pid,name,first,last,beats,game,secs,iph FROM pl WHERE lower(name) LIKE ? OR pid=? ORDER BY ${sort} LIMIT ?`,'%'+q+'%',q,lim).toArray():this.sql.exec(`SELECT pid,name,first,last,beats,game,secs,iph FROM pl ORDER BY ${sort} LIMIT ?`,lim).toArray();
+        const rows=q?this.sql.exec(`SELECT pid,name,first,last,beats,game,secs,iph,dev FROM pl WHERE lower(name) LIKE ? OR pid=? ORDER BY ${sort} LIMIT ?`,'%'+q+'%',q,lim).toArray():this.sql.exec(`SELECT pid,name,first,last,beats,game,secs,iph,dev FROM pl ORDER BY ${sort} LIMIT ?`,lim).toArray();
         const bans=new Set(this.sql.exec('SELECT k FROM sban WHERE until=0 OR until>?',now).toArray().map(r=>r.k));
         const tot=this.sql.exec('SELECT COUNT(*) AS c FROM pl').toArray()[0].c, online=this.sql.exec('SELECT COUNT(*) AS c FROM pl WHERE last>?',now-150000).toArray()[0].c, today=this.sql.exec('SELECT COUNT(*) AS c FROM pl WHERE last>?',now-86400000).toArray()[0].c, newToday=this.sql.exec('SELECT COUNT(*) AS c FROM pl WHERE first>?',now-86400000).toArray()[0].c;
-        return J({total:tot,online,today,newToday,players:rows.map(r=>({pid:r.pid,name:r.name,first:r.first,last:r.last,beats:r.beats,game:r.game,mins:Math.round(r.secs/60),on:now-r.last<150000,banned:bans.has('p:'+r.pid)||bans.has('i:'+r.iph)||bans.has('n:'+String(r.name).toLowerCase()),same:r.iph?this.sql.exec('SELECT COUNT(*) AS c FROM pl WHERE iph=?',r.iph).toArray()[0].c:1}))}); }
+        return J({total:tot,online,today,newToday,players:rows.map(r=>({pid:r.pid,dev:r.dev||'',name:r.name,first:r.first,last:r.last,beats:r.beats,game:r.game,mins:Math.round(r.secs/60),on:now-r.last<150000,banned:bans.has('p:'+r.pid)||bans.has('i:'+r.iph)||bans.has('n:'+String(r.name).toLowerCase()),same:r.iph?this.sql.exec('SELECT COUNT(*) AS c FROM pl WHERE iph=?',r.iph).toArray()[0].c:1}))}); }
       if(m.op==='pcmd'){ const kind=String(m.kind||''); if(!['msg','gift','kick','reload','rename','goto','setcash','givecar','givegun','resetcity','setstr','freeze','flip','confetti'].includes(kind)) return J({err:'bad'},400); const data={};
         if(kind==='goto') data.page=String(m.page||'').replace(/[^a-z0-9-]/g,'').slice(0,24); if(kind==='setcash') data.n=Math.max(0,Math.min(1e9,Math.round(+m.n||0))); if(kind==='givecar') data.model=String(m.model||'').replace(/[^a-z0-9]/g,'').slice(0,16); if(kind==='givegun') data.gun=String(m.gun||'').replace(/[^a-z]/g,'').slice(0,12); if(kind==='setstr') data.n=Math.max(0,Math.min(100,Math.round(+m.n||0))); if(kind==='freeze'||kind==='flip') data.secs=Math.max(3,Math.min(120,Math.round(+m.secs||10))); if(kind==='freeze') data.text=String(m.text||'').slice(0,120);
         if(kind==='msg'){ data.text=String(m.text||'').slice(0,500); data.title=String(m.title||'Message from the admin').slice(0,80); if(!data.text) return J({err:'bad'},400); }
@@ -486,6 +496,13 @@ export class Site {
         this.queue(pid,'reload',{}); return J({ok:true}); }
       if(m.op==='sunban'){ if(m.k) this.sql.exec('DELETE FROM sban WHERE k=?',String(m.k)); if(m.pid){ const pid=cleanPid(m.pid), r=this.sql.exec('SELECT name,iph FROM pl WHERE pid=?',pid).toArray()[0]; this.sql.exec('DELETE FROM sban WHERE k=?','p:'+pid); if(r){ this.sql.exec('DELETE FROM sban WHERE k=?','i:'+r.iph); this.sql.exec('DELETE FROM sban WHERE k=?','n:'+String(r.name).toLowerCase()); } } return J({ok:true}); }
       if(m.op==='sbans'){ const now=Date.now(); return J({bans:this.sql.exec('SELECT k,kind,name,reason,until,ts FROM sban WHERE until=0 OR until>? ORDER BY ts DESC',now).toArray()}); }
+      if(m.op==='reserve'||m.op==='unreserve'||m.op==='reservePid'){ const set=(await this.s.get('settings'))||{}; let list=set.reserved||[];
+        if(m.op==='reserve'){ const n=nameKey(m.name); if(n.length<3) return J({err:'short'},400); const holders=new Set(); for(const r of this.sql.exec('SELECT pid,name FROM pl').toArray()) if(nameKey(r.name).startsWith(n)) holders.add(r.pid); for(const r of this.sql.exec('SELECT pid,name FROM pnames').toArray()) if(nameKey(r.name).startsWith(n)) holders.add(r.pid);
+          list=list.filter(r=>r.n!==n); list.push({n,label:String(m.name).slice(0,20),pids:[...holders].slice(0,20),ts:Date.now()}); }
+        if(m.op==='unreserve') list=list.filter(r=>r.n!==String(m.n));
+        if(m.op==='reservePid'){ const r=list.find(x=>x.n===String(m.n)), pid=cleanPid(m.pid); if(r&&pid){ r.pids=(r.pids||[]).filter(x=>x!==pid); if(m.on!==false) r.pids.push(pid); } }
+        set.reserved=list; await this.s.put('settings',set); return J({ok:true,reserved:list}); }
+      if(m.op==='reserved'){ const set=(await this.s.get('settings'))||{}; const list=(set.reserved||[]).map(r=>({...r,holders:(r.pids||[]).map(p2=>{ const x=this.sql.exec('SELECT pid,name,last,dev,iph FROM pl WHERE pid=?',p2).toArray()[0]; return x?{pid:x.pid,name:x.name,last:x.last,dev:x.dev||'',conn:(x.iph||'').slice(0,6)}:{pid:p2,name:'?',last:0,dev:'',conn:''}; })})); return J({reserved:list}); }
       if(m.op==='pinfo'){ const pid=cleanPid(m.pid), r=this.sql.exec('SELECT iph FROM pl WHERE pid=?',pid).toArray()[0];
         return J({names:this.sql.exec('SELECT name,first,last FROM pnames WHERE pid=? ORDER BY last DESC LIMIT 30',pid).toArray(),note:(this.sql.exec('SELECT text FROM pnote WHERE pid=?',pid).toArray()[0]||{}).text||'',
           same:r&&r.iph?this.sql.exec('SELECT pid,name,last FROM pl WHERE iph=? AND pid<>? ORDER BY last DESC LIMIT 20',r.iph,pid).toArray():[],allowed:!!this.sql.exec('SELECT 1 FROM allow WHERE pid=?',pid).toArray().length}); }
