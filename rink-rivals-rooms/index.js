@@ -21,10 +21,20 @@ export default {
     }
     /* site owner tools: clean leaderboards and chat. Needs the ADMIN_KEY secret. */
     const ad=url.pathname.match(/^\/admin\/(lb|chat|site)(?:\/([a-z0-9]{2,16}))?$/);
+    /* admin sign-in: the password is only ever checked here, on the server (it's a Cloudflare secret, never in the page).
+       Wrong guesses are rate-limited per IP; a right one is swapped for a random session token that expires. */
+    if(url.pathname==='/admin/login'){ if(req.method==='OPTIONS') return new Response(null,{headers:CORS}); if(req.method!=='POST') return J({err:'method'},405);
+      const ip=req.headers.get('cf-connecting-ip')||'?', chat=env.CHAT.get(env.CHAT.idFromName('SITE')), call=o=>chat.fetch(new Request('https://do/sec',{method:'POST',headers:{'content-type':'application/json'},body:JSON.stringify(o)})).then(r=>r.json());
+      const gate=await call({op:'check',ip}); if(gate.blocked) return J({err:'locked',wait:gate.wait},429);
+      let pw=''; try{ pw=String((await req.json()).pw||''); }catch(e){} await new Promise(r=>setTimeout(r,350));   /* slow every guess down */
+      const ok=(env.ADMIN_KEY&&await sameSecret(pw,env.ADMIN_KEY))||(env.SITE_ADMIN_KEY&&await sameSecret(pw,env.SITE_ADMIN_KEY));
+      if(!ok){ const f=await call({op:'fail',ip}); return J({err:'wrong',left:f.left},403); }
+      await call({op:'ok',ip}); const t=await call({op:'newtok',role:'full'}); return J({token:t.token,exp:t.exp}); }
     if(ad){ if(req.method==='OPTIONS') return new Response(null,{headers:CORS});
-      const key=req.headers.get('x-admin-key'); let role=null;
-      if(key&&((env.ADMIN_KEY&&key===env.ADMIN_KEY)||(env.SITE_ADMIN_KEY&&key===env.SITE_ADMIN_KEY))) role='full';
-      else { const pid=req.headers.get('x-admin-pid'); if(pid){ try{ const ar=await env.CHAT.get(env.CHAT.idFromName('SITE')).fetch(new Request('https://do/authpid',{method:'POST',headers:{'content-type':'application/json'},body:JSON.stringify({op:'authpid',pid})})); const d=await ar.json(); if(d&&d.lvl) role=d.lvl; }catch(e){} } }
+      let role=null; const chat=env.CHAT.get(env.CHAT.idFromName('SITE')), call=o=>chat.fetch(new Request('https://do/sec',{method:'POST',headers:{'content-type':'application/json'},body:JSON.stringify(o)})).then(r=>r.json());
+      const tok=req.headers.get('x-admin-token'), pid=req.headers.get('x-admin-pid');
+      if(tok){ try{ const d=await call({op:'tok',token:tok}); if(d&&d.role) role=d.role; }catch(e){} }
+      else if(pid){ try{ const ar=await chat.fetch(new Request('https://do/authpid',{method:'POST',headers:{'content-type':'application/json'},body:JSON.stringify({op:'authpid',pid})})); const d=await ar.json(); if(d&&d.lvl) role=d.lvl; }catch(e){} }
       if(!role) return J({err:'forbidden'},403);
       const body=await req.text(); const u=new URL(req.url); u.pathname='/admin';
       const h=new Headers(); h.set('content-type','application/json'); h.set('x-admin-role',role);
@@ -98,7 +108,12 @@ export class Lobby {
 }
 
 /* Leaderboards: one Durable Object per game, a SQLite table of each player's record on each board */
-const CORS={'Access-Control-Allow-Origin':'*','Access-Control-Allow-Methods':'GET,POST,OPTIONS','Access-Control-Allow-Headers':'content-type,x-admin-key,x-admin-pid'};
+/* where the admin page lives. Not linked anywhere public: the chat only shows it to people the server has granted access. */
+const ADMIN_URL='/hq-owa9rwwt9kplpdbu';
+const CORS={'Access-Control-Allow-Origin':'*','Access-Control-Allow-Methods':'GET,POST,OPTIONS','Access-Control-Allow-Headers':'content-type,x-admin-token,x-admin-pid'};
+/* SHA-256 as hex, and a comparison that takes the same time whether the guess is close or not */
+async function sha(x){ const b=await crypto.subtle.digest('SHA-256',new TextEncoder().encode(String(x))); return [...new Uint8Array(b)].map(v=>v.toString(16).padStart(2,'0')).join(''); }
+async function sameSecret(a,b){ const [x,y]=await Promise.all([crypto.subtle.digest('SHA-256',new TextEncoder().encode(String(a))),crypto.subtle.digest('SHA-256',new TextEncoder().encode(String(b)))]); return crypto.subtle.timingSafeEqual(x,y); }
 const J=(o,st)=>new Response(JSON.stringify(o),{status:st||200,headers:{...CORS,'content-type':'application/json','cache-control':'no-store'}});
 const BAD=/fuck|shit|cunt|nigg|fag|bitch|whore|slut|rape|hitler|nazi|dick|pussy|cock/i;
 export class Board {
@@ -156,7 +171,11 @@ export class Chat {
     this.sql.exec('CREATE TABLE IF NOT EXISTS ban(nm TEXT PRIMARY KEY, until INTEGER)');
     this.sql.exec('CREATE TABLE IF NOT EXISTS tag(nm TEXT PRIMARY KEY, tag TEXT)');
     this.sql.exec('CREATE TABLE IF NOT EXISTS grnt(pubid TEXT PRIMARY KEY, lvl TEXT, name TEXT, ts INTEGER)');
-    this.sql.exec('CREATE TABLE IF NOT EXISTS cfg(k TEXT PRIMARY KEY, v TEXT)'); }
+    this.sql.exec('CREATE TABLE IF NOT EXISTS cfg(k TEXT PRIMARY KEY, v TEXT)');
+    /* grants are keyed by a SHA-256 of the person's private device id (the short public id can be forged) */
+    this.sql.exec('CREATE TABLE IF NOT EXISTS grnt2(sh TEXT PRIMARY KEY, pubid TEXT, lvl TEXT, name TEXT, ts INTEGER)');
+    this.sql.exec('CREATE TABLE IF NOT EXISTS rl(ip TEXT PRIMARY KEY, n INTEGER, first INTEGER, until INTEGER)');
+    this.sql.exec('CREATE TABLE IF NOT EXISTS sess(th TEXT PRIMARY KEY, role TEXT, exp INTEGER)'); }
   cfgGet(k){ const r=this.sql.exec('SELECT v FROM cfg WHERE k=?',k).toArray()[0]; return r?r.v:null; }
   cfgSet(k,v){ this.sql.exec('INSERT OR REPLACE INTO cfg(k,v) VALUES(?,?)',k,String(v)); }
   socks(){ return this.ctx.getWebSockets().filter(ws=>ws.deserializeAttachment()); }
@@ -166,7 +185,7 @@ export class Chat {
   people(){ return new Set(this.socks().map(ws=>ws.deserializeAttachment().who)).size; }
   count(){ this.all({t:'n',n:this.people()}); this.who(); }
   tagOf(name){ const r=this.sql.exec('SELECT tag FROM tag WHERE nm=?',String(name||'').toLowerCase()).toArray()[0]; return r?r.tag:''; }
-  grantOf(pubid){ const r=this.sql.exec('SELECT lvl FROM grnt WHERE pubid=?',String(pubid)).toArray()[0]; return r?r.lvl:null; }
+  async grantOfWho(who){ if(!who) return null; const h=await sha('rr-grant:'+who); const r=this.sql.exec('SELECT lvl FROM grnt2 WHERE sh=?',h).toArray()[0]; return r?r.lvl:null; }
   isBanned(name,who){ const now=Date.now(); const chk=k=>{ const r=this.sql.exec('SELECT until FROM ban WHERE nm=?',k).toArray()[0]; return r&&(r.until===0||r.until>now)?r:null; }; return chk(String(name||'').toLowerCase())||(who?chk('pid:'+who):null); }
   socksByPub(pubid){ return this.ctx.getWebSockets().filter(ws=>{ const a=ws.deserializeAttachment(); return a&&pubId(a.who)===pubid; }); }
   who(){ const m=new Map(); for(const ws of this.socks()){ const a=ws.deserializeAttachment(); m.set(a.who,{name:a.name,game:a.game,me:a.who}); }
@@ -175,7 +194,15 @@ export class Chat {
   hist(){ return this.sql.exec('SELECT id,ts,name,text,game FROM m WHERE hid=0 ORDER BY id DESC LIMIT 60').toArray().reverse().map(r=>({...r,tag:this.tagOf(r.name)})); }
   async fetch(req){
     const path=new URL(req.url).pathname;
-    if(path==='/authpid'){ let m={}; try{ m=await req.json(); }catch(e){} const pid=String(m.pid||'').replace(/[^a-z0-9]/gi,'').slice(0,24); return J({lvl:pid?this.grantOf(pubId(pid)):null}); }
+    if(path==='/authpid'){ let m={}; try{ m=await req.json(); }catch(e){} const pid=String(m.pid||'').replace(/[^a-z0-9]/gi,'').slice(0,24); return J({lvl:pid.length>=8?await this.grantOfWho(pid):null}); }
+    if(path==='/sec'){ let m={}; try{ m=await req.json(); }catch(e){} const now=Date.now(), ip=String(m.ip||'?').slice(0,64);
+      if(m.op==='check'){ const r=this.sql.exec('SELECT until FROM rl WHERE ip=?',ip).toArray()[0]; const g=this.sql.exec("SELECT COUNT(*) AS c FROM rl WHERE until>?",now).toArray()[0].c; return J({blocked:!!(r&&r.until>now),wait:r&&r.until>now?Math.ceil((r.until-now)/60000):0,locked:g}); }
+      if(m.op==='fail'){ let r=this.sql.exec('SELECT n,first FROM rl WHERE ip=?',ip).toArray()[0]; let n=1, first=now; if(r&&now-r.first<15*60000){ n=r.n+1; first=r.first; } const until=n>=5?now+60*60000:0; this.sql.exec('INSERT OR REPLACE INTO rl(ip,n,first,until) VALUES(?,?,?,?)',ip,n,first,until); return J({left:Math.max(0,5-n)}); }
+      if(m.op==='ok'){ this.sql.exec('DELETE FROM rl WHERE ip=?',ip); return J({ok:true}); }
+      if(m.op==='newtok'){ const raw=crypto.getRandomValues(new Uint8Array(32)), token=[...raw].map(v=>v.toString(16).padStart(2,'0')).join(''), exp=now+12*3600000; this.sql.exec('DELETE FROM sess WHERE exp<?',now); this.sql.exec('INSERT INTO sess(th,role,exp) VALUES(?,?,?)',await sha(token),m.role==='full'?'full':'mod',exp); return J({token,exp}); }
+      if(m.op==='tok'){ const r=this.sql.exec('SELECT role,exp FROM sess WHERE th=?',await sha(String(m.token||'').slice(0,80))).toArray()[0]; return J({role:r&&r.exp>now?r.role:null}); }
+      if(m.op==='logout'){ this.sql.exec('DELETE FROM sess WHERE th=?',await sha(String(m.token||'').slice(0,80))); return J({ok:true}); }
+      return J({err:'op'},400); }
     if(path==='/admin'){ let m={}; try{ m=await req.json(); }catch(e){}
       const role=req.headers.get('x-admin-role')||'full', full=role==='full';
       const FULLONLY=['grant','ungrant','clear','broadcast','lock']; if(FULLONLY.includes(m.op)&&!full) return J({err:'forbidden'},403);
@@ -193,9 +220,10 @@ export class Chat {
       if(m.op==='bans') return J({bans:this.sql.exec('SELECT nm,until FROM ban').toArray()});
       if(m.op==='tag'){ const nm=String(m.name||'').toLowerCase(), tg=String(m.tag||'').replace(/[^\w \-!★+]/g,'').slice(0,18); if(!nm) return J({err:'bad'},400); if(tg) this.sql.exec('INSERT OR REPLACE INTO tag(nm,tag) VALUES(?,?)',nm,tg); else this.sql.exec('DELETE FROM tag WHERE nm=?',nm); this.who(); return J({ok:true}); }
       if(m.op==='tags') return J({tags:this.sql.exec('SELECT nm,tag FROM tag').toArray()});
-      if(m.op==='grant'){ const pub=String(m.pubid||'').slice(0,12), lvl=m.lvl==='full'?'full':'mod', nm=String(m.name||'').slice(0,24); if(!pub) return J({err:'bad'},400); this.sql.exec('INSERT OR REPLACE INTO grnt(pubid,lvl,name,ts) VALUES(?,?,?,?)',pub,lvl,nm,Date.now()); for(const ws of this.socksByPub(pub)) this.send(ws,{t:'role',lvl}); return J({ok:true}); }
-      if(m.op==='ungrant'&&m.pubid){ this.sql.exec('DELETE FROM grnt WHERE pubid=?',String(m.pubid)); for(const ws of this.socksByPub(String(m.pubid))) this.send(ws,{t:'role',lvl:null}); return J({ok:true}); }
-      if(m.op==='grants') return J({grants:this.sql.exec('SELECT pubid,lvl,name,ts FROM grnt ORDER BY ts DESC').toArray()});
+      if(m.op==='grant'){ if(!full) return J({err:'forbidden'},403); const pub=String(m.pubid||'').slice(0,12), lvl=m.lvl==='full'?'full':'mod', nm=String(m.name||'').slice(0,24); if(!pub) return J({err:'bad'},400); const live=this.socksByPub(pub); if(!live.length) return J({err:'offline'},409);
+        const who=live[0].deserializeAttachment().who; this.sql.exec('INSERT OR REPLACE INTO grnt2(sh,pubid,lvl,name,ts) VALUES(?,?,?,?,?)',await sha('rr-grant:'+who),pub,lvl,nm,Date.now()); for(const ws of live) this.send(ws,{t:'role',lvl,url:ADMIN_URL}); return J({ok:true}); }
+      if(m.op==='ungrant'&&m.pubid){ if(!full) return J({err:'forbidden'},403); this.sql.exec('DELETE FROM grnt WHERE pubid=?',String(m.pubid)); this.sql.exec('DELETE FROM grnt2 WHERE pubid=?',String(m.pubid)); for(const ws of this.socksByPub(String(m.pubid))) this.send(ws,{t:'role',lvl:null}); return J({ok:true}); }
+      if(m.op==='grants') return J({grants:this.sql.exec('SELECT pubid,lvl,name,ts FROM grnt2 ORDER BY ts DESC').toArray()});
       if(m.op==='who'){ const seen=new Set(), out=[]; for(const ws of this.socks()){ const a=ws.deserializeAttachment(); if(seen.has(a.who)) continue; seen.add(a.who); out.push({name:a.name,game:a.game,id:pubId(a.who),tag:this.tagOf(a.name)}); } return J({who:out}); }
       if(m.op==='recent'){ const rows=this.sql.exec('SELECT name FROM m WHERE hid=0 ORDER BY id DESC LIMIT 300').toArray(); const seen=new Set(), out=[]; for(const r of rows){ const k=r.name.toLowerCase(); if(seen.has(k)) continue; seen.add(k); out.push({name:r.name,tag:this.tagOf(r.name),banned:!!this.isBanned(r.name)}); if(out.length>=40) break; } return J({recent:out}); }
       if(m.op==='clear'){ this.sql.exec('UPDATE m SET hid=1'); this.all({t:'clear'}); return J({ok:true}); }
@@ -215,7 +243,7 @@ export class Chat {
       if(m.op==='stats'){ return J({online:this.people(),connections:this.socks().length,
         bans:this.sql.exec('SELECT COUNT(*) AS c FROM ban').toArray()[0].c,
         tags:this.sql.exec('SELECT COUNT(*) AS c FROM tag').toArray()[0].c,
-        admins:this.sql.exec('SELECT COUNT(*) AS c FROM grnt').toArray()[0].c,
+        admins:this.sql.exec('SELECT COUNT(*) AS c FROM grnt2').toArray()[0].c,
         locked:this.cfgGet('locked')==='1'}); }
       return J({err:'op'},400); }
     if(req.headers.get('Upgrade')!=='websocket') return new Response('Expected a WebSocket',{status:426});
@@ -227,7 +255,7 @@ export class Chat {
     if(m.t==='hello'){ const who=String(m.pid||'').replace(/[^a-z0-9]/gi,'').slice(0,24)||crypto.randomUUID().slice(0,12); const nm=cleanName(m.name);
       const b=this.isBanned(nm,who); if(b){ this.send(ws,{t:'kicked',perm:b.until===0,mins:b.until===0?0:Math.ceil((b.until-Date.now())/60000)}); try{ ws.close(4003,'banned'); }catch(e){} return; }
       a={name:nm,game:String(m.game||'home').replace(/[^a-z0-9]/g,'').slice(0,16)||'home',who,ts:[],last:''}; ws.serializeAttachment(a);
-      const g=this.grantOf(pubId(who)); if(g) this.send(ws,{t:'role',lvl:g}); this.count(); return; }
+      const g=await this.grantOfWho(who); if(g) this.send(ws,{t:'role',lvl:g,url:ADMIN_URL}); this.count(); return; }
     if(!a) return;
     if(m.t==='where'){ a.game=String(m.game||'home').replace(/[^a-z0-9]/g,'').slice(0,16)||'home'; ws.serializeAttachment(a); this.who(); return; }
     if(m.t==='dm'){ const now=Date.now(), to=String(m.to||'').slice(0,12); if(!to) return;
@@ -255,7 +283,7 @@ export class Chat {
       this.send(ws,{t:'sys',text:'Thanks, that message was reported.'}); return; }
     if(m.t==='say'){ const now=Date.now();
       const mu=this.sql.exec('SELECT until FROM mute WHERE who=?',a.who).toArray()[0]; if(mu&&mu.until>now){ this.send(ws,{t:'sys',text:`You are muted for ${Math.ceil((mu.until-now)/60000)} more minutes.`}); return; }
-      if(this.cfgGet('locked')==='1'&&!this.grantOf(pubId(a.who))){ this.send(ws,{t:'sys',text:'Chat is locked by an admin right now.'}); return; }
+      if(this.cfgGet('locked')==='1'&&!(await this.grantOfWho(a.who))){ this.send(ws,{t:'sys',text:'Chat is locked by an admin right now.'}); return; }
       let text=String(m.text||'').replace(/[\u0000-\u001f​-‏‪-‮]/g,'').replace(/\s+/g,' ').trim().slice(0,200); if(!text) return;
       a.ts=(a.ts||[]).filter(t=>now-t<10000); if(a.ts.length>=8){ this.send(ws,{t:'sys',text:'That is a lot of messages at once, give it a few seconds.'}); return; }
       if(text.toLowerCase()===a.last){ this.send(ws,{t:'sys',text:'You just said that.'}); return; }

@@ -4,7 +4,7 @@
 (function(){ if(window.RRPARTY) return;
   const qs=new URLSearchParams(location.search);
   const OFF=/[?&]test\b/.test(location.search)||location.protocol==='file:';
-  const PAGE=(location.pathname.split('/').pop()||'').replace(/\.html$/,'')||'home';
+  const PAGE=window.RR_ADMIN?'admin':(location.pathname.split('/').pop()||'').replace(/\.html$/,'')||'home';
   if(PAGE==='admin') return;
   const SERVER=(qs.get('server')||'wss://rink-rivals-rooms.mitchellchad2026.workers.dev').replace(/^http/,'ws');
   const ls={ get:k=>{ try{ return localStorage.getItem(k); }catch(e){ return null; } }, set:(k,v)=>{ try{ localStorage.setItem(k,v); }catch(e){} }, del:k=>{ try{ localStorage.removeItem(k); }catch(e){} } };

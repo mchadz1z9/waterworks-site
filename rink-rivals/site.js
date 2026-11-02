@@ -4,7 +4,7 @@
   const qs=new URLSearchParams(location.search);
   const SERVER=(qs.get('server')||'wss://rink-rivals-rooms.mitchellchad2026.workers.dev').replace(/^ws/,'http');
   const OFF=/[?&]test\b/.test(location.search)||location.protocol==='file:';
-  const PAGE=(location.pathname.split('/').pop()||'').replace(/\.html$/,'');
+  const PAGE=window.RR_ADMIN?'admin':(location.pathname.split('/').pop()||'').replace(/\.html$/,'');
   const ls={ get:k=>{ try{ return localStorage.getItem(k); }catch(e){ return null; } }, set:(k,v)=>{ try{ localStorage.setItem(k,v); }catch(e){} } };
   const esc=s=>String(s).replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
   /* overrides are cached so the games (which build rosters synchronously on load) can read them without waiting */
