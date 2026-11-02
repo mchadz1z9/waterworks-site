@@ -46,6 +46,7 @@ h3.sec{margin:16px 0 4px;font-size:15px;color:var(--mut);text-transform:uppercas
   <h1>🔒 Rink Rivals Admin</h1>
   <p class="sub">Enter the admin password.</p>
   <input id="pw" type="password" placeholder="Password" autocomplete="current-password" autofocus>
+  <input id="code2" class="hide" inputmode="numeric" maxlength="6" placeholder="6-digit code from your authenticator app" autocomplete="one-time-code" style="margin-top:8px;letter-spacing:4px;text-align:center">
   <div style="margin-top:12px"><button id="loginBtn" class="go" style="width:100%">Sign in</button></div>
   <div class="msg" id="loginMsg"></div>
 </div>
@@ -114,6 +115,26 @@ h3.sec{margin:16px 0 4px;font-size:15px;color:var(--mut);text-transform:uppercas
     </div>
     <div class="msg" id="eMsg"></div>
     <div class="list" id="eList"></div>
+  </div>
+
+  <div class="card full">
+    <h2>🔐 Security centre</h2>
+    <p class="mut">Only works when you signed in with the password (not just from an approved device).</p>
+    <div class="ovgrid"><div class="ovt"><b id="sc2fa">—</b><span>2-step login</span></div><div class="ovt"><b id="scPw">—</b><span>Password</span></div><div class="ovt"><b id="scSess">—</b><span>Signed-in sessions</span></div><div class="ovt"><b id="scDev">—</b><span>Approved devices</span></div><div class="ovt"><b id="scFails">—</b><span>Failed logins (24h)</span></div><div class="ovt"><b id="scLocked">—</b><span>Locked-out connections</span></div></div>
+    <h3 class="sec">2-step login (authenticator app)</h3>
+    <p class="mut">With this on, the password alone is useless — signing in also needs the 6-digit code from an app on your phone (Google Authenticator, Microsoft Authenticator, Authy…).</p>
+    <div id="tfaOff"><button class="go" id="tfaStart" style="flex:0 0 auto">Turn on 2-step login</button></div>
+    <div id="tfaSetup" class="hide"><p>1. In your authenticator app tap <b>+</b> → <b>Scan a QR code</b>:</p><div id="tfaQR" style="background:#fff;padding:10px;display:inline-block;border-radius:10px"></div><p class="mut">Can't scan? Type this key in instead: <code id="tfaKey" style="user-select:all;font-size:15px"></code></p><p>2. Type the 6-digit code it shows:</p><div class="row"><input id="tfaCode" inputmode="numeric" maxlength="6" placeholder="123456" style="flex:0 0 160px;letter-spacing:4px"><button class="go" id="tfaConfirm" style="flex:0 0 auto">Confirm &amp; turn on</button></div></div>
+    <div id="tfaOn" class="hide"><p>✅ 2-step login is ON.</p><div class="row"><input id="tfaOffCode" inputmode="numeric" maxlength="6" placeholder="current code" style="flex:0 0 160px"><button class="del" id="tfaDisable" style="flex:0 0 auto">Turn off</button></div></div>
+    <h3 class="sec">Change the admin password</h3>
+    <div class="row"><input id="pwOld" type="password" placeholder="Current password" autocomplete="current-password"><input id="pwNew" type="password" placeholder="New password (12+ characters)" autocomplete="new-password"><input id="pwNew2" type="password" placeholder="New password again" autocomplete="new-password"><button class="warn" id="pwGo" style="flex:0 0 auto">Change</button></div>
+    <p class="mut" style="font-size:13px">The old password stops working right away and every other session is signed out.</p>
+    <h3 class="sec">Signed-in sessions</h3><div id="sessList" class="list"></div>
+    <div class="row" style="margin-top:6px"><button class="warn" id="sessOthers" style="flex:0 0 auto">Sign out everywhere else</button><button class="del" id="panicBtn" style="flex:0 0 auto">🚨 PANIC: lock everyone out</button></div>
+    <p class="mut" style="font-size:13px">Panic signs out every session (including this one) and removes every approved device and admin/mod. You'll need the password (and code) to get back in.</p>
+    <h3 class="sec">Login attempts</h3><div id="loginLog" class="list" style="max-height:220px;overflow:auto;font-size:13px"></div>
+    <h3 class="sec">Activity log (every admin change)</h3><div id="auditLog" class="list" style="max-height:300px;overflow:auto;font-size:13px"></div>
+    <div class="msg" id="secMsg"></div>
   </div>
 
   <div class="card full">
@@ -252,9 +273,12 @@ async function api(path,op,extra){ const r=await fetch(SERVER+path,{method:'POST
 /* ---- login (password, or auto via a granted device) ---- */
 async function authGet(){ const r=await fetch(SERVER+'/admin/site',{method:'POST',headers:hdrs(),body:JSON.stringify({op:'get'})}); if(r.status===403) return null; return r.json(); }
 /* the password goes to the server once and is swapped for a session token; the page never stores the password */
+let LASTPW=''; $('code2').addEventListener('keydown',e=>{ if(e.key==='Enter') $('loginBtn').click(); });
 $('loginBtn').onclick=async()=>{ const pw=$('pw').value; if(!pw) return; $('pw').value=''; $('loginMsg').textContent='Checking…'; $('loginMsg').className='msg';
-  try{ const r=await fetch(SERVER+'/admin/login',{method:'POST',headers:{'content-type':'application/json'},body:JSON.stringify({pw})}); const d=await r.json().catch(()=>({}));
+  try{ const r=await fetch(SERVER+'/admin/login',{method:'POST',headers:{'content-type':'application/json'},body:JSON.stringify({pw,code:$('code2').value.trim()})}); const d=await r.json().catch(()=>({}));
     if(r.status===429){ $('loginMsg').textContent=`Too many wrong tries — locked for ${d.wait||60} more minutes.`; $('loginMsg').className='msg err'; return; }
+    if(d.err==='code'){ LASTPW=pw; $('pw').value=pw; $('code2').classList.remove('hide'); $('code2').focus(); $('loginMsg').textContent='2-step login is on — enter the 6-digit code from your authenticator app.'; $('loginMsg').className='msg'; return; }
+    if(d.err==='badcode'){ $('pw').value=pw; $('code2').value=''; $('loginMsg').textContent=`Wrong or expired code. ${d.left??''} tries left.`; $('loginMsg').className='msg err'; return; }
     if(!d.token){ $('loginMsg').textContent=d.left!=null?`Wrong password. ${d.left} ${d.left===1?'try':'tries'} left before a 1-hour lockout.`:'Wrong password.'; $('loginMsg').className='msg err'; return; }
     KEY=d.token; sessionStorage.setItem('rrAdminTok',JSON.stringify({token:d.token,exp:d.exp})); const st=await authGet(); if(!st){ KEY=''; $('loginMsg').textContent='Sign-in failed — try again.'; $('loginMsg').className='msg err'; return; } showApp(st);
     if(PID){ try{ await api('/admin/chat','grantself',{pid:PID,name:'Owner device'}); localStorage.setItem('rrAdmUrl',location.pathname.replace(/\.html$/,'')); }catch(e){} } }
@@ -266,7 +290,7 @@ function showApp(st){ ROLE=st.role||'full'; $('login').classList.add('hide'); $(
   const full=ROLE==='full'; document.querySelectorAll('.full').forEach(el=>el.style.display=full?'':'none');
   try{ if(full) localStorage.setItem('rrOwner','1'); }catch(e){}
   $('roleNote').textContent=full?'Signed in as full admin — changes go live for everyone.':'Signed in as moderator — you can kick, ban and tag.';
-  if(full){ initPlayers(); initControl(st.settings||{}); initAnn(); initEditor(); initSettings(); initTourney(); initDaily(); renderAnn(st.ann); renderEdits(st.ov); renderSettings(st.settings); renderTourneys(st.tourneys); } loadUsers(); loadStats(); }
+  if(full){ initSecurity(); initPlayers(); initControl(st.settings||{}); initAnn(); initEditor(); initSettings(); initTourney(); initDaily(); renderAnn(st.ann); renderEdits(st.ov); renderSettings(st.settings); renderTourneys(st.tourneys); } loadUsers(); loadStats(); }
 
 /* ---- announcement ---- */
 const THEMES={blue:['#1e3a8a','#0ea5e9'],green:['#065f46','#22c55e'],purple:['#4c1d95','#a855f7'],red:['#7f1d1d','#ef4444'],orange:['#7c2d12','#f59e0b'],pink:['#831843','#ec4899'],teal:['#134e4a','#14b8a6'],gold:['#78350f','#fbbf24']};
@@ -426,6 +450,26 @@ function renderPlayers(ps){ $('aOut').innerHTML=ps.map(p=>`<div style="backgroun
   $('aOut').querySelectorAll('[data-give]').forEach(b=>b.onclick=async()=>{ const pid=b.dataset.give, t=$('aOut').querySelector(`[data-at="${pid}"]`).value.trim(), dd=$('aOut').querySelector(`[data-ad="${pid}"]`).value.trim(); if(!t) return; await api('/admin/site','achAdd',{pid,title:t,detail:dd}); lookup(b.dataset.nm); }); }
 $('aGo').onclick=()=>lookup($('aQ').value); $('aQ').addEventListener('keydown',e=>{ if(e.key==='Enter') lookup($('aQ').value); });
 
+/* ---- security centre ---- */
+function uaShort(u){ u=String(u||''); return /iPhone|iPad/.test(u)?'iPhone/iPad':/Android/.test(u)?'Android':/CrOS/.test(u)?'Chromebook':/Windows/.test(u)?'Windows':/Mac OS/.test(u)?'Mac':/Linux/.test(u)?'Linux':'Unknown device'; }
+async function loadSecurity(){ if(!KEY){ $('secMsg').textContent='Sign in with the password to use the security centre.'; return; } try{ const s=await api('/admin/sec','secStatus');
+    $('sc2fa').textContent=s.totp?'ON ✅':'off ⚠️'; $('scPw').textContent=s.customPw?'custom ✅':'original'; $('scSess').textContent=s.sessions; $('scDev').textContent=s.grants; $('scFails').textContent=s.fails24; $('scLocked').textContent=s.locked;
+    $('tfaOff').classList.toggle('hide',!!s.totp); $('tfaOn').classList.toggle('hide',!s.totp);
+    const ss=(await api('/admin/sec','sessions')).sessions||[]; $('sessList').innerHTML=ss.map(x=>`<div class="urow"><span class="nm">${x.me?'👉 This browser':'🖥️ '+uaShort(x.ua)} <span class="pill">${x.role}</span></span><span class="mut" style="font-size:13px">signed in ${agoT(x.created)} · active ${agoT(x.last)} · conn ${esc(x.ip||'?')}</span>${x.me?'':`<button class="del" data-rev="${x.id}" style="flex:0 0 auto">Sign out</button>`}</div>`).join('')||'<span class="mut">None</span>';
+    const ll=(await api('/admin/sec','loginLog')).rows||[]; $('loginLog').innerHTML=ll.map(x=>`<div class="urow"><span class="nm">${x.ok?'✅':'❌'} ${esc(x.why)}</span><span class="mut">${new Date(x.ts).toLocaleString()} · conn ${esc(x.ip)} · ${esc(uaShort(x.ua))}</span></div>`).join('')||'<span class="mut">No attempts yet.</span>';
+    const al=(await api('/admin/sec','auditLog')).rows||[]; $('auditLog').innerHTML=al.map(x=>`<div class="urow" style="display:block"><b>${esc(x.what)}</b> <span class="mut">by ${esc(x.who)} · ${new Date(x.ts).toLocaleString()} · conn ${esc(x.ip)}</span><div class="mut" style="word-break:break-all">${esc(x.detail)}</div></div>`).join('')||'<span class="mut">Nothing yet.</span>'; }
+  catch(e){ $('secMsg').textContent='Could not load the security centre.'; } }
+function initSecurity(){ if(initSecurity.done) return; initSecurity.done=1;
+  $('tfaStart').onclick=async()=>{ const r=await api('/admin/sec','totpBegin'); if(!r.secret) return; $('tfaSetup').classList.remove('hide'); $('tfaKey').textContent=r.secret.replace(/(.{4})/g,'$1 ').trim(); $('tfaQR').innerHTML='';
+    const draw=()=>{ try{ new QRCode($('tfaQR'),{text:r.uri,width:180,height:180}); }catch(e){ $('tfaQR').textContent='(QR unavailable — type the key)'; } }; if(window.QRCode) draw(); else { const sc=document.createElement('script'); sc.src='https://cdnjs.cloudflare.com/ajax/libs/qrcodejs/1.0.0/qrcode.min.js'; sc.onload=draw; sc.onerror=()=>{ $('tfaQR').textContent='(QR unavailable — type the key)'; }; document.head.appendChild(sc); } };
+  $('tfaConfirm').onclick=async()=>{ const r=await api('/admin/sec','totpEnable',{code:$('tfaCode').value.trim()}); if(r.ok){ setMsg('secMsg','2-step login is ON. From now on you need the code to sign in.',1); $('tfaSetup').classList.add('hide'); loadSecurity(); } else setMsg('secMsg','That code is wrong — check the time on your phone and try the newest code.',0); };
+  $('tfaDisable').onclick=async()=>{ if(!confirm('Turn OFF 2-step login? Your admin page will be less safe.')) return; const r=await api('/admin/sec','totpDisable',{code:$('tfaOffCode').value.trim()}); setMsg('secMsg',r.ok?'2-step login turned off.':'Wrong code.',r.ok?1:0); loadSecurity(); };
+  $('pwGo').onclick=async()=>{ const o=$('pwOld').value, n=$('pwNew').value, n2=$('pwNew2').value; if(n.length<12){ setMsg('secMsg','The new password needs at least 12 characters.',0); return; } if(n!==n2){ setMsg('secMsg','The new passwords don\'t match.',0); return; }
+    const r=await api('/admin/sec','setPw',{oldPw:o,newPw:n}).catch(()=>({err:'oldpw'})); if(r.ok){ setMsg('secMsg','Password changed. The old one no longer works and every other session was signed out.',1); for(const id of ['pwOld','pwNew','pwNew2']) $(id).value=''; loadSecurity(); } else setMsg('secMsg',r.err==='oldpw'?'Current password is wrong.':'Could not change it.',0); };
+  $('sessList').onclick=async e=>{ const b=e.target.closest('[data-rev]'); if(!b) return; await api('/admin/sec','revoke',{id:b.dataset.rev}); loadSecurity(); };
+  $('sessOthers').onclick=async()=>{ await api('/admin/sec','revokeOthers'); setMsg('secMsg','Every other session was signed out.',1); loadSecurity(); };
+  $('panicBtn').onclick=async()=>{ if(!confirm('🚨 PANIC: sign out EVERYONE (you too) and remove every approved device and admin/mod?')) return; if(!confirm('Are you sure? You will need the password to get back in.')) return; await api('/admin/sec','panic'); sessionStorage.removeItem('rrAdminTok'); try{ localStorage.removeItem('rrAdmUrl'); }catch(e){} alert('Locked down. Everyone is signed out.'); location.reload(); };
+  loadSecurity(); }
 /* ---- all players ---- */
 let PL=[], PLSEL=null;
 const agoT=t=>{ if(!t) return 'a while ago'; const s=(Date.now()-t)/1000; return s<90?'just now':s<3600?Math.round(s/60)+' min ago':s<86400?Math.round(s/3600)+' h ago':Math.round(s/86400)+' days ago'; };

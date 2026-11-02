@@ -20,27 +20,35 @@ export default {
       return env.CHAT.get(env.CHAT.idFromName('SITE')).fetch(req);
     }
     /* site owner tools: clean leaderboards and chat. Needs the ADMIN_KEY secret. */
-    const ad=url.pathname.match(/^\/admin\/(lb|chat|site)(?:\/([a-z0-9]{2,16}))?$/);
+    const ad=url.pathname.match(/^\/admin\/(lb|chat|site|sec)(?:\/([a-z0-9]{2,16}))?$/);
     /* admin sign-in: the password is only ever checked here, on the server (it's a Cloudflare secret, never in the page).
        Wrong guesses are rate-limited per IP; a right one is swapped for a random session token that expires. */
     if(url.pathname==='/admin/login'){ if(req.method==='OPTIONS') return new Response(null,{headers:CORS}); if(req.method!=='POST') return J({err:'method'},405);
       const ip=req.headers.get('cf-connecting-ip')||'?', chat=env.CHAT.get(env.CHAT.idFromName('SITE')), call=o=>chat.fetch(new Request('https://do/sec',{method:'POST',headers:{'content-type':'application/json'},body:JSON.stringify(o)})).then(r=>r.json());
       const gate=await call({op:'check',ip}); if(gate.blocked) return J({err:'locked',wait:gate.wait},429);
-      let pw=''; try{ pw=String((await req.json()).pw||''); }catch(e){} await new Promise(r=>setTimeout(r,350));   /* slow every guess down */
-      const ok=(env.ADMIN_KEY&&await sameSecret(pw,env.ADMIN_KEY))||(env.SITE_ADMIN_KEY&&await sameSecret(pw,env.SITE_ADMIN_KEY));
-      if(!ok){ const f=await call({op:'fail',ip}); return J({err:'wrong',left:f.left},403); }
-      await call({op:'ok',ip}); const t=await call({op:'newtok',role:'full'}); return J({token:t.token,exp:t.exp}); }
+      let pw='', code=''; try{ const b=await req.json(); pw=String(b.pw||''); code=String(b.code||'').replace(/\D/g,''); }catch(e){} await new Promise(r=>setTimeout(r,350));   /* slow every guess down */
+      const cfg=await call({op:'authcfg'}), ua=(req.headers.get('user-agent')||'').slice(0,300);
+      const ok=cfg.pwh?(await pbkdf(pw,cfg.pwh.salt))===cfg.pwh.hash:((env.ADMIN_KEY&&await sameSecret(pw,env.ADMIN_KEY))||(env.SITE_ADMIN_KEY&&await sameSecret(pw,env.SITE_ADMIN_KEY)));
+      if(!ok){ const f=await call({op:'fail',ip,why:'wrong password',ua}); return J({err:'wrong',left:f.left},403); }
+      if(cfg.totp){ if(!code) return J({err:'code'},401); const v=await call({op:'totpCheck',code}); if(!v.ok){ const f=await call({op:'fail',ip,why:'wrong 2-step code',ua}); return J({err:'badcode',left:f.left},403); } }
+      await call({op:'ok',ip,ua}); const t=await call({op:'newtok',role:'full',ua,ip}); return J({token:t.token,exp:t.exp}); }
     if(ad){ if(req.method==='OPTIONS') return new Response(null,{headers:CORS});
       let role=null; const chat=env.CHAT.get(env.CHAT.idFromName('SITE')), call=o=>chat.fetch(new Request('https://do/sec',{method:'POST',headers:{'content-type':'application/json'},body:JSON.stringify(o)})).then(r=>r.json());
       const tok=req.headers.get('x-admin-token'), pid=req.headers.get('x-admin-pid');
-      if(tok){ try{ const d=await call({op:'tok',token:tok}); if(d&&d.role) role=d.role; }catch(e){} }
+      const ua=(req.headers.get('user-agent')||'').slice(0,300), ip=req.headers.get('cf-connecting-ip')||'?';
+      if(tok){ try{ const d=await call({op:'tok',token:tok,ua}); if(d&&d.role) role=d.role; }catch(e){} }
       else if(pid){ try{ const ar=await chat.fetch(new Request('https://do/authpid',{method:'POST',headers:{'content-type':'application/json'},body:JSON.stringify({op:'authpid',pid})})); const d=await ar.json(); if(d&&d.lvl) role=d.lvl; }catch(e){} }
       if(!role) return J({err:'forbidden'},403);
       const body=await req.text(); const u=new URL(req.url); u.pathname='/admin';
-      const h=new Headers(); h.set('content-type','application/json'); h.set('x-admin-role',role);
+      /* the security centre needs a real password sign-in (not just an approved device), and a password change re-checks the old one */
+      if(ad[1]==='sec'){ if(!tok||role!=='full') return J({err:'needpw'},403); let bj={}; try{ bj=JSON.parse(body||'{}'); }catch(e){}
+        if(bj.op==='setPw'){ const cfg=await call({op:'authcfg'}), old=String(bj.oldPw||''); const ok=cfg.pwh?(await pbkdf(old,cfg.pwh.salt))===cfg.pwh.hash:((env.ADMIN_KEY&&await sameSecret(old,env.ADMIN_KEY))||(env.SITE_ADMIN_KEY&&await sameSecret(old,env.SITE_ADMIN_KEY))); if(!ok){ await call({op:'fail',ip,why:'wrong old password (change)',ua}); return J({err:'oldpw'},403); } } }
+      const h=new Headers(); h.set('content-type','application/json'); h.set('x-admin-role',role); if(tok) h.set('x-admin-th',await sha(tok));
+      /* every change is written to the activity log (reads are not) */
+      try{ const bj=JSON.parse(body||'{}'), op=String(bj.op||''); if(op&&!/^(get|players|who|recent|list|daily|stats|tags|bans|muted|grants|sbans|msgs|secStatus|auditLog|loginLog|sessions|lockstatus|player|liveStats|notes|polls|pinfo|export)$/.test(op)){ const d2={...bj}; for(const k of ['pw','oldPw','newPw','code','token']) delete d2[k]; await call({op:'audit',role:tok?role+' (password)':role+' (device)',ip,what:ad[1]+'/'+op,detail:JSON.stringify(d2).slice(0,300)}); } }catch(e){}
       const r2=new Request(u,{method:'POST',headers:h,body});
       if(ad[1]==='lb'&&ad[2]) return env.BOARDS.get(env.BOARDS.idFromName(ad[2])).fetch(r2);
-      if(ad[1]==='chat') return env.CHAT.get(env.CHAT.idFromName('SITE')).fetch(r2);
+      if(ad[1]==='chat'||ad[1]==='sec') return env.CHAT.get(env.CHAT.idFromName('SITE')).fetch(r2);
       if(ad[1]==='site') return env.SITE.get(env.SITE.idFromName('SITE')).fetch(r2);
       return J({err:'bad'},400); }
     if(url.pathname==='/lobby'){
@@ -113,6 +121,12 @@ const ADMIN_URL='/hq-owa9rwwt9kplpdbu';
 const CORS={'Access-Control-Allow-Origin':'*','Access-Control-Allow-Methods':'GET,POST,OPTIONS','Access-Control-Allow-Headers':'content-type,x-admin-token,x-admin-pid'};
 /* SHA-256 as hex, and a comparison that takes the same time whether the guess is close or not */
 async function sha(x){ const b=await crypto.subtle.digest('SHA-256',new TextEncoder().encode(String(x))); return [...new Uint8Array(b)].map(v=>v.toString(16).padStart(2,'0')).join(''); }
+const B32='ABCDEFGHIJKLMNOPQRSTUVWXYZ234567';
+function b32enc(bytes){ let bits=0, v=0, out=''; for(const b of bytes){ v=(v<<8)|b; bits+=8; while(bits>=5){ out+=B32[(v>>>(bits-5))&31]; bits-=5; } } if(bits>0) out+=B32[(v<<(5-bits))&31]; return out; }
+function b32dec(str){ const s=String(str).toUpperCase().replace(/[^A-Z2-7]/g,''); let bits=0, v=0; const out=[]; for(const ch of s){ v=(v<<5)|B32.indexOf(ch); bits+=5; if(bits>=8){ out.push((v>>>(bits-8))&255); bits-=8; } } return new Uint8Array(out); }
+async function totpAt(secret,step){ const key=await crypto.subtle.importKey('raw',b32dec(secret),{name:'HMAC',hash:'SHA-1'},false,['sign']); const msg=new Uint8Array(8); let x=step; for(let i=7;i>=0;i--){ msg[i]=x&255; x=Math.floor(x/256); }
+  const h=new Uint8Array(await crypto.subtle.sign('HMAC',key,msg)), o=h[19]&15, n=((h[o]&127)<<24)|(h[o+1]<<16)|(h[o+2]<<8)|h[o+3]; return String(n%1000000).padStart(6,'0'); }
+async function pbkdf(pw,salt){ const k=await crypto.subtle.importKey('raw',new TextEncoder().encode(String(pw)),'PBKDF2',false,['deriveBits']); const b=await crypto.subtle.deriveBits({name:'PBKDF2',hash:'SHA-256',salt:new TextEncoder().encode(salt),iterations:100000},k,256); return [...new Uint8Array(b)].map(v=>v.toString(16).padStart(2,'0')).join(''); }
 async function sameSecret(a,b){ const [x,y]=await Promise.all([crypto.subtle.digest('SHA-256',new TextEncoder().encode(String(a))),crypto.subtle.digest('SHA-256',new TextEncoder().encode(String(b)))]); return crypto.subtle.timingSafeEqual(x,y); }
 const J=(o,st)=>new Response(JSON.stringify(o),{status:st||200,headers:{...CORS,'content-type':'application/json','cache-control':'no-store'}});
 const BAD=/fuck|shit|cunt|nigg|fag|bitch|whore|slut|rape|hitler|nazi|dick|pussy|cock/i;
@@ -175,7 +189,10 @@ export class Chat {
     /* grants are keyed by a SHA-256 of the person's private device id (the short public id can be forged) */
     this.sql.exec('CREATE TABLE IF NOT EXISTS grnt2(sh TEXT PRIMARY KEY, pubid TEXT, lvl TEXT, name TEXT, ts INTEGER)');
     this.sql.exec('CREATE TABLE IF NOT EXISTS rl(ip TEXT PRIMARY KEY, n INTEGER, first INTEGER, until INTEGER)');
-    this.sql.exec('CREATE TABLE IF NOT EXISTS sess(th TEXT PRIMARY KEY, role TEXT, exp INTEGER)'); }
+    this.sql.exec('CREATE TABLE IF NOT EXISTS sess(th TEXT PRIMARY KEY, role TEXT, exp INTEGER)');
+    for(const c of ['uah TEXT','ip TEXT','created INTEGER','last INTEGER','ua TEXT']) try{ this.sql.exec('ALTER TABLE sess ADD COLUMN '+c); }catch(e){}
+    this.sql.exec('CREATE TABLE IF NOT EXISTS alog(id INTEGER PRIMARY KEY AUTOINCREMENT, ts INTEGER, who TEXT, ip TEXT, what TEXT, detail TEXT)');
+    this.sql.exec('CREATE TABLE IF NOT EXISTS llog(id INTEGER PRIMARY KEY AUTOINCREMENT, ts INTEGER, ok INTEGER, ip TEXT, why TEXT, ua TEXT)'); }
   cfgGet(k){ const r=this.sql.exec('SELECT v FROM cfg WHERE k=?',k).toArray()[0]; return r?r.v:null; }
   cfgSet(k,v){ this.sql.exec('INSERT OR REPLACE INTO cfg(k,v) VALUES(?,?)',k,String(v)); }
   socks(){ return this.ctx.getWebSockets().filter(ws=>ws.deserializeAttachment()); }
@@ -197,10 +214,13 @@ export class Chat {
     if(path==='/authpid'){ let m={}; try{ m=await req.json(); }catch(e){} const pid=String(m.pid||'').replace(/[^a-z0-9]/gi,'').slice(0,24); return J({lvl:pid.length>=8?await this.grantOfWho(pid):null}); }
     if(path==='/sec'){ let m={}; try{ m=await req.json(); }catch(e){} const now=Date.now(), ip=String(m.ip||'?').slice(0,64);
       if(m.op==='check'){ const r=this.sql.exec('SELECT until FROM rl WHERE ip=?',ip).toArray()[0]; const g=this.sql.exec("SELECT COUNT(*) AS c FROM rl WHERE until>?",now).toArray()[0].c; return J({blocked:!!(r&&r.until>now),wait:r&&r.until>now?Math.ceil((r.until-now)/60000):0,locked:g}); }
-      if(m.op==='fail'){ let r=this.sql.exec('SELECT n,first FROM rl WHERE ip=?',ip).toArray()[0]; let n=1, first=now; if(r&&now-r.first<15*60000){ n=r.n+1; first=r.first; } const until=n>=5?now+60*60000:0; this.sql.exec('INSERT OR REPLACE INTO rl(ip,n,first,until) VALUES(?,?,?,?)',ip,n,first,until); return J({left:Math.max(0,5-n)}); }
-      if(m.op==='ok'){ this.sql.exec('DELETE FROM rl WHERE ip=?',ip); return J({ok:true}); }
-      if(m.op==='newtok'){ const raw=crypto.getRandomValues(new Uint8Array(32)), token=[...raw].map(v=>v.toString(16).padStart(2,'0')).join(''), exp=now+12*3600000; this.sql.exec('DELETE FROM sess WHERE exp<?',now); this.sql.exec('INSERT INTO sess(th,role,exp) VALUES(?,?,?)',await sha(token),m.role==='full'?'full':'mod',exp); return J({token,exp}); }
-      if(m.op==='tok'){ const r=this.sql.exec('SELECT role,exp FROM sess WHERE th=?',await sha(String(m.token||'').slice(0,80))).toArray()[0]; return J({role:r&&r.exp>now?r.role:null}); }
+      if(m.op==='authcfg'){ const pw=this.cfgGet('pwh'); return J({pwh:pw?JSON.parse(pw):null,totp:!!this.cfgGet('totp')}); }
+      if(m.op==='totpCheck'){ const sec2=this.cfgGet('totp'); if(!sec2) return J({ok:true}); const st=Math.floor(now/30000), code=String(m.code||''), last=+(this.cfgGet('totpLast')||0); for(const d of [0,-1,1]){ if(st+d<=last) continue; if(await totpAt(sec2,st+d)===code){ this.cfgSet('totpLast',st+d); return J({ok:true}); } } return J({ok:false}); }
+      if(m.op==='audit'){ this.sql.exec('INSERT INTO alog(ts,who,ip,what,detail) VALUES(?,?,?,?,?)',now,String(m.role||''),(await sha('rr-ip:'+ip)).slice(0,10),String(m.what||'').slice(0,60),String(m.detail||'').slice(0,300)); this.sql.exec('DELETE FROM alog WHERE id<(SELECT MAX(id)-2000 FROM alog)'); return J({ok:true}); }
+      if(m.op==='fail'){ this.sql.exec('INSERT INTO llog(ts,ok,ip,why,ua) VALUES(?,0,?,?,?)',now,(await sha('rr-ip:'+ip)).slice(0,10),String(m.why||'').slice(0,60),String(m.ua||'').slice(0,120)); this.sql.exec('DELETE FROM llog WHERE id<(SELECT MAX(id)-500 FROM llog)'); let r=this.sql.exec('SELECT n,first FROM rl WHERE ip=?',ip).toArray()[0]; let n=1, first=now; if(r&&now-r.first<15*60000){ n=r.n+1; first=r.first; } const until=n>=5?now+60*60000:0; this.sql.exec('INSERT OR REPLACE INTO rl(ip,n,first,until) VALUES(?,?,?,?)',ip,n,first,until); return J({left:Math.max(0,5-n)}); }
+      if(m.op==='ok'){ this.sql.exec('DELETE FROM rl WHERE ip=?',ip); this.sql.exec('INSERT INTO llog(ts,ok,ip,why,ua) VALUES(?,1,?,?,?)',now,(await sha('rr-ip:'+ip)).slice(0,10),'signed in',String(m.ua||'').slice(0,120)); return J({ok:true}); }
+      if(m.op==='newtok'){ const raw=crypto.getRandomValues(new Uint8Array(32)), token=[...raw].map(v=>v.toString(16).padStart(2,'0')).join(''), exp=now+12*3600000; this.sql.exec('DELETE FROM sess WHERE exp<?',now); this.sql.exec('INSERT INTO sess(th,role,exp,uah,ip,created,last,ua) VALUES(?,?,?,?,?,?,?,?)',await sha(token),m.role==='full'?'full':'mod',exp,await sha('ua:'+(m.ua||'')),(await sha('rr-ip:'+(m.ip||'?'))).slice(0,10),now,now,String(m.ua||'').slice(0,160)); return J({token,exp}); }
+      if(m.op==='tok'){ const th=await sha(String(m.token||'').slice(0,80)), r=this.sql.exec('SELECT role,exp,uah FROM sess WHERE th=?',th).toArray()[0]; if(!r||r.exp<=now) return J({role:null}); if(r.uah&&r.uah!==await sha('ua:'+(m.ua||''))) return J({role:null}); this.sql.exec('UPDATE sess SET last=? WHERE th=?',now,th); return J({role:r.role}); }   /* a token only works in the browser it was made in */
       if(m.op==='logout'){ this.sql.exec('DELETE FROM sess WHERE th=?',await sha(String(m.token||'').slice(0,80))); return J({ok:true}); }
       return J({err:'op'},400); }
     if(path==='/admin'){ let m={}; try{ m=await req.json(); }catch(e){}
@@ -223,6 +243,19 @@ export class Chat {
       if(m.op==='grant'){ if(!full) return J({err:'forbidden'},403); const pub=String(m.pubid||'').slice(0,12), lvl=m.lvl==='full'?'full':'mod', nm=String(m.name||'').slice(0,24); if(!pub) return J({err:'bad'},400); const live=this.socksByPub(pub); if(!live.length) return J({err:'offline'},409);
         const who=live[0].deserializeAttachment().who; this.sql.exec('INSERT OR REPLACE INTO grnt2(sh,pubid,lvl,name,ts) VALUES(?,?,?,?,?)',await sha('rr-grant:'+who),pub,lvl,nm,Date.now()); for(const ws of live) this.send(ws,{t:'role',lvl,url:ADMIN_URL}); return J({ok:true}); }
       if(m.op==='ungrant'&&m.pubid){ if(!full) return J({err:'forbidden'},403); this.sql.exec('DELETE FROM grnt WHERE pubid=?',String(m.pubid)); this.sql.exec('DELETE FROM grnt2 WHERE pubid=?',String(m.pubid)); for(const ws of this.socksByPub(String(m.pubid))) this.send(ws,{t:'role',lvl:null}); return J({ok:true}); }
+      if(/^(secStatus|totpBegin|totpEnable|totpDisable|setPw|sessions|revoke|revokeOthers|panic|auditLog|loginLog)$/.test(m.op||'')){ if(!full) return J({err:'forbidden'},403); const now=Date.now(), th=req.headers.get('x-admin-th')||'';
+        if(m.op==='secStatus') return J({totp:!!this.cfgGet('totp'),customPw:!!this.cfgGet('pwh'),sessions:this.sql.exec('SELECT COUNT(*) AS c FROM sess WHERE exp>?',now).toArray()[0].c,grants:this.sql.exec('SELECT COUNT(*) AS c FROM grnt2').toArray()[0].c,fails24:this.sql.exec('SELECT COUNT(*) AS c FROM llog WHERE ok=0 AND ts>?',now-86400000).toArray()[0].c,locked:this.sql.exec('SELECT COUNT(*) AS c FROM rl WHERE until>?',now).toArray()[0].c});
+        if(m.op==='totpBegin'){ const sec2=b32enc(crypto.getRandomValues(new Uint8Array(20))); this.cfgSet('totpPending',sec2); return J({secret:sec2,uri:`otpauth://totp/Rink%20Rivals:admin?secret=${sec2}&issuer=Rink%20Rivals&digits=6&period=30`}); }
+        if(m.op==='totpEnable'){ const sec2=this.cfgGet('totpPending'); if(!sec2) return J({err:'none'},400); const st=Math.floor(now/30000); let ok=false; for(const d of [0,-1,1]) if(await totpAt(sec2,st+d)===String(m.code||'')) ok=true; if(!ok) return J({err:'badcode'},400); this.cfgSet('totp',sec2); this.cfgSet('totpLast',st); this.sql.exec("DELETE FROM cfg WHERE k='totpPending'"); return J({ok:true}); }
+        if(m.op==='totpDisable'){ const sec2=this.cfgGet('totp'); if(!sec2) return J({ok:true}); const st=Math.floor(now/30000); let ok=false; for(const d of [0,-1,1]) if(await totpAt(sec2,st+d)===String(m.code||'')) ok=true; if(!ok) return J({err:'badcode'},400); this.sql.exec("DELETE FROM cfg WHERE k='totp'"); return J({ok:true}); }
+        if(m.op==='setPw'){ const np=String(m.newPw||''); if(np.length<12) return J({err:'short'},400); if(!th) return J({err:'needpw'},403);
+          const salt=b32enc(crypto.getRandomValues(new Uint8Array(16))); this.cfgSet('pwh',JSON.stringify({salt,hash:await pbkdf(np,salt)})); this.sql.exec('DELETE FROM sess WHERE th<>?',th); return J({ok:true}); }
+        if(m.op==='sessions') return J({sessions:this.sql.exec('SELECT th,role,exp,ip,created,last,ua FROM sess WHERE exp>? ORDER BY last DESC',now).toArray().map(r=>({id:r.th.slice(0,12),me:r.th===th,role:r.role,ip:r.ip,created:r.created,last:r.last,ua:r.ua,exp:r.exp}))});
+        if(m.op==='revoke'){ this.sql.exec('DELETE FROM sess WHERE substr(th,1,12)=? AND th<>?',String(m.id||''),th); return J({ok:true}); }
+        if(m.op==='revokeOthers'){ this.sql.exec('DELETE FROM sess WHERE th<>?',th); return J({ok:true}); }
+        if(m.op==='panic'){ this.sql.exec('DELETE FROM sess'); this.sql.exec('DELETE FROM grnt2'); this.sql.exec('DELETE FROM grnt'); for(const ws of this.socks()) this.send(ws,{t:'role',lvl:null}); return J({ok:true}); }
+        if(m.op==='auditLog') return J({rows:this.sql.exec('SELECT ts,who,ip,what,detail FROM alog ORDER BY id DESC LIMIT 200').toArray()});
+        if(m.op==='loginLog') return J({rows:this.sql.exec('SELECT ts,ok,ip,why,ua FROM llog ORDER BY id DESC LIMIT 150').toArray()}); }
       if(m.op==='grantself'){ if(!full) return J({err:'forbidden'},403); const pid=String(m.pid||'').replace(/[^a-z0-9]/gi,'').slice(0,24); if(pid.length<8) return J({err:'bad'},400); const pub=pubId(pid);
         this.sql.exec('INSERT OR REPLACE INTO grnt2(sh,pubid,lvl,name,ts) VALUES(?,?,?,?,?)',await sha('rr-grant:'+pid),pub,'full',String(m.name||'Owner').slice(0,24),Date.now()); for(const ws of this.socksByPub(pub)) this.send(ws,{t:'role',lvl:'full',url:ADMIN_URL}); return J({ok:true}); }
       if(m.op==='grants') return J({grants:this.sql.exec('SELECT pubid,lvl,name,ts FROM grnt2 ORDER BY ts DESC').toArray()});
