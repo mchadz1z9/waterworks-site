@@ -374,7 +374,7 @@ export class Site {
     this.sql.exec('CREATE TABLE IF NOT EXISTS ans(id INTEGER PRIMARY KEY AUTOINCREMENT, pid TEXT, name TEXT, q TEXT, a TEXT, ts INTEGER)');
     this.sql.exec('CREATE TABLE IF NOT EXISTS slog(id INTEGER PRIMARY KEY AUTOINCREMENT, ts INTEGER, op TEXT, detail TEXT)'); }
   /* is this name already someone else's? (reserved names are allowed for the devices they're reserved for) */
-  nameTaken(name,pid,set){ const k=String(name||'').toLowerCase().trim(); if(!k||/^player\d*$/.test(k)) return false; const r=(set.reserved||[]).find(x=>nameKey(name).startsWith(x.n)); if(r&&(r.pids||[]).includes(pid)) return false;
+  nameTaken(name,pid,set){ const k=String(name||'').toLowerCase().trim(); if(!k||/^player\d*$/.test(k)) return false; /* names anyone may share */ if((set.shared||['aiden']).includes(k)) return false; const r=(set.reserved||[]).find(x=>nameKey(name).startsWith(x.n)); if(r&&(r.pids||[]).includes(pid)) return false;
     /* the earliest account to use a name keeps it */ const o=this.sql.exec('SELECT pid FROM pl WHERE lower(name)=? AND pid<>? AND first<COALESCE((SELECT first FROM pl WHERE pid=? AND lower(name)=?),9e15) LIMIT 1',k,pid,pid,k).toArray()[0]; return !!o; }
   pollRes(p){ const r=p.opts.map(()=>0); for(const v of this.sql.exec('SELECT opt FROM vote WHERE poll=?',p.id).toArray()) if(r[v.opt]!=null) r[v.opt]++; return r; }
   queue(pid,kind,data){ this.sql.exec('INSERT INTO cmd(pid,kind,data,ts) VALUES(?,?,?,?)',pid,kind,JSON.stringify(data||{}),Date.now()); }
@@ -487,6 +487,7 @@ export class Site {
         if('motd' in p) next.motd=String(p.motd||'').slice(0,300);
         if('newLock' in p){ next.newLock=!!p.newLock; if(p.newLock&&!cur.newLock) next.newLockAt=Date.now(); }
         if('nameLock' in p) next.nameLock=!!p.nameLock;
+        if('shared' in p) next.shared=(Array.isArray(p.shared)?p.shared:[]).map(x=>String(x).toLowerCase().trim().slice(0,20)).filter(Boolean).slice(0,100);
         if('welcome' in p) next.welcome=String(p.welcome||'').slice(0,400);
         if('pin' in p) next.pin=String(p.pin||'').slice(0,200);
         if('nameBlock' in p) next.nameBlock=(Array.isArray(p.nameBlock)?p.nameBlock:[]).map(x=>String(x).toLowerCase().trim().slice(0,30)).filter(Boolean).slice(0,200);
