@@ -374,8 +374,8 @@ export class Site {
     this.sql.exec('CREATE TABLE IF NOT EXISTS ans(id INTEGER PRIMARY KEY AUTOINCREMENT, pid TEXT, name TEXT, q TEXT, a TEXT, ts INTEGER)');
     this.sql.exec('CREATE TABLE IF NOT EXISTS slog(id INTEGER PRIMARY KEY AUTOINCREMENT, ts INTEGER, op TEXT, detail TEXT)'); }
   /* is this name already someone else's? (reserved names are allowed for the devices they're reserved for) */
-  nameTaken(name,pid,set){ const k=String(name||'').toLowerCase().trim(); if(!k||/^player\d*$/.test(k)) return false; /* names anyone may share */ if((set.shared||['aiden']).includes(k)) return false; const r=(set.reserved||[]).find(x=>nameKey(name).startsWith(x.n)); if(r&&(r.pids||[]).includes(pid)) return false;
-    /* the earliest account to use a name keeps it */ const o=this.sql.exec('SELECT pid FROM pl WHERE lower(name)=? AND pid<>? AND first<COALESCE((SELECT first FROM pl WHERE pid=? AND lower(name)=?),9e15) LIMIT 1',k,pid,pid,k).toArray()[0]; return !!o; }
+  nameTaken(name,pid,set){ const k=String(name||'').toLowerCase().trim(); if(!k||/^player\d*$/.test(k)) return false;  const r=(set.reserved||[]).find(x=>nameKey(name).startsWith(x.n)); if(r&&(r.pids||[]).includes(pid)) return false;
+    /* the earliest accounts to use a name keep it — 1 per name, except "Aiden" which up to 10 people can share */ const cap=k==='aiden'?10:1, n=this.sql.exec('SELECT COUNT(*) n FROM pl WHERE lower(name)=? AND pid<>? AND first<COALESCE((SELECT first FROM pl WHERE pid=? AND lower(name)=?),9e15)',k,pid,pid,k).one().n; return n>=cap; }
   pollRes(p){ const r=p.opts.map(()=>0); for(const v of this.sql.exec('SELECT opt FROM vote WHERE poll=?',p.id).toArray()) if(r[v.opt]!=null) r[v.opt]++; return r; }
   queue(pid,kind,data){ this.sql.exec('INSERT INTO cmd(pid,kind,data,ts) VALUES(?,?,?,?)',pid,kind,JSON.stringify(data||{}),Date.now()); }
   banFor(pid,iph,name,fp){ const now=Date.now(); for(const k of ['p:'+pid,'n:'+String(name||'').toLowerCase(),...(fp?['f:'+fp]:[])]){ const r=this.sql.exec('SELECT reason,until FROM sban WHERE k=?',k).toArray()[0]; if(r&&(r.until===0||r.until>now)) return {reason:r.reason||'',until:r.until}; } return null; }
