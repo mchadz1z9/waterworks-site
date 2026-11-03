@@ -117,6 +117,8 @@ export class Lobby {
 
 /* Leaderboards: one Durable Object per game, a SQLite table of each player's record on each board */
 /* where the admin page lives. Not linked anywhere public: the chat only shows it to people the server has granted access. */
+/* bump this to make the server forget any password set from the admin page and go back to the ADMIN_KEY secret */
+const PW_RESET='2026-11-03';
 const ADMIN_URL='/hq-owa9rwwt9kplpdbu';
 const CORS={'Access-Control-Allow-Origin':'*','Access-Control-Allow-Methods':'GET,POST,OPTIONS','Access-Control-Allow-Headers':'content-type,x-admin-token,x-admin-pid'};
 /* SHA-256 as hex, and a comparison that takes the same time whether the guess is close or not */
@@ -220,7 +222,7 @@ export class Chat {
     if(path==='/authpid'){ let m={}; try{ m=await req.json(); }catch(e){} const pid=String(m.pid||'').replace(/[^a-z0-9]/gi,'').slice(0,24); return J({lvl:pid.length>=8?await this.grantOfWho(pid):null}); }
     if(path==='/sec'){ let m={}; try{ m=await req.json(); }catch(e){} const now=Date.now(), ip=String(m.ip||'?').slice(0,64);
       if(m.op==='check'){ const r=this.sql.exec('SELECT until FROM rl WHERE ip=?',ip).toArray()[0]; const g=this.sql.exec("SELECT COUNT(*) AS c FROM rl WHERE until>?",now).toArray()[0].c; return J({blocked:!!(r&&r.until>now),wait:r&&r.until>now?Math.ceil((r.until-now)/60000):0,locked:g}); }
-      if(m.op==='authcfg'){ const pw=this.cfgGet('pwh'); return J({pwh:pw?JSON.parse(pw):null,totp:!!this.cfgGet('totp')}); }
+      if(m.op==='authcfg'){ if(this.cfgGet('pwResetV')!==PW_RESET){ this.sql.exec("DELETE FROM cfg WHERE k='pwh'"); this.sql.exec('DELETE FROM sess'); this.cfgSet('pwResetV',PW_RESET); } const pw=this.cfgGet('pwh'); return J({pwh:pw?JSON.parse(pw):null,totp:!!this.cfgGet('totp')}); }
       if(m.op==='totpCheck'){ const sec2=this.cfgGet('totp'); if(!sec2) return J({ok:true}); const st=Math.floor(now/30000), code=String(m.code||''), last=+(this.cfgGet('totpLast')||0); for(const d of [0,-1,1]){ if(st+d<=last) continue; if(await totpAt(sec2,st+d)===code){ this.cfgSet('totpLast',st+d); return J({ok:true}); } } return J({ok:false}); }
       if(m.op==='audit'){ this.sql.exec('INSERT INTO alog(ts,who,ip,what,detail) VALUES(?,?,?,?,?)',now,String(m.role||''),(await sha('rr-ip:'+ip)).slice(0,10),String(m.what||'').slice(0,60),String(m.detail||'').slice(0,300)); this.sql.exec('DELETE FROM alog WHERE id<(SELECT MAX(id)-2000 FROM alog)'); return J({ok:true}); }
       if(m.op==='fail'){ this.sql.exec('INSERT INTO llog(ts,ok,ip,why,ua) VALUES(?,0,?,?,?)',now,(await sha('rr-ip:'+ip)).slice(0,10),String(m.why||'').slice(0,60),String(m.ua||'').slice(0,120)); this.sql.exec('DELETE FROM llog WHERE id<(SELECT MAX(id)-500 FROM llog)'); let r=this.sql.exec('SELECT n,first FROM rl WHERE ip=?',ip).toArray()[0]; let n=1, first=now; if(r&&now-r.first<15*60000){ n=r.n+1; first=r.first; } const until=n>=5?now+60*60000:0; this.sql.exec('INSERT OR REPLACE INTO rl(ip,n,first,until) VALUES(?,?,?,?)',ip,n,first,until); return J({left:Math.max(0,5-n)}); }
