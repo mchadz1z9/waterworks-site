@@ -368,8 +368,10 @@ body{background:radial-gradient(1200px 600px at 10% -10%,#1e1b4b 0,transparent 6
   </div>
   <div class="card" data-grp="fun">
     <h2>🎭 Fun effects</h2>
-    <p class="mut">Pick who: the player you clicked in <b>All players</b>, everyone you ticked, or everyone online. They see it within 30 seconds.</p>
-    <div class="row"><select id="fxWho" style="flex:0 0 220px"><option value="sel">The selected player</option><option value="ticked">Ticked players</option><option value="all">Everyone online</option></select><input id="fxSecs" type="number" min="3" max="120" value="15" style="flex:0 0 90px" title="seconds"><span class="mut" id="fxWhoNow" style="align-self:center"></span></div>
+    <p class="mut">Click a player who is online right now, then pick an effect. They see it within 30 seconds.</p>
+    <h3 class="sec">🟢 Online now — click to pick</h3>
+    <div id="fxOn" class="row" style="gap:6px;max-height:180px;overflow:auto"><span class="mut">Loading…</span></div>
+    <div class="row" style="margin-top:8px"><select id="fxWho" style="flex:0 0 220px"><option value="sel">The player I picked</option><option value="ticked">Ticked players (All players list)</option><option value="all">Everyone online</option></select><input id="fxSecs" type="number" min="3" max="120" value="15" style="flex:0 0 90px" title="seconds"><span class="mut" id="fxWhoNow" style="align-self:center"></span></div>
     <div class="fxg" style="margin-top:8px">
       <button class="ghost" data-fx="shake">📳 Shake</button><button class="ghost" data-fx="invert">🌗 Invert colours</button><button class="ghost" data-fx="mirror">🪞 Mirror</button><button class="ghost" data-fx="upside">🙃 Upside down</button>
       <button class="ghost" data-fx="rainbow">🌈 Rainbow</button><button class="ghost" data-fx="spin">🌀 Spin</button><button class="ghost" data-fx="blur">👓 Blurry</button><button class="ghost" data-fx="comic">🔤 Comic Sans</button>
@@ -383,7 +385,7 @@ body{background:radial-gradient(1200px 600px at 10% -10%,#1e1b4b 0,transparent 6
   </div>
   <div class="card" data-grp="fun">
     <h2>❓ Ask a question</h2>
-    <p class="mut">A question pops up on their screen with a box to type an answer. Answers show up here.</p>
+    <p class="mut">Goes to whoever you picked in 🎭 Fun effects (one online player, the ticked players, or everyone). A question pops up on their screen with a box to type an answer — answers show up here.</p>
     <div class="row"><input id="askQ" maxlength="240" placeholder="e.g. What game should I add next?"><button class="go" id="askGo" style="flex:0 0 auto">Ask</button></div>
     <div class="row" style="margin-top:6px"><button class="ghost" id="ansGo" style="flex:0 0 auto">↻ Refresh answers</button><button class="del" id="ansClr" style="flex:0 0 auto">🗑 Clear answers</button></div>
     <div id="ansList" class="list" style="max-height:340px;overflow:auto"></div><div class="msg" id="askMsg"></div>
@@ -739,13 +741,17 @@ function initNav(){ if(initNav.done) return; initNav.done=1; const cards=[...doc
   let g0='dash'; try{ g0=localStorage.getItem('rrAdmG')||'dash'; }catch(e){} showG(GRP.some(x=>x[0]===g0)?g0:'dash');
   $('secQ').oninput=()=>{ const q=$('secQ').value.trim().toLowerCase(); if(!q){ showG(CURG); return; } cards.forEach(c=>c.classList.toggle('dim',!c.textContent.toLowerCase().includes(q))); document.querySelectorAll('#side button').forEach(b=>b.classList.remove('on')); };
   addEventListener('keydown',e=>{ if(e.key==='/'&&!/INPUT|TEXTAREA|SELECT/.test((document.activeElement||{}).tagName||'')){ e.preventDefault(); $('secQ').focus(); } }); }
-function showG(k){ CURG=k; try{ localStorage.setItem('rrAdmG',k); }catch(e){} document.querySelectorAll('#cards>.card').forEach(c=>c.classList.toggle('dim',k!=='all'&&c.dataset.g!==k)); document.querySelectorAll('#side button').forEach(b=>b.classList.toggle('on',b.dataset.g===k)); if($('secQ')) $('secQ').value=''; scrollTo({top:0,behavior:'smooth'}); }
+function showG(k){ CURG=k; if(k==='fun'&&typeof loadFxOnline==='function') loadFxOnline(); try{ localStorage.setItem('rrAdmG',k); }catch(e){} document.querySelectorAll('#cards>.card').forEach(c=>c.classList.toggle('dim',k!=='all'&&c.dataset.g!==k)); document.querySelectorAll('#side button').forEach(b=>b.classList.toggle('on',b.dataset.g===k)); if($('secQ')) $('secQ').value=''; scrollTo({top:0,behavior:'smooth'}); }
 
 function bulkUpd(){ const n=TICK.size; $('bulkBar').classList.toggle('hide',!n); $('bkN').textContent=`${n} ticked`; $('plTickN').textContent=n?`${n} ticked`:''; fxWhoNow(); }
 async function bulk(kind,extra,okT){ const pids=[...TICK]; if(!pids.length) return; const r=await api('/admin/site','pcmd',Object.assign({kind,pids},extra||{})).catch(()=>({})); setMsg('plMsgOut',r.ok?`${okT} (${r.n} players)`:'Something went wrong.',r.ok?1:0); }
-function fxWhoNow(){ const w=$('fxWho'); if(!w) return; $('fxWhoNow').textContent=w.value==='sel'?(PLSEL?'→ '+PLSEL.name:'→ click a player in All players first'):w.value==='ticked'?`→ ${TICK.size} ticked`:'→ everyone online'; }
+let FXON=[];
+async function loadFxOnline(){ try{ const d=await api('/admin/site','players',{sort:'last',limit:300}); FXON=(d.players||[]).filter(p=>p.on); const el=$('fxOn'); if(!el) return;
+  el.innerHTML=FXON.length?FXON.map((p,i)=>`<button class="${PLSEL&&PLSEL.pid===p.pid?'go':'ghost'}" data-fxp="${i}" style="flex:0 0 auto;padding:7px 12px;font-size:13px">🟢 ${esc(p.name)} <span style="opacity:.7;font-weight:400">· ${esc(p.game||'home')}</span></button>`).join(''):'<span class="mut">Nobody is online right now.</span>';
+  if(PLSEL&&!FXON.some(p=>p.pid===PLSEL.pid)&&$('fxWho').value==='sel') fxWhoNow(); }catch(e){} }
+function fxWhoNow(){ const w=$('fxWho'); if(!w) return; $('fxWhoNow').textContent=w.value==='sel'?(PLSEL?'→ '+PLSEL.name+(FXON.length&&!FXON.some(p=>p.pid===PLSEL.pid)?' (offline — they get it when they come back)':''):'→ click an online player above'):w.value==='ticked'?`→ ${TICK.size} ticked`:'→ everyone online'; }
 async function fxSend(kind,extra,okT){ const w=$('fxWho').value, body=Object.assign({kind,secs:+$('fxSecs').value||15},extra||{});
-  if(w==='sel'){ if(!PLSEL){ setMsg('fxMsg','Click a player in All players first.',0); return; } body.pid=PLSEL.pid; } else if(w==='ticked'){ if(!TICK.size){ setMsg('fxMsg','Tick some players first.',0); return; } body.pids=[...TICK]; } else { if(!confirm('Do this to everyone online?')) return; body.pid='*'; }
+  if(w==='sel'){ if(!PLSEL){ setMsg('fxMsg','Click an online player first.',0); return; } body.pid=PLSEL.pid; } else if(w==='ticked'){ if(!TICK.size){ setMsg('fxMsg','Tick some players first.',0); return; } body.pids=[...TICK]; } else { if(!confirm('Do this to everyone online?')) return; body.pid='*'; }
   const r=await api('/admin/site','pcmd',body).catch(()=>({})); setMsg('fxMsg',r.ok?`${okT} — they'll see it within 30 seconds.`:'Something went wrong.',r.ok?1:0); }
 
 async function loadActivity(){ try{ const d=await api('/admin/site','activity'); const mx=Math.max(1,...d.hours.map(h=>h.n));
@@ -769,6 +775,8 @@ function initV2(set){ if(initV2.done) return; initV2.done=1; initNav();
   $('bkKick').onclick=()=>{ if(confirm(`Kick ${TICK.size} players to the home page?`)) bulk('kick',{},'Kicked'); };
   $('bkReload').onclick=()=>bulk('reload',{},'Reload sent');
   $('fxWho').onchange=fxWhoNow; fxWhoNow();
+  $('fxOn').onclick=e=>{ const b=e.target.closest('[data-fxp]'); if(!b) return; PLSEL=FXON[+b.dataset.fxp]; $('fxWho').value='sel'; fxWhoNow(); $('fxOn').querySelectorAll('[data-fxp]').forEach(x=>x.className=x===b?'go':'ghost'); };
+  loadFxOnline(); setInterval(()=>{ if(CURG==='fun'||CURG==='all') loadFxOnline(); },20000);
   document.querySelectorAll('[data-fx]').forEach(b=>b.onclick=()=>{ const k=b.dataset.fx, nm=b.textContent.trim();
     if(k==='say'){ const t=$('fxSay').value.trim(); if(!t) return; return fxSend('say',{text:t},'Said it'); }
     if(k==='award'){ const t=$('fxAward').value.trim(); if(!t) return; return fxSend('award',{text:t},'Award given'); }
