@@ -92,7 +92,7 @@ addEventListener('pointerdown',e=>{ac();const p=pt(e);
  if(state==='over'){if(mode==='vs'&&vsWon===true&&vsI<3){vsI++;start('vs')}else if(mode==='vs'&&vsWon===null){start('vs')}else state='menu';return}
  if(state==='play'&&ball.ready&&Math.hypot(p.x-ball.x,p.y-ball.y)<120)drag=p});
 addEventListener('pointermove',e=>{if(drag)drag=pt(e)});
-addEventListener('pointerup',e=>{if(!drag)return;const p=pt(e);drag=null;const v=velFor(p);if(v.pull<28)return;ball.vx=v.vx;ball.vy=v.vy;ball.fly=true;ball.ready=false;ball.age=0;release=T;shots++;beep(240,.1,'triangle',.18,120)});
+addEventListener('pointerup',e=>{if(!drag)return;const p=pt(e);drag=null;const v=velFor(p);if(v.pull<28)return;ball.vx=v.vx;ball.vy=v.vy;ball.spin=2.2+v.pull/175*1.4;ball.fly=true;ball.ready=false;ball.age=0;release=T;shots++;beep(240,.1,'triangle',.18,120)});
 function scoreIt(){const swish=!ball.touched;makes++;streak++;
  let pts=(mode==='three'||mode==='vs')?((mode==='vs'?vs.shot===9:rackBall===4)?2:1)+(swish?1:0):2+(swish?1:0)+Math.min(streak-1,5)+(hoop.x>840?1:0);
  if(swish){swishRun++}else swishRun=0;
@@ -104,14 +104,15 @@ function scoreIt(){const swish=!ball.touched;makes++;streak++;
  for(let i=0;i<30;i++)parts.push({x:hoop.x,y:hoop.y+10,vx:(Math.random()-.5)*9,vy:-Math.random()*8,c:['#ffd23f','#ff7a2f','#fff'][i%3],l:1+Math.random()*.6});
  beep(660,.15,'square',.09);setTimeout(()=>beep(990,.2,'square',.09),100);noise(.3,.3,5000);noise(.9,.12,900);
  if(mode==='time'&&makes%3===0){level++;if(level>=2){hoop.rx=Math.min(880,720+Math.random()*160);hoop.base=170+Math.random()*130}if(level>=3)hoop.amp=Math.min(70,(level-2)*18);if(level>=3)def.on=true;setTimeout(()=>say('Level '+level+(level>=3?': defender!':': hoop moves!'),'#ff9a5a'),900)}}
+let ACC=0;
 function step(){
- if(!ball.fly)return;ball.age++;const px=ball.x,py=ball.y;ball.vy+=GR;ball.x+=ball.vx;ball.y+=ball.vy;ball.rot+=ball.vx*.03;
+ if(!ball.fly)return;ball.age++;const px=ball.x,py=ball.y;ball.vy+=GR;ball.vx*=.9992;ball.vy*=.9992;ball.x+=ball.vx;ball.y+=ball.vy;ball.rot+=ball.vx*.03-(ball.spin||0)*.02;
  ball.trail.push({x:ball.x,y:ball.y});if(ball.trail.length>14)ball.trail.shift();
  if(ball.y<hoop.y-R*.6)ball.above=true;
- for(const p of rimPts()){const dx=ball.x-p.x,dy=ball.y-p.y,d=Math.hypot(dx,dy),mr=R+5;if(d<mr&&d>0){const nx=dx/d,ny=dy/d;ball.x=p.x+nx*mr;ball.y=p.y+ny*mr;const dot=ball.vx*nx+ball.vy*ny;if(dot<0){ball.vx-=(1+.62)*dot*nx;ball.vy-=(1+.62)*dot*ny;ball.vx*=.96;ball.touched=true;beep(520+Math.random()*80,.12,'triangle',.25,300)}}}
- const b=board();if(ball.x+R>b.x&&ball.x-R<b.x+b.w&&ball.y>b.y&&ball.y<b.y+b.h){if(px+R<=b.x+4||ball.vx>0){ball.x=b.x-R;ball.vx=-Math.abs(ball.vx)*.55;ball.touched=true;beep(200,.12,'square',.2,110)}}
+ for(const p of rimPts()){const dx=ball.x-p.x,dy=ball.y-p.y,d=Math.hypot(dx,dy),mr=R+5;if(d<mr&&d>0){const nx=dx/d,ny=dy/d;ball.x=p.x+nx*mr;ball.y=p.y+ny*mr;const dot=ball.vx*nx+ball.vy*ny;if(dot<0){const e=.5+Math.min(.15,Math.abs(dot)*.012);ball.vx-=(1+e)*dot*nx;ball.vy-=(1+e)*dot*ny;const tx=-ny,ty=nx,tv=ball.vx*tx+ball.vy*ty,sp=(ball.spin||0)*.35;ball.vx-=tx*(tv*.22+sp)*.5;ball.vy-=ty*(tv*.22+sp)*.5;ball.spin=(ball.spin||0)*.6;ball.touched=true;beep(520+Math.random()*80,.12,'triangle',.25,300)}}}
+ const b=board();if(ball.x+R>b.x&&ball.x-R<b.x+b.w&&ball.y>b.y&&ball.y<b.y+b.h){if(px+R<=b.x+4||ball.vx>0){ball.x=b.x-R;ball.vx=-Math.abs(ball.vx)*.55;ball.vy+=(ball.spin||0)*.25;ball.spin=(ball.spin||0)*.5;ball.touched=true;beep(200,.12,'square',.2,110)}}
  if(def.on){const dx=ball.x-def.hx,dy=ball.y-def.hy,d=Math.hypot(dx,dy);if(d<R+30&&!ball.blocked){const nx=dx/d,ny=dy/d,dot=ball.vx*nx+ball.vy*ny;if(dot<0){ball.vx-=1.8*dot*nx;ball.vy-=1.8*dot*ny;ball.blocked=true;ball.touched=true;say('BLOCKED!','#ff7a7a');beep(180,.15,'square',.25,90)}}}
- if(ball.y>FLOOR+15){ball.y=FLOOR+15;ball.vy*=-.55;ball.vx*=.85;if(Math.abs(ball.vy)>2)beep(120,.08,'sine',.25,70)}
+ if(ball.y>FLOOR+15){ball.y=FLOOR+15;ball.vy*=-.58;ball.vx=ball.vx*.82-(ball.spin||0)*.3;ball.spin=(ball.spin||0)*.4;if(Math.abs(ball.vy)>2)beep(120,.08,'sine',.25,70)}
  if(!ball.scored&&ball.above&&py<hoop.y&&ball.y>=hoop.y&&ball.vy>0&&Math.abs(ball.x-hoop.x)<44-R*.35){ball.scored=true;scoreIt();ball.vx*=.25;ball.vy*=.6}
  if(ball.scored&&ball.y>FLOOR-5)endShot();
  else if(ball.age>50&&(ball.x>1100||ball.x<-100||(ball.y>=FLOOR+14&&Math.abs(ball.vy)<1.5)||ball.age>420))endShot()}
@@ -125,7 +126,7 @@ function endShot(){if(!ball.fly)return;ball.fly=false;
  if(mode==='three'){rackBall++;if(rackBall>=5){rackBall=0;rack++;if(rack>=5){finish();return}START={x:SPOTS[rack].x,y:SPOTS[rack].y};say(SPOTS[rack].n,'#cbb8f0')}}
  newBall()}
 function finish(){state='over';const b=best[mode]||0;if(score>b){best[mode]=score;try{localStorage.hb3=JSON.stringify(best)}catch(e){}}newBall()}
-function traj(){if(!drag)return[];const v=velFor(drag);let px=START.x,py=START.y,vx=v.vx,vy=v.vy;const o=[];for(let i=0;i<46;i++){vy+=GR;px+=vx;py+=vy;if(i%3===2)o.push([px,py])}return o}
+function traj(){if(!drag)return[];const v=velFor(drag);let px=START.x,py=START.y,vx=v.vx,vy=v.vy;const o=[];for(let i=0;i<46;i++){vy+=GR;vx*=.9992;vy*=.9992;px+=vx;py+=vy;if(i%3===2)o.push([px,py])}return o}
 function figure(fx,col,pull,rel){ // shooter silhouette
  x.save();x.translate(fx,FLOOR);const lean=-clamp(pull/175,0,1)*.18;x.rotate(lean);
  x.fillStyle='#1a1230';x.fillRect(-16,-90,13,90);x.fillRect(3,-90,13,90);
@@ -157,7 +158,8 @@ function draw(dt){
  // shooter
  const pull=drag?velFor(drag).pull:0;figure(START.x-46,'#3a7be0',pull,ball.fly?T-release:0);
  if(drag&&ball.ready){const tr=traj();x.fillStyle='rgba(255,255,255,.85)';tr.forEach((p,i)=>{x.globalAlpha=1-i/tr.length*.8;x.beginPath();x.arc(p[0],p[1],5-i*.1,0,7);x.fill()});x.globalAlpha=1;x.fillStyle='rgba(255,255,255,.2)';x.fillRect(START.x-60,FLOOR+20,140,9);x.fillStyle=pull>150?'#ff7a2f':'#ffd23f';x.fillRect(START.x-60,FLOOR+20,140*pull/175,9)}
- if(ball.fly)step();
+ { const hgt=Math.max(0,FLOOR+15-ball.y), a=Math.max(.08,.45-hgt/900); x.fillStyle='rgba(0,0,0,'+a+')'; x.beginPath(); x.ellipse(ball.x,FLOOR+22,R*(1+hgt/500),R*.28*(1+hgt/700),0,0,7); x.fill(); }
+ if(ball.fly){ ACC+=dt; let n=0; while(ACC>=1/60&&n<6){ step(); ACC-=1/60; n++; } } else ACC=0;
  // trail
  if(fire>0&&ball.fly){ball.trail.forEach((p,i)=>{x.fillStyle='rgba(255,'+(110+i*10)+',30,'+(i/ball.trail.length*.6)+')';x.beginPath();x.arc(p.x,p.y,R*(i/ball.trail.length),0,7);x.fill()})}
  x.fillStyle='rgba(0,0,0,.3)';x.beginPath();x.ellipse(ball.x,FLOOR+5,R*Math.max(.3,1-(FLOOR-ball.y)/700),6,0,0,7);x.fill();
