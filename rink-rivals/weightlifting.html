@@ -82,10 +82,11 @@ kbd{ font:inherit; font-size:13px; background:var(--ledbg); color:#fff; border-r
 
       <div class="split">
         <div>
+          <h3>Gym</h3><div class="pills" id="gymPills"></div><div class="muted" id="gymInfo" style="font-size:13px;margin:4px 0 8px"></div>
           <h3>Go to a station</h3>
           <div class="pills" id="goPills"></div>
           <div class="row" id="wRow" style="margin-top:6px"><span class="muted">Weight:</span>
-            <div class="pills"><button data-w="-10">−10</button><button data-w="-5">−5</button><b id="wVal" style="font-size:22px;min-width:110px;text-align:center">—</b><button data-w="5">+5</button><button data-w="25">+25</button><button data-w="100">+100</button><button id="maxW" class="gold" style="display:none" title="Load the heaviest weight">👑 MAX</button></div>
+            <div class="pills"><button data-w="-10">−10</button><button data-w="-5">−5</button><b id="wVal" style="font-size:22px;min-width:110px;text-align:center">—</b><button data-w="5">+5</button><button data-w="25">+25</button><button data-w="100">+100</button><button data-w="10000">+10K</button><button data-w="1000000">+1M</button><button data-w="-1000000">−1M</button><button id="maxW" class="gold" style="display:none" title="Load the heaviest weight you can lift">💪 MAX</button></div>
           </div>
           <div class="row" style="margin-top:4px">
             <button class="btn" id="leaveBtn">Leave station <kbd>E</kbd></button>
@@ -163,10 +164,17 @@ const SV=(()=>{ let v=null; try{ v=JSON.parse(localStorage.getItem(SKEY)||'null'
   v.best=v.best||{}; v.w=v.w||{}; return v; })();
 const saveSV=()=>{ try{ localStorage.setItem(SKEY,JSON.stringify(SV)); }catch(e){} };
 const owner=()=>!!(window.RRSTR&&RRSTR.owner);
-const wCap=s=>owner()?100000:(s.each?200:1200);
+/* three gyms. The heaviest bar you may load depends on the gym AND your strength (the owner is infinitely strong) */
+const GYMS={iron:{n:'Iron Gym',ic:'🏋️',cap:1200,need:0,tint:''},gold:{n:'Gold Gym',ic:'🥇',cap:100000,need:100,tint:'rgba(250,204,21,.13)'},diamond:{n:'Diamond Gym',ic:'💎',cap:100000000,need:10000,tint:'rgba(56,189,248,.14)'}};
+const strLv=()=>owner()?Infinity:(window.RRSTR?RRSTR.level:0);
+const gymKey=()=>{ const g=(SV&&SV.gym)||'iron'; return GYMS[g]&&strLv()>=GYMS[g].need?g:'iron'; };
+/* how heavy your strength lets you go: 300 lb at 0, ~20,000 at 100, ~2 million at 1,000, 100 million at ~7,100 */
+const strCap=()=>owner()?Infinity:300+Math.pow(strLv(),2)*2;
+const needFor=w=>Math.ceil(Math.sqrt(Math.max(0,w-300)/2));
+const wCap=s=>{ const g=GYMS[gymKey()], cap=Math.min(g.cap,strCap()); return s.each?Math.max(5,Math.round(Math.min(cap/6,g.cap/6)/2.5)*2.5):Math.max(45,Math.floor(cap/5)*5); };
 const weightOf=s=>clamp(SV.w[s.k]||s.start,s.each?5:45,wCap(s));
 /* how strong you are: 1 = brand new, ~2.5 at 100 strength; the owner can move anything */
-const power=()=>(!window.RRSTR?1:RRSTR.owner?1600:1+RRSTR.frac*1.5)*(potionOn('power')?1.5:1);
+const power=()=>(!window.RRSTR?1:RRSTR.owner?1e12:(1+RRSTR.frac*1.5)*Math.max(1,strCap()/1200))*(potionOn('power')?1.5:1);
 
 /* ---------- workout of the day ---------- */
 const WPOOL=[{k:'pushup',n:15},{k:'pullup',n:6},{k:'situp',n:20},{k:'bench',n:5,w:135},{k:'squat',n:5,w:185},{k:'dead',n:3,w:225},{k:'press',n:5,w:95},{k:'curl',n:12,w:25},{k:'perfect',n:10},{k:'pushup',n:30},{k:'pullup',n:10},{k:'tread',n:8},{k:'bike',n:8}];
@@ -402,22 +410,29 @@ function refreshStats(){ const st=window.RRSTR?RRSTR.state():{level:0,frac:0,bad
   $('stats').innerHTML=[['Strength',st.level.toLocaleString()],['Bench',best('bench')],['Squat',best('squat')],['Deadlift',best('dead')],['Press',best('press')],['Curls',best('curl')],['Pull-ups',best('pullup')],['Push-ups',best('pushup')],['Sit-ups',best('situp')],['Treadmill laps',best('tread')],['Bike laps',best('bike')],['Perfect reps',(SV.perfect||0).toLocaleString()],['Lifted (lb)',own?'100,000':Math.round(SV.vol||0).toLocaleString()]]
     .map(([n,v])=>`<div class="stat"><b>${v}</b><span>${n}</span></div>`).join('');
   $('sBarFill').style.width=(st.frac*100)+'%';
-  $('sBarTxt').textContent=own?'Owner — +100,000 strength every rep and lap, and you can lift up to 100,000 lb 👑':st.tier==='VIP'?'VIP — you start maxed at 100 strength ⭐':st.level>=100?'Maxed out — you are a Professional! 💪':st.tier==='PRO'?`PRO — you started at 75 · ${100-st.level} to max`:`${100-st.level} strength to go until Professional`;
+  $('sBarTxt').textContent=own?'Owner — ∞ infinite strength: every gym is open and you can lift the full 100,000,000 lb in the Diamond Gym 👑':st.tier==='VIP'?'VIP — you start maxed at 100 strength ⭐':st.level>=100?'Maxed out — you are a Professional! 💪':st.tier==='PRO'?`PRO — you started at 75 · ${100-st.level} to max`:`${100-st.level} strength to go until Professional`;
   $('tagWrap').innerHTML=own?'<span class="tag owner">👑 OWNER</span>':st.tier==='VIP'?'<span class="tag owner">⭐ VIP</span>':(st.tier==='PRO'||st.level>=100)?'<span class="tag">💪 PRO</span>':(st.badge?`<span class="tag">${st.badge}</span>`:'<span class="muted">No tag yet — keep training</span>');
   syncUI(); }
 function syncUI(){ const s=PL.at?SK[PL.at]:null, wt=s&&s.t==='w';
   $('goPills').innerHTML=ST.map(x=>`<button data-go="${x.k}" class="${PL.at===x.k?'on':''}">${x.ic} ${esc(x.n)}</button>`).join('');
   $('wVal').textContent=wt?`${weightOf(s).toLocaleString()} lb${s.each?' each':''}`:(s?'bodyweight':'—');
-  document.querySelectorAll('[data-w]').forEach(b=>b.disabled=!wt); $('maxW').style.display=owner()?'':'none'; $('maxW').disabled=!wt;
+  document.querySelectorAll('[data-w]').forEach(b=>b.disabled=!wt); $('maxW').style.display=''; $('maxW').disabled=!wt;
   $('leaveBtn').disabled=!s; $('endBtn').disabled=!(X&&!X.ended&&X.reps>0); }
 function renderWOD(){ $('wod').innerHTML=WOD.tasks.map(t=>`<div class="${t.got>=t.n?'done':''}"><b>${t.got>=t.n?'✅':'⬜'} ${esc(wodLabel(t))}</b><small>${Math.min(t.got,t.n)} / ${t.n}</small></div>`).join('');
   $('wodMsg').textContent=WOD.done?'Done for today — nice work! New workout tomorrow.':'Finish all three for a +5 strength bonus.'; }
 function setWeight(d,abs){ if(!PL.at) return; const s=SK[PL.at]; if(s.t!=='w') return; const step=s.each?2.5:5; if(X&&!X.ended&&X.reps) endSet('change');
-  SV.w[s.k]=clamp(abs!=null?abs:Math.round((weightOf(s)+d)/step)*step,s.each?5:45,wCap(s)); saveSV(); sfx.clank(); if(X&&(X.ended||!X.reps)) restart(); syncUI(); }
+  const want=abs!=null?abs:Math.round((weightOf(s)+d)/step)*step; if(want>wCap(s)&&!owner()){ const g=GYMS[gymKey()], w2=s.each?want*6:want; banner(w2>g.cap?`${g.ic} ${g.n} tops out at ${g.cap.toLocaleString()} lb`:`Too heavy! You need ${needFor(w2).toLocaleString()} strength for that`,'Train more to lift heavier','#f87171',1.8); }
+  SV.w[s.k]=clamp(want,s.each?5:45,wCap(s)); saveSV(); sfx.clank(); if(X&&(X.ended||!X.reps)) restart(); syncUI(); }
 
 $('goPills').addEventListener('click',e=>{ const b=e.target.closest('[data-go]'); if(b) goStation(SK[b.dataset.go]); });
 document.querySelectorAll('[data-w]').forEach(b=>b.onclick=()=>setWeight(+b.dataset.w));
 $('maxW').onclick=()=>{ if(PL.at) setWeight(0,wCap(SK[PL.at])); };
+function renderGyms(){ const el=$('gymPills'); if(!el) return; const lv=strLv(), cur=gymKey();
+  el.innerHTML=Object.entries(GYMS).map(([k,g])=>{ const ok=lv>=g.need; return `<button data-gym="${k}" class="${cur===k?'on':''}" ${ok?'':'disabled'} title="${ok?'':'Needs '+g.need.toLocaleString()+' strength'}">${g.ic} ${g.n}${ok?'':' 🔒'}</button>`; }).join('');
+  const g=GYMS[cur]; $('gymInfo').textContent=`${g.ic} ${g.n}: bars up to ${g.cap.toLocaleString()} lb · your strength lets you load ${owner()?'anything — ∞':Math.min(g.cap,strCap()).toLocaleString()+' lb'}${!owner()&&cur!=='diamond'?` · next gym at ${(cur==='iron'?100:10000).toLocaleString()} strength`:''}`;
+  let t=document.getElementById('gymTint'); if(!t){ t=document.createElement('div'); t.id='gymTint'; t.style.cssText='position:absolute;inset:0;pointer-events:none;border-radius:inherit;mix-blend-mode:screen;transition:background .4s'; const st=$('stage'); if(st){ if(getComputedStyle(st).position==='static') st.style.position='relative'; st.appendChild(t); } } t.style.background=g.tint?`radial-gradient(ellipse at 50% 30%,${g.tint},transparent 70%)`:'transparent'; }
+document.addEventListener('click',e=>{ const b=e.target.closest('[data-gym]'); if(!b||b.disabled) return; SV.gym=b.dataset.gym; for(const s2 of ST) if(SV.w[s2.k]>wCap(s2)) SV.w[s2.k]=wCap(s2); saveSV(); renderGyms(); syncUI(); const g=GYMS[SV.gym]; banner(`${g.ic} Welcome to the ${g.n}`,`Bars up to ${g.cap.toLocaleString()} lb`,'#facc15',2); });
+addEventListener('rrstr-change',()=>renderGyms()); setTimeout(renderGyms,300); setInterval(renderGyms,3000);
 $('leaveBtn').onclick=leave;
 $('endBtn').onclick=()=>{ if(X&&!X.ended) endSet('stop'); syncUI(); };
 $('camBtn').onclick=()=>{ camMode=(camMode+1)%2; };
@@ -602,7 +617,7 @@ function buyPotion(k){ const p=POTS.find(x=>x.k===k); if(!p||!window.RRSTR) retu
 $('shopBtn').onclick=goShop;
 setInterval(()=>{ renderShop(); const on=POTS.filter(p=>potionOn(p.k)); const t=on.length?on.map(p=>p.ic+' '+mmss(FX.p[p.k]-Date.now())).join(' · '):'Spend strength on potions'; if($('potMsg').textContent!==t) $('potMsg').textContent=t; },1000);
 /* read-only view for automated tests (only on ?test pages) */
-if(TEST) window.__gym=()=>({at:PL.at,x:PL.x,z:PL.z,near:(nearest()||{}).k||null,set:X?{reps:X.reps,state:X.state,ended:!!X.ended,combo:X.combo,stam:X.stam,b:X.b,zone:X.zone,u:.5+.5*Math.sin(X.ph)}:null,weight:PL.at?weightOf(SK[PL.at]):null,wod:WOD.tasks.map(t=>t.got),best:SV.best,online:!!(NET&&NET.on),others:[...OT.values()].map(o=>({name:o.name,x:o.x,z:o.z,at:o.at,r:o.r})),feed:feed.map(f=>f.t),spotter:(spotter()||{}).name||null,fx:{liked:FX.liked,aura:FX.aura,str:boostOn('str'),trn:boostOn('trn'),likes:likeN},pots:POTS.filter(p=>potionOn(p.k)).map(p=>p.k),shop:!!shopEl,nearShop:nearShop(),cardio:X&&X.s.t==='c'?{pace:X.pace,lap:X.lap,zone:X.zone,inZ:X.inZ,stam:X.stam}:null});
+if(TEST) window.__gymT={go:k=>goStation(SK[k]),set:v=>setWeight(0,v),w:k=>weightOf(SK[k]),load:k=>loadOf(SK[k])}; window.__gym=()=>({at:PL.at,x:PL.x,z:PL.z,near:(nearest()||{}).k||null,set:X?{reps:X.reps,state:X.state,ended:!!X.ended,combo:X.combo,stam:X.stam,b:X.b,zone:X.zone,u:.5+.5*Math.sin(X.ph)}:null,weight:PL.at?weightOf(SK[PL.at]):null,wod:WOD.tasks.map(t=>t.got),best:SV.best,online:!!(NET&&NET.on),others:[...OT.values()].map(o=>({name:o.name,x:o.x,z:o.z,at:o.at,r:o.r})),feed:feed.map(f=>f.t),spotter:(spotter()||{}).name||null,fx:{liked:FX.liked,aura:FX.aura,str:boostOn('str'),trn:boostOn('trn'),likes:likeN},pots:POTS.filter(p=>potionOn(p.k)).map(p=>p.k),shop:!!shopEl,nearShop:nearShop(),cardio:X&&X.s.t==='c'?{pace:X.pace,lap:X.lap,zone:X.zone,inZ:X.inZ,stam:X.stam}:null});
 
 renderWOD(); refreshStats(); requestAnimationFrame(frame);
 })();
