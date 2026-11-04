@@ -410,6 +410,20 @@ body{background:radial-gradient(1200px 600px at 10% -10%,#1e1b4b 0,transparent 6
     <div id="scList" class="list"></div><div class="msg" id="scMsg2"></div>
   </div>
 
+
+  <div class="card full" data-grp="dash">
+    <h2>🟢 Who came on</h2>
+    <p class="mut">Every visit: name, when they came on, how long they stayed, what they played and which network they were on. A pop-up shows here the moment someone new comes on.</p>
+    <div class="row"><label style="display:flex;gap:8px;align-items:center;margin:0"><input type="checkbox" id="vsPop" checked style="width:auto"> Pop-up when someone comes on</label><label style="display:flex;gap:8px;align-items:center;margin:0"><input type="checkbox" id="vsSnd" style="width:auto"> with a sound</label><button class="ghost" id="vsNote" style="flex:0 0 auto">🔔 Also notify me on this computer</button><input id="vsQ" placeholder="Filter by name…" style="flex:1 1 160px"></div>
+    <div id="vsList" class="list" style="max-height:520px;overflow:auto;font-size:14px"><span class="mut">Loading…</span></div>
+  </div>
+  <div class="card" data-grp="sec">
+    <h2>🛡️ Proxy &amp; VPN blocking</h2>
+    <p class="mut">Blocks people using a VPN, a proxy or an "unblocker" site (they connect from a data centre instead of a home, school or phone network). They see a "turn off your proxy" screen. School web filters are never blocked.</p>
+    <div class="row"><label style="display:flex;gap:8px;align-items:center;margin:0"><input type="checkbox" id="pxOn" style="width:auto"> <b>Block proxies &amp; VPNs</b></label><button class="ghost" id="pxGo" style="flex:0 0 auto">↻ Refresh</button></div>
+    <h3 class="sec">Seen on a proxy / data-centre network</h3><div id="pxList" class="list" style="max-height:360px;overflow:auto;font-size:14px"></div>
+    <h3 class="sec">Allowed anyway</h3><div id="pxOk" class="list"></div><div class="msg" id="pxMsg"></div>
+  </div>
   <div class="card full" data-grp="feed">
     <h2>📱 Rink Clips (video feed)</h2>
     <p class="mut">Players can post videos and pictures on <a href="clips" target="_blank">Rink Clips</a>. Two reports hide a post automatically until you look at it.</p>
@@ -806,7 +820,32 @@ function initFeedAdm(){ if(initFeedAdm.done) return; initFeedAdm.done=1; const c
     else if(d.fdcur){ const r=await api('/admin/site','feedHide',{cid:d.fdcur,on:d.on==='1'}); if(FD&&r.hide) FD.hide=r.hide; renderCur(); return; } else return;
     loadFeedAdm(); };
   loadFeedAdm(); setInterval(()=>{ if(CURG==='feed') loadFeedAdm(); },60000); }
-function initV2(set){ if(initV2.done) return; initV2.done=1; initNav(); initFeedAdm();
+
+/* ---- who came on + proxy blocking ---- */
+let VS=[], VSMAX=0, VSFIRST=true;
+const fmtClock=t=>new Date(t).toLocaleTimeString([],{hour:'numeric',minute:'2-digit'}), fmtDay=t=>{ const d=new Date(t), n=new Date(); return d.toDateString()===n.toDateString()?'Today':new Date(n-864e5).toDateString()===d.toDateString()?'Yesterday':d.toLocaleDateString([],{weekday:'short',month:'short',day:'numeric'}); };
+const fmtLen=ms=>{ const m=Math.round(ms/60000); return m<1?'under a minute':m<60?m+' min':Math.floor(m/60)+' h '+(m%60)+' min'; };
+function vsToast(v){ const d=document.createElement('div'); d.style.cssText='position:fixed;right:16px;bottom:16px;z-index:9999;background:linear-gradient(90deg,#16a34a,#2563eb);color:#fff;border-radius:14px;padding:12px 16px;font:700 15px system-ui;box-shadow:0 10px 30px rgba(0,0,0,.5);max-width:340px;cursor:pointer'; d.innerHTML=`🟢 <b>${esc(v.name)}</b> just came on<div style="font-weight:500;font-size:13px;opacity:.9">${fmtClock(v.start)} · ${esc(v.game||'home')}${v.dev?' · '+esc(v.dev):''}${v.proxy?' · ⚠️ proxy/VPN':''}</div>`; d.onclick=()=>d.remove(); document.body.appendChild(d); setTimeout(()=>d.remove(),9000);
+  if($('vsSnd').checked){ try{ const A=new AudioContext(), o=A.createOscillator(), g=A.createGain(); o.frequency.value=880; g.gain.value=.08; o.connect(g); g.connect(A.destination); o.start(); o.frequency.setValueAtTime(1320,A.currentTime+.12); o.stop(A.currentTime+.25); }catch(e){} }
+  try{ if(window.Notification&&Notification.permission==='granted') new Notification(`${v.name} came on Rink Rivals`,{body:`${fmtClock(v.start)} · ${v.game||'home'}`}); }catch(e){} }
+async function loadVisits(){ try{ const d=await api('/admin/site','visits',{limit:200}); const rows=d.rows||[], now=d.now||Date.now();
+  if(!VSFIRST&&$('vsPop').checked) for(const v of rows.filter(v=>v.id>VSMAX).reverse()) vsToast(v);
+  VSFIRST=false; VSMAX=Math.max(VSMAX,...rows.map(v=>v.id),0); VS=rows; renderVisits(now); }catch(e){} }
+function renderVisits(now){ now=now||Date.now(); const q=$('vsQ').value.trim().toLowerCase(); let day='';
+  $('vsList').innerHTML=VS.filter(v=>!q||v.name.toLowerCase().includes(q)).map(v=>{ const on=now-v.last<75000, dd=fmtDay(v.start), head=dd!==day?(day=dd,`<h3 class="sec" style="margin-top:10px">${dd}</h3>`):'';
+    return head+`<div class="urow"><span class="nm">${on?'🟢':'⚪'} ${esc(v.name)} ${v.dev?`<span class="pill">${esc(v.dev)}</span>`:''}${v.proxy?' <span class="pill" style="color:#fca5a5">⚠️ proxy/VPN</span>':''}<br><span class="mut" style="font-weight:400">${esc(String(v.games||v.game||'home').split(',').join(' · '))}${v.aso?' · '+esc(v.aso):''}</span></span><span style="text-align:right;font-size:13px"><b>${fmtClock(v.start)}</b><br><span class="mut">${on?'on now · '+fmtLen(now-v.start):'left '+fmtClock(v.last)+' · '+fmtLen(v.last-v.start)}</span></span></div>`; }).join('')||'<span class="mut">Nobody yet.</span>'; }
+async function loadPx(){ try{ const d=await api('/admin/site','pxList'); const ok=new Set((d.ok||[]).map(x=>x.pid));
+  $('pxList').innerHTML=(d.rows||[]).map(r=>`<div class="urow"><span class="nm">${esc(r.name)} <span class="mut" style="font-weight:400">${esc(String(r.aso||'').replace('⚠️ ',''))}${r.cc?' · '+esc(r.cc):''} · seen ${agoT(r.last)}</span></span>${ok.has(r.pid)?'<span class="pill">allowed</span>':`<button class="go sm" data-pxok="${esc(r.pid)}" style="flex:0 0 auto">Allow anyway</button>`}</div>`).join('')||'<span class="mut">Nobody on a proxy so far.</span>';
+  $('pxOk').innerHTML=(d.ok||[]).map(r=>`<div class="urow"><span class="nm">${esc(r.name||r.pid)}</span><button class="del sm" data-pxno="${esc(r.pid)}" style="flex:0 0 auto">Remove</button></div>`).join('')||'<span class="mut">Nobody.</span>'; }catch(e){} }
+function initVisits(set){ if(initVisits.done) return; initVisits.done=1; $('pxOn').checked=set.proxyBlock!==false;
+  try{ $('vsPop').checked=localStorage.getItem('rrVsPop')!=='0'; $('vsSnd').checked=localStorage.getItem('rrVsSnd')==='1'; }catch(e){}
+  $('vsPop').onchange=()=>{ try{ localStorage.setItem('rrVsPop',$('vsPop').checked?'1':'0'); }catch(e){} }; $('vsSnd').onchange=()=>{ try{ localStorage.setItem('rrVsSnd',$('vsSnd').checked?'1':'0'); }catch(e){} };
+  $('vsNote').onclick=async()=>{ if(!window.Notification){ alert('This browser does not support notifications.'); return; } const r=await Notification.requestPermission(); $('vsNote').textContent=r==='granted'?'🔔 Notifications on':'🔕 Notifications blocked'; };
+  $('vsQ').oninput=()=>renderVisits();
+  $('pxOn').onchange=async()=>{ const on=$('pxOn').checked; const r=await api('/admin/site','settings',{patch:{proxyBlock:on}}).catch(()=>({})); setMsg('pxMsg',r.ok?(on?'Proxy & VPN blocking is on.':'Proxy & VPN blocking is off.'):'Could not save.',r.ok?1:0); };
+  $('pxGo').onclick=loadPx; $('pxList').closest('.card').onclick=async e=>{ const b=e.target.closest('[data-pxok],[data-pxno]'); if(!b) return; await api('/admin/site','pxAllow',{pid:b.dataset.pxok||b.dataset.pxno,on:!!b.dataset.pxok}); loadPx(); };
+  loadVisits(); loadPx(); setInterval(loadVisits,20000); setInterval(loadPx,60000); setInterval(()=>renderVisits(),30000); }
+function initV2(set){ if(initV2.done) return; initV2.done=1; initNav(); initFeedAdm(); initVisits(set);
   $('wcText').value=set.welcome||''; $('pnText').value=set.pin||'';
   $('acGo').onclick=loadActivity; $('acPeak').onclick=async()=>{ if(!confirm('Reset the online record?')) return; await api('/admin/site','peakReset'); loadActivity(); };
   $('plAll').onchange=()=>{ for(const p of PL) $('plAll').checked?TICK.add(p.pid):TICK.delete(p.pid); document.querySelectorAll('[data-tick]').forEach(c=>c.checked=TICK.has(c.dataset.tick)); bulkUpd(); };

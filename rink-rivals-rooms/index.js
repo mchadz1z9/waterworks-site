@@ -10,7 +10,7 @@ export default {
       return env.ROOMS.get(id).fetch(req);
     }
     if(url.pathname==='/site'){ if(req.method==='OPTIONS') return new Response(null,{headers:CORS}); return env.SITE.get(env.SITE.idFromName('SITE')).fetch(req); }
-    if(url.pathname==='/tourney'||url.pathname==='/play'||url.pathname==='/daily'||url.pathname==='/like'||url.pathname==='/vote'||url.pathname==='/namecheck'||url.pathname.startsWith('/feed/')){ if(req.method==='OPTIONS') return new Response(null,{headers:CORS}); return env.SITE.get(env.SITE.idFromName('SITE')).fetch(req); }
+    if(url.pathname==='/tourney'||url.pathname==='/play'||url.pathname==='/daily'||url.pathname==='/like'||url.pathname==='/vote'||url.pathname==='/namecheck'||url.pathname.startsWith('/feed/')){ if(req.method==='OPTIONS') return new Response(null,{headers:CORS}); const cf=req.cf||{}, h=new Headers(req.headers); h.set('x-rr-asn',String(cf.asn||'')); h.set('x-rr-aso',String(cf.asOrganization||'').slice(0,80)); h.set('x-rr-cc',String(cf.country||'')); return env.SITE.get(env.SITE.idFromName('SITE')).fetch(new Request(req,{headers:h})); }
     const lb=url.pathname.match(/^\/lb\/([a-z0-9]{2,16})$/);
     if(lb){ if(req.method==='OPTIONS') return new Response(null,{headers:CORS}); return env.BOARDS.get(env.BOARDS.idFromName(lb[1])).fetch(req); }
     const pm=url.pathname.match(/^\/party\/([A-Z0-9]{4,8})$/);
@@ -124,6 +124,12 @@ const CORS={'Access-Control-Allow-Origin':'*','Access-Control-Allow-Methods':'GE
 /* SHA-256 as hex, and a comparison that takes the same time whether the guess is close or not */
 async function sha(x){ const b=await crypto.subtle.digest('SHA-256',new TextEncoder().encode(String(x))); return [...new Uint8Array(b)].map(v=>v.toString(16).padStart(2,'0')).join(''); }
 /* reserved names: "Aiden", "A1den", "aiden_99", "AIDEN pro"… all count as Aiden. Only the devices it's reserved for may use it. */
+/* networks that are data centres, VPNs or proxy services rather than homes, schools or phone carriers */
+const PROXY_ORG=/(amazon|aws|google cloud|google llc|microsoft|azure|digitalocean|linode|akamai|vultr|choopa|ovh|hetzner|contabo|oracle|alibaba|tencent|leaseweb|m247|datacamp|cdn77|packet|equinix|hostinger|hostwinds|ionos|scaleway|upcloud|kamatera|psychz|quadranet|colocrossing|buyvm|frantech|zenlayer|g-core|gcore|cogent|hurricane electric|nordvpn|surfshark|expressvpn|mullvad|proton|private internet access|cyberghost|ipvanish|windscribe|hide\.me|tunnelbear|hotspot shield|psiphon|vpn|proxy|hosting|\bservers?\b|\bcloud\b|data ?cent(er|re)|\bcolo(cation)?\b|vercel|netlify|render|fly\.io|heroku|replit|fastly)/i;
+const PROXY_ASN=new Set(['13335','209242','16509','14618','15169','396982','8075','14061','63949','20473','16276','24940','51167','31898','45102','132203','60068','9009','212238','208091','174','6939','36352','53667','46844','62240','19318','30633','54825','25369','35916','40021','394380','397423','20278','64267']);
+/* school web filters route whole schools through their cloud: never treat those as a proxy */
+const SCHOOL_OK=/(zscaler|iboss|securly|lightspeed|goguardian|contentkeeper|netsweeper|umbrella|opendns|fortinet|palo alto|sophos|smoothwall|linewize|forcepoint|barracuda|school|district|education|k12|universit|college|academ)/i;
+const isProxyNet=(asn,aso)=>!SCHOOL_OK.test(String(aso||''))&&(PROXY_ASN.has(String(asn))||PROXY_ORG.test(String(aso||'')));
 const nameKey=n=>String(n||'').toLowerCase().replace(/[0@4]/g,c=>({'0':'o','@':'a','4':'a'}[c])).replace(/[1!|]/g,'i').replace(/3/g,'e').replace(/[5$]/g,'s').replace(/7/g,'t').replace(/[^a-z]/g,'');
 function reservedFor(name,pid,list){ const k=nameKey(name); for(const r of list||[]){ if(r&&r.n&&k.startsWith(r.n)&&!(r.pids||[]).includes(pid)) return r; } return null; }
 const devOf=u=>{ u=String(u||''); return /CrOS/.test(u)?'Chromebook':/iPhone/.test(u)?'iPhone':/iPad/.test(u)?'iPad':/Android/.test(u)?'Android':/Windows/.test(u)?'Windows PC':/Macintosh|Mac OS/.test(u)?'Mac':/Linux/.test(u)?'Linux PC':'Unknown'; };
@@ -368,7 +374,7 @@ export class Site {
     this.sql.exec('CREATE TABLE IF NOT EXISTS pnote(pid TEXT PRIMARY KEY, text TEXT, ts INTEGER)');
     this.sql.exec('CREATE TABLE IF NOT EXISTS allow(pid TEXT PRIMARY KEY, ts INTEGER)');
     this.sql.exec('CREATE TABLE IF NOT EXISTS vote(poll TEXT, pid TEXT, opt INTEGER, PRIMARY KEY(poll,pid))');
-    try{ this.sql.exec('ALTER TABLE pl ADD COLUMN dev TEXT'); }catch(e){} try{ this.sql.exec('ALTER TABLE pl ADD COLUMN fp TEXT'); }catch(e){}
+    try{ this.sql.exec('ALTER TABLE pl ADD COLUMN dev TEXT'); }catch(e){} try{ this.sql.exec('ALTER TABLE pl ADD COLUMN aso TEXT'); }catch(e){} try{ this.sql.exec('ALTER TABLE pl ADD COLUMN cc TEXT'); }catch(e){} try{ this.sql.exec('ALTER TABLE pl ADD COLUMN fp TEXT'); }catch(e){}
     this.sql.exec('CREATE TABLE IF NOT EXISTS namereq(pid TEXT PRIMARY KEY, old TEXT, want TEXT, ts INTEGER)');
     this.sql.exec('CREATE TABLE IF NOT EXISTS act(h INTEGER, pid TEXT, PRIMARY KEY(h,pid))');
     this.sql.exec('CREATE TABLE IF NOT EXISTS ans(id INTEGER PRIMARY KEY AUTOINCREMENT, pid TEXT, name TEXT, q TEXT, a TEXT, ts INTEGER)');
@@ -379,7 +385,10 @@ export class Site {
     this.sql.exec('CREATE TABLE IF NOT EXISTS flike(id TEXT, pid TEXT, PRIMARY KEY(id,pid))');
     this.sql.exec('CREATE TABLE IF NOT EXISTS fcom(cid INTEGER PRIMARY KEY AUTOINCREMENT, id TEXT, pid TEXT, name TEXT, text TEXT, ts INTEGER)');
     this.sql.exec('CREATE TABLE IF NOT EXISTS frep(id TEXT, pid TEXT, ts INTEGER, PRIMARY KEY(id,pid))');
-    this.sql.exec('CREATE TABLE IF NOT EXISTS fban(pid TEXT PRIMARY KEY, ts INTEGER)'); }
+    this.sql.exec('CREATE TABLE IF NOT EXISTS fban(pid TEXT PRIMARY KEY, ts INTEGER)');
+    /* every visit: who, when they came on, when they were last seen, and where they were */
+    this.sql.exec('CREATE TABLE IF NOT EXISTS visit(id INTEGER PRIMARY KEY AUTOINCREMENT, pid TEXT, name TEXT, start INTEGER, last INTEGER, game TEXT, games TEXT, dev TEXT, aso TEXT, proxy INTEGER DEFAULT 0)');
+    this.sql.exec('CREATE TABLE IF NOT EXISTS pxok(pid TEXT PRIMARY KEY, ts INTEGER)'); }
   /* is this name already someone else's? (reserved names are allowed for the devices they're reserved for) */
   nameTaken(name,pid,set){ const k=String(name||'').toLowerCase().trim(); if(!k||/^player\d*$/.test(k)) return false;  const r=(set.reserved||[]).find(x=>nameKey(name).startsWith(x.n)); if(r&&(r.pids||[]).includes(pid)) return false;
     /* the earliest accounts to use a name keep it — 1 per name, except "Aiden" which up to 10 people can share */ const cap=k==='aiden'?10:1, n=this.sql.exec('SELECT COUNT(*) n FROM pl WHERE lower(name)=? AND pid<>? AND first<COALESCE((SELECT first FROM pl WHERE pid=? AND lower(name)=?),9e15)',k,pid,pid,k).one().n; return n>=cap; }
@@ -454,7 +463,13 @@ export class Site {
         const on=this.sql.exec('SELECT COUNT(*) n FROM pl WHERE last>?',now0-70000).one().n, pk=(await this.s.get('peak'))||{n:0}; if(on>pk.n) await this.s.put('peak',{n:on,ts:now0}); }
       if(!ex&&set.welcome) this.queue(pid,'msg',{title:'👋 Welcome to Rink Rivals!',text:set.welcome});
       { const sc=(await this.s.get('sched'))||[]; if(sc.length&&sc.some(x=>x.at<=now0)){ for(const x of sc.filter(x=>x.at<=now0)) this.queue('*','msg',{title:x.title||'📣 Announcement',text:x.text},now0-1); await this.s.put('sched',sc.filter(x=>x.at>now0)); } }
+      const asn=req.headers.get('x-rr-asn')||'', aso=req.headers.get('x-rr-aso')||'', onPx=isProxyNet(asn,aso);
+      this.sql.exec('UPDATE pl SET aso=?,cc=? WHERE pid=?',(onPx?'⚠️ ':'')+aso,req.headers.get('x-rr-cc')||'',pid);
+      { const v=this.sql.exec('SELECT id,last,games FROM visit WHERE pid=? ORDER BY id DESC LIMIT 1',pid).toArray()[0], dv=devOf(req.headers.get('user-agent'));
+        if(v&&now0-v.last<180000){ const gs=new Set(String(v.games||'').split(',').filter(Boolean)); if(game) gs.add(game); this.sql.exec('UPDATE visit SET last=?,name=?,game=?,games=?,proxy=MAX(proxy,?) WHERE id=?',now0,name2,game,[...gs].slice(-12).join(','),onPx?1:0,v.id); }
+        else { this.sql.exec('INSERT INTO visit(pid,name,start,last,game,games,dev,aso,proxy) VALUES(?,?,?,?,?,?,?,?,?)',pid,name2,now0,now0,game,game,dv,aso,onPx?1:0); if(Math.random()<.02) this.sql.exec('DELETE FROM visit WHERE id<(SELECT MAX(id)-20000 FROM visit)'); } }
       let ban=this.banFor(pid,iph,name,fp);
+      if(!ban&&onPx&&set.proxyBlock!==false&&!this.sql.exec('SELECT 1 FROM pxok WHERE pid=?',pid).toArray().length) ban={reason:'Proxies, VPNs and unblocker sites are not allowed on Rink Rivals. Turn it off, then reload the page.',until:now0+60000,proxy:true};
       /* invite-only: accounts first seen after the lock was switched on wait for approval */
       if(!ban&&set.newLock&&set.newLockAt){ const f=this.sql.exec('SELECT first FROM pl WHERE pid=?',pid).toArray()[0]; if(f&&f.first>set.newLockAt&&!this.sql.exec('SELECT 1 FROM allow WHERE pid=?',pid).toArray().length) ban={reason:'Rink Rivals is invite-only right now. Ask an admin to let you in.',until:0,invite:true}; }
       const cmds=this.sql.exec("SELECT id,kind,data FROM cmd WHERE pid=? OR (pid='*' AND ts>?) ORDER BY id",pid,ex?ex.last:now0).toArray().map(c=>({id:c.id,kind:c.kind,data:JSON.parse(c.data||'{}')}));
@@ -504,7 +519,7 @@ export class Site {
       const role=req.headers.get('x-admin-role')||'full', full=role==='full';
       if(m.op==='get') return J({...await this.state(),role});
       if(!full) return J({err:'forbidden'},403);
-      if(!['players','pinfo','sbans','reserved','namereqs','activity','answers','slog','feedAll','stats','liveStats','daily','export','polls','list'].includes(m.op)&&!(m.op==='notes'&&typeof m.text!=='string')&&!(m.op==='sched'&&!m.add&&!m.del)){ const d={...m}; delete d.op; if(d.patch&&d.patch.reserved) delete d.patch.reserved; this.sql.exec('INSERT INTO slog(ts,op,detail) VALUES(?,?,?)',Date.now(),String(m.op).slice(0,24),JSON.stringify(d).slice(0,300)); if(Math.random()<.02) this.sql.exec('DELETE FROM slog WHERE id<(SELECT MAX(id)-3000 FROM slog)'); }
+      if(!['players','pinfo','sbans','reserved','namereqs','activity','answers','slog','feedAll','visits','pxList','stats','liveStats','daily','export','polls','list'].includes(m.op)&&!(m.op==='notes'&&typeof m.text!=='string')&&!(m.op==='sched'&&!m.add&&!m.del)){ const d={...m}; delete d.op; if(d.patch&&d.patch.reserved) delete d.patch.reserved; this.sql.exec('INSERT INTO slog(ts,op,detail) VALUES(?,?,?)',Date.now(),String(m.op).slice(0,24),JSON.stringify(d).slice(0,300)); if(Math.random()<.02) this.sql.exec('DELETE FROM slog WHERE id<(SELECT MAX(id)-3000 FROM slog)'); }
       if(m.op==='ann'){ const title=String(m.title||'').slice(0,120), body=String(m.body||'').slice(0,2000); if(!title&&!body) return J({err:'empty'},400);
         const icon=String(m.icon||'').slice(0,6), theme=String(m.theme||'').replace(/[^a-z]/g,'').slice(0,12);
         const btn=String(m.btn||'').slice(0,40), link=String(m.link||'').trim().slice(0,300);
@@ -532,6 +547,7 @@ export class Site {
         if('shared' in p) next.shared=(Array.isArray(p.shared)?p.shared:[]).map(x=>String(x).toLowerCase().trim().slice(0,20)).filter(Boolean).slice(0,100);
         if('welcome' in p) next.welcome=String(p.welcome||'').slice(0,400);
         if('pin' in p) next.pin=String(p.pin||'').slice(0,200);
+        if('proxyBlock' in p) next.proxyBlock=!!p.proxyBlock;
         if('feedApprove' in p) next.feedApprove=!!p.feedApprove; if('feedOff' in p) next.feedOff=!!p.feedOff;
         if('nameBlock' in p) next.nameBlock=(Array.isArray(p.nameBlock)?p.nameBlock:[]).map(x=>String(x).toLowerCase().trim().slice(0,30)).filter(Boolean).slice(0,200);
         if('banner' in p){ const b=p.banner||{}; next.banner={text:String(b.text||'').slice(0,160),theme:String(b.theme||'').replace(/[^a-z]/g,'').slice(0,12)}; next.bannerId=Date.now().toString(36); }
@@ -553,7 +569,7 @@ export class Site {
       if(m.op==='players'&&!(await this.s.get('plSeeded'))){ const all=(await this.s.get('pta'))||{}, days=(await this.s.get('ptDays'))||[]; for(const d of days){ const mp=(await this.s.get('pt:'+d))||{}; for(const [p2,v] of Object.entries(mp)) if(!all[p2]) all[p2]={n:v.n,s:v.s,l:v.l}; }
         for(const [p2,v] of Object.entries(all)){ if(String(p2).length<8) continue; this.sql.exec('INSERT OR IGNORE INTO pl(pid,name,first,last,beats,game,iph,secs) VALUES(?,?,?,?,0,?,?,?)',p2,String(v.n||'Player').slice(0,20),v.l||0,v.l||0,'','',+v.s||0); } await this.s.put('plSeeded',1); }
       if(m.op==='players'){ const q=String(m.q||'').trim().toLowerCase(), now=Date.now(), sort={last:'last DESC',first:'first DESC',time:'secs DESC',name:'name COLLATE NOCASE'}[m.sort]||'last DESC', lim=Math.min(500,Math.max(10,+m.limit||200));
-        const rows=q?this.sql.exec(`SELECT pid,name,first,last,beats,game,secs,iph,dev FROM pl WHERE lower(name) LIKE ? OR pid=? ORDER BY ${sort} LIMIT ?`,'%'+q+'%',q,lim).toArray():this.sql.exec(`SELECT pid,name,first,last,beats,game,secs,iph,dev FROM pl ORDER BY ${sort} LIMIT ?`,lim).toArray();
+        const rows=q?this.sql.exec(`SELECT pid,name,first,last,beats,game,secs,iph,dev,aso FROM pl WHERE lower(name) LIKE ? OR pid=? ORDER BY ${sort} LIMIT ?`,'%'+q+'%',q,lim).toArray():this.sql.exec(`SELECT pid,name,first,last,beats,game,secs,iph,dev,aso FROM pl ORDER BY ${sort} LIMIT ?`,lim).toArray();
         const bans=new Set(this.sql.exec('SELECT k FROM sban WHERE until=0 OR until>?',now).toArray().map(r=>r.k));
         const tot=this.sql.exec('SELECT COUNT(*) AS c FROM pl').toArray()[0].c, online=this.sql.exec('SELECT COUNT(*) AS c FROM pl WHERE last>?',now-150000).toArray()[0].c, today=this.sql.exec('SELECT COUNT(*) AS c FROM pl WHERE last>?',now-86400000).toArray()[0].c, newToday=this.sql.exec('SELECT COUNT(*) AS c FROM pl WHERE first>?',now-86400000).toArray()[0].c;
         return J({total:tot,online,today,newToday,players:rows.map(r=>({pid:r.pid,dev:r.dev||'',name:r.name,first:r.first,last:r.last,beats:r.beats,game:r.game,mins:Math.round(r.secs/60),on:now-r.last<150000,banned:bans.has('p:'+r.pid)||bans.has('i:'+r.iph)||bans.has('n:'+String(r.name).toLowerCase()),same:r.iph?this.sql.exec('SELECT COUNT(*) AS c FROM pl WHERE iph=?',r.iph).toArray()[0].c:1}))}); }
@@ -594,6 +610,9 @@ export class Site {
       if(m.op==='feedComDel'){ this.sql.exec('DELETE FROM fcom WHERE cid=?',+m.cid); return J({ok:true}); }
       if(m.op==='feedBan'){ const pid=cleanPid(m.pid); if(m.on){ this.sql.exec('INSERT OR REPLACE INTO fban(pid,ts) VALUES(?,?)',pid,Date.now()); if(m.wipe){ for(const r of this.sql.exec("SELECT id FROM fpost WHERE pid=? AND st<>'gone'",pid).toArray()){ this.sql.exec('DELETE FROM fblob WHERE post=?',r.id); this.sql.exec("UPDATE fpost SET st='gone',size=0 WHERE id=?",r.id); } this.sql.exec('DELETE FROM fcom WHERE pid=?',pid); } } else this.sql.exec('DELETE FROM fban WHERE pid=?',pid); return J({ok:true}); }
       if(m.op==='feedHide'){ const set=(await this.s.get('settings'))||{}, id=String(m.cid||'').slice(0,40); let h=set.feedHide||[]; h=m.on?[...new Set([...h,id])]:h.filter(x=>x!==id); set.feedHide=h.slice(-1000); if(!m.on) this.sql.exec('DELETE FROM frep WHERE id=?',id); await this.s.put('settings',set); return J({ok:true,hide:set.feedHide}); }
+      if(m.op==='visits'){ const since=+m.since||0, rows=this.sql.exec('SELECT id,pid,name,start,last,game,games,dev,aso,proxy FROM visit WHERE id>? ORDER BY id DESC LIMIT ?',since,Math.min(300,+m.limit||150)).toArray(); return J({rows,now:Date.now()}); }
+      if(m.op==='pxList') return J({rows:this.sql.exec("SELECT pid,name,last,aso,cc,dev FROM pl WHERE aso LIKE '⚠️%' ORDER BY last DESC LIMIT 200").toArray(),ok:this.sql.exec('SELECT p.pid,(SELECT name FROM pl WHERE pl.pid=p.pid) name FROM pxok p').toArray()});
+      if(m.op==='pxAllow'){ const pid=cleanPid(m.pid); if(m.on) this.sql.exec('INSERT OR REPLACE INTO pxok(pid,ts) VALUES(?,?)',pid,Date.now()); else this.sql.exec('DELETE FROM pxok WHERE pid=?',pid); return J({ok:true}); }
       if(m.op==='namereqs') return J({rows:this.sql.exec('SELECT pid,old,want,ts FROM namereq ORDER BY ts DESC LIMIT 100').toArray()});
       if(m.op==='nameOk'||m.op==='nameNo'){ const pid=cleanPid(m.pid), r=this.sql.exec('SELECT want FROM namereq WHERE pid=?',pid).toArray()[0]; this.sql.exec('DELETE FROM namereq WHERE pid=?',pid);
         if(m.op==='nameOk'&&r){ const set=(await this.s.get('settings'))||{}; if(this.nameTaken(r.want,pid,set)) return J({err:'taken'}); this.sql.exec('UPDATE pl SET name=? WHERE pid=?',r.want,pid); this.queue(pid,'rename',{name:r.want,why:'approved'}); } return J({ok:true}); }
