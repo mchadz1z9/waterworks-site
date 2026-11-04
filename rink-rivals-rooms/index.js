@@ -1,6 +1,13 @@
 /* Arcade Rivals online rooms: one Durable Object per room code relays messages between up to 4 players. */
 const MAX=8;
 export default {
+  /* nightly chat wipe at 10 p.m. Toronto time. Cron runs at 02:00 and 03:00 UTC, and only the one that lands on 22:00 local (EST or EDT) clears */
+  async scheduled(ev, env, ctx){
+    const hr=+new Intl.DateTimeFormat('en-CA',{timeZone:'America/Toronto',hour:'numeric',hourCycle:'h23'}).format(new Date(ev.scheduledTime||Date.now()));
+    if(hr!==22) return;
+    const chat=env.CHAT.get(env.CHAT.idFromName('SITE'));
+    ctx.waitUntil(chat.fetch(new Request('https://do/admin',{method:'POST',headers:{'content-type':'application/json','x-admin-role':'full'},body:JSON.stringify({op:'clear'})})));
+  },
   async fetch(req, env){
     const url=new URL(req.url);
     const m=url.pathname.match(/^\/room\/([A-Z0-9]{4,8})$/);
