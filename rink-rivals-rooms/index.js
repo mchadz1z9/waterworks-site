@@ -39,6 +39,7 @@ export default {
       if(tok){ try{ const d=await call({op:'tok',token:tok,ua}); if(d&&d.role) role=d.role; }catch(e){} }
       else if(pid){ try{ const ar=await chat.fetch(new Request('https://do/authpid',{method:'POST',headers:{'content-type':'application/json'},body:JSON.stringify({op:'authpid',pid})})); const d=await ar.json(); if(d&&d.lvl) role=d.lvl; }catch(e){} }
       if(!role) return J({err:'forbidden'},403);
+      if(role==='arcade'&&ad[1]!=='site'&&ad[1]!=='chat') return J({err:'forbidden'},403);
       const body=await req.text(); const u=new URL(req.url); u.pathname='/admin';
       /* the security centre needs a real password sign-in (not just an approved device), and a password change re-checks the old one */
       if(ad[1]==='sec'){ if(!tok||role!=='full') return J({err:'needpw'},403); let bj={}; try{ bj=JSON.parse(body||'{}'); }catch(e){}
@@ -241,7 +242,10 @@ export class Chat {
       return J({err:'op'},400); }
     if(path==='/admin'){ let m={}; try{ m=await req.json(); }catch(e){}
       const role=req.headers.get('x-admin-role')||'full', full=role==='full';
-      const FULLONLY=['grant','ungrant','clear','broadcast','lock']; if(FULLONLY.includes(m.op)&&!full) return J({err:'forbidden'},403);
+      if(role==='arcade'&&m.op!=='who') return J({err:'forbidden'},403);
+      const FULLONLY=['grant','ungrant','clear','broadcast','lock','grantPid']; if(FULLONLY.includes(m.op)&&!full) return J({err:'forbidden'},403);
+      if(m.op==='grantPid'){ const pid=String(m.pid||'').replace(/[^a-z0-9]/gi,'').slice(0,24), lvl=['full','mod','arcade'].includes(m.lvl)?m.lvl:'arcade', nm=String(m.name||'').slice(0,24); if(pid.length<8) return J({err:'bad'},400);
+        const pub=pubId(pid); this.sql.exec('INSERT OR REPLACE INTO grnt2(sh,pubid,lvl,name,ts) VALUES(?,?,?,?,?)',await sha('rr-grant:'+pid),pub,lvl,nm,Date.now()); for(const ws of this.socksByPub(pub)) this.send(ws,{t:'role',lvl,url:ADMIN_URL}); return J({ok:true,pubid:pub}); }
       if(m.op==='list') return J({rows:this.sql.exec('SELECT * FROM m ORDER BY id DESC LIMIT 200').toArray()});
       if(m.op==='del'&&m.id){ this.sql.exec('UPDATE m SET hid=1 WHERE id=?',+m.id); this.all({t:'del',id:+m.id}); return J({ok:true}); }
       if(m.op==='mute'&&m.who){ this.sql.exec('INSERT OR REPLACE INTO mute(who,until) VALUES(?,?)',String(m.who),Date.now()+(+m.mins||1440)*60000); return J({ok:true}); }
@@ -256,7 +260,7 @@ export class Chat {
       if(m.op==='bans') return J({bans:this.sql.exec('SELECT nm,until FROM ban').toArray()});
       if(m.op==='tag'){ const nm=String(m.name||'').toLowerCase(), tg=String(m.tag||'').replace(/[^\w \-!★+]/g,'').slice(0,18); if(!nm) return J({err:'bad'},400); if(tg) this.sql.exec('INSERT OR REPLACE INTO tag(nm,tag) VALUES(?,?)',nm,tg); else this.sql.exec('DELETE FROM tag WHERE nm=?',nm); this.who(); return J({ok:true}); }
       if(m.op==='tags') return J({tags:this.sql.exec('SELECT nm,tag FROM tag').toArray()});
-      if(m.op==='grant'){ if(!full) return J({err:'forbidden'},403); const pub=String(m.pubid||'').slice(0,12), lvl=m.lvl==='full'?'full':'mod', nm=String(m.name||'').slice(0,24); if(!pub) return J({err:'bad'},400); const live=this.socksByPub(pub); if(!live.length) return J({err:'offline'},409);
+      if(m.op==='grant'){ if(!full) return J({err:'forbidden'},403); const pub=String(m.pubid||'').slice(0,12), lvl=m.lvl==='full'?'full':m.lvl==='arcade'?'arcade':'mod', nm=String(m.name||'').slice(0,24); if(!pub) return J({err:'bad'},400); const live=this.socksByPub(pub); if(!live.length) return J({err:'offline'},409);
         const who=live[0].deserializeAttachment().who; this.sql.exec('INSERT OR REPLACE INTO grnt2(sh,pubid,lvl,name,ts) VALUES(?,?,?,?,?)',await sha('rr-grant:'+who),pub,lvl,nm,Date.now()); for(const ws of live) this.send(ws,{t:'role',lvl,url:ADMIN_URL}); return J({ok:true}); }
       if(m.op==='ungrant'&&m.pubid){ if(!full) return J({err:'forbidden'},403); this.sql.exec('DELETE FROM grnt WHERE pubid=?',String(m.pubid)); this.sql.exec('DELETE FROM grnt2 WHERE pubid=?',String(m.pubid)); for(const ws of this.socksByPub(String(m.pubid))) this.send(ws,{t:'role',lvl:null}); return J({ok:true}); }
       if(/^(secStatus|totpBegin|totpEnable|totpDisable|setPw|sessions|revoke|revokeOthers|panic|auditLog|loginLog)$/.test(m.op||'')){ if(!full) return J({err:'forbidden'},403); const now=Date.now(), th=req.headers.get('x-admin-th')||'';
@@ -518,6 +522,16 @@ export class Site {
     if(url.pathname==='/admin'){ let m={}; try{ m=await req.json(); }catch(e){}
       const role=req.headers.get('x-admin-role')||'full', full=role==='full';
       if(m.op==='get') return J({...await this.state(),role});
+      if(role==='arcade'){ const now=Date.now();
+        if(m.op==='arcadePlayers') return J({players:this.sql.exec("SELECT pid,name,game,last,dev FROM pl WHERE game LIKE 'sa-%' AND last>? ORDER BY last DESC LIMIT 200",now-90000).toArray()});
+        if(m.op==='pcmd'){ const kind=String(m.kind||''); if(!['msg','confetti','emoji','award','sagift'].includes(kind)) return J({err:'forbidden'},403);
+          const pids=(Array.isArray(m.pids)?m.pids:[m.pid]).map(cleanPid).filter(x=>x.length>=8).slice(0,100); const ok=pids.filter(pid=>{ const r=this.sql.exec('SELECT game,last FROM pl WHERE pid=?',pid).toArray()[0]; return r&&/^sa-/.test(r.game||'')&&now-r.last<90000; });
+          if(!ok.length) return J({err:'none',msg:'Only players who are in the Sports Arcade right now'});
+          const data={}; if(kind==='msg'){ data.text=String(m.text||'').slice(0,300); data.title='🏟️ Message from the Sports Arcade'; if(!data.text) return J({err:'bad'},400); }
+          if(kind==='award'){ data.text=String(m.text||'').slice(0,160); if(!data.text) return J({err:'bad'},400); } if(kind==='emoji'){ data.e=[...String(m.e||'🏆')].slice(0,3).join(''); data.secs=12; }
+          if(kind==='sagift'){ data.what='puck'; data.n=Math.max(1,Math.min(1e7,Math.round(+m.n||0))); }
+          for(const pid of ok) this.queue(pid,kind,data); this.sql.exec('INSERT INTO slog(ts,op,detail) VALUES(?,?,?)',now,'arcade:'+kind,JSON.stringify({n:ok.length,...data}).slice(0,300)); return J({ok:true,n:ok.length}); }
+        return J({err:'forbidden'},403); }
       if(!full) return J({err:'forbidden'},403);
       if(!['players','pinfo','sbans','reserved','namereqs','activity','answers','slog','feedAll','visits','pxList','stats','liveStats','daily','export','polls','list'].includes(m.op)&&!(m.op==='notes'&&typeof m.text!=='string')&&!(m.op==='sched'&&!m.add&&!m.del)){ const d={...m}; delete d.op; if(d.patch&&d.patch.reserved) delete d.patch.reserved; this.sql.exec('INSERT INTO slog(ts,op,detail) VALUES(?,?,?)',Date.now(),String(m.op).slice(0,24),JSON.stringify(d).slice(0,300)); if(Math.random()<.02) this.sql.exec('DELETE FROM slog WHERE id<(SELECT MAX(id)-3000 FROM slog)'); }
       if(m.op==='ann'){ const title=String(m.title||'').slice(0,120), body=String(m.body||'').slice(0,2000); if(!title&&!body) return J({err:'empty'},400);
@@ -573,9 +587,9 @@ export class Site {
         const bans=new Set(this.sql.exec('SELECT k FROM sban WHERE until=0 OR until>?',now).toArray().map(r=>r.k));
         const tot=this.sql.exec('SELECT COUNT(*) AS c FROM pl').toArray()[0].c, online=this.sql.exec('SELECT COUNT(*) AS c FROM pl WHERE last>?',now-150000).toArray()[0].c, today=this.sql.exec('SELECT COUNT(*) AS c FROM pl WHERE last>?',now-86400000).toArray()[0].c, newToday=this.sql.exec('SELECT COUNT(*) AS c FROM pl WHERE first>?',now-86400000).toArray()[0].c;
         return J({total:tot,online,today,newToday,players:rows.map(r=>({pid:r.pid,dev:r.dev||'',name:r.name,first:r.first,last:r.last,beats:r.beats,game:r.game,mins:Math.round(r.secs/60),on:now-r.last<150000,banned:bans.has('p:'+r.pid)||bans.has('i:'+r.iph)||bans.has('n:'+String(r.name).toLowerCase()),same:r.iph?this.sql.exec('SELECT COUNT(*) AS c FROM pl WHERE iph=?',r.iph).toArray()[0].c:1}))}); }
-      if(m.op==='pcmd'){ const kind=String(m.kind||''); if(!['msg','gift','kick','reload','rename','goto','setcash','givecar','givegun','resetcity','setstr','freeze','flip','confetti','shake','invert','mirror','rainbow','spin','blur','comic','tiny','disco','upside','airhorn','say','emoji','heal','wanted','ask','award','jumpcash'].includes(kind)) return J({err:'bad'},400); const data={};
+      if(m.op==='pcmd'){ const kind=String(m.kind||''); if(!['msg','gift','kick','reload','rename','goto','setcash','givecar','givegun','resetcity','setstr','freeze','flip','confetti','shake','invert','mirror','rainbow','spin','blur','comic','tiny','disco','upside','airhorn','say','emoji','heal','wanted','ask','award','jumpcash','sagift'].includes(kind)) return J({err:'bad'},400); const data={};
         if(kind==='goto') data.page=String(m.page||'').replace(/[^a-z0-9-]/g,'').slice(0,24); if(kind==='setcash') data.n=Math.max(0,Math.min(1e9,Math.round(+m.n||0))); if(kind==='givecar') data.model=String(m.model||'').replace(/[^a-z0-9]/g,'').slice(0,16); if(kind==='givegun') data.gun=String(m.gun||'').replace(/[^a-z]/g,'').slice(0,12); if(kind==='setstr') data.n=Math.max(0,Math.min(100,Math.round(+m.n||0))); if(['freeze','flip','shake','invert','mirror','rainbow','spin','blur','comic','tiny','disco','upside','emoji'].includes(kind)) data.secs=Math.max(3,Math.min(120,Math.round(+m.secs||10))); if(kind==='freeze') data.text=String(m.text||'').slice(0,120);
-        if(kind==='say'||kind==='ask'||kind==='award'){ data.text=String(m.text||'').slice(0,240); if(!data.text) return J({err:'bad'},400); } if(kind==='emoji') data.e=[...String(m.e||'🎉')].slice(0,3).join(''); if(kind==='wanted') data.n=Math.max(0,Math.min(5,Math.round(+m.n||0)));
+        if(kind==='say'||kind==='ask'||kind==='award'){ data.text=String(m.text||'').slice(0,240); if(!data.text) return J({err:'bad'},400); } if(kind==='emoji') data.e=[...String(m.e||'🎉')].slice(0,3).join(''); if(kind==='wanted') data.n=Math.max(0,Math.min(5,Math.round(+m.n||0))); if(kind==='sagift'){ data.what='puck'; data.n=Math.max(1,Math.min(1e7,Math.round(+m.n||0))); }
         if(kind==='msg'){ data.text=String(m.text||'').slice(0,500); data.title=String(m.title||'Message from the admin').slice(0,80); if(!data.text) return J({err:'bad'},400); }
         if(kind==='gift'){ data.what=['cash','str'].includes(m.what)?m.what:'cash'; data.n=Math.max(1,Math.min(10000000,Math.round(+m.n||0))); data.note=String(m.note||'').slice(0,120); }
         if(kind==='kick'){ data.text=String(m.text||'You were kicked by an admin.').slice(0,200); }

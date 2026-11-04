@@ -424,6 +424,20 @@ body{background:radial-gradient(1200px 600px at 10% -10%,#1e1b4b 0,transparent 6
     <h3 class="sec">Seen on a proxy / data-centre network</h3><div id="pxList" class="list" style="max-height:360px;overflow:auto;font-size:14px"></div>
     <h3 class="sec">Allowed anyway</h3><div id="pxOk" class="list"></div><div class="msg" id="pxMsg"></div>
   </div>
+
+  <div class="card full" data-grp="arcade" id="arcCard">
+    <h2>🏟️ Arcade admin</h2>
+    <p class="mut">For the Sports Arcade only: see who is playing, send them a message, an award, confetti or emoji rain, and give Puck Clicker points.</p>
+    <h3 class="sec">🟢 In the Sports Arcade right now</h3>
+    <div id="arOn" class="row" style="gap:6px"><span class="mut">Loading…</span></div>
+    <div class="row" style="margin-top:8px"><span class="mut" id="arWho">Click a player above (or tick “everyone in the arcade”).</span><label style="display:flex;gap:6px;align-items:center;margin:0"><input type="checkbox" id="arAll" style="width:auto"> everyone in the arcade</label></div>
+    <div class="row" style="margin-top:8px"><input id="arMsg" maxlength="300" placeholder="Message"><button class="go" id="arMsgGo" style="flex:0 0 auto">📨 Send</button></div>
+    <div class="row" style="margin-top:6px"><input id="arAward" maxlength="160" placeholder="Award, e.g. 🏆 Penalty king!"><button class="go" id="arAwardGo" style="flex:0 0 auto">🏆 Give award</button></div>
+    <div class="row" style="margin-top:6px"><input id="arPts" type="number" min="1" value="10000" style="flex:0 0 160px"><button class="go" id="arPtsGo" style="flex:0 0 auto">🎁 Give Puck Clicker points</button><button class="ghost" id="arConf" style="flex:0 0 auto">🎉 Confetti</button><input id="arEmoji" maxlength="6" value="🏆" style="flex:0 0 70px"><button class="ghost" id="arEmo" style="flex:0 0 auto">Emoji rain</button></div>
+    <div class="msg" id="arMsgOut"></div>
+    <div id="arGrantBox" style="display:none"><h3 class="sec">👑 Arcade admins (full admins only)</h3><p class="mut">Give someone these Arcade controls only. They can't ban, kick, change settings or touch the rest of the site.</p>
+      <div class="row"><input id="arGName" placeholder="Player name, e.g. Connor"><button class="go" id="arGGo" style="flex:0 0 auto">Make Arcade admin</button></div><div id="arGList" class="list"></div></div>
+  </div>
   <div class="card full" data-grp="feed">
     <h2>📱 Arcade Clips (video feed)</h2>
     <p class="mut">Players can post videos and pictures on <a href="clips" target="_blank">Arcade Clips</a>. Two reports hide a post automatically until you look at it.</p>
@@ -480,7 +494,8 @@ $('logout').onclick=e=>{ e.preventDefault(); sessionStorage.removeItem('rrAdminT
 function showApp(st){ ROLE=st.role||'full'; $('login').classList.add('hide'); $('app').classList.remove('hide');
   const full=ROLE==='full'; document.querySelectorAll('.full').forEach(el=>el.style.display=full?'':'none');
   try{ if(full) localStorage.setItem('rrOwner','1'); }catch(e){}
-  $('roleNote').textContent=full?'Signed in as full admin — changes go live for everyone.':'Signed in as moderator — you can kick, ban and tag.';
+  $('roleNote').textContent=full?'Signed in as full admin — changes go live for everyone.':ROLE==='arcade'?'Signed in as Arcade admin — Sports Arcade tools only.':'Signed in as moderator — you can kick, ban and tag.';
+  if(ROLE==='arcade'){ document.querySelectorAll('#cards>.card').forEach(c=>{ if(c.id!=='arCard') c.style.display='none'; }); const sd=$('side'); if(sd) sd.style.display='none'; const tb=$('topbar'); if(tb) tb.style.display='none'; const app=$('app'); if(app) app.style.gridTemplateColumns='1fr'; initArcade(); return; }
   if(full){ initV2(st.settings||{}); initSecurity(); initPlayers(); initMore(st.settings||{}); initControl(st.settings||{}); initAnn(); initEditor(); initSettings(); initTourney(); initDaily(); renderAnn(st.ann); renderEdits(st.ov); renderSettings(st.settings); renderTourneys(st.tourneys); } loadUsers(); loadStats(); }
 
 /* ---- announcement ---- */
@@ -759,7 +774,7 @@ function initControl(set){ $('scMaint').checked=!!set.maint; $('scMaintMsg').val
   $('scAllReload').onclick=async()=>{ if(!confirm('Reload the page for everyone online?')) return; const r=await api('/admin/site','pcmd',{kind:'reload',pid:'*'}); setMsg('scMsg',r.ok?'Everyone online will reload.':'Could not send.',r.ok?1:0); }; }
 
 /* ================= v2: navigation, dashboard and the new tools ================= */
-const GRP=[['all','🧭 Everything'],['dash','📊 Dashboard'],['players','🧑‍🤝‍🧑 Players'],['fun','🎭 Fun & trolls'],['chat','💬 Chat'],['site','🕹️ Site & events'],['games','🏆 Games & boards'],['sec','🔐 Security'],['feed','📱 Clips'],['tools','🧰 Tools']];
+const GRP=[['all','🧭 Everything'],['dash','📊 Dashboard'],['players','🧑‍🤝‍🧑 Players'],['fun','🎭 Fun & trolls'],['chat','💬 Chat'],['site','🕹️ Site & events'],['games','🏆 Games & boards'],['sec','🔐 Security'],['arcade','🏟️ Arcade'],['feed','📱 Clips'],['tools','🧰 Tools']];
 function grpOf(c){ if(c.dataset.grp) return c.dataset.grp; const h=(c.querySelector('h2')||{}).textContent||''; if(/Overview|Live stats/.test(h)) return 'dash'; if(/All players|Edit a player|Player stats|Users/.test(h)) return 'players'; if(/Chat|Broadcast/.test(h)) return 'chat'; if(/Security/.test(h)) return 'sec'; if(/Leaderboard|Tournament|Daily/.test(h)) return 'games'; return 'site'; }
 let CURG='dash';
 function initNav(){ if(initNav.done) return; initNav.done=1; const cards=[...document.querySelectorAll('#cards>.card')]; cards.forEach(c=>c.dataset.g=grpOf(c));
@@ -845,7 +860,29 @@ function initVisits(set){ if(initVisits.done) return; initVisits.done=1; $('pxOn
   $('pxOn').onchange=async()=>{ const on=$('pxOn').checked; const r=await api('/admin/site','settings',{patch:{proxyBlock:on}}).catch(()=>({})); setMsg('pxMsg',r.ok?(on?'Proxy & VPN blocking is on.':'Proxy & VPN blocking is off.'):'Could not save.',r.ok?1:0); };
   $('pxGo').onclick=loadPx; $('pxList').closest('.card').onclick=async e=>{ const b=e.target.closest('[data-pxok],[data-pxno]'); if(!b) return; await api('/admin/site','pxAllow',{pid:b.dataset.pxok||b.dataset.pxno,on:!!b.dataset.pxok}); loadPx(); };
   loadVisits(); loadPx(); setInterval(loadVisits,20000); setInterval(loadPx,60000); setInterval(()=>renderVisits(),30000); }
-function initV2(set){ if(initV2.done) return; initV2.done=1; initNav(); initFeedAdm(); initVisits(set);
+
+/* ---- arcade admin (Connor's role) ---- */
+let AROn=[], ARSel=null;
+const AR_GAMES={'sa-golf':'Golf','sa-soccer':'Pitch Kings','sa-penalty':'Penalties','sa-hardwood':'Hardwood','sa-hoops':'Hoops','sa-hockey':'Ice Legends','sa-bowling':'Bowling','sa-darts':'Darts','sa-tabletennis':'Table tennis','sa-puckclicker':'Puck Clicker','sa-perfect':'Perfect Season','sa-seventeen':'17-0 Team','sa-football':'Pixel Bowl','sa-tennis':'Tennis','sa-baseball':'Diamond Nine'};
+async function arLoad(){ try{ let rows; if(ROLE==='arcade'){ rows=(await api('/admin/site','arcadePlayers')).players||[]; } else { const d=await api('/admin/site','players',{sort:'last',limit:300}); rows=(d.players||[]).filter(p=>p.on&&/^sa-/.test(p.game||'')); }
+  AROn=rows; $('arOn').innerHTML=rows.length?rows.map((p,i)=>`<button class="${ARSel&&ARSel.pid===p.pid?'go':'ghost'}" data-arp="${i}" style="flex:0 0 auto;padding:7px 12px;font-size:13px">🟢 ${esc(p.name)} <span style="opacity:.7;font-weight:400">· ${esc(AR_GAMES[p.game]||p.game)}</span></button>`).join(''):'<span class="mut">Nobody is in the Sports Arcade right now.</span>'; }catch(e){ $('arOn').innerHTML='<span class="mut">Could not load.</span>'; } }
+async function arSend(kind,extra,okT){ const pids=$('arAll').checked?AROn.map(p=>p.pid):ARSel?[ARSel.pid]:[]; if(!pids.length){ setMsg('arMsgOut','Pick a player first.',0); return; }
+  const r=await api('/admin/site','pcmd',Object.assign({kind,pids},extra||{})).catch(()=>({})); setMsg('arMsgOut',r.ok?`${okT} — sent to ${r.n||pids.length} player${(r.n||pids.length)>1?'s':''} (within 30 s).`:(r.msg||'Could not send.'),r.ok?1:0); }
+async function arGrants(){ try{ const g=await api('/admin/chat','grants'); const L=(g.grants||[]).filter(x=>x.lvl==='arcade'); $('arGList').innerHTML=L.map(x=>`<div class="urow"><span class="nm">🏟️ ${esc(x.name||x.pubid)}</span><button class="del sm" data-arung="${esc(x.pubid)}" style="flex:0 0 auto">Remove</button></div>`).join('')||'<span class="mut">No Arcade admins yet.</span>'; }catch(e){} }
+function initArcade(){ if(initArcade.done) return; initArcade.done=1;
+  $('arOn').onclick=e=>{ const b=e.target.closest('[data-arp]'); if(!b) return; ARSel=AROn[+b.dataset.arp]; $('arAll').checked=false; $('arWho').textContent='→ '+ARSel.name; arLoad(); };
+  $('arAll').onchange=()=>{ $('arWho').textContent=$('arAll').checked?'→ everyone in the arcade ('+AROn.length+')':(ARSel?'→ '+ARSel.name:'Click a player above.'); };
+  $('arMsgGo').onclick=()=>{ const t=$('arMsg').value.trim(); if(t) arSend('msg',{text:t},'Message sent'); };
+  $('arAwardGo').onclick=()=>{ const t=$('arAward').value.trim(); if(t) arSend('award',{text:t},'Award given'); };
+  $('arPtsGo').onclick=()=>arSend('sagift',{n:+$('arPts').value||0},'Points sent');
+  $('arConf').onclick=()=>arSend('confetti',{},'Confetti sent'); $('arEmo').onclick=()=>arSend('emoji',{e:$('arEmoji').value||'🏆'},'Emoji rain sent');
+  if(ROLE==='full'){ $('arGrantBox').style.display=''; arGrants();
+    $('arGGo').onclick=async()=>{ const n=$('arGName').value.trim(); if(!n) return; const d=await api('/admin/site','players',{q:n,limit:20}).catch(()=>({})); const exact=(d.players||[]).filter(p=>p.name.toLowerCase()===n.toLowerCase());
+      if(!exact.length){ setMsg('arMsgOut','No player called "'+n+'".',0); return; } const p=exact.sort((a,b)=>b.last-a.last)[0]; if(!confirm(`Give ${p.name} Arcade admin controls? (They get an admin button in chat that opens only the Arcade tools.)`)) return;
+      const r=await api('/admin/chat','grantPid',{pid:p.pid,lvl:'arcade',name:p.name}).catch(()=>({})); setMsg('arMsgOut',r.ok?`${p.name} is now an Arcade admin.`:'Could not grant.',r.ok?1:0); arGrants(); };
+    $('arGList').onclick=async e=>{ const b=e.target.closest('[data-arung]'); if(!b||!confirm('Remove their Arcade admin controls?')) return; await api('/admin/chat','ungrant',{pubid:b.dataset.arung}); arGrants(); }; }
+  arLoad(); setInterval(arLoad,20000); }
+function initV2(set){ if(initV2.done) return; initV2.done=1; initNav(); initFeedAdm(); initVisits(set); initArcade();
   $('wcText').value=set.welcome||''; $('pnText').value=set.pin||'';
   $('acGo').onclick=loadActivity; $('acPeak').onclick=async()=>{ if(!confirm('Reset the online record?')) return; await api('/admin/site','peakReset'); loadActivity(); };
   $('plAll').onchange=()=>{ for(const p of PL) $('plAll').checked?TICK.add(p.pid):TICK.delete(p.pid); document.querySelectorAll('[data-tick]').forEach(c=>c.checked=TICK.has(c.dataset.tick)); bulkUpd(); };

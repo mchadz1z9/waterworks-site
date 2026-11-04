@@ -122,6 +122,7 @@
       if(c.kind==='say'&&d.text){ try{ const u=new SpeechSynthesisUtterance(d.text); u.rate=1; speechSynthesis.speak(u); }catch(e){} popup('🔊 The admin says',d.text); }
       if(c.kind==='award'&&d.text){ fx('confetti',6000); popup('🏆 You got an award!',d.text); }
       if(c.kind==='ask'&&d.text) askPop(d.text);
+      if(c.kind==='sagift'&&d.what==='puck'){ const n=+d.n||0; try{ if(PAGE==='sa-puckclicker'&&typeof window.eval('typeof S')==='string'&&window.eval('typeof S')==='object'){ window.eval('S.cur[S.lv]+='+n+';S.life[S.lv]+='+n+';try{localStorage.pk1=JSON.stringify(S)}catch(e){}'); } else { const j=JSON.parse(localStorage.getItem('pk1')||'null'); if(j&&j.cur){ j.cur[j.lv||0]=(j.cur[j.lv||0]||0)+n; j.life[j.lv||0]=(j.life[j.lv||0]||0)+n; localStorage.setItem('pk1',JSON.stringify(j)); } else ls.set('saPuckGift',String((+ls.get('saPuckGift')||0)+n)); } }catch(e){} fx('confetti',3500); popup('🎁 Sports Arcade gift',`You got ${n.toLocaleString()} Puck Clicker points!`); }
       if(c.kind==='heal'){ city({heal:true}); popup('❤️ Healed','An admin healed you to full health in Rival City.'); }
       if(c.kind==='wanted'){ city({wanted:+d.n||0}); popup('🚨 Wanted level',`An admin set your Rival City wanted level to ${+d.n||0} star${+d.n===1?'':'s'}.`); }
       if(c.kind==='gift'){ const n=+d.n||0; if(d.what==='str'&&window.RRSTR){ RRSTR.add(Math.min(100,n)); popup('🎁 Gift from the admin',`+${n} strength${d.note?'\n'+d.note:''}`); }
