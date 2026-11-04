@@ -9,6 +9,14 @@ export default {
       const id=env.ROOMS.idFromName(m[1]);
       return env.ROOMS.get(id).fetch(req);
     }
+    if(url.pathname==='/nhl'){ /* live NHL scoreboard, passed through from the NHL's public score feed (cached 30 s) */
+      const c=caches.default, key=new Request('https://nhl.cache/score-now'); let r=await c.match(key);
+      if(!r){ const up=await fetch('https://api-web.nhle.com/v1/score/now',{headers:{'user-agent':'ArcadeRivals/1.0'}}).catch(()=>null); if(!up||!up.ok) return J({err:'nhl'},502);
+        const d=await up.json(); const T=t=>({ab:t.abbrev,name:(t.name||{}).default||t.abbrev,logo:t.logo,score:t.score,sog:t.sog});
+        const games=(d.games||[]).map(g=>({id:g.id,state:g.gameState,start:g.startTimeUTC,period:(g.periodDescriptor||{}).number||g.period||0,ptype:(g.periodDescriptor||{}).periodType||'',clock:(g.clock||{}).timeRemaining||'',inter:!!(g.clock||{}).inIntermission,away:T(g.awayTeam),home:T(g.homeTeam),
+          goals:(g.goals||[]).slice(-6).map(x=>({p:(x.periodDescriptor||{}).number||x.period,t:x.timeInPeriod,who:(x.name||{}).default||'',team:(x.teamAbbrev&&x.teamAbbrev.default)||x.teamAbbrev||''}))}));
+        r=new Response(JSON.stringify({date:d.currentDate,games}),{headers:{'content-type':'application/json','cache-control':'max-age=30'}}); await c.put(key,r.clone()); }
+      const h=new Headers(r.headers); for(const k in CORS) h.set(k,CORS[k]); return new Response(r.body,{headers:h}); }
     if(url.pathname==='/site'){ if(req.method==='OPTIONS') return new Response(null,{headers:CORS}); return env.SITE.get(env.SITE.idFromName('SITE')).fetch(req); }
     if(url.pathname==='/tourney'||url.pathname==='/play'||url.pathname==='/daily'||url.pathname==='/like'||url.pathname==='/vote'||url.pathname==='/namecheck'||url.pathname.startsWith('/feed/')){ if(req.method==='OPTIONS') return new Response(null,{headers:CORS}); const cf=req.cf||{}, h=new Headers(req.headers); h.set('x-rr-asn',String(cf.asn||'')); h.set('x-rr-aso',String(cf.asOrganization||'').slice(0,80)); h.set('x-rr-cc',String(cf.country||'')); return env.SITE.get(env.SITE.idFromName('SITE')).fetch(new Request(req,{headers:h})); }
     const lb=url.pathname.match(/^\/lb\/([a-z0-9]{2,16})$/);
