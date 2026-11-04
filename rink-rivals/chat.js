@@ -62,6 +62,7 @@
       <div class="log"><div class="empty">Say hi to everyone on Rink Rivals 👋</div></div><div class="who"></div><div class="dmv" style="display:none"></div>
       <div class="rules">Be kind · no swearing · never share personal info · no spam · ⚑ reports a message</div>
       <form autocomplete="off"><input maxlength="200" placeholder="${name?'Message everyone…':'Pick a name to chat…'}" aria-label="Chat message"><button>Send</button></form>`;
+    { const pinEl=document.createElement('div'); pinEl.className='rrPin'; pinEl.style.cssText='display:none;background:linear-gradient(90deg,#7c3aed,#2563eb);color:#fff;font:600 13px system-ui;padding:6px 10px;border-radius:8px;margin:4px 6px'; const lg=root.querySelector('.log'); lg.parentNode.insertBefore(pinEl,lg); const showPin=t=>{ pinEl.textContent=t?'📌 '+t:''; pinEl.style.display=t?'block':'none'; }; try{ showPin(localStorage.getItem('rrPin')||''); }catch(e){} addEventListener('rr-pin',e=>showPin(e.detail||'')); }
     log=root.querySelector('.log'); inp=root.querySelector('input'); cnt=root.querySelector('.cnt'); dmv=root.querySelector('.dmv');
     { const a=root.querySelector('.adm'); let u=''; try{ u=localStorage.getItem('rrAdmUrl')||''; }catch(e){} if(a&&myRole&&u){ a.href=u; a.style.display=''; a.textContent=myRole==='full'?'⚙ Admin':'⚙ Mod'; } }
     /* keys typed into the chat must never reach the game */

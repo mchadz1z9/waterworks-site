@@ -377,7 +377,7 @@ export class Site {
   nameTaken(name,pid,set){ const k=String(name||'').toLowerCase().trim(); if(!k||/^player\d*$/.test(k)) return false;  const r=(set.reserved||[]).find(x=>nameKey(name).startsWith(x.n)); if(r&&(r.pids||[]).includes(pid)) return false;
     /* the earliest accounts to use a name keep it — 1 per name, except "Aiden" which up to 10 people can share */ const cap=k==='aiden'?10:1, n=this.sql.exec('SELECT COUNT(*) n FROM pl WHERE lower(name)=? AND pid<>? AND first<COALESCE((SELECT first FROM pl WHERE pid=? AND lower(name)=?),9e15)',k,pid,pid,k).one().n; return n>=cap; }
   pollRes(p){ const r=p.opts.map(()=>0); for(const v of this.sql.exec('SELECT opt FROM vote WHERE poll=?',p.id).toArray()) if(r[v.opt]!=null) r[v.opt]++; return r; }
-  queue(pid,kind,data){ this.sql.exec('INSERT INTO cmd(pid,kind,data,ts) VALUES(?,?,?,?)',pid,kind,JSON.stringify(data||{}),Date.now()); }
+  queue(pid,kind,data,ts){ this.sql.exec('INSERT INTO cmd(pid,kind,data,ts) VALUES(?,?,?,?)',pid,kind,JSON.stringify(data||{}),ts||Date.now()); }
   banFor(pid,iph,name,fp){ const now=Date.now(); for(const k of ['p:'+pid,'n:'+String(name||'').toLowerCase(),...(fp?['f:'+fp]:[])]){ const r=this.sql.exec('SELECT reason,until FROM sban WHERE k=?',k).toArray()[0]; if(r&&(r.until===0||r.until>now)) return {reason:r.reason||'',until:r.until}; } return null; }
   async state(){ const poll=await this.s.get('poll'); return { poll: poll&&poll.open?{id:poll.id,q:poll.q,opts:poll.opts}:null, ann: await this.s.get('ann')||null, ov: await this.s.get('ov')||[], settings: await this.s.get('settings')||{}, tourneys: await this.s.get('tourneys')||[] }; }
   /* ---- daily play time + daily challenge ---- */
@@ -394,12 +394,14 @@ export class Site {
       const pid=cleanPid(m.pid), name=cleanName(m.name); if(pid.length<8) return J({err:'bad'},400);
       const now0=Date.now(), iph=(await sha('rr-ip:'+(req.headers.get('cf-connecting-ip')||'?'))).slice(0,24), game=String(m.game||'').replace(/[^a-z0-9-]/g,'').slice(0,24);
       const fp=String(m.fp||'').replace(/[^a-z0-9]/gi,'').slice(0,24), set0=(await this.s.get('settings'))||{};
-      const ex=this.sql.exec('SELECT last,name FROM pl WHERE pid=?',pid).toArray()[0], gap=ex?now0-ex.last:0; let name2=name, forced=null;
+      const ex=this.sql.exec('SELECT last,name,beats FROM pl WHERE pid=?',pid).toArray()[0], gap=ex?now0-ex.last:0; let name2=name, forced=null;
       /* name lock: once you have a name you keep it, unless an admin approves a change */
       if(ex&&set0.nameLock&&ex.name&&ex.name.toLowerCase()!==name.toLowerCase()&&!/^player\d*$/i.test(ex.name)&&!/^player\d*$/i.test(name)){ this.sql.exec('INSERT OR REPLACE INTO namereq(pid,old,want,ts) VALUES(?,?,?,?)',pid,ex.name,name,now0); name2=ex.name; forced={name:ex.name,why:'locked',was:name}; }
       /* unique names: if someone else already has it, you get a different one */
       else if(this.nameTaken(name,pid,set0)){ name2='Player'+Math.floor(1000+Math.random()*9000); forced={name:name2,why:'taken',was:name}; }
       if(forced) this.queue(pid,'rename',forced);
+      /* still called "Player" after a minute of playing: send them back to the name screen */
+      else if(ex&&ex.beats>=2&&/^(player|guest|you|anonymous|user|unknown|name|me)\s*\d*$/i.test(name2)){ this.genT=this.genT||{}; if(now0-(this.genT[pid]||0)>90000){ this.genT[pid]=now0; this.queue(pid,'rename',{name:name2,why:'generic'}); } }
       if(ex) this.sql.exec('UPDATE pl SET name=?,last=?,beats=beats+1,game=?,iph=?,fp=?,secs=secs+? WHERE pid=?',name2,now0,game,iph,fp,gap>0&&gap<=90000?gap/1000:0,pid);
       else this.sql.exec('INSERT INTO pl(pid,name,first,last,beats,game,iph,secs,fp) VALUES(?,?,?,?,1,?,?,0,?)',pid,name2,now0,now0,game,iph,fp);
       this.sql.exec('UPDATE pl SET dev=? WHERE pid=?',devOf(req.headers.get('user-agent')),pid);
@@ -411,7 +413,7 @@ export class Site {
       { const h=Math.floor(now0/3600000); this.sql.exec('INSERT OR IGNORE INTO act(h,pid) VALUES(?,?)',h,pid); if(Math.random()<.01) this.sql.exec('DELETE FROM act WHERE h<?',h-24*14);
         const on=this.sql.exec('SELECT COUNT(*) n FROM pl WHERE last>?',now0-70000).one().n, pk=(await this.s.get('peak'))||{n:0}; if(on>pk.n) await this.s.put('peak',{n:on,ts:now0}); }
       if(!ex&&set.welcome) this.queue(pid,'msg',{title:'👋 Welcome to Rink Rivals!',text:set.welcome});
-      { const sc=(await this.s.get('sched'))||[]; if(sc.length&&sc.some(x=>x.at<=now0)){ for(const x of sc.filter(x=>x.at<=now0)) this.queue('*','msg',{title:x.title||'📣 Announcement',text:x.text}); await this.s.put('sched',sc.filter(x=>x.at>now0)); } }
+      { const sc=(await this.s.get('sched'))||[]; if(sc.length&&sc.some(x=>x.at<=now0)){ for(const x of sc.filter(x=>x.at<=now0)) this.queue('*','msg',{title:x.title||'📣 Announcement',text:x.text},now0-1); await this.s.put('sched',sc.filter(x=>x.at>now0)); } }
       let ban=this.banFor(pid,iph,name,fp);
       /* invite-only: accounts first seen after the lock was switched on wait for approval */
       if(!ban&&set.newLock&&set.newLockAt){ const f=this.sql.exec('SELECT first FROM pl WHERE pid=?',pid).toArray()[0]; if(f&&f.first>set.newLockAt&&!this.sql.exec('SELECT 1 FROM allow WHERE pid=?',pid).toArray().length) ban={reason:'Rink Rivals is invite-only right now. Ask an admin to let you in.',until:0,invite:true}; }
