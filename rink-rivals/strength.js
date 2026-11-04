@@ -9,7 +9,10 @@
   const myTag=()=>String(ls.get('rrMyTag')||'').toLowerCase();
   const isOwner=()=>{ if(ls.get('rrOwner')==='1'||/\bowner\b/.test(myTag())) return true; try{ return sessionStorage.getItem('rrRole')==='full'; }catch(e){ return false; } };
   const tier=()=>{ const t=myTag(); if(/\bvip\b/.test(t)) return 'VIP'; if(/\bpro\b|professional/.test(t)) return 'PRO'; return ''; };
-  let val=(()=>{ const n=+ls.get(K); return isFinite(n)?Math.max(0,Math.min(MAX,n)):0; })();
+  let val=(()=>{ const n=+ls.get(K); return isFinite(n)?Math.max(0,n):0; })();   /* no cap any more: keep training, keep getting stronger */
+  let workouts=(()=>{ const n=+ls.get('rrWorkouts'); return isFinite(n)?Math.max(0,n):0; })();
+  /* the more you train, the more each workout gives: x1 for a beginner, up to x5 after lots of workouts */
+  const trainMul=()=>1+Math.min(4,workouts/40);
   /* the owner's strength is its own number: starts at 10,000 and every rep adds another 100,000 */
   let ownerVal=(()=>{ const n=+ls.get('rrOwnerStr'); return isFinite(n)&&n>=OWNER_LVL?n:OWNER_LVL; })();
   const base=()=>Math.max(val,FLOOR[tier()]||0);
@@ -23,10 +26,11 @@
   const RRSTR={
     MAX, get owner(){ return isOwner(); }, get level(){ return level(); }, get frac(){ return frac(); }, get tier(){ return tier(); },
     muscle, tag, badge,
-    add(n){ try{ if(JSON.parse(localStorage.getItem('rrSiteEvents')||'{}').str2x) n=(+n||0)*2; }catch(e){} if(isOwner()){ ownerVal+=100000; ls.set('rrOwnerStr',String(ownerVal)); changed(); return level(); } val=Math.max(0,Math.min(MAX,val+(+n||0))); save(); return level(); },
+    add(n){ try{ if(JSON.parse(localStorage.getItem('rrSiteEvents')||'{}').str2x) n=(+n||0)*2; }catch(e){} if(isOwner()){ ownerVal+=100000; ls.set('rrOwnerStr',String(ownerVal)); changed(); return level(); } n=+n||0; if(n>0){ workouts++; ls.set('rrWorkouts',String(workouts)); n*=trainMul(); } val=Math.max(0,val+n); save(); return level(); },
+    get workouts(){ return workouts; }, get multiplier(){ return +trainMul().toFixed(2); },
     /* spend strength (the potion shop). false if you don't have enough */
     spend(n){ n=Math.max(0,+n||0); if(level()<n) return false; if(isOwner()){ ownerVal=Math.max(OWNER_LVL,ownerVal-n); ls.set('rrOwnerStr',String(ownerVal)); changed(); return true; } val=Math.max(0,base()-n); save(); return true; },
-    set(n){ val=Math.max(0,Math.min(MAX,+n||0)); save(); return level(); },
+    set(n){ val=Math.max(0,+n||0); save(); return level(); },
     state(){ return {level:level(),frac:frac(),owner:isOwner(),tier:tier(),tag:tag(),badge:badge()}; } };
   window.RRSTR=RRSTR;
   /* keep our tag in step with what the admin gave us (the chat sends everyone's tags) */

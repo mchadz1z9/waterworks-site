@@ -243,7 +243,7 @@ export class Chat {
     if(path==='/admin'){ let m={}; try{ m=await req.json(); }catch(e){}
       const role=req.headers.get('x-admin-role')||'full', full=role==='full';
       if(role==='arcade'&&m.op!=='who') return J({err:'forbidden'},403);
-      const FULLONLY=['grant','ungrant','clear','broadcast','lock','grantPid']; if(FULLONLY.includes(m.op)&&!full) return J({err:'forbidden'},403);
+      const FULLONLY=['grant','ungrant','clear','broadcast','lock','grantPid','kick','ban','unban']; if(FULLONLY.includes(m.op)&&!full) return J({err:'forbidden'},403);
       if(m.op==='grantPid'){ const pid=String(m.pid||'').replace(/[^a-z0-9]/gi,'').slice(0,24), lvl=['full','mod','arcade'].includes(m.lvl)?m.lvl:'arcade', nm=String(m.name||'').slice(0,24); if(pid.length<8) return J({err:'bad'},400);
         const pub=pubId(pid); this.sql.exec('INSERT OR REPLACE INTO grnt2(sh,pubid,lvl,name,ts) VALUES(?,?,?,?,?)',await sha('rr-grant:'+pid),pub,lvl,nm,Date.now()); for(const ws of this.socksByPub(pub)) this.send(ws,{t:'role',lvl,url:ADMIN_URL}); return J({ok:true,pubid:pub}); }
       if(m.op==='list') return J({rows:this.sql.exec('SELECT * FROM m ORDER BY id DESC LIMIT 200').toArray()});
