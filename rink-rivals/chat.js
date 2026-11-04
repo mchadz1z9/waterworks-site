@@ -1,4 +1,4 @@
-/* Rink Rivals site chat: one chat room for the whole site. On the home page it is docked in the page (#chatDock);
+/* Arcade Rivals site chat: one chat room for the whole site. On the home page it is docked in the page (#chatDock);
    in a game it is a 💬 button that opens a panel. Typing in the chat never moves your player. */
 (function(){
   if(window.RRC) return;
@@ -58,8 +58,8 @@
   if(GAME!=='home') ls.set('rrLast',GAME);
     function build(){
     root=document.createElement('div'); root.className='rrc';
-    root.innerHTML=`<header><span>💬</span><b>Rink Rivals Chat</b><small class="cnt" title="See who's online and what they're playing">connecting…</small><button class="bell" title="Message notifications on/off">🔔</button><button class="nm" title="Change your name">✎ Name</button><a class="adm" href="#" title="Admin tools" style="display:none">⚙</a>${dock()?'':'<button class="cl" title="Close">✕</button>'}</header>
-      <div class="log"><div class="empty">Say hi to everyone on Rink Rivals 👋</div></div><div class="who"></div><div class="dmv" style="display:none"></div>
+    root.innerHTML=`<header><span>💬</span><b>Arcade Rivals Chat</b><small class="cnt" title="See who's online and what they're playing">connecting…</small><button class="bell" title="Message notifications on/off">🔔</button><button class="nm" title="Change your name">✎ Name</button><a class="adm" href="#" title="Admin tools" style="display:none">⚙</a>${dock()?'':'<button class="cl" title="Close">✕</button>'}</header>
+      <div class="log"><div class="empty">Say hi to everyone on Arcade Rivals 👋</div></div><div class="who"></div><div class="dmv" style="display:none"></div>
       <div class="rules">Be kind · no swearing · never share personal info · no spam · ⚑ reports a message</div>
       <form autocomplete="off"><input maxlength="200" placeholder="${name?'Message everyone…':'Pick a name to chat…'}" aria-label="Chat message"><button>Send</button></form>`;
     { const pinEl=document.createElement('div'); pinEl.className='rrPin'; pinEl.style.cssText='display:none;background:linear-gradient(90deg,#7c3aed,#2563eb);color:#fff;font:600 13px system-ui;padding:6px 10px;border-radius:8px;margin:4px 6px'; const lg=root.querySelector('.log'); lg.parentNode.insertBefore(pinEl,lg); const showPin=t=>{ pinEl.textContent=t?'📌 '+t:''; pinEl.style.display=t?'block':'none'; }; try{ showPin(localStorage.getItem('rrPin')||''); }catch(e){} addEventListener('rr-pin',e=>showPin(e.detail||'')); }
@@ -74,7 +74,7 @@
     log.addEventListener('click',e=>{ const b=e.target.closest('.x'); if(!b) return; const id=+b.dataset.id; if(confirm('Report this message as mean or unsafe?')) tx({t:'report',id}); });
     if(dock()){ dock().appendChild(root); open=true; }
     else { panel=document.createElement('div'); panel.id='rrcP'; panel.appendChild(root); document.body.appendChild(panel);
-      fab=document.createElement('button'); fab.id='rrcF'; fab.innerHTML='💬 Chat <i></i>'; fab.title='Chat with everyone on Rink Rivals'; fab.addEventListener('click',()=>toggle(!open)); fab.addEventListener('keydown',e=>e.stopPropagation());
+      fab=document.createElement('button'); fab.id='rrcF'; fab.innerHTML='💬 Chat <i></i>'; fab.title='Chat with everyone on Arcade Rivals'; fab.addEventListener('click',()=>toggle(!open)); fab.addEventListener('keydown',e=>e.stopPropagation());
       document.body.appendChild(fab); } }
   function toggle(on){ open=on; if(panel) panel.classList.toggle('open',on); if(on){ unread=0; badge(); setTimeout(()=>{ log.scrollTop=log.scrollHeight; if(name) inp.focus(); else askName(); },30); } }
   function badge(){ if(!fab) return; const i=fab.querySelector('i'); i.textContent=unread>9?'9+':unread; i.classList.toggle('on',unread>0); }
@@ -89,7 +89,7 @@
   addEventListener('pointerdown',()=>{ try{ nAC=nAC||new (window.AudioContext||window.webkitAudioContext)(); if(nAC.state==='suspended') nAC.resume(); }catch(e){} },{once:true});
   function notify(m){ if(!notifOn) return; const hidden=document.hidden, docked=!!dock();
     if(hidden){ missed++; document.title=`(${missed}) 💬 ${m.name}: ${m.text}`.slice(0,60); if(!titleT){ titleT=setInterval(()=>{ if(!document.hidden){ clearInterval(titleT); titleT=null; missed=0; document.title=baseTitle; } },1000); }
-      try{ if(window.Notification&&Notification.permission==='granted'){ const n=new Notification(`${m.name} on Rink Rivals`,{body:String(m.text).slice(0,120),tag:'rrchat',silent:false}); n.onclick=()=>{ window.focus(); toggle(true); n.close(); }; } }catch(e){} return; }
+      try{ if(window.Notification&&Notification.permission==='granted'){ const n=new Notification(`${m.name} on Arcade Rivals`,{body:String(m.text).slice(0,120),tag:'rrchat',silent:false}); n.onclick=()=>{ window.focus(); toggle(true); n.close(); }; } }catch(e){} return; }
     if(open||docked) return; ping();
     if(popInv) return; mkPop(); pop.classList.remove('inv');
     pop.innerHTML=`<b style="color:hsl(${hue(m.name)},85%,70%)">${esc(m.name)}</b> <span>${esc(GN[m.game]||'')}</span><div>${esc(String(m.text).slice(0,140))}</div><small>Click to reply</small>`; pop.classList.add('on'); clearTimeout(popT); popT=setTimeout(()=>pop&&pop.classList.remove('on'),8000); }
@@ -102,7 +102,7 @@
     pop.querySelector('.y').onclick=ev=>{ ev.stopPropagation(); close(); if(party){ if(window.RRPARTY) RRPARTY.join(m.room); else location.href=`./?party=${encodeURIComponent(m.room)}`; return; } location.href=`${m.game==='home'?'./':m.game}?room=${encodeURIComponent(m.room)}`; };
     pop.querySelector('.n').onclick=ev=>{ ev.stopPropagation(); close(); };
     pop.classList.add('on'); clearTimeout(popT); popT=setTimeout(close,45000);
-    if(document.hidden){ try{ if(window.Notification&&Notification.permission==='granted') new Notification(`${m.from} invited you to ${gn}`,{body:'Open Rink Rivals to join',tag:'rrinv'}); }catch(e){} } }
+    if(document.hidden){ try{ if(window.Notification&&Notification.permission==='granted') new Notification(`${m.from} invited you to ${gn}`,{body:'Open Arcade Rivals to join',tag:'rrinv'}); }catch(e){} } }
   let invCb=null;
   function sys(t){ const el=document.createElement('div'); el.className='sys'; el.textContent=t; log.appendChild(el); log.scrollTop=log.scrollHeight; }
   function tx(o){ if(ws&&ws.readyState===1) ws.send(JSON.stringify(o)); }
@@ -133,7 +133,7 @@
     try{ localStorage.setItem('rrKicked',String(Date.now()+(+m.mins||30)*60000)); }catch(e){}
     if(document.getElementById('rrKick')) return; const d=document.createElement('div'); d.id='rrKick';
     d.style.cssText='position:fixed;inset:0;z-index:100001;display:flex;align-items:center;justify-content:center;padding:20px;background:rgba(2,4,10,.94);color:#fff;font-family:system-ui,sans-serif;text-align:center';
-    d.innerHTML=`<div style="max-width:460px"><div style="font-size:52px">🚫</div><h2 style="margin:10px 0;font-size:30px">You've been removed</h2><p style="font-size:18px;color:#cbd5e1">An admin removed you from Rink Rivals${m.mins?` for ${m.mins} minutes`:''}. Chat and online play are paused for now.</p></div>`;
+    d.innerHTML=`<div style="max-width:460px"><div style="font-size:52px">🚫</div><h2 style="margin:10px 0;font-size:30px">You've been removed</h2><p style="font-size:18px;color:#cbd5e1">An admin removed you from Arcade Rivals${m.mins?` for ${m.mins} minutes`:''}. Chat and online play are paused for now.</p></div>`;
     (document.body||document.documentElement).appendChild(d); }
   try{ const until=+localStorage.getItem('rrKicked')||0; if(until>Date.now()){ banned=true; kicked({mins:Math.ceil((until-Date.now())/60000)}); } }catch(e){}
   function setN(n){ online=n; cnt.textContent=`👥 ${n} online ${root.classList.contains('showwho')?'▴':'▾'}`; if(fab){ fab.title=`Chat · ${n} online`; fab.innerHTML=`💬 Chat <s>· ${n} online</s> <i></i>`; badge(); } }
@@ -143,7 +143,7 @@
   function renderWho(){ const el=root&&root.querySelector('.who'); if(!el) return; const by={}; for(const p of roster){ (by[p.game]=by[p.game]||[]).push(p); }
     const games=Object.keys(by).sort((a,b)=>(a==='home')-(b==='home')||by[b].length-by[a].length);
     const thr=[...dms.entries()].filter(([k,t])=>t.msgs.length).sort((a,b)=>(b[1].msgs[b[1].msgs.length-1].ts)-(a[1].msgs[a[1].msgs.length-1].ts)).slice(0,12);
-    el.innerHTML=(thr.length?`<h4>✉️ Private messages</h4>`+thr.map(([k,t])=>{ const last=t.msgs[t.msgs.length-1], on=roster.some(p=>p.id===k); return `<div class="wr" style="cursor:pointer" data-thr="${esc(k)}" data-nm="${esc(t.name)}"><b style="color:hsl(${hue(t.name)},85%,70%)">${on?'🟢':'⚪'} ${esc(t.name)}${t.unread?` <span class="tg" style="background:#ef4444">${t.unread} new</span>`:''}</b><span>${esc((last.mine?'You: ':'')+last.text).slice(0,40)}</span></div>`; }).join(''):'')+`<h4>👥 ${roster.length} on Rink Rivals right now</h4>`+(roster.length?games.map(g=>by[g].map(p=>`<div class="wr"><b style="color:hsl(${hue(p.name)},85%,70%)">${esc(p.name)}${p.tag?` <span class="tg">${esc(p.tag)}</span>`:''}${p.me?' (you)':''}</b>${p.me?'':`<button class="dmb" data-dm="${esc(p.id)}" data-nm="${esc(p.name)}" title="Private message">💬</button>`}<span>${g==='home'?'🏠 browsing':esc(GN[g]||g)}</span>${g==='home'?'':g===GAME?'<a class="here">Here</a>':`<a href="${esc(g)}" title="Go play ${esc(GN[g]||g)} with them">Play →</a>`}</div>`).join('')).join(''):'<div class="empty">Nobody else yet.</div>')+'<div class="rules" style="border:0;padding:6px 2px">Tip: in a game press <b>Online → Play with anyone</b> to get matched with the people there.</div>';
+    el.innerHTML=(thr.length?`<h4>✉️ Private messages</h4>`+thr.map(([k,t])=>{ const last=t.msgs[t.msgs.length-1], on=roster.some(p=>p.id===k); return `<div class="wr" style="cursor:pointer" data-thr="${esc(k)}" data-nm="${esc(t.name)}"><b style="color:hsl(${hue(t.name)},85%,70%)">${on?'🟢':'⚪'} ${esc(t.name)}${t.unread?` <span class="tg" style="background:#ef4444">${t.unread} new</span>`:''}</b><span>${esc((last.mine?'You: ':'')+last.text).slice(0,40)}</span></div>`; }).join(''):'')+`<h4>👥 ${roster.length} on Arcade Rivals right now</h4>`+(roster.length?games.map(g=>by[g].map(p=>`<div class="wr"><b style="color:hsl(${hue(p.name)},85%,70%)">${esc(p.name)}${p.tag?` <span class="tg">${esc(p.tag)}</span>`:''}${p.me?' (you)':''}</b>${p.me?'':`<button class="dmb" data-dm="${esc(p.id)}" data-nm="${esc(p.name)}" title="Private message">💬</button>`}<span>${g==='home'?'🏠 browsing':esc(GN[g]||g)}</span>${g==='home'?'':g===GAME?'<a class="here">Here</a>':`<a href="${esc(g)}" title="Go play ${esc(GN[g]||g)} with them">Play →</a>`}</div>`).join('')).join(''):'<div class="empty">Nobody else yet.</div>')+'<div class="rules" style="border:0;padding:6px 2px">Tip: in a game press <b>Online → Play with anyone</b> to get matched with the people there.</div>';
     el.querySelectorAll('.dmb').forEach(b=>b.onclick=ev=>{ ev.stopPropagation(); openDM(b.dataset.dm,b.dataset.nm); }); el.querySelectorAll('[data-thr]').forEach(b=>b.onclick=ev=>{ ev.stopPropagation(); openDM(b.dataset.thr,b.dataset.nm); }); }
   /* ---------- private messages ---------- */
   function admBtn(u){ let b=document.getElementById('rrAdmBtn'); if(!u||!myRole){ if(b) b.remove(); return; } if(window.RR_ADMIN) return; if(!b){ b=document.createElement('a'); b.id='rrAdmBtn'; b.style.cssText='position:fixed;left:12px;bottom:12px;z-index:2147483000;font:800 14px system-ui,sans-serif;color:#0a0d18;background:#fde68a;border-radius:999px;padding:8px 14px;text-decoration:none;box-shadow:0 6px 18px rgba(0,0,0,.35)'; document.body.appendChild(b); } b.href=u; b.textContent=myRole==='full'?'⚙ Admin':'⚙ Mod tools'; }
@@ -165,7 +165,7 @@
   window.RRC={ invite(id,game,room,cb){ invCb=cb||null; tx({t:'invite',to:id,game,room}); }, dm:(id,nm)=>openDM(id,nm), get role(){ return myRole; }, get pid(){ return pid; }, toggle:on=>toggle(on==null?!open:on), showWho, get online(){ return online; }, get roster(){ return roster; } };
 })();
 
-/* Rink Rivals player name: everyone picks a name once, before they play (it's the name on the chat, online games and the records) */
+/* Arcade Rivals player name: everyone picks a name once, before they play (it's the name on the chat, online games and the records) */
 (function(){
   if(window.RRNAME) return; window.RRNAME=1;
   const esc=s=>String(s).replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
@@ -183,14 +183,14 @@
 #rrNm h2{margin:0 0 6px;font-size:34px;color:#fff;letter-spacing:.02em} #rrNm p{margin:0 0 16px;color:#94a3b8;font:500 15px/1.4 system-ui,sans-serif}
 #rrNm input{width:100%;box-sizing:border-box;font:700 22px system-ui,sans-serif;padding:12px 14px;border-radius:10px;border:2px solid #475569;background:#020617;color:#fff;outline:none;text-align:center} #rrNm input:focus{border-color:#38bdf8}
 #rrNm button{margin-top:14px;width:100%;font:800 22px 'Big Shoulders Display','Arial Narrow',sans-serif;padding:11px;border:0;border-radius:10px;color:#111;background:linear-gradient(135deg,#fde047,#f59e0b);cursor:pointer} #rrNm .e{min-height:18px;margin-top:8px;color:#f87171;font:600 14px system-ui,sans-serif}`;
-    document.head.appendChild(st); ov=document.createElement('div'); ov.id='rrNm'; ov.innerHTML=`<div class="bx" role="dialog" aria-modal="true" aria-labelledby="rrNmT"><h2 id="rrNmT">${get()?'Pick a real name':'Welcome to Rink Rivals'}</h2><p>${get()?`"${esc(get())}" is a placeholder. Everyone needs a real player name now. `:''}Pick your player name first. It's shown in online games, on the world records and in the chat. Don't use your real full name.</p><input maxlength="20" autocomplete="off" spellcheck="false" placeholder="Your player name" aria-label="Player name"><div class="e"></div><button type="button">Let's play</button></div>`;
+    document.head.appendChild(st); ov=document.createElement('div'); ov.id='rrNm'; ov.innerHTML=`<div class="bx" role="dialog" aria-modal="true" aria-labelledby="rrNmT"><h2 id="rrNmT">${get()?'Pick a real name':'Welcome to Arcade Rivals'}</h2><p>${get()?`"${esc(get())}" is a placeholder. Everyone needs a real player name now. `:''}Pick your player name first. It's shown in online games, on the world records and in the chat. Don't use your real full name.</p><input maxlength="20" autocomplete="off" spellcheck="false" placeholder="Your player name" aria-label="Player name"><div class="e"></div><button type="button">Let's play</button></div>`;
     document.body.appendChild(ov); inp=ov.querySelector('input'); msg=ov.querySelector('.e'); ov.querySelector('button').addEventListener('click',save); inp.addEventListener('input',()=>{ msg.textContent=''; });
     ['mousedown','pointerdown','touchstart','click','wheel'].forEach(t=>ov.addEventListener(t,e=>e.stopPropagation()));
     addEventListener('keydown',block,true); addEventListener('keyup',block,true); setTimeout(()=>inp.focus(),50); }
   if(document.readyState==='loading') document.addEventListener('DOMContentLoaded',show); else show();
 })();
 
-/* Rink Rivals key bindings: every game's controls can be moved to other keys (saved per game on this device).
+/* Arcade Rivals key bindings: every game's controls can be moved to other keys (saved per game on this device).
    A pressed key is swapped for the game's own key before the game sees it, so the games themselves don't change. */
 (function(){
   if(window.RRKEYS) return;

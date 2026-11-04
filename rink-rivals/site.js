@@ -1,4 +1,4 @@
-/* Rink Rivals site config: a full-screen update announcement that everyone sees when they open the site,
+/* Arcade Rivals site config: a full-screen update announcement that everyone sees when they open the site,
    and admin player edits that the games pick up. All set from the /admin page. Read-only here. */
 (function(){ if(window.RRSITE) return;
   const qs=new URLSearchParams(location.search);
@@ -22,7 +22,7 @@
     const d=document.createElement('div'); d.id='rrAnn'; d.setAttribute('role','dialog'); d.setAttribute('aria-modal','true');
     const cv=cover(ann);
     d.innerHTML=`<div class="rra-card"><button class="rra-x" aria-label="Close">×</button>
-      <div class="rra-cover" style="background:${cv.grad}"><span class="rra-ico">${esc(cv.icon)}</span><span class="rra-tag">Rink Rivals update</span></div>
+      <div class="rra-cover" style="background:${cv.grad}"><span class="rra-ico">${esc(cv.icon)}</span><span class="rra-tag">Arcade Rivals update</span></div>
       ${ann.title?`<h2>${esc(ann.title)}</h2>`:''}<div class="rra-body">${esc(ann.body||'').replace(/\n/g,'<br>')}</div>
       <button class="rra-go">${esc(ann.btn||"Let's play ▸")}</button></div>`;
     const close=()=>{ ls.set('rrAnnSeen',ann.id); d.remove(); };
@@ -60,7 +60,7 @@
     const joined=joinedIds().includes(t.id), n=(t.joins&&t.joins.length)||0, when=fmtTime(t.time);
     const d=document.createElement('div'); d.id='rrTour'; d.setAttribute('role','dialog'); d.setAttribute('aria-modal','true');
     d.innerHTML=`<div class="rra-card"><button class="rra-x" aria-label="Close">×</button>
-      <div class="rra-cover" style="background:linear-gradient(135deg,#78350f,#fbbf24)"><span class="rra-ico">🏆</span><span class="rra-tag">Rink Rivals tournament</span></div>
+      <div class="rra-cover" style="background:linear-gradient(135deg,#78350f,#fbbf24)"><span class="rra-ico">🏆</span><span class="rra-tag">Arcade Rivals tournament</span></div>
       <h2>${esc(t.name)}</h2>
       <div class="rra-meta">${t.game?`<span>🎮 ${esc(t.game)}</span>`:''}${when?`<span>🗓️ ${esc(when)}</span>`:''}<span class="rra-cnt">👥 ${n} joined</span></div>
       ${t.desc?`<div class="rra-body">${esc(t.desc).replace(/\n/g,'<br>')}</div>`:''}
@@ -90,12 +90,12 @@
   function cover2(id,html){ let o=document.getElementById(id); if(!html){ if(o) o.remove(); return; } if(!document.body) return void addEventListener('DOMContentLoaded',()=>cover2(id,html)); if(!o){ o=document.createElement('div'); o.id=id; o.style.cssText='position:fixed;inset:0;z-index:'+(id==='rrBan'?2147483640:2147483600)+';display:flex;align-items:center;justify-content:center;padding:20px;background:#05080f;color:#f8fafc;font:600 18px system-ui,sans-serif;text-align:center'; document.body.appendChild(o); } o.innerHTML=html; }
   function gate(set){ set=set||{}; try{ ls.set('rrSiteGate',JSON.stringify({maint:set.maint,maintMsg:set.maintMsg,off:set.off,hidden:set.hidden,events:set.events})); ls.set('rrSiteEvents',JSON.stringify(set.events||{})); }catch(e){}
     if(PAGE==='admin') return; const adm=admDev();
-    cover2('rrMaint',set.maint&&!adm?`<div><div style="font-size:64px">🛠️</div><h2 style="margin:8px 0">Rink Rivals is down for maintenance</h2><p style="color:#cbd5e1;max-width:520px">${esc(set.maintMsg||'We\'re making some changes. Check back soon!')}</p></div>`:'');
+    cover2('rrMaint',set.maint&&!adm?`<div><div style="font-size:64px">🛠️</div><h2 style="margin:8px 0">Arcade Rivals is down for maintenance</h2><p style="color:#cbd5e1;max-width:520px">${esc(set.maintMsg||'We\'re making some changes. Check back soon!')}</p></div>`:'');
     const off=(set.off||[]).includes(PAGE); cover2('rrOff',off&&!adm?`<div><div style="font-size:64px">⛔</div><h2 style="margin:8px 0">This game is switched off for now</h2><p style="color:#cbd5e1">An admin has turned it off for a while. Try another game!</p><a href="./" style="display:inline-block;margin-top:10px;background:#fbbf24;color:#0a0d18;padding:10px 18px;border-radius:999px;text-decoration:none;font-weight:800">🏠 Home</a></div>`:'');
     if(PAGE===''||PAGE==='index'){ const hide=set.hidden||[], offs=set.off||[], run=()=>document.querySelectorAll('a.card').forEach(a=>{ const g=(a.getAttribute('href')||'').replace(/\.html$/,'').replace(/^\.?\//,''); a.style.display=hide.includes(g)&&!adm?'none':''; a.style.opacity=offs.includes(g)?'.45':''; a.title=offs.includes(g)?'Switched off by an admin':''; }); if(document.readyState==='loading') addEventListener('DOMContentLoaded',run); else run(); } }
   try{ gate(JSON.parse(ls.get('rrSiteGate')||'null')); }catch(e){}
   function banScreen(b){ if(b&&b.proxy){ cover2('rrBan',`<div><div style="font-size:64px">🛡️</div><h2 style="margin:8px 0">Turn off your proxy or VPN</h2><p style="color:#fde68a">${esc(b.reason||'')}</p><button onclick="location.reload()" style="font:800 16px system-ui;border:0;border-radius:12px;padding:12px 22px;background:#22c55e;color:#052e16;cursor:pointer;margin-top:8px">I turned it off — reload</button></div>`); return; }
-  cover2('rrBan',b?`<div><div style="font-size:64px">🚫</div><h2 style="margin:8px 0">${b.invite?'Invite only right now 🔒':'You\'ve been banned from Rink Rivals'}</h2>${b.reason?`<p style="color:#fca5a5">Reason: ${esc(b.reason)}</p>`:''}<p style="color:#cbd5e1">${b.until?'The ban ends '+new Date(b.until).toLocaleString():'This ban does not expire.'}</p></div>`:''); try{ b?ls.set('rrBanned',JSON.stringify(b)):localStorage.removeItem('rrBanned'); }catch(e){} }
+  cover2('rrBan',b?`<div><div style="font-size:64px">🚫</div><h2 style="margin:8px 0">${b.invite?'Invite only right now 🔒':'You\'ve been banned from Arcade Rivals'}</h2>${b.reason?`<p style="color:#fca5a5">Reason: ${esc(b.reason)}</p>`:''}<p style="color:#cbd5e1">${b.until?'The ban ends '+new Date(b.until).toLocaleString():'This ban does not expire.'}</p></div>`:''); try{ b?ls.set('rrBanned',JSON.stringify(b)):localStorage.removeItem('rrBanned'); }catch(e){} }
   try{ const b=JSON.parse(ls.get('rrBanned')||'null'); if(b&&(!b.until||b.until>Date.now())&&PAGE!=='admin') banScreen(b); }catch(e){}
   function popup(title,text){ if(!document.body) return void addEventListener('DOMContentLoaded',()=>popup(title,text)); const o=document.createElement('div'); o.style.cssText='position:fixed;inset:0;z-index:2147483500;display:flex;align-items:center;justify-content:center;padding:18px;background:rgba(0,0,0,.6);font:600 17px system-ui,sans-serif';
     o.innerHTML=`<div style="max-width:440px;width:100%;background:#0f172a;color:#f8fafc;border:2px solid #fbbf24;border-radius:18px;padding:20px 22px;text-align:center"><div style="font-size:40px">📨</div><h3 style="margin:6px 0 8px;font-size:22px">${esc(title)}</h3><p style="color:#e2e8f0;white-space:pre-wrap">${esc(text)}</p><button style="margin-top:10px;font:800 16px system-ui;background:#fbbf24;border:0;border-radius:999px;padding:9px 22px;cursor:pointer">OK</button></div>`;
@@ -104,7 +104,7 @@
       if(c.kind==='msg') popup(d.title||'Message from the admin',d.text||'');
       if(c.kind==='reload') setTimeout(()=>location.reload(),300);
       if(c.kind==='kick'){ popup('Kicked',d.text||'You were kicked by an admin.'); setTimeout(()=>{ location.href='./'; },2500); }
-      if(c.kind==='rename'&&d.name&&d.why==='generic'){ if(!document.getElementById('rrNm')){ popup('Pick a real name ✏️','Everyone needs a real name to play on Rink Rivals — +d.name+ is just a placeholder. Pick one now!'); setTimeout(()=>location.reload(),2500); } continue; }
+      if(c.kind==='rename'&&d.name&&d.why==='generic'){ if(!document.getElementById('rrNm')){ popup('Pick a real name ✏️','Everyone needs a real name to play on Arcade Rivals — +d.name+ is just a placeholder. Pick one now!'); setTimeout(()=>location.reload(),2500); } continue; }
       if(c.kind==='rename'&&d.name){ ls.set('rrOnlineName',d.name); popup(d.why==='reserved'||d.why==='taken'?'That name is taken':d.why==='locked'?'Name change needs approval':d.why==='approved'?'Name change approved ✅':'Your name was changed',d.why==='reserved'||d.why==='taken'?`"${d.was||'That name'}" already belongs to someone else, so for now you're "${d.name}". Pick a different name!`:d.why==='locked'?`Names are locked right now. You're still "${d.name}" — an admin has to approve "${d.was}".`:d.why==='approved'?`You're now "${d.name}".`:`An admin changed your name to "${d.name}".`); if(/^Player\d+$/.test(d.name)) setTimeout(()=>location.reload(),2500); }
       if(c.kind==='goto'&&d.page) setTimeout(()=>{ location.href=d.page==='home'?'./':d.page; },400);
       const city=o=>{ if(PAGE==='city') dispatchEvent(new CustomEvent('rr-gift',{detail:o})); else { try{ const sv=JSON.parse(ls.get('rrCity')||'{}'); if(o.setcash!=null) sv.money=o.setcash; if(o.car){ sv.cars=sv.cars||['hatch']; if(!sv.cars.includes(o.car)) sv.cars.push(o.car); } if(o.gun){ sv.guns=sv.guns||{}; sv.guns[o.gun]=(sv.guns[o.gun]||0)+60; } if(o.reset){ localStorage.removeItem('rrCity'); return; } ls.set('rrCity',JSON.stringify(sv)); }catch(e){} } };

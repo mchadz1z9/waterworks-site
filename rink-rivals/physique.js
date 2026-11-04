@@ -1,4 +1,4 @@
-/* Rink Rivals physique: the people drawn in the gym and on the bodybuilding stage.
+/* Arcade Rivals physique: the people drawn in the gym and on the bodybuilding stage.
    RRPHY(R3, K) gives pose() (joint positions for each lift / walk / run), drawBody() (a lean, muscular person) and
    drawOlympia() (the owner: a full Mr. Olympia physique). Shared so every page draws the same body. */
 window.RRPHY=function(R3,K){

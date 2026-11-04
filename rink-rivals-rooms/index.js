@@ -1,4 +1,4 @@
-/* Rink Rivals online rooms: one Durable Object per room code relays messages between up to 4 players. */
+/* Arcade Rivals online rooms: one Durable Object per room code relays messages between up to 4 players. */
 const MAX=8;
 export default {
   async fetch(req, env){
@@ -55,7 +55,7 @@ export default {
       if(req.headers.get('Upgrade')!=='websocket') return new Response('Expected a WebSocket',{status:426});
       return env.LOBBY.get(env.LOBBY.idFromName('SITE')).fetch(req);
     }
-    return new Response('Rink Rivals rooms',{headers:{'content-type':'text/plain'}});
+    return new Response('Arcade Rivals rooms',{headers:{'content-type':'text/plain'}});
   }
 };
 export class Room {
@@ -283,9 +283,9 @@ export class Chat {
       if(m.op==='words'){ const w=(Array.isArray(m.words)?m.words:[]).map(x=>String(x).toLowerCase().trim().slice(0,30)).filter(Boolean).slice(0,200); this.cfgSet('words',JSON.stringify(w)); return J({ok:true}); }
       if(m.op==='clear'){ this.sql.exec('UPDATE m SET hid=1'); this.all({t:'clear'}); return J({ok:true}); }
       if(m.op==='broadcast'){ const text=String(m.text||'').replace(/[\u0000-\u001f]/g,' ').replace(/\s+/g,' ').trim().slice(0,300); if(!text) return J({err:'empty'},400);
-        const now=Date.now(); this.sql.exec('INSERT INTO m(ts,name,text,game,who) VALUES(?,?,?,?,?)',now,'📣 Rink Rivals',text,'',' admin');
+        const now=Date.now(); this.sql.exec('INSERT INTO m(ts,name,text,game,who) VALUES(?,?,?,?,?)',now,'📣 Arcade Rivals',text,'',' admin');
         const id=this.sql.exec('SELECT last_insert_rowid() AS id').toArray()[0].id; this.sql.exec('DELETE FROM m WHERE id<?',id-600);
-        this.all({t:'msg',m:{id,ts:now,name:'📣 Rink Rivals',text,game:'',tag:'NEWS'}}); return J({ok:true}); }
+        this.all({t:'msg',m:{id,ts:now,name:'📣 Arcade Rivals',text,game:'',tag:'NEWS'}}); return J({ok:true}); }
       if(m.op==='smute'&&m.name){ const nm=String(m.name).toLowerCase(), mins=Math.max(1,+m.mins||15); let n=0;
         for(const ws of this.socks()){ const b=ws.deserializeAttachment(); if(b&&String(b.name||'').toLowerCase()===nm){ n++; this.sql.exec('INSERT OR REPLACE INTO mute(who,until) VALUES(?,?)',b.who,Date.now()+mins*60000); this.send(ws,{t:'sys',text:`You have been muted for ${mins} minute${mins===1?'':'s'} by an admin.`}); } }
         return J({ok:true,muted:n}); }
@@ -379,7 +379,7 @@ export class Site {
     this.sql.exec('CREATE TABLE IF NOT EXISTS act(h INTEGER, pid TEXT, PRIMARY KEY(h,pid))');
     this.sql.exec('CREATE TABLE IF NOT EXISTS ans(id INTEGER PRIMARY KEY AUTOINCREMENT, pid TEXT, name TEXT, q TEXT, a TEXT, ts INTEGER)');
     this.sql.exec('CREATE TABLE IF NOT EXISTS slog(id INTEGER PRIMARY KEY AUTOINCREMENT, ts INTEGER, op TEXT, detail TEXT)');
-    /* Rink Clips: posts, the media itself in 1 MB chunks, likes, comments, reports and posting bans */
+    /* Arcade Clips: posts, the media itself in 1 MB chunks, likes, comments, reports and posting bans */
     this.sql.exec('CREATE TABLE IF NOT EXISTS fpost(id INTEGER PRIMARY KEY AUTOINCREMENT, pid TEXT, name TEXT, kind TEXT, mime TEXT, size INTEGER, cap TEXT, ts INTEGER, st TEXT, nchunk INTEGER)');
     this.sql.exec('CREATE TABLE IF NOT EXISTS fblob(post INTEGER, i INTEGER, d BLOB, PRIMARY KEY(post,i))');
     this.sql.exec('CREATE TABLE IF NOT EXISTS flike(id TEXT, pid TEXT, PRIMARY KEY(id,pid))');
@@ -407,7 +407,7 @@ export class Site {
     const url=new URL(req.url);
     const cleanPid=v=>String(v||'').replace(/[^a-z0-9]/gi,'').slice(0,24), cleanName=v=>String(v||'').replace(/[<>]/g,'').trim().slice(0,20)||'Player';
 
-    /* ---------- Rink Clips (the video feed) ---------- */
+    /* ---------- Arcade Clips (the video feed) ---------- */
     if(url.pathname.startsWith('/feed/')){ const set=(await this.s.get('settings'))||{}, now=Date.now(), bad=t=>CHAT_BAD.some(r=>{ r.lastIndex=0; return r.test(t); });
       if(url.pathname.startsWith('/feed/media/')){ const id=+url.pathname.split('/').pop(), p=this.sql.exec('SELECT mime,size,nchunk,st FROM fpost WHERE id=?',id).toArray()[0]; if(!p||p.st==='gone') return new Response('Not found',{status:404,headers:CORS});
         const CH=1048576, rg=/bytes=(\d*)-(\d*)/.exec(req.headers.get('range')||''); let a=0, b=p.size-1; if(rg){ if(rg[1]!=='') a=+rg[1]; if(rg[2]!=='') b=Math.min(p.size-1,+rg[2]); else b=Math.min(p.size-1,a+4*CH-1); if(rg[1]===''&&rg[2]!==''){ a=Math.max(0,p.size-+rg[2]); b=p.size-1; } }
@@ -461,7 +461,7 @@ export class Site {
       if(Array.isArray(m.ans)) for(const x of m.ans.slice(0,5)){ const q=String(x&&x.q||'').slice(0,240), a1=String(x&&x.a||'').slice(0,500); if(q) this.sql.exec('INSERT INTO ans(pid,name,q,a,ts) VALUES(?,?,?,?,?)',pid,name2,q,a1,now0); }
       { const h=Math.floor(now0/3600000); this.sql.exec('INSERT OR IGNORE INTO act(h,pid) VALUES(?,?)',h,pid); if(Math.random()<.01) this.sql.exec('DELETE FROM act WHERE h<?',h-24*14);
         const on=this.sql.exec('SELECT COUNT(*) n FROM pl WHERE last>?',now0-70000).one().n, pk=(await this.s.get('peak'))||{n:0}; if(on>pk.n) await this.s.put('peak',{n:on,ts:now0}); }
-      if(!ex&&set.welcome) this.queue(pid,'msg',{title:'👋 Welcome to Rink Rivals!',text:set.welcome});
+      if(!ex&&set.welcome) this.queue(pid,'msg',{title:'👋 Welcome to Arcade Rivals!',text:set.welcome});
       { const sc=(await this.s.get('sched'))||[]; if(sc.length&&sc.some(x=>x.at<=now0)){ for(const x of sc.filter(x=>x.at<=now0)) this.queue('*','msg',{title:x.title||'📣 Announcement',text:x.text},now0-1); await this.s.put('sched',sc.filter(x=>x.at>now0)); } }
       const asn=req.headers.get('x-rr-asn')||'', aso=req.headers.get('x-rr-aso')||'', onPx=isProxyNet(asn,aso);
       this.sql.exec('UPDATE pl SET aso=?,cc=? WHERE pid=?',(onPx?'⚠️ ':'')+aso,req.headers.get('x-rr-cc')||'',pid);
@@ -469,9 +469,9 @@ export class Site {
         if(v&&now0-v.last<180000){ const gs=new Set(String(v.games||'').split(',').filter(Boolean)); if(game) gs.add(game); this.sql.exec('UPDATE visit SET last=?,name=?,game=?,games=?,proxy=MAX(proxy,?) WHERE id=?',now0,name2,game,[...gs].slice(-12).join(','),onPx?1:0,v.id); }
         else { this.sql.exec('INSERT INTO visit(pid,name,start,last,game,games,dev,aso,proxy) VALUES(?,?,?,?,?,?,?,?,?)',pid,name2,now0,now0,game,game,dv,aso,onPx?1:0); if(Math.random()<.02) this.sql.exec('DELETE FROM visit WHERE id<(SELECT MAX(id)-20000 FROM visit)'); } }
       let ban=this.banFor(pid,iph,name,fp);
-      if(!ban&&onPx&&set.proxyBlock!==false&&!this.sql.exec('SELECT 1 FROM pxok WHERE pid=?',pid).toArray().length) ban={reason:'Proxies, VPNs and unblocker sites are not allowed on Rink Rivals. Turn it off, then reload the page.',until:now0+60000,proxy:true};
+      if(!ban&&onPx&&set.proxyBlock!==false&&!this.sql.exec('SELECT 1 FROM pxok WHERE pid=?',pid).toArray().length) ban={reason:'Proxies, VPNs and unblocker sites are not allowed on Arcade Rivals. Turn it off, then reload the page.',until:now0+60000,proxy:true};
       /* invite-only: accounts first seen after the lock was switched on wait for approval */
-      if(!ban&&set.newLock&&set.newLockAt){ const f=this.sql.exec('SELECT first FROM pl WHERE pid=?',pid).toArray()[0]; if(f&&f.first>set.newLockAt&&!this.sql.exec('SELECT 1 FROM allow WHERE pid=?',pid).toArray().length) ban={reason:'Rink Rivals is invite-only right now. Ask an admin to let you in.',until:0,invite:true}; }
+      if(!ban&&set.newLock&&set.newLockAt){ const f=this.sql.exec('SELECT first FROM pl WHERE pid=?',pid).toArray()[0]; if(f&&f.first>set.newLockAt&&!this.sql.exec('SELECT 1 FROM allow WHERE pid=?',pid).toArray().length) ban={reason:'Arcade Rivals is invite-only right now. Ask an admin to let you in.',until:0,invite:true}; }
       const cmds=this.sql.exec("SELECT id,kind,data FROM cmd WHERE pid=? OR (pid='*' AND ts>?) ORDER BY id",pid,ex?ex.last:now0).toArray().map(c=>({id:c.id,kind:c.kind,data:JSON.parse(c.data||'{}')}));
       if(cmds.length) this.sql.exec('DELETE FROM cmd WHERE pid=?',pid); this.sql.exec("DELETE FROM cmd WHERE pid='*' AND ts<?",now0-3600000);
       const extra={ban,cmds};

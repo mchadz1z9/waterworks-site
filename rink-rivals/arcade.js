@@ -1,4 +1,4 @@
-/* Rink Rivals arcade covers: each game gets a stadium-lit crest with big chrome / gold lettering,
+/* Arcade Rivals arcade covers: each game gets a stadium-lit crest with big chrome / gold lettering,
    drawn as an SVG so there are no image files to load. RRARC.cover({...}) returns the SVG markup. */
 (function(){ if(window.RRARC) return;
   const esc=s=>String(s==null?'':s).replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
@@ -46,7 +46,7 @@
       <text x="${sx}" y="${sy+sh*.5}" text-anchor="middle" dominant-baseline="central" font-size="${iconSize}" filter="url(#${id}d)">${esc(o.icon||'🏆')}</text>`;
     /* lettering */
     let text;
-    if(wide){ const ls=lines(o.title,10); text=`<text x="46" y="62" font-family="${FONT}" font-weight="800" font-size="20" letter-spacing="4" fill="${mix(c1,'#ffffff',.65)}">${esc((o.kicker||'RINK RIVALS ARCADE').toUpperCase())}</text>`
+    if(wide){ const ls=lines(o.title,10); text=`<text x="46" y="62" font-family="${FONT}" font-weight="800" font-size="20" letter-spacing="4" fill="${mix(c1,'#ffffff',.65)}">${esc((o.kicker||'ARCADE RIVALS ARCADE').toUpperCase())}</text>`
         +title(id,ls,46,ls.length>1?222:200,470,ls.length>1?82:104,'start',rim)
         +(o.tag?`<text x="48" y="${ls.length>1?268:250}" font-family="${FONT}" font-weight="800" font-size="24" letter-spacing="3" fill="#fde68a">${esc(o.tag.toUpperCase())}</text>`:''); }
     else { const ls=lines(o.title,11); text=title(id,ls,W/2,ls.length>1?284:276,360,ls.length>1?46:70,'middle',rim); }

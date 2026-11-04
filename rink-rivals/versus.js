@@ -1,4 +1,4 @@
-/* Rink Rivals online score battles for the solo games.
+/* Arcade Rivals online score battles for the solo games.
    Everyone in the room plays the same course, conditions and random draws (one shared seed) at the same time,
    sees everyone's live score, and gets a results table at the end. Games can also draw the others as ghosts.
    A game calls RRV.attach({game, blurb, better:'high'|'low', opts:()=>settings, start(opts), state:()=>({v,txt,done,pos})}). */

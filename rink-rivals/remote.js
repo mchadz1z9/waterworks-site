@@ -1,4 +1,4 @@
-/* Rink Rivals "play a friend online" for the two-player games.
+/* Arcade Rivals "play a friend online" for the two-player games.
    The host runs the game in its 2-player mode. The friend's key presses are relayed to the host and replayed there
    as Player 2's keys, and the host's game screen is streamed back to the friend as live video (WebRTC, peer to peer;
    the rink-rivals-rooms relay only carries the connection setup, keys and the scoreboard text).

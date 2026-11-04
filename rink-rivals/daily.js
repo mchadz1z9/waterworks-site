@@ -1,4 +1,4 @@
-/* Rink Rivals "Today" panel on the home page: today's top play times, your own play time,
+/* Arcade Rivals "Today" panel on the home page: today's top play times, your own play time,
    and the daily challenge. The winner (picked by the admin) chooses a prize here. */
 (function(){ const el=document.getElementById('rrDaily'); if(!el||!window.RRSITE) return;
   const esc=s=>String(s==null?'':s).replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));

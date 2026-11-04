@@ -1,4 +1,4 @@
-# Rink Rivals
+# Arcade Rivals
 
 A separate Cloudflare Pages site, apart from the WaterWorks site.
 

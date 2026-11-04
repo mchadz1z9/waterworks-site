@@ -1,4 +1,4 @@
-/* Rink Rivals touch-screen mode: on-screen stick and buttons that press the game's keys.
+/* Arcade Rivals touch-screen mode: on-screen stick and buttons that press the game's keys.
    Each page sets window.RR_TOUCH = {stick:'wasd'|'ad'|'none', buttons:[[label,code],...], pedals:bool} before loading this. */
 (function(){
   const cfg=window.RR_TOUCH||{stick:'wasd',buttons:[]};

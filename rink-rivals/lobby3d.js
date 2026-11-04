@@ -1,5 +1,5 @@
-/* Rink Rivals 3D arcade lobby: the home page backdrop is a real perspective-rendered arcade hall.
-   Neon RINK RIVALS sign, jumbotrons with today's top players and the daily challenge, themed
+/* Arcade Rivals 3D arcade lobby: the home page backdrop is a real perspective-rendered arcade hall.
+   Neon ARCADE RIVALS sign, jumbotrons with today's top players and the daily challenge, themed
    hockey / basketball / football / soccer machines, a trophy cabinet of real champions, bleachers,
    tables and hanging TVs, sweeping spotlights, floating particles and neon floor reflections.
    The camera drifts slowly and follows the mouse a little. Draws on <canvas id="arena">.
@@ -55,9 +55,9 @@
     const rr=(x,y,w,h,r)=>{ g.beginPath(); g.moveTo(x+r,y); g.arcTo(x+w,y,x+w,y+h,r); g.arcTo(x+w,y+h,x,y+h,r); g.arcTo(x,y+h,x,y,r); g.arcTo(x,y,x+w,y,r); g.closePath(); };
     g.lineJoin='round'; g.shadowColor='#22d3ee'; g.shadowBlur=30; g.strokeStyle='#67e8f9'; g.lineWidth=7; rr(28,24,1344,352,40); g.stroke(); g.shadowBlur=0; g.strokeStyle='#ecfeff'; g.lineWidth=2.5; rr(28,24,1344,352,40); g.stroke();
     g.textAlign='center'; g.textBaseline='middle';
-    g.font=`900 196px ${FONT}`; for(const [b,c,w] of [[50,'#ff2fb3',16],[24,'#ff5fc8',9]]){ g.shadowColor='#ff2fb3'; g.shadowBlur=b; g.strokeStyle=c; g.lineWidth=w; g.strokeText('RINK RIVALS',700,168); }
-    g.shadowBlur=18; g.shadowColor='#ffd1f0'; g.fillStyle='#fff0fa'; g.fillText('RINK RIVALS',700,168);
-    g.font=`800 70px ${FONT}`; g.shadowColor='#22d3ee'; g.shadowBlur=26; g.strokeStyle='#22d3ee'; g.lineWidth=6; g.strokeText('★  A R C A D E  ★',700,300); g.shadowBlur=10; g.fillStyle='#e0faff'; g.fillText('★  A R C A D E  ★',700,300); }
+    g.font=`900 166px ${FONT}`; for(const [b,c,w] of [[50,'#ff2fb3',16],[24,'#ff5fc8',9]]){ g.shadowColor='#ff2fb3'; g.shadowBlur=b; g.strokeStyle=c; g.lineWidth=w; g.strokeText('ARCADE RIVALS',700,168); }
+    g.shadowBlur=18; g.shadowColor='#ffd1f0'; g.fillStyle='#fff0fa'; g.fillText('ARCADE RIVALS',700,168);
+    g.font=`800 70px ${FONT}`; g.shadowColor='#22d3ee'; g.shadowBlur=26; g.strokeStyle='#22d3ee'; g.lineWidth=6; g.strokeText('★  PLAY · CHAT · WIN  ★',700,300); g.shadowBlur=10; g.fillStyle='#e0faff'; g.fillText('★  PLAY · CHAT · WIN  ★',700,300); }
   const jL=mk(720,420), jR=mk(720,420);
   let data=null;
   const fmt=s=>{ s=Math.round(s||0); const h=Math.floor(s/3600), m=Math.floor(s%3600/60); return h?`${h}h ${m}m`:`${m}m`; };

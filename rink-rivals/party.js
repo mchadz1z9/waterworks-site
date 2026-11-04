@@ -1,4 +1,4 @@
-/* Rink Rivals parties: team up with friends from the lobby or any game, vote on what to play,
+/* Arcade Rivals parties: team up with friends from the lobby or any game, vote on what to play,
    and the leader hits GO to launch everyone into that game together (same online room).
    Runs on every page (site.js loads it). The party stays alive while people move between pages. */
 (function(){ if(window.RRPARTY) return;

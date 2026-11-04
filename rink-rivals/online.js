@@ -1,4 +1,4 @@
-/* Rink Rivals online play: rooms with a short code, relayed through the rink-rivals-rooms worker.
+/* Arcade Rivals online play: rooms with a short code, relayed through the rink-rivals-rooms worker.
    A game calls RRO.init({game, maxPlayers, onStart, onMsg, onPeers}) (dropIn: true skips the waiting room; publicRoom: 'GYM' makes "Play anyone" join one shared open room) and gets RRO.send / RRO.me / RRO.peers / RRO.isHost(). */
 (function(){
   const qs=new URLSearchParams(location.search);
@@ -118,7 +118,7 @@
   window.RRO={ watch(f){ watchers.push(f); lobby('home'); if(counts) f(counts); }, counts:()=>counts, init(c){ cfg=c; lobby(c.game); setTimeout(()=>{ topBtn(); watchMenu(); },0); const r=(qs.get('room')||'').toUpperCase(); if(/^[A-Z0-9]{4,8}$/.test(r)) setTimeout(()=>connect(r,getName()||'Player'),300); return api; } };
 })();
 
-/* Rink Rivals leaderboards: every game keeps world records on the rooms server.
+/* Arcade Rivals leaderboards: every game keeps world records on the rooms server.
    A game calls RRL.boards(game,[{id,name,mode:'max'|'min'|'sum'}]) and RRL.post(id,score,text) when a result is final. */
 (function(){
   const qs=new URLSearchParams(location.search), API=(qs.get('server')||'wss://rink-rivals-rooms.mitchellchad2026.workers.dev').replace(/^ws/,'http')+'/lb/';

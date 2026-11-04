@@ -1,4 +1,4 @@
-/* Rink Rivals strength: your Weightlifting progress, saved on this device. Working out raises it,
+/* Arcade Rivals strength: your Weightlifting progress, saved on this device. Working out raises it,
    it makes your character look more muscular in the games that draw a person, and it makes the bar
    feel lighter in the gym.
    Tags (set by an admin, read from the chat) give a head start: OWNER starts at 10,000 strength, gains

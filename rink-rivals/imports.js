@@ -1,4 +1,4 @@
-/* Rink Rivals player imports: send a real player from 84 & Up or 82-0 into the sports games.
+/* Arcade Rivals player imports: send a real player from 84 & Up or 82-0 into the sports games.
    A sent player keeps his overall and joins his real team in that game (or a team you pick when his club isn't there);
    the game builds his skills from the overall. Stored in this browser only. */
 (function(){ if(window.RRI) return;
