@@ -409,6 +409,18 @@ body{background:radial-gradient(1200px 600px at 10% -10%,#1e1b4b 0,transparent 6
     <div class="row" style="margin-top:6px"><input id="scX" maxlength="500" placeholder="Message"><button class="go" id="scAdd" style="flex:0 0 auto">⏰ Schedule</button></div>
     <div id="scList" class="list"></div><div class="msg" id="scMsg2"></div>
   </div>
+
+  <div class="card full" data-grp="feed">
+    <h2>📱 Rink Clips (video feed)</h2>
+    <p class="mut">Players can post videos and pictures on <a href="clips" target="_blank">Rink Clips</a>. Two reports hide a post automatically until you look at it.</p>
+    <div class="row"><label style="display:flex;gap:8px;align-items:center;margin:0"><input type="checkbox" id="fdAppr" style="width:auto"> <b>New posts wait for my approval</b></label><label style="display:flex;gap:8px;align-items:center;margin:0"><input type="checkbox" id="fdOff" style="width:auto"> Turn off posting</label><button class="ghost" id="fdGo" style="flex:0 0 auto">↻ Refresh</button></div>
+    <div class="msg" id="fdMsg"></div>
+    <h3 class="sec">⏳ Waiting for approval / 🚩 hidden by reports</h3><div id="fdPend" class="list"></div>
+    <h3 class="sec">✅ Live posts</h3><div id="fdLive" class="list" style="max-height:520px;overflow:auto"></div>
+    <h3 class="sec">💬 Latest comments</h3><div id="fdComs" class="list" style="max-height:360px;overflow:auto;font-size:14px"></div>
+    <h3 class="sec">🚫 Banned from posting</h3><div id="fdBans" class="list"></div>
+    <h3 class="sec">🎬 Built-in videos <span class="mut" id="fdCurN"></span></h3><p class="mut">Hide any built-in video you don't want on the feed. Reported ones are at the top.</p><input id="fdQ" placeholder="Search built-in videos…"><div id="fdCur" class="list" style="max-height:420px;overflow:auto;font-size:14px"></div>
+  </div>
   <div class="card" data-grp="tools">
     <h2>🗒️ Admin notepad</h2>
     <p class="mut">Private notes for you — saved on the server, so they follow you to any device. Saves automatically.</p>
@@ -733,7 +745,7 @@ function initControl(set){ $('scMaint').checked=!!set.maint; $('scMaintMsg').val
   $('scAllReload').onclick=async()=>{ if(!confirm('Reload the page for everyone online?')) return; const r=await api('/admin/site','pcmd',{kind:'reload',pid:'*'}); setMsg('scMsg',r.ok?'Everyone online will reload.':'Could not send.',r.ok?1:0); }; }
 
 /* ================= v2: navigation, dashboard and the new tools ================= */
-const GRP=[['all','🧭 Everything'],['dash','📊 Dashboard'],['players','🧑‍🤝‍🧑 Players'],['fun','🎭 Fun & trolls'],['chat','💬 Chat'],['site','🕹️ Site & events'],['games','🏆 Games & boards'],['sec','🔐 Security'],['tools','🧰 Tools']];
+const GRP=[['all','🧭 Everything'],['dash','📊 Dashboard'],['players','🧑‍🤝‍🧑 Players'],['fun','🎭 Fun & trolls'],['chat','💬 Chat'],['site','🕹️ Site & events'],['games','🏆 Games & boards'],['sec','🔐 Security'],['feed','📱 Clips'],['tools','🧰 Tools']];
 function grpOf(c){ if(c.dataset.grp) return c.dataset.grp; const h=(c.querySelector('h2')||{}).textContent||''; if(/Overview|Live stats/.test(h)) return 'dash'; if(/All players|Edit a player|Player stats|Users/.test(h)) return 'players'; if(/Chat|Broadcast/.test(h)) return 'chat'; if(/Security/.test(h)) return 'sec'; if(/Leaderboard|Tournament|Daily/.test(h)) return 'games'; return 'site'; }
 let CURG='dash';
 function initNav(){ if(initNav.done) return; initNav.done=1; const cards=[...document.querySelectorAll('#cards>.card')]; cards.forEach(c=>c.dataset.g=grpOf(c));
@@ -765,7 +777,36 @@ async function loadSched(){ try{ const d=await api('/admin/site','sched'); $('sc
 async function loadLog(){ try{ const d=await api('/admin/site','slog'); $('lgList').innerHTML=(d.rows||[]).map(r=>`<div class="urow"><span class="nm" style="font-weight:600">${esc(r.op)} <span class="mut" style="font-weight:400">${esc(r.detail.length>140?r.detail.slice(0,140)+'…':r.detail)}</span></span><span class="mut">${agoT(r.ts)}</span></div>`).join('')||'<span class="mut">Nothing logged yet.</span>'; }catch(e){} }
 async function loadReqCount(){ try{ const d=await api('/admin/site','namereqs'); $('tbReq').textContent=(d.rows||[]).length; }catch(e){} }
 
-function initV2(set){ if(initV2.done) return; initV2.done=1; initNav();
+
+/* ---- Rink Clips moderation ---- */
+let FD=null, CUR=null;
+const fdMedia=p=>p.kind==='image'?`<img src="${SERVER}/feed/media/${p.id}" style="max-width:180px;max-height:180px;border-radius:8px">`:`<video src="${SERVER}/feed/media/${p.id}" controls preload="metadata" style="max-width:220px;max-height:220px;border-radius:8px;background:#000"></video>`;
+const fdRow=p=>`<div class="urow" style="align-items:flex-start">${fdMedia(p)}<div style="flex:1;min-width:180px"><b>${esc(p.name)}</b> <span class="pill">${p.st==='pending'?'⏳ waiting':p.st==='hidden'?'🚩 hidden':'✅ live'}</span>${p.reps?` <span class="pill" style="color:#fca5a5">${p.reps} report${p.reps>1?'s':''}</span>`:''} <span class="pill">❤️ ${p.likes}</span><div style="margin:4px 0">${esc(p.cap||'(no caption)')}</div><div class="mut">${agoT(p.ts)} · ${(p.size/1e6).toFixed(1)} MB</div>
+  <div class="row" style="margin-top:6px;gap:6px">${p.st!=='ok'?`<button class="go sm" data-fdok="${p.id}">✅ Approve</button>`:`<button class="warn sm" data-fdhide="${p.id}">🙈 Hide</button>`}<button class="del sm" data-fddel="${p.id}">🗑 Delete</button><button class="del sm" data-fdban="${esc(p.pid)}" data-nm="${esc(p.name)}">🚫 Ban from posting</button></div></div></div>`;
+async function loadFeedAdm(){ try{ FD=await api('/admin/site','feedAll'); $('fdAppr').checked=FD.approve; $('fdOff').checked=FD.off;
+  const pend=FD.posts.filter(p=>p.st!=='ok'), live=FD.posts.filter(p=>p.st==='ok');
+  $('fdPend').innerHTML=pend.map(fdRow).join('')||'<span class="mut">Nothing waiting. 🎉</span>'; $('fdLive').innerHTML=live.map(fdRow).join('')||'<span class="mut">No player posts yet.</span>';
+  $('fdComs').innerHTML=FD.coms.map(c=>`<div class="urow"><span class="nm" style="font-weight:600">${esc(c.name)}: <span style="font-weight:400">${esc(c.text)}</span> <span class="mut">on ${esc(c.id)} · ${agoT(c.ts)}</span></span><button class="del sm" data-fdcom="${c.cid}" style="flex:0 0 auto">Delete</button><button class="ghost sm" data-fdban="${esc(c.pid)}" data-nm="${esc(c.name)}" style="flex:0 0 auto">🚫 Ban</button></div>`).join('')||'<span class="mut">No comments yet.</span>';
+  $('fdBans').innerHTML=FD.bans.map(b=>`<div class="urow"><span class="nm">${esc(b.name||b.pid)}</span><button class="go sm" data-fdunban="${esc(b.pid)}" style="flex:0 0 auto">Unban</button></div>`).join('')||'<span class="mut">Nobody.</span>';
+  const t=document.querySelector('#side button[data-g="feed"] .ct'); if(t) t.textContent=pend.length?`${pend.length} waiting`:'1';
+  if(!CUR){ try{ const h=await fetch('clips.html',{cache:'no-store'}).then(r=>r.text()); CUR=JSON.parse(h.match(/const CLIPS=(\[[\s\S]*?\]);\n/)[1]); }catch(e){ CUR=[]; } } renderCur(); }catch(e){ setMsg('fdMsg','Could not load the feed.',0); } }
+function renderCur(){ if(!FD||!CUR) return; const q=$('fdQ').value.trim().toLowerCase(), hide=new Set(FD.hide), rep={}; for(const r of FD.reps) rep[r.id]=r.n;
+  const L=CUR.filter(c=>!q||(c.title+' '+c.by+' '+c.cat).toLowerCase().includes(q)).sort((a,b)=>(rep[b.id]||0)-(rep[a.id]||0)); $('fdCurN').textContent=`(${CUR.length - FD.hide.length} showing, ${FD.hide.length} hidden)`;
+  $('fdCur').innerHTML=L.map(c=>`<div class="urow"><span class="nm" style="font-weight:600">${hide.has(c.id)?'🙈 ':''}${esc(c.title)} <span class="mut" style="font-weight:400">${esc(c.cat)} · ${esc(c.by)}</span>${rep[c.id]?` <span class="pill" style="color:#fca5a5">🚩 ${rep[c.id]}</span>`:''}</span><a class="mut" href="clips#${encodeURIComponent(c.id)}" target="_blank">view</a><button class="${hide.has(c.id)?'go':'warn'} sm" data-fdcur="${esc(c.id)}" data-on="${hide.has(c.id)?0:1}" style="flex:0 0 auto">${hide.has(c.id)?'Show again':'Hide'}</button></div>`).join(''); }
+function initFeedAdm(){ if(initFeedAdm.done) return; initFeedAdm.done=1; const card=$('fdPend').closest('.card');
+  $('fdGo').onclick=loadFeedAdm; $('fdQ').oninput=renderCur;
+  $('fdAppr').onchange=async()=>{ await api('/admin/site','settings',{patch:{feedApprove:$('fdAppr').checked}}); setMsg('fdMsg',$('fdAppr').checked?'New posts now wait for your approval.':'New posts go live straight away (reports still hide them).',1); };
+  $('fdOff').onchange=async()=>{ await api('/admin/site','settings',{patch:{feedOff:$('fdOff').checked}}); setMsg('fdMsg',$('fdOff').checked?'Posting is off.':'Posting is on.',1); };
+  card.onclick=async e=>{ const b=e.target.closest('button'); if(!b) return; const d=b.dataset;
+    if(d.fdok){ await api('/admin/site','feedSet',{id:+d.fdok,st:'ok'}); } else if(d.fdhide){ await api('/admin/site','feedSet',{id:+d.fdhide,st:'hidden'}); }
+    else if(d.fddel){ if(!confirm('Delete this post for good?')) return; await api('/admin/site','feedDel',{id:+d.fddel}); }
+    else if(d.fdcom){ await api('/admin/site','feedComDel',{cid:+d.fdcom}); }
+    else if(d.fdban){ const wipe=confirm(`Ban ${d.nm} from posting and commenting?\n\nOK = ban AND delete all their posts and comments\nCancel = do nothing`); if(!wipe) return; await api('/admin/site','feedBan',{pid:d.fdban,on:true,wipe:true}); }
+    else if(d.fdunban){ await api('/admin/site','feedBan',{pid:d.fdunban,on:false}); }
+    else if(d.fdcur){ const r=await api('/admin/site','feedHide',{cid:d.fdcur,on:d.on==='1'}); if(FD&&r.hide) FD.hide=r.hide; renderCur(); return; } else return;
+    loadFeedAdm(); };
+  loadFeedAdm(); setInterval(()=>{ if(CURG==='feed') loadFeedAdm(); },60000); }
+function initV2(set){ if(initV2.done) return; initV2.done=1; initNav(); initFeedAdm();
   $('wcText').value=set.welcome||''; $('pnText').value=set.pin||'';
   $('acGo').onclick=loadActivity; $('acPeak').onclick=async()=>{ if(!confirm('Reset the online record?')) return; await api('/admin/site','peakReset'); loadActivity(); };
   $('plAll').onchange=()=>{ for(const p of PL) $('plAll').checked?TICK.add(p.pid):TICK.delete(p.pid); document.querySelectorAll('[data-tick]').forEach(c=>c.checked=TICK.has(c.dataset.tick)); bulkUpd(); };

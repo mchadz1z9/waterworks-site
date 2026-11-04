@@ -10,7 +10,7 @@ export default {
       return env.ROOMS.get(id).fetch(req);
     }
     if(url.pathname==='/site'){ if(req.method==='OPTIONS') return new Response(null,{headers:CORS}); return env.SITE.get(env.SITE.idFromName('SITE')).fetch(req); }
-    if(url.pathname==='/tourney'||url.pathname==='/play'||url.pathname==='/daily'||url.pathname==='/like'||url.pathname==='/vote'||url.pathname==='/namecheck'){ if(req.method==='OPTIONS') return new Response(null,{headers:CORS}); return env.SITE.get(env.SITE.idFromName('SITE')).fetch(req); }
+    if(url.pathname==='/tourney'||url.pathname==='/play'||url.pathname==='/daily'||url.pathname==='/like'||url.pathname==='/vote'||url.pathname==='/namecheck'||url.pathname.startsWith('/feed/')){ if(req.method==='OPTIONS') return new Response(null,{headers:CORS}); return env.SITE.get(env.SITE.idFromName('SITE')).fetch(req); }
     const lb=url.pathname.match(/^\/lb\/([a-z0-9]{2,16})$/);
     if(lb){ if(req.method==='OPTIONS') return new Response(null,{headers:CORS}); return env.BOARDS.get(env.BOARDS.idFromName(lb[1])).fetch(req); }
     const pm=url.pathname.match(/^\/party\/([A-Z0-9]{4,8})$/);
@@ -120,7 +120,7 @@ export class Lobby {
 /* bump this to make the server forget any password set from the admin page and go back to the ADMIN_KEY secret */
 const PW_RESET='2026-11-03';
 const ADMIN_URL='/hq-owa9rwwt9kplpdbu';
-const CORS={'Access-Control-Allow-Origin':'*','Access-Control-Allow-Methods':'GET,POST,OPTIONS','Access-Control-Allow-Headers':'content-type,x-admin-token,x-admin-pid'};
+const CORS={'Access-Control-Allow-Origin':'*','Access-Control-Allow-Methods':'GET,POST,OPTIONS','Access-Control-Allow-Headers':'content-type,x-admin-token,x-admin-pid,x-pid,x-name,x-cap,x-fp','Access-Control-Expose-Headers':'content-length,content-range,accept-ranges'};
 /* SHA-256 as hex, and a comparison that takes the same time whether the guess is close or not */
 async function sha(x){ const b=await crypto.subtle.digest('SHA-256',new TextEncoder().encode(String(x))); return [...new Uint8Array(b)].map(v=>v.toString(16).padStart(2,'0')).join(''); }
 /* reserved names: "Aiden", "A1den", "aiden_99", "AIDEN pro"… all count as Aiden. Only the devices it's reserved for may use it. */
@@ -372,7 +372,14 @@ export class Site {
     this.sql.exec('CREATE TABLE IF NOT EXISTS namereq(pid TEXT PRIMARY KEY, old TEXT, want TEXT, ts INTEGER)');
     this.sql.exec('CREATE TABLE IF NOT EXISTS act(h INTEGER, pid TEXT, PRIMARY KEY(h,pid))');
     this.sql.exec('CREATE TABLE IF NOT EXISTS ans(id INTEGER PRIMARY KEY AUTOINCREMENT, pid TEXT, name TEXT, q TEXT, a TEXT, ts INTEGER)');
-    this.sql.exec('CREATE TABLE IF NOT EXISTS slog(id INTEGER PRIMARY KEY AUTOINCREMENT, ts INTEGER, op TEXT, detail TEXT)'); }
+    this.sql.exec('CREATE TABLE IF NOT EXISTS slog(id INTEGER PRIMARY KEY AUTOINCREMENT, ts INTEGER, op TEXT, detail TEXT)');
+    /* Rink Clips: posts, the media itself in 1 MB chunks, likes, comments, reports and posting bans */
+    this.sql.exec('CREATE TABLE IF NOT EXISTS fpost(id INTEGER PRIMARY KEY AUTOINCREMENT, pid TEXT, name TEXT, kind TEXT, mime TEXT, size INTEGER, cap TEXT, ts INTEGER, st TEXT, nchunk INTEGER)');
+    this.sql.exec('CREATE TABLE IF NOT EXISTS fblob(post INTEGER, i INTEGER, d BLOB, PRIMARY KEY(post,i))');
+    this.sql.exec('CREATE TABLE IF NOT EXISTS flike(id TEXT, pid TEXT, PRIMARY KEY(id,pid))');
+    this.sql.exec('CREATE TABLE IF NOT EXISTS fcom(cid INTEGER PRIMARY KEY AUTOINCREMENT, id TEXT, pid TEXT, name TEXT, text TEXT, ts INTEGER)');
+    this.sql.exec('CREATE TABLE IF NOT EXISTS frep(id TEXT, pid TEXT, ts INTEGER, PRIMARY KEY(id,pid))');
+    this.sql.exec('CREATE TABLE IF NOT EXISTS fban(pid TEXT PRIMARY KEY, ts INTEGER)'); }
   /* is this name already someone else's? (reserved names are allowed for the devices they're reserved for) */
   nameTaken(name,pid,set){ const k=String(name||'').toLowerCase().trim(); if(!k||/^player\d*$/.test(k)) return false;  const r=(set.reserved||[]).find(x=>nameKey(name).startsWith(x.n)); if(r&&(r.pids||[]).includes(pid)) return false;
     /* the earliest accounts to use a name keep it — 1 per name, except "Aiden" which up to 10 people can share */ const cap=k==='aiden'?10:1, n=this.sql.exec('SELECT COUNT(*) n FROM pl WHERE lower(name)=? AND pid<>? AND first<COALESCE((SELECT first FROM pl WHERE pid=? AND lower(name)=?),9e15)',k,pid,pid,k).one().n; return n>=cap; }
@@ -390,6 +397,39 @@ export class Site {
   async fetch(req){
     const url=new URL(req.url);
     const cleanPid=v=>String(v||'').replace(/[^a-z0-9]/gi,'').slice(0,24), cleanName=v=>String(v||'').replace(/[<>]/g,'').trim().slice(0,20)||'Player';
+
+    /* ---------- Rink Clips (the video feed) ---------- */
+    if(url.pathname.startsWith('/feed/')){ const set=(await this.s.get('settings'))||{}, now=Date.now(), bad=t=>CHAT_BAD.some(r=>{ r.lastIndex=0; return r.test(t); });
+      if(url.pathname.startsWith('/feed/media/')){ const id=+url.pathname.split('/').pop(), p=this.sql.exec('SELECT mime,size,nchunk,st FROM fpost WHERE id=?',id).toArray()[0]; if(!p||p.st==='gone') return new Response('Not found',{status:404,headers:CORS});
+        const CH=1048576, rg=/bytes=(\d*)-(\d*)/.exec(req.headers.get('range')||''); let a=0, b=p.size-1; if(rg){ if(rg[1]!=='') a=+rg[1]; if(rg[2]!=='') b=Math.min(p.size-1,+rg[2]); else b=Math.min(p.size-1,a+4*CH-1); if(rg[1]===''&&rg[2]!==''){ a=Math.max(0,p.size-+rg[2]); b=p.size-1; } }
+        if(a>b||a>=p.size) return new Response(null,{status:416,headers:{...CORS,'content-range':`bytes */${p.size}`}});
+        const out=new Uint8Array(b-a+1); let o=0; for(let i=Math.floor(a/CH);i<=Math.floor(b/CH);i++){ const r=this.sql.exec('SELECT d FROM fblob WHERE post=? AND i=?',id,i).toArray()[0]; if(!r) break; const d=new Uint8Array(r.d), s0=i*CH, from=Math.max(a,s0)-s0, to=Math.min(b,s0+d.length-1)-s0; out.set(d.subarray(from,to+1),o); o+=to-from+1; }
+        return new Response(out,{status:rg?206:200,headers:{...CORS,'content-type':p.mime,'accept-ranges':'bytes','content-length':String(out.length),...(rg?{'content-range':`bytes ${a}-${b}/${p.size}`}:{}),'cache-control':'public,max-age=86400'}}); }
+      if(req.method==='OPTIONS') return new Response(null,{headers:CORS});
+      const iph=(await sha('rr-ip:'+(req.headers.get('cf-connecting-ip')||'?'))).slice(0,24);
+      if(url.pathname==='/feed/upload'){ const pid=cleanPid(req.headers.get('x-pid')), name=cleanName(decodeURIComponent(req.headers.get('x-name')||'')), cap=decodeURIComponent(req.headers.get('x-cap')||'').replace(/[\u0000-\u001f<>]/g,' ').trim().slice(0,200), mime=(req.headers.get('content-type')||'').split(';')[0].toLowerCase();
+        if(pid.length<8) return J({err:'bad'},400); if(set.feedOff) return J({err:'off'}); if(this.banFor(pid,iph,name,'')||this.sql.exec('SELECT 1 FROM fban WHERE pid=?',pid).toArray().length) return J({err:'banned'});
+        const kind=/^video\/(mp4|webm|quicktime)$/.test(mime)?'video':/^image\/(jpeg|png|gif|webp)$/.test(mime)?'image':''; if(!kind) return J({err:'type'}); if(cap&&bad(cap)) return J({err:'words'});
+        if(this.sql.exec('SELECT COUNT(*) n FROM fpost WHERE pid=? AND ts>?',pid,now-3600000).one().n>=5) return J({err:'slow'});
+        const buf=new Uint8Array(await req.arrayBuffer()), max=kind==='video'?20e6:6e6; if(!buf.length) return J({err:'empty'}); if(buf.length>max) return J({err:'big',max});
+        const st=set.feedApprove===false?'ok':'pending'; this.sql.exec('INSERT INTO fpost(pid,name,kind,mime,size,cap,ts,st,nchunk) VALUES(?,?,?,?,?,?,?,?,?)',pid,name,kind,mime,buf.length,cap,now,st,Math.ceil(buf.length/1048576));
+        const id=this.sql.exec('SELECT last_insert_rowid() id').one().id; for(let i=0;i*1048576<buf.length;i++) this.sql.exec('INSERT INTO fblob(post,i,d) VALUES(?,?,?)',id,i,buf.subarray(i*1048576,Math.min(buf.length,(i+1)*1048576)));
+        return J({ok:true,id,st}); }
+      let m={}; try{ m=await req.json(); }catch(e){} const pid=cleanPid(m.pid);
+      if(url.pathname==='/feed/list'){ const posts=this.sql.exec("SELECT id,name,kind,cap,ts FROM fpost WHERE st='ok' ORDER BY id DESC LIMIT 300").toArray().map(p=>({...p,id:'p:'+p.id}));
+        const likes={}, coms={}; for(const r of this.sql.exec('SELECT id,COUNT(*) n FROM flike GROUP BY id').toArray()) likes[r.id]=r.n; for(const r of this.sql.exec('SELECT id,COUNT(*) n FROM fcom GROUP BY id').toArray()) coms[r.id]=r.n;
+        const mine=pid?this.sql.exec('SELECT id FROM flike WHERE pid=?',pid).toArray().map(r=>r.id):[], pend=pid?this.sql.exec("SELECT COUNT(*) n FROM fpost WHERE pid=? AND st='pending'",pid).one().n:0;
+        return J({posts,likes,coms,mine,hide:set.feedHide||[],approve:set.feedApprove!==false,off:!!set.feedOff,pend}); }
+      if(pid.length<8) return J({err:'bad'},400); const id=String(m.id||'').replace(/[^a-z0-9:]/gi,'').slice(0,40); if(!id) return J({err:'bad'},400);
+      if(url.pathname==='/feed/like'){ if(m.on) this.sql.exec('INSERT OR IGNORE INTO flike(id,pid) VALUES(?,?)',id,pid); else this.sql.exec('DELETE FROM flike WHERE id=? AND pid=?',id,pid); return J({ok:true,n:this.sql.exec('SELECT COUNT(*) n FROM flike WHERE id=?',id).one().n}); }
+      if(url.pathname==='/feed/comments') return J({list:this.sql.exec('SELECT cid,name,text,ts FROM fcom WHERE id=? ORDER BY cid DESC LIMIT 100',id).toArray()});
+      if(url.pathname==='/feed/comment'){ const name=cleanName(m.name), text=String(m.text||'').replace(/[\u0000-\u001f<>]/g,' ').trim().slice(0,200); if(!text) return J({err:'empty'});
+        if(this.banFor(pid,iph,name,'')||this.sql.exec('SELECT 1 FROM fban WHERE pid=?',pid).toArray().length) return J({err:'banned'}); if(bad(text)) return J({err:'words'});
+        if(this.sql.exec('SELECT COUNT(*) n FROM fcom WHERE pid=? AND ts>?',pid,now-600000).one().n>=15) return J({err:'slow'});
+        this.sql.exec('INSERT INTO fcom(id,pid,name,text,ts) VALUES(?,?,?,?,?)',id,pid,name,text,now); if(Math.random()<.02) this.sql.exec('DELETE FROM fcom WHERE cid<(SELECT MAX(cid)-20000 FROM fcom)'); return J({ok:true}); }
+      if(url.pathname==='/feed/report'){ this.sql.exec('INSERT OR IGNORE INTO frep(id,pid,ts) VALUES(?,?,?)',id,pid,now); const n=this.sql.exec('SELECT COUNT(*) n FROM frep WHERE id=?',id).one().n;
+        /* two reports and a player's post is hidden until an admin looks at it */ if(id.startsWith('p:')&&n>=2) this.sql.exec("UPDATE fpost SET st='hidden' WHERE id=? AND st='ok'",+id.slice(2)); return J({ok:true}); }
+      return J({err:'unknown'},404); }
     if(url.pathname==='/play'){ let m={}; try{ m=await req.json(); }catch(e){}
       const pid=cleanPid(m.pid), name=cleanName(m.name); if(pid.length<8) return J({err:'bad'},400);
       const now0=Date.now(), iph=(await sha('rr-ip:'+(req.headers.get('cf-connecting-ip')||'?'))).slice(0,24), game=String(m.game||'').replace(/[^a-z0-9-]/g,'').slice(0,24);
@@ -464,7 +504,7 @@ export class Site {
       const role=req.headers.get('x-admin-role')||'full', full=role==='full';
       if(m.op==='get') return J({...await this.state(),role});
       if(!full) return J({err:'forbidden'},403);
-      if(!['players','pinfo','sbans','reserved','namereqs','activity','answers','slog','stats','liveStats','daily','export','polls','list'].includes(m.op)&&!(m.op==='notes'&&typeof m.text!=='string')&&!(m.op==='sched'&&!m.add&&!m.del)){ const d={...m}; delete d.op; if(d.patch&&d.patch.reserved) delete d.patch.reserved; this.sql.exec('INSERT INTO slog(ts,op,detail) VALUES(?,?,?)',Date.now(),String(m.op).slice(0,24),JSON.stringify(d).slice(0,300)); if(Math.random()<.02) this.sql.exec('DELETE FROM slog WHERE id<(SELECT MAX(id)-3000 FROM slog)'); }
+      if(!['players','pinfo','sbans','reserved','namereqs','activity','answers','slog','feedAll','stats','liveStats','daily','export','polls','list'].includes(m.op)&&!(m.op==='notes'&&typeof m.text!=='string')&&!(m.op==='sched'&&!m.add&&!m.del)){ const d={...m}; delete d.op; if(d.patch&&d.patch.reserved) delete d.patch.reserved; this.sql.exec('INSERT INTO slog(ts,op,detail) VALUES(?,?,?)',Date.now(),String(m.op).slice(0,24),JSON.stringify(d).slice(0,300)); if(Math.random()<.02) this.sql.exec('DELETE FROM slog WHERE id<(SELECT MAX(id)-3000 FROM slog)'); }
       if(m.op==='ann'){ const title=String(m.title||'').slice(0,120), body=String(m.body||'').slice(0,2000); if(!title&&!body) return J({err:'empty'},400);
         const icon=String(m.icon||'').slice(0,6), theme=String(m.theme||'').replace(/[^a-z]/g,'').slice(0,12);
         const btn=String(m.btn||'').slice(0,40), link=String(m.link||'').trim().slice(0,300);
@@ -492,6 +532,7 @@ export class Site {
         if('shared' in p) next.shared=(Array.isArray(p.shared)?p.shared:[]).map(x=>String(x).toLowerCase().trim().slice(0,20)).filter(Boolean).slice(0,100);
         if('welcome' in p) next.welcome=String(p.welcome||'').slice(0,400);
         if('pin' in p) next.pin=String(p.pin||'').slice(0,200);
+        if('feedApprove' in p) next.feedApprove=!!p.feedApprove; if('feedOff' in p) next.feedOff=!!p.feedOff;
         if('nameBlock' in p) next.nameBlock=(Array.isArray(p.nameBlock)?p.nameBlock:[]).map(x=>String(x).toLowerCase().trim().slice(0,30)).filter(Boolean).slice(0,200);
         if('banner' in p){ const b=p.banner||{}; next.banner={text:String(b.text||'').slice(0,160),theme:String(b.theme||'').replace(/[^a-z]/g,'').slice(0,12)}; next.bannerId=Date.now().toString(36); }
         await this.s.put('settings',next); return J({ok:true,settings:next}); }
@@ -545,6 +586,14 @@ export class Site {
       if(m.op==='sched'){ let sc=(await this.s.get('sched'))||[]; if(m.add){ const text=String(m.add.text||'').slice(0,500), at=+m.add.at; if(!text||!(at>Date.now())) return J({err:'bad'},400); sc.push({id:Date.now().toString(36),at,title:String(m.add.title||'').slice(0,80),text}); } if(m.del) sc=sc.filter(x=>x.id!==m.del); sc=sc.sort((a,b)=>a.at-b.at).slice(0,50); await this.s.put('sched',sc); return J({ok:true,list:sc}); }
       if(m.op==='slog') return J({rows:this.sql.exec('SELECT ts,op,detail FROM slog ORDER BY id DESC LIMIT 300').toArray()});
       if(m.op==='peakReset'){ await this.s.delete('peak'); return J({ok:true}); }
+      if(m.op==='feedAll'){ const posts=this.sql.exec('SELECT p.id,p.pid,p.name,p.kind,p.mime,p.size,p.cap,p.ts,p.st,(SELECT COUNT(*) FROM frep r WHERE r.id=\'p:\'||p.id) reps,(SELECT COUNT(*) FROM flike l WHERE l.id=\'p:\'||p.id) likes FROM fpost p WHERE p.st<>\'gone\' ORDER BY p.id DESC LIMIT 300').toArray();
+        const coms=this.sql.exec('SELECT cid,id,pid,name,text,ts FROM fcom ORDER BY cid DESC LIMIT 200').toArray(), reps=this.sql.exec("SELECT id,COUNT(*) n FROM frep WHERE id NOT LIKE 'p:%' GROUP BY id ORDER BY n DESC LIMIT 100").toArray(), bans=this.sql.exec('SELECT f.pid,(SELECT name FROM pl WHERE pl.pid=f.pid) name FROM fban f').toArray();
+        const set=(await this.s.get('settings'))||{}; return J({posts,coms,reps,bans,hide:set.feedHide||[],approve:set.feedApprove!==false,off:!!set.feedOff}); }
+      if(m.op==='feedSet'){ const st=['ok','hidden','pending'].includes(m.st)?m.st:'hidden'; this.sql.exec('UPDATE fpost SET st=? WHERE id=?',st,+m.id); if(st==='ok') this.sql.exec('DELETE FROM frep WHERE id=?','p:'+(+m.id)); return J({ok:true}); }
+      if(m.op==='feedDel'){ const id=+m.id; this.sql.exec('DELETE FROM fblob WHERE post=?',id); this.sql.exec("UPDATE fpost SET st='gone',size=0 WHERE id=?",id); this.sql.exec('DELETE FROM fcom WHERE id=?','p:'+id); this.sql.exec('DELETE FROM flike WHERE id=?','p:'+id); this.sql.exec('DELETE FROM frep WHERE id=?','p:'+id); return J({ok:true}); }
+      if(m.op==='feedComDel'){ this.sql.exec('DELETE FROM fcom WHERE cid=?',+m.cid); return J({ok:true}); }
+      if(m.op==='feedBan'){ const pid=cleanPid(m.pid); if(m.on){ this.sql.exec('INSERT OR REPLACE INTO fban(pid,ts) VALUES(?,?)',pid,Date.now()); if(m.wipe){ for(const r of this.sql.exec("SELECT id FROM fpost WHERE pid=? AND st<>'gone'",pid).toArray()){ this.sql.exec('DELETE FROM fblob WHERE post=?',r.id); this.sql.exec("UPDATE fpost SET st='gone',size=0 WHERE id=?",r.id); } this.sql.exec('DELETE FROM fcom WHERE pid=?',pid); } } else this.sql.exec('DELETE FROM fban WHERE pid=?',pid); return J({ok:true}); }
+      if(m.op==='feedHide'){ const set=(await this.s.get('settings'))||{}, id=String(m.cid||'').slice(0,40); let h=set.feedHide||[]; h=m.on?[...new Set([...h,id])]:h.filter(x=>x!==id); set.feedHide=h.slice(-1000); if(!m.on) this.sql.exec('DELETE FROM frep WHERE id=?',id); await this.s.put('settings',set); return J({ok:true,hide:set.feedHide}); }
       if(m.op==='namereqs') return J({rows:this.sql.exec('SELECT pid,old,want,ts FROM namereq ORDER BY ts DESC LIMIT 100').toArray()});
       if(m.op==='nameOk'||m.op==='nameNo'){ const pid=cleanPid(m.pid), r=this.sql.exec('SELECT want FROM namereq WHERE pid=?',pid).toArray()[0]; this.sql.exec('DELETE FROM namereq WHERE pid=?',pid);
         if(m.op==='nameOk'&&r){ const set=(await this.s.get('settings'))||{}; if(this.nameTaken(r.want,pid,set)) return J({err:'taken'}); this.sql.exec('UPDATE pl SET name=? WHERE pid=?',r.want,pid); this.queue(pid,'rename',{name:r.want,why:'approved'}); } return J({ok:true}); }
