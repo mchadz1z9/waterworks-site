@@ -33,7 +33,7 @@ a{color:inherit}
 .rb{width:52px;border:0;background:none;color:#fff;cursor:pointer;display:flex;flex-direction:column;align-items:center;font:700 12px system-ui;text-shadow:0 1px 3px #000}
 .rb i{font-style:normal;font-size:28px;width:48px;height:48px;border-radius:50%;background:rgba(15,23,42,.55);display:flex;align-items:center;justify-content:center;margin-bottom:3px}
 .rb.liked i{background:rgba(239,68,68,.85)}
-.mute{position:absolute;top:64px;right:12px;z-index:6;border:0;border-radius:999px;background:rgba(0,0,0,.6);color:#fff;font-size:20px;width:42px;height:42px;cursor:pointer}
+.mute{position:absolute;top:64px;right:12px;z-index:9;border:0;border-radius:999px;background:rgba(0,0,0,.6);color:#fff;font-size:20px;width:42px;height:42px;cursor:pointer}
 .sheet{position:fixed;left:50%;transform:translateX(-50%);bottom:0;width:min(100vw,560px);max-height:72dvh;background:#0f172a;border-radius:18px 18px 0 0;z-index:40;display:flex;flex-direction:column;box-shadow:0 -10px 40px rgba(0,0,0,.6)}
 .sheet.hide,.modal.hide{display:none}
 .sheet h3{margin:0;padding:14px 16px;border-bottom:1px solid #1e293b;display:flex;justify-content:space-between;align-items:center;font-size:16px}
@@ -55,7 +55,7 @@ a{color:inherit}
 .hint{position:absolute;left:50%;transform:translateX(-50%);bottom:8px;font-size:12px;color:#64748b}
 </style></head><body>
 <div id="top"><a class="logo" href="./">📱 Rink Clips</a><div id="chips"></div><button class="btn" id="postBtn">➕ Post</button><a class="btn gh" href="./" style="text-decoration:none">🏠</a></div>
-<div id="feed"></div>
+<div id="feed"></div><button id="sndBtn" style="position:fixed;left:50%;transform:translateX(-50%);bottom:18px;z-index:2147483000;border:0;border-radius:999px;padding:11px 20px;font:800 15px system-ui;background:#f8fafc;color:#0f172a;box-shadow:0 8px 30px rgba(0,0,0,.5);cursor:pointer">🔊 Tap for sound</button>
 <div class="sheet hide" id="comSheet"><h3><span id="comT">💬 Comments</span><button class="x" id="comX">✕</button></h3><div id="comList"></div><div class="crow"><input id="comIn" maxlength="200" placeholder="Add a comment… (be kind!)"><button class="btn" id="comGo">Send</button></div></div>
 <div class="modal hide" id="postM"><div class="box"><h2>➕ Post a clip</h2><div style="color:#94a3b8;font-size:14px">A video (up to 20 MB) or a picture (up to 6 MB). Keep it friendly — no mean stuff, nothing you didn't make or aren't allowed to share, and no personal info.</div>
   <div class="drop" id="drop">📁 Tap to choose a video or picture</div><input type="file" id="file" accept="video/mp4,video/webm,video/quicktime,image/*" hidden>
@@ -73,7 +73,7 @@ const myName=()=>(ls.get('rrOnlineName')||'Player').trim();
 const post=(path,body)=>fetch(SERVER+path,{method:'POST',headers:{'content-type':'application/json'},body:JSON.stringify(Object.assign({pid:pid()},body||{}))}).then(r=>r.json());
 function toast(t){ const d=document.createElement('div'); d.className='toast'; d.textContent=t; document.body.appendChild(d); setTimeout(()=>{ d.style.opacity=0; setTimeout(()=>d.remove(),300); },2200); }
 const fmtN=n=>n>=1000?(n/1000).toFixed(n>=10000?0:1)+'k':String(n||0);
-let ST={posts:[],likes:{},coms:{},mine:[],hide:[]}, MINE=new Set(), MUTED=ls.get('rrClipsMuted')!=='0', CAT='For you', LIST=[];
+let ST={posts:[],likes:{},coms:{},mine:[],hide:[]}, MINE=new Set(), MUTED=true, WANT=ls.get('rrClipsMuted')!=='1', TAPPED=false, CAT='For you', LIST=[];
 function shuffle(a){ const r=a.slice(); let seed=+(ls.get('rrClipsSeed')||0)||Math.floor(Math.random()*1e9); ls.set('rrClipsSeed',String(seed)); const rnd=()=>{ seed=(seed*16807)%2147483647; return seed/2147483647; }; for(let i=r.length-1;i>0;i--){ const j=Math.floor(rnd()*(i+1)); [r[i],r[j]]=[r[j],r[i]]; } return r; }
 function community(){ return ST.posts.map(p=>({id:p.id,src:'user',kind:p.kind,url:SERVER+'/feed/media/'+p.id.slice(2),title:p.cap||'',by:'@'+p.name,cat:'🆕 Community',ts:p.ts})); }
 function build(){ ACT=-1; const hide=new Set(ST.hide||[]), cur=CLIPS.filter(c=>!hide.has(c.id)), com=community();
@@ -92,19 +92,27 @@ let io=null, ACT=-1;
 function observe(){ if(io) io.disconnect(); io=new IntersectionObserver(es=>{ for(const e of es){ const i=+e.target.dataset.i; if(e.isIntersecting&&e.intersectionRatio>.6) activate(i); } },{root:$('feed'),threshold:[.6]}); document.querySelectorAll('.clip').forEach(s=>io.observe(s)); }
 function stageOf(i){ const s=document.querySelector(`.clip[data-i="${i}"]`); return s&&s.querySelector('[data-stage]'); }
 function mount(i,play){ const c=LIST[i], st=stageOf(i); if(!c||!st||st.dataset.m) return; st.dataset.m='1';
-  if(c.src==='yt'){ st.innerHTML=play?`<iframe src="https://www.youtube-nocookie.com/embed/${c.yt}?autoplay=1&mute=${MUTED?1:0}&playsinline=1&rel=0&modestbranding=1&loop=1&playlist=${c.yt}" allow="autoplay; encrypted-media; picture-in-picture; fullscreen" allowfullscreen title="${esc(c.title)}"></iframe>`:`<div class="poster" style="background-image:url('https://i.ytimg.com/vi/${c.yt}/hqdefault.jpg')"></div>`; if(!play) delete st.dataset.m; return; }
+  if(c.src==='yt'){ st.innerHTML=play?`<iframe src="https://www.youtube-nocookie.com/embed/${c.yt}?autoplay=1&mute=${MUTED?1:0}&playsinline=1&rel=0&modestbranding=1&loop=1&playlist=${c.yt}&enablejsapi=1&origin=${encodeURIComponent(location.origin)}" allow="autoplay; encrypted-media; picture-in-picture; fullscreen" allowfullscreen title="${esc(c.title)}"></iframe><button class="mute" data-mute>${MUTED?'🔇':'🔊'}</button>`:`<div class="poster" style="background-image:url('https://i.ytimg.com/vi/${c.yt}/hqdefault.jpg')"></div>`; if(!play) delete st.dataset.m; return; }
   if(c.kind==='image'){ st.innerHTML=`<img class="media" src="${esc(c.url)}" alt="">`; return; }
   st.innerHTML=`<video playsinline loop ${MUTED?'muted':''} preload="${play?'auto':'metadata'}" ${c.thumb?`poster="${esc(c.thumb)}"`:''} src="${esc(c.url)}"></video><button class="mute" data-mute>${MUTED?'🔇':'🔊'}</button>`;
-  const v=st.querySelector('video'); v.onclick=()=>{ v.paused?v.play().catch(()=>{}):v.pause(); }; if(play) v.play().catch(()=>{ v.muted=true; v.play().catch(()=>{}); }); }
+  const v=st.querySelector('video'); v.onclick=()=>{ v.paused?v.play().catch(()=>{}):v.pause(); }; if(play) v.play().catch(()=>{ if(!v.muted){ v.muted=true; MUTED=true; st.querySelectorAll('[data-mute]').forEach(b=>b.textContent='🔇'); const sb=$('sndBtn'); if(sb) sb.style.display=''; } v.play().catch(()=>{}); }); }
 function unmount(i){ const st=stageOf(i); if(!st) return; const v=st.querySelector('video'); if(v){ v.pause(); v.removeAttribute('src'); v.load(); } st.innerHTML=''; delete st.dataset.m; }
-function activate(i){ if(i===ACT) return; const old=ACT; ACT=i; if(old>=0) unmount(old); for(const k of [i-2,i+2]) if(k!==i) unmount(k); mount(i,true); const nx=LIST[i+1]; if(nx&&nx.src==='yt') mount(i+1,false); if(location.hash.slice(1)!==LIST[i].id) history.replaceState(null,'','#'+encodeURIComponent(LIST[i].id)); }
+function activate(i){ if(i===ACT) return; const old=ACT; ACT=i; if(old>=0) unmount(old); for(const k of [i-2,i+2]) if(k!==i) unmount(k); mount(i,true); if(!MUTED){ [600,1500,3000].forEach(t=>setTimeout(()=>{ if(ACT===i&&!MUTED){ ytCmd('unMute'); ytCmd('setVolume',[100]); } },t)); } const nx=LIST[i+1]; if(nx&&nx.src==='yt') mount(i+1,false); if(location.hash.slice(1)!==LIST[i].id) history.replaceState(null,'','#'+encodeURIComponent(LIST[i].id)); }
 document.addEventListener('click',async e=>{ const chip=e.target.closest('[data-c]'); if(chip){ CAT=chip.dataset.c; ACT=-1; build(); return; }
   const sec=e.target.closest('.clip'); if(!sec) return; const c=LIST[+sec.dataset.i];
-  if(e.target.closest('[data-mute]')){ MUTED=!MUTED; ls.set('rrClipsMuted',MUTED?'1':'0'); const v=sec.querySelector('video'); if(v) v.muted=MUTED; e.target.closest('[data-mute]').textContent=MUTED?'🔇':'🔊'; return; }
+  if(e.target.closest('[data-mute]')){ setSound(MUTED); WANT=!MUTED; ls.set('rrClipsMuted',MUTED?'1':'0'); return; }
   if(e.target.closest('[data-like]')){ const b=e.target.closest('[data-like]'), on=!MINE.has(c.id); on?MINE.add(c.id):MINE.delete(c.id); b.classList.toggle('liked',on); ST.likes[c.id]=Math.max(0,(ST.likes[c.id]||0)+(on?1:-1)); b.querySelector('span').textContent=fmtN(ST.likes[c.id]); if(on){ b.animate([{transform:'scale(1)'},{transform:'scale(1.35)'},{transform:'scale(1)'}],{duration:300}); } post('/feed/like',{id:c.id,on}).catch(()=>{}); return; }
   if(e.target.closest('[data-share]')){ const u=location.origin+location.pathname+'#'+encodeURIComponent(c.id); try{ if(navigator.share){ await navigator.share({title:c.title,url:u}); return; } await navigator.clipboard.writeText(u); toast('🔗 Link copied!'); }catch(_){ toast(u); } return; }
   if(e.target.closest('[data-rep]')){ if(!confirm('Report this clip to the admins? Only do this if it is mean, scary, rude or not OK.')) return; post('/feed/report',{id:c.id}).then(()=>toast('🚩 Thanks — the admins will take a look')).catch(()=>{}); return; }
   if(e.target.closest('[data-com]')){ openCom(c); return; } });
+/* sound: browsers only allow it after you tap, so the first tap anywhere turns it on (unless you chose mute) */
+function ytCmd(f,a){ const fr=document.querySelector(`.clip[data-i="${ACT}"] iframe`); if(fr&&fr.contentWindow) fr.contentWindow.postMessage(JSON.stringify({event:'command',func:f,args:a||[]}),'*'); }
+function setSound(on){ MUTED=!on; const sec=document.querySelector(`.clip[data-i="${ACT}"]`); if(!sec) return; const v=sec.querySelector('video'); if(v){ v.muted=MUTED; if(on) v.play().catch(()=>{}); }
+  if(sec.querySelector('iframe')){ if(on){ ytCmd('unMute'); ytCmd('setVolume',[100]); ytCmd('playVideo'); } else ytCmd('mute'); }
+  sec.querySelectorAll('[data-mute]').forEach(b=>b.textContent=MUTED?'🔇':'🔊'); const sb=$('sndBtn'); if(sb) sb.style.display=MUTED?'':'none'; }
+function firstTap(e){ if(TAPPED) return; TAPPED=true; if(WANT&&!(e&&e.target&&e.target.closest&&e.target.closest('[data-mute]'))) setSound(true); }
+addEventListener('pointerdown',firstTap,{capture:true}); addEventListener('keydown',firstTap,{capture:true});
+$('sndBtn').onclick=()=>{ TAPPED=true; WANT=true; ls.set('rrClipsMuted','0'); setSound(true); };
 /* comments */
 let COMC=null;
 async function openCom(c){ COMC=c; $('comSheet').classList.remove('hide'); $('comT').textContent='💬 Comments'; $('comList').innerHTML='<div class="cm" style="color:#94a3b8">Loading…</div>';
