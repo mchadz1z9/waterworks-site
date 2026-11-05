@@ -49,9 +49,9 @@ varying vec3 vCol;varying vec3 vN;varying vec3 vW;
 void main(){vec3 p=aPos;if(aPh>0.0){p.y+=abs(sin(uTime*9.0+aPh))*uCheer*6.0+sin(uTime*1.7+aPh)*0.5;}
 vec4 w=uM*vec4(p,1.0);vW=w.xyz;vN=mat3(uM)*aNor;vCol=aCol*uTint;gl_Position=uVP*w;}`,
 `precision mediump float;varying vec3 vCol;varying vec3 vN;varying vec3 vW;
-uniform vec3 uLight,uEye,uFog;uniform float uAlpha,uBright,uFogN,uFogF;
+uniform vec3 uLight,uEye,uFog;uniform float uAlpha,uBright,uFogN,uFogF,uFogMax;
 void main(){vec3 n=normalize(vN);float d=max(dot(n,uLight),0.0);float h=0.5+0.5*n.y;
-vec3 V=normalize(uEye-vW);float w2=clamp((dot(n,uLight)+0.22)/1.22,0.0,1.0);vec3 amb=mix(vec3(0.30,0.28,0.27),vec3(0.57,0.585,0.62),h);vec3 c=vCol*(amb+vec3(1.0,0.95,0.86)*0.56*w2);float sp=pow(max(dot(n,normalize(uLight+V)),0.0),40.0)*0.2*d;float rim=pow(1.0-max(dot(n,V),0.0),3.0)*0.2*(1.0-0.9*abs(n.y));c+=vec3(1.0,0.97,0.9)*sp+vec3(0.6,0.75,1.0)*rim*(0.5+0.5*dot(vCol,vec3(0.33)));float aoK=1.0-0.26*(1.0-smoothstep(0.0,55.00,vW.y))*(1.0-smoothstep(0.35,0.75,abs(n.y)));c*=aoK;c*=uBright;float f=clamp((length(vW-uEye)-uFogN)/uFogF,0.0,0.55);
+vec3 V=normalize(uEye-vW);float w2=clamp((dot(n,uLight)+0.22)/1.22,0.0,1.0);vec3 amb=mix(vec3(0.30,0.28,0.27),vec3(0.57,0.585,0.62),h);vec3 c=vCol*(amb+vec3(1.0,0.95,0.86)*0.56*w2);float sp=pow(max(dot(n,normalize(uLight+V)),0.0),40.0)*0.2*d;float rim=pow(1.0-max(dot(n,V),0.0),3.0)*0.2*(1.0-0.9*abs(n.y));c+=vec3(1.0,0.97,0.9)*sp+vec3(0.6,0.75,1.0)*rim*(0.5+0.5*dot(vCol,vec3(0.33)));float aoK=1.0-0.26*(1.0-smoothstep(0.0,55.00,vW.y))*(1.0-smoothstep(0.35,0.75,abs(n.y)));c*=aoK;c*=uBright;float f=clamp((length(vW-uEye)-uFogN)/uFogF,0.0,uFogMax);
 gl_FragColor=vec4(mix(c,uFog,f),uAlpha);}`);
     PT=prog(`attribute vec3 aPos;attribute vec2 aUV;uniform mat4 uVP,uM;varying vec2 vUV;
 void main(){vUV=aUV;gl_Position=uVP*uM*vec4(aPos,1.0);}`,
@@ -153,7 +153,7 @@ void main(){vec4 t=texture2D(uTex,vUV*uUVR.zw+uUVR.xy);if(t.a<0.04)discard;gl_Fr
     gl.useProgram(PC.p); curMesh=null;
     for(const k of ['aPos','aNor','aCol','aPh']) gl.enableVertexAttribArray(PC.a[k]);
     gl.uniformMatrix4fv(PC.u.uVP,false,VP); gl.uniform3fv(PC.u.uLight,nrm([.35,.85,.4])); gl.uniform3fv(PC.u.uEye,eye);
-    gl.uniform3fv(PC.u.uFog,sky); gl.uniform1f(PC.u.uBright,bright); gl.uniform1f(PC.u.uFogN,fogN); gl.uniform1f(PC.u.uFogF,fogF); gl.uniform1f(PC.u.uAlpha,1); gl.uniform1f(PC.u.uTime,time); gl.uniform1f(PC.u.uCheer,cheer);
+    gl.uniform3fv(PC.u.uFog,sky); gl.uniform1f(PC.u.uBright,bright); gl.uniform1f(PC.u.uFogN,fogN); gl.uniform1f(PC.u.uFogF,fogF); gl.uniform1f(PC.u.uFogMax,fogMax); gl.uniform1f(PC.u.uAlpha,1); gl.uniform1f(PC.u.uTime,time); gl.uniform1f(PC.u.uCheer,cheer);
   }
   function useT(){
     for(const k of ['aPos','aNor','aCol','aPh']) if(PC.a[k]!==undefined) gl.disableVertexAttribArray(PC.a[k]);
@@ -172,13 +172,19 @@ void main(){vec4 t=texture2D(uTex,vUV*uUVR.zw+uUVR.xy);if(t.a<0.04)discard;gl_Fr
   const numUV=n=>{ n=Math.max(0,Math.min(99,Math.round(n))); return [(n%10)/10,Math.floor(n/10)/10,.1,.1]; };
 
   /* ---- ground and static scenery ---- */
-  let ground=null, groundTex=null, world=null, crowdM=null;
+  let ground=null, groundTex=null, world=null, crowdM=null, chunks=[], fogMax=.55, cullD=0;
   function setGround(canvas,x0,z0,x1,z1,mip){
     if(groundTex) gl.deleteTexture(groundTex);
     groundTex=mkTex(canvas,!!mip);
     ground=texMesh([x0,0,z0, x1,0,z0, x1,0,z1, x0,0,z0, x1,0,z1, x0,0,z1],[0,0, 1,0, 1,1, 0,0, 1,1, 0,1]);
   }
-  function setStatic(build){ const g=new Geo(), c=new Geo(); build(g,c,{primBox,primCyl,primSphere,T,S,RX,RY,RZ,mm,I}); freeMesh(world); freeMesh(crowdM); world=g.p.length?upload(g):null; crowdM=c.p.length?upload(c):null; }
+  /* opt.chunk: split the scenery into square tiles of that size so tiles far beyond the fog can be skipped (big pieces stay in one always-drawn mesh) */
+  function setStatic(build,opt){ const c=new Geo(); let g=new Geo(); const CH=opt&&opt.chunk, tiles=new Map();
+    if(CH){ const glob=g; g={ add(pr,m,col,ph){ const sx=Math.hypot(m[0],m[1],m[2]), sz=Math.hypot(m[8],m[9],m[10]); if(Math.max(sx,sz)>CH*.5){ glob.add(pr,m,col,ph); return; } const k=Math.floor(m[12]/CH)+','+Math.floor(m[14]/CH); let t=tiles.get(k); if(!t){ t=new Geo(); t.cx=(Math.floor(m[12]/CH)+.5)*CH; t.cz=(Math.floor(m[14]/CH)+.5)*CH; tiles.set(k,t); } t.add(pr,m,col,ph); },
+      quad(a,b,c2,d,col,ph){ glob.quad(a,b,c2,d,col,ph); }, glob }; }
+    build(g,c,{primBox,primCyl,primSphere,T,S,RX,RY,RZ,mm,I}); freeMesh(world); freeMesh(crowdM); for(const t of chunks) freeMesh(t.mesh); chunks=[];
+    const G=CH?g.glob:g; world=G.p.length?upload(G):null; crowdM=c.p.length?upload(c):null;
+    for(const t of tiles.values()) if(t.p.length) chunks.push({mesh:upload(t),cx:t.cx,cz:t.cz,r:CH*.75}); }
   /* crowd: seats in tiers with fans that bob when the crowd cheers */
   const FANS=['#e2e8f0','#f87171','#60a5fa','#fbbf24','#34d399','#f472b6','#a78bfa','#94a3b8','#1f2937','#f97316'];
   function crowdRow(g,c,a,b,y,depth,rows,seat){
@@ -251,12 +257,12 @@ void main(){vec4 t=texture2D(uTex,vUV*uUVR.zw+uUVR.xy);if(t.a<0.04)discard;gl_Fr
   function frame(cam,draw,dt){
     time+=dt||1/60; resize();
     /* optional per-frame look: cam.sky (clear + fog colour), cam.bright (overall light), cam.fog [start,len] in world units */
-    sky=cam.sky||[.04,.06,.12]; bright=cam.bright==null?1:cam.bright; fogN=cam.fog?cam.fog[0]:1500; fogF=cam.fog?cam.fog[1]:2600;
+    sky=cam.sky||[.04,.06,.12]; bright=cam.bright==null?1:cam.bright; fogN=cam.fog?cam.fog[0]:1500; fogF=cam.fog?cam.fog[1]:2600; fogMax=cam.fogMax==null?.55:cam.fogMax; cullD=cam.cull||0;
     gl.viewport(0,0,cw,ch); gl.clearColor(sky[0],sky[1],sky[2],1); gl.clear(gl.COLOR_BUFFER_BIT|gl.DEPTH_BUFFER_BIT);
     gl.enable(gl.DEPTH_TEST); gl.disable(gl.CULL_FACE); gl.disable(gl.BLEND); gl.depthMask(true);
     eye=cam.eye; VP=mul(persp(cam.fov*Math.PI/180,cw/ch,cam.near||6,cam.far||14000),lookAt(cam.eye,cam.center,[0,1,0]));
     cheer=cam.cheer||0;
-    useC(); if(world) part(world,I(),[1,1,1]); if(crowdM) part(crowdM,I(),[1,1,1]);
+    useC(); if(world) part(world,I(),[1,1,1]); if(crowdM) part(crowdM,I(),[1,1,1]); for(const t of chunks){ if(cullD&&Math.hypot(t.cx-eye[0],t.cz-eye[2])>cullD+t.r) continue; part(t.mesh,I(),[1,1,1]); }
     decals.length=0; shadows.length=0;
     draw&&draw();
     useT();
