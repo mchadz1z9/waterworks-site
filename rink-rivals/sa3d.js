@@ -21,7 +21,9 @@ window.SA3D=function(opt){
   const beam=(a,b,t,col)=>R3.part(UB,R3.beam(a.map(v=>v*K),b.map(v=>v*K),t*K,t*K),col);
   const shadow=(x,z,r)=>R3.shadow(x*K,z*K,r*K);
   /* a person: kind = stand / walk / run, ph = stride phase, mod(J) may move joints (metres, facing +z) */
-  function person(x,z,yaw,look,kind,ph,mod,y){ if(!PHY) return; const J=PHY.pose(kind||'stand',0,ph||0,.19); if(mod) mod(J); PHY.drawBody(J,{x,z,yaw:yaw||0,y:y||0},Object.assign({top:'#2563eb',legs:'#111827',skin:'#e0b48f',shoe:'#111',hair:'#2a1a10',buff:1.05},look||{})); }
+  /* your weightlifting strength shows on YOUR player in the Sports Arcade: a little more muscle as you get stronger, capped so nobody gets huge */
+  const STR=(()=>{ try{ if(localStorage.getItem('rrOwner')==='1') return 1; const v=+localStorage.getItem('rrStrength')||0; return Math.max(0,Math.min(1,v/100)); }catch(e){ return 0; } })();
+  function person(x,z,yaw,look,kind,ph,mod,y){ if(!PHY) return; if(look&&look.me){ look=Object.assign({},look); look.buff=(look.buff||1.05)*(1+.2*STR); } const J=PHY.pose(kind||'stand',0,ph||0,.19); if(mod) mod(J); PHY.drawBody(J,{x,z,yaw:yaw||0,y:y||0},Object.assign({top:'#2563eb',legs:'#111827',skin:'#e0b48f',shoe:'#111',hair:'#2a1a10',buff:1.05},look||{})); }
   /* rotate every joint of a pose around an axis through a pivot (for dives, falls, lunges) */
   function tilt(J,pivot,ax,ang){ const c=Math.cos(ang), s=Math.sin(ang); for(const k in J){ const p=J[k]; if(!Array.isArray(p)||p.length!==3||k==='F'||k==='toe') continue; let x=p[0]-pivot[0], y=p[1]-pivot[1], z=p[2]-pivot[2];
       if(ax==='z'){ const nx=x*c-y*s, ny=x*s+y*c; x=nx; y=ny; } else if(ax==='x'){ const ny=y*c-z*s, nz=y*s+z*c; y=ny; z=nz; } else { const nx=x*c+z*s, nz=-x*s+z*c; x=nx; z=nz; }
@@ -52,5 +54,5 @@ window.SA3D=function(opt){
   let lastF=0; setInterval(()=>{ if(performance.now()-lastF>350&&glc.style.display!=='none') glc.style.display='none'; },200);
   function frame(draw,dt,shake){ lastF=performance.now(); if(glc.style.display==='none') glc.style.display=''; const e=cam.eye.slice(); if(shake){ e[0]+=(Math.random()-.5)*shake; e[1]+=(Math.random()-.5)*shake; }
     R3.frame({eye:e.map(v=>v*K),center:cam.center.map(v=>v*K),fov:cam.fov,near:5,far:90000,sky:cam.sky,bright:cam.bright,fog:cam.fog,fogMax:cam.fogMax},draw,dt); }
-  return {R3,PHY,K,cam,place,box,boxR,sph,cyl,beam,shadow,person,tilt,setStatic,ray,toPlane,toScreen,frame,canvas:glc};
+  return {STR,R3,PHY,K,cam,place,box,boxR,sph,cyl,beam,shadow,person,tilt,setStatic,ray,toPlane,toScreen,frame,canvas:glc};
 };
