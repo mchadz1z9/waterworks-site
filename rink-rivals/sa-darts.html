@@ -16,6 +16,7 @@ h1{margin:0;font-size:30px;letter-spacing:-.5px}h2{margin:0 0 10px;font-size:13p
 .ovl{position:fixed;inset:0;background:rgba(0,0,0,.72);display:grid;place-items:center;z-index:10;padding:16px}.ovl .box{background:var(--card);border:1px solid var(--line);border-radius:16px;padding:22px;max-width:420px;width:100%;text-align:center}
 .big{font-size:54px;font-weight:900;line-height:1}table{width:100%;border-collapse:collapse;font-size:14px}td{padding:6px;border-top:1px solid var(--line)}.tip{font-size:12px;color:var(--mut)}
 </style></head><body><div class="wrap" id="app"></div>
+<script>window.SA3D_ON=true;</script>
 <script id="gfx-boost">
 /* Graphics boost: bloom, vignette, colour grade and soft shadows-of-light applied to the 2D game canvas. Auto-lowers quality if the device is slow. */
 (function(){if(window.__gfx)return;window.__gfx=1;
@@ -56,6 +57,7 @@ function layer(w,h){lay.width=w;lay.height=h;
  off.width=Math.max(8,w>>2);off.height=Math.max(8,h>>2)}
 let grade=null;
 function post(t){
+ if(window.SA3D_ON)return;
  if(!on||lvl<=0)return;
  if(!cv||!cv.offsetParent||!cv.isConnected){if(tries++%30===0)cv=findCanvas();if(cv)cx=cv.getContext('2d');if(!cv)return}
  const w=cv.width,h=cv.height;if(w!==lw||h!==lh){layer(w,h);grade=null}
@@ -78,6 +80,7 @@ window.requestAnimationFrame=function(fn){return raf(function(t){fn(t);if(t!==la
 const st=document.createElement('style');st.textContent='button,.btn,.tab{transition:transform .12s,box-shadow .15s,filter .15s}button:not(:disabled):hover{transform:translateY(-1px);filter:brightness(1.08)}button:not(:disabled):active{transform:translateY(1px)}canvas{border-radius:12px;box-shadow:0 10px 34px rgba(0,0,0,.45)}';document.head.appendChild(st);
 })();
 </script>
+<script src="r3lib.js"></script><script src="physique.js"></script><script src="sa3d.js"></script>
 <script>
 const $=s=>document.querySelector(s),clamp=(v,a,b)=>Math.max(a,Math.min(b,v));
 const PROS=[['Rookie Ray',42,'Beginner'],['Club Casey',30,'Easy'],['Steady Sam',22,'Medium'],['Gerwyn Price',16,'Pro'],['Michael van Gerwen',11,'World class'],['Luke Littler',8,'Legend']];
@@ -90,7 +93,7 @@ const ORDER=[20,1,18,4,13,6,10,15,2,17,3,19,7,16,8,11,14,9,12,5],S=1.3,CX=380,CY
 function scoreAt(x,y){const r=Math.hypot(x,y);if(r<6.35)return{p:50,l:'BULL',dbl:1};if(r<15.9)return{p:25,l:'25',dbl:0};if(r>170)return{p:0,l:'MISS',dbl:0};
  let a=Math.atan2(x,-y);if(a<0)a+=Math.PI*2;const n=ORDER[Math.floor(((a+Math.PI/20)%(Math.PI*2))/(Math.PI/10))];
  if(r>=99&&r<107)return{p:n*3,l:'T'+n,dbl:0};if(r>=162)return{p:n*2,l:'D'+n,dbl:1};return{p:n,l:''+n,dbl:0}}
-function render(){cancelAnimationFrame(raf);let h='<div class="top"><div><h1>Bullseye Club</h1><div class="sub">Double-out darts against a CPU. Hold to steady your aim, release to throw.</div></div><div class="sp"></div>'+(V==='game'?'<button class="btn g s" data-a="title">Quit</button>':'')+'</div>';
+function render(){cancelAnimationFrame(raf);if(V3&&V!=='game')V3.canvas.style.display='none';let h='<div class="top"><div><h1>Bullseye Club</h1><div class="sub">Double-out darts against a CPU. Hold to steady your aim, release to throw.</div></div><div class="sp"></div>'+(V==='game'?'<button class="btn g s" data-a="title">Quit</button>':'')+'</div>';
  if(V==='title')h+='<div class="hero"><div class="card"><h2>Play</h2><div class="sub" style="margin-bottom:12px">Race from the start score down to exactly zero. You must finish on a double (or the bull). Go below zero or leave 1 and it is a bust.</div><div style="display:grid;gap:8px"><button class="btn" data-a="start">Start match</button><button class="btn g" data-a="diff">Opponent: '+PROS[sv.opp][0]+' ('+PROS[sv.opp][2]+')</button><button class="btn g" data-a="mode">Game: '+sv.start+'</button><button class="btn g" data-a="legs">Match: best of '+sv.legs+' leg'+(sv.legs>1?'s':'')+'</button><button class="btn g" data-a="tour">Tournament (4 pros)</button></div><div class="tip" style="margin-top:10px">Wins: <b style="color:var(--gold)">'+sv.wins+'</b> · Best finish (darts used): <b style="color:var(--gold)">'+(sv.best||'-')+'</b></div></div><div class="card"><h2>Controls</h2><table><tr><td>Aim</td><td>Move the mouse, or arrow keys / WASD</td></tr><tr><td>Steady</td><td>Hold mouse button or Space (shake shrinks)</td></tr><tr><td>Throw</td><td>Release</td></tr></table><div class="tip" style="margin-top:8px">Touch: drag to aim, lift your finger to throw. Triple ring is the thin ring inside, double is the outer ring.</div></div></div>';
  else h+='<canvas id="cv" width="1000" height="560"></canvas><div id="ovl"></div>';
  $('#app').innerHTML=h;if(V==='game')loop()}
@@ -142,17 +145,43 @@ function drawBoard(x){const gl=x.createRadialGradient(CX,CY,100,CX,CY,330);gl.ad
 function drawDart(x,px,py,col,sc){sc=sc||1;x.save();x.translate(px,py);x.strokeStyle='#c8ccd6';x.lineWidth=2*sc;x.beginPath();x.moveTo(0,0);x.lineTo(7*sc,10*sc);x.stroke();x.strokeStyle='#333';x.lineWidth=5*sc;x.beginPath();x.moveTo(7*sc,10*sc);x.lineTo(20*sc,28*sc);x.stroke();x.strokeStyle='#999';x.lineWidth=1.3*sc;x.beginPath();x.moveTo(20*sc,28*sc);x.lineTo(30*sc,42*sc);x.stroke();
  x.fillStyle=col;x.beginPath();x.moveTo(30*sc,42*sc);x.lineTo(38*sc,40*sc);x.lineTo(44*sc,56*sc);x.lineTo(34*sc,50*sc);x.closePath();x.fill();x.beginPath();x.moveTo(30*sc,42*sc);x.lineTo(26*sc,50*sc);x.lineTo(24*sc,58*sc);x.lineTo(34*sc,50*sc);x.closePath();x.fillStyle=shade(col);x.fill();x.restore()}
 const shade=c=>c==='#ff3d4d'?'#b01f2c':'#1f8a5a';
+/* ---------- 3D: the board on a pub wall, darts that really stick out of it ---------- */
+const BY=1.73, FOV=16, FPX=280/Math.tan(FOV*Math.PI/360), DIST=FPX/1300;   /* 1300 px per metre at the board, like the old 2D scale */
+const V3=window.SA3D?SA3D({virtual:[1000,560],cam:{eye:[(500-CX)/1300,BY+(CY-280)/1300,DIST],center:[(500-CX)/1300,BY+(CY-280)/1300,DIST-1],fov:FOV},sky:[.05,.035,.025],bright:1.05}):null;
+const W3=(mx,my,z)=>[mx/1000,BY-my/1000,z||0];
+if(V3){V3.setStatic(({sb,sc,sbR,g,K})=>{
+  const Q=(r0,r1,a0,a1,col,z)=>{const P=(r,a)=>[Math.sin(a)*r/1000*K,(BY+Math.cos(a)*r/1000)*K,z*K];const A=P(r0,a0),B=P(r1,a0),C=P(r1,a1),D=P(r0,a1);g.quad(A,D,C,B,col)};
+  for(let i=0;i<20;i++){const e=i%2===0,a0=(i-.5)*Math.PI/10,a1=(i+.5)*Math.PI/10;for(let k=0;k<4;k++){const b0=a0+(a1-a0)*k/4,b1=a0+(a1-a0)*(k+1)/4;
+    Q(15.9,99,b0,b1,e?'#14120f':'#f0e2bd',.012);Q(99,107,b0,b1,e?'#d8232e':'#13874a',.012);Q(107,162,b0,b1,e?'#14120f':'#f0e2bd',.012);Q(162,170,b0,b1,e?'#d8232e':'#13874a',.012)}}
+  for(let k=0;k<24;k++){const b0=k/24*Math.PI*2,b1=(k+1)/24*Math.PI*2;Q(6.35,15.9,b0,b1,'#13874a',.012);Q(0,6.35,b0,b1,'#d8232e',.0125);Q(170,226,b0,b1,'#0d0d0d',.011)}
+  /* the metal spider: rings and radial wires standing proud of the board */
+  for(const r of [15.9,99,107,162,170]){const n=Math.max(24,Math.round(r/2.2));for(let k=0;k<n;k++){const a=(k+.5)/n*Math.PI*2;sbR(Math.sin(a)*r/1000,BY+Math.cos(a)*r/1000,.0135,(2*Math.PI*r/n+.4)/1000,.0016,.0025,'#c9ced6',0,0,-a)}}
+  for(let i=0;i<20;i++){const a=(i-.5)*Math.PI/10,rm=(15.9+170)/2;sbR(Math.sin(a)*rm/1000,BY+Math.cos(a)*rm/1000,.0135,(170-15.9)/1000,.0016,.0025,'#c9ced6',0,0,Math.PI/2-a)}
+  /* cabinet doors, the wall, the light above, the oche floor */
+  sb(0,BY,-.045,.62,.62,.03,'#3b2414');for(const sx of [-1,1]){sb(sx*.47,BY,-.03,.3,.62,.03,'#5a3820');sb(sx*.47,BY,-.012,.24,.56,.01,'#2a1a10')}
+  for(let i=-8;i<=8;i++)sb(i*.36,1.6,-.07,.34,4,.04,i%2?'#3a2616':'#432c19');sb(0,3.3,-.06,6,.2,.08,'#1c120a');sb(0,.5,-.06,6,1,.06,'#1c120a');
+  sb(0,BY+.48,.25,.6,.08,.18,'#111');sb(0,BY+.44,.25,.5,.02,.12,'#fff7d6');sb(0,0,1.2,6,.02,3,'#2b1d12');sb(0,.012,2.37,1.2,.02,.05,'#c9a227');
+ });}
+function dart3(tip,col,tilt,yaw,sc){ /* a dart whose point is at tip, body back toward the thrower */ sc=sc||1;const dir=[Math.sin(yaw||0)*.25,.18+(tilt||0),1],l=Math.hypot(...dir),d=dir.map(v=>v/l),P=k=>[tip[0]+d[0]*k*sc,tip[1]+d[1]*k*sc,tip[2]+d[2]*k*sc];
+  V3.beam(tip,P(.03),.0026,'#d6dbe3');V3.beam(P(.028),P(.075),.0072,'#4b5563');V3.beam(P(.05),P(.06),.0076,'#9ca3af');V3.beam(P(.074),P(.118),.003,'#e5e7eb');
+  const f=P(.122);V3.boxR(f[0],f[1],f[2],.036*sc,.002,.03*sc,col,yaw||0,-Math.atan2(d[1],d[2]),0);V3.boxR(f[0],f[1],f[2],.002,.036*sc,.03*sc,shade(col),yaw||0,-Math.atan2(d[1],d[2]),0)}
 function draw(){const cv=$('#cv');if(!cv||!G)return;const x=cv.getContext('2d'),g=G;
- const bg=x.createLinearGradient(0,0,0,560);bg.addColorStop(0,'#0a0f0d');bg.addColorStop(1,'#050806');x.fillStyle=bg;x.fillRect(0,0,1000,560);
+ if(V3){const r=cv.getBoundingClientRect();V3.place(r.left,r.top,r.width,r.height);V3.canvas.style.display='';cv.style.position='relative';cv.style.zIndex='1';cv.style.background='transparent';x.clearRect(0,0,1000,560);
+  V3.frame(()=>{ g.darts.forEach((d,i)=>dart3(W3(d.x,d.y,.012),d.pl?'#2fc47a':'#ff3d4d',((i*37)%9-4)*.02,((i*53)%7-3)*.05));
+   if(g.fl){const f=g.fl,t=f.t,e=t*t,a=[(f.x0-CX)/1300*1.4,BY-.45,1.35],b=W3(f.x,f.y,.012),p=[a[0]+(b[0]-a[0])*e,a[1]+(b[1]-a[1])*e+Math.sin(t*Math.PI)*.12,a[2]+(b[2]-a[2])*e];dart3(p,f.pl?'#2fc47a':'#ff3d4d',.1*(1-t))}
+   if(g.turn===1&&g.ph==='aim'){dart3(W3(g.ax,g.ay,.35),'#ff3d4d',.05,0,1)} },1/60);
+  x.fillStyle='#f4f4f4';x.font='800 22px system-ui';x.textAlign='center';x.textBaseline='middle';for(let i=0;i<20;i++){const a=i*Math.PI/10-Math.PI/2;x.strokeStyle='rgba(0,0,0,.6)';x.lineWidth=3;x.strokeText(ORDER[i],CX+Math.cos(a)*183*S,CY+Math.sin(a)*183*S+1);x.fillText(ORDER[i],CX+Math.cos(a)*183*S,CY+Math.sin(a)*183*S+1)}x.textBaseline='alphabetic';
+ }
+ if(!V3){const bg=x.createLinearGradient(0,0,0,560);bg.addColorStop(0,'#0a0f0d');bg.addColorStop(1,'#050806');x.fillStyle=bg;x.fillRect(0,0,1000,560);
  x.fillStyle='rgba(255,255,255,.03)';for(let i=0;i<12;i++)x.fillRect(i*90-20,0,40,560);
  for(let i=0;i<7;i++){x.fillStyle=i%2?'#1a120c':'#21170f';x.fillRect(i*104,0,104,560)}
  x.fillStyle='rgba(255,230,160,.12)';x.beginPath();x.moveTo(CX-60,0);x.lineTo(CX+60,0);x.lineTo(CX+330,560);x.lineTo(CX-330,560);x.fill();
  for(let i=0;i<36;i++){const bx=i*29+((i*53)%17),bh=(g.crowd>0?Math.sin(g.t*10+i)*8*g.crowd:0);x.fillStyle=['#2a1a1f','#1a2230','#26261a','#1d2a20'][i%4];x.beginPath();x.arc(bx,545-bh,13,0,7);x.fill();x.fillRect(bx-13,545-bh,26,30)}
  drawBoard(x);
  g.darts.forEach(d=>drawDart(x,CX+d.x*S,CY+d.y*S,d.pl?'#2fc47a':'#ff3d4d',.7));
- if(g.fl){const f=g.fl,t=f.t,e=t*t,px=f.x0+(CX+f.x*S-f.x0)*e,py=f.y0+(CY+f.y*S-f.y0)*e-Math.sin(t*Math.PI)*70,sc=1.6-.9*e;drawDart(x,px,py,f.pl?'#2fc47a':'#ff3d4d',sc)}
+ if(g.fl){const f=g.fl,t=f.t,e=t*t,px=f.x0+(CX+f.x*S-f.x0)*e,py=f.y0+(CY+f.y*S-f.y0)*e-Math.sin(t*Math.PI)*70,sc=1.6-.9*e;drawDart(x,px,py,f.pl?'#2fc47a':'#ff3d4d',sc)}}
  if(g.ph==='aim'||g.ph==='wait'){const w=g.turn===0?wobble():[0,0];const px=CX+(g.ax+w[0])*S,py=CY+(g.ay+w[1])*S;if(g.turn===0&&g.ph==='aim'){x.strokeStyle='rgba(255,255,255,.9)';x.lineWidth=2;x.beginPath();x.arc(px,py,12+(g.holding?0:8),0,7);x.moveTo(px-18,py);x.lineTo(px+18,py);x.moveTo(px,py-18);x.lineTo(px,py+18);x.stroke();x.fillStyle='rgba(8,12,10,.85)';x.fillRect(CX+215*S/1.5-190,515,0,0)}
-  else if(g.turn===1&&g.ph==='aim'){drawDart(x,px,py,'#ff3d4d',.9)}}
+  else if(g.turn===1&&g.ph==='aim'&&!V3){drawDart(x,px,py,'#ff3d4d',.9)}}
  g.sp.forEach(p=>{x.globalAlpha=Math.max(0,p.l);x.fillStyle='#ffd23f';x.fillRect(p.x,p.y,3,3)});x.globalAlpha=1;
  // side panel
  x.fillStyle='rgba(8,12,10,.9)';x.beginPath();x.roundRect(720,20,260,520,14);x.fill();x.strokeStyle='#2f4a3d';x.lineWidth=2;x.stroke();x.textAlign='center';
