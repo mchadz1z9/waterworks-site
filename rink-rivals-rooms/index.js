@@ -16,13 +16,27 @@ export default {
       const id=env.ROOMS.idFromName(m[1]);
       return env.ROOMS.get(id).fetch(req);
     }
+    if(url.pathname==='/nhl/game'){ /* one game's live play-by-play for the rink tracker (cached 8 s) */
+      const id=String(url.searchParams.get('id')||'').replace(/\D/g,'').slice(0,12); if(id.length<8) return J({err:'bad'},400);
+      const c=caches.default, key=new Request('https://nhl.cache/game/'+id); let r=await c.match(key);
+      if(!r){ const up=await fetch('https://api-web.nhle.com/v1/gamecenter/'+id+'/play-by-play',{headers:{'user-agent':'ArcadeRivals/1.0'}}).catch(()=>null); if(!up||!up.ok) return J({err:'nhl'},502);
+        const d=await up.json(), who={}; for(const p of d.rosterSpots||[]) who[p.playerId]=((p.firstName||{}).default||'')[0]+'. '+((p.lastName||{}).default||'')+' #'+p.sweaterNumber;
+        const T=t=>({id:t.id,ab:t.abbrev,name:(t.commonName||t.name||{}).default||t.abbrev,logo:t.logo,score:t.score,sog:t.sog});
+        const KEEP={'goal':1,'shot-on-goal':1,'missed-shot':1,'blocked-shot':1,'hit':1,'penalty':1,'faceoff':1,'giveaway':1,'takeaway':1,'period-start':1,'period-end':1,'stoppage':0};
+        const plays=(d.plays||[]).filter(p=>KEEP[p.typeDescKey]).slice(-80).map(p=>{ const x=p.details||{}, pid=x.scoringPlayerId||x.shootingPlayerId||x.hittingPlayerId||x.committedByPlayerId||x.winningPlayerId||x.playerId;
+          return {k:p.typeDescKey,p:(p.periodDescriptor||{}).number,t:p.timeInPeriod,x:x.xCoord,y:x.yCoord,tm:x.eventOwnerTeamId,who:pid?who[pid]||'':'',st:x.shotType||x.descKey||'',a1:x.assist1PlayerId?who[x.assist1PlayerId]||'':'',h:x.homeScore,a:x.awayScore}; });
+        r=new Response(JSON.stringify({id:d.id,state:d.gameState,venue:(d.venue||{}).default||'',period:(d.periodDescriptor||{}).number||0,ptype:(d.periodDescriptor||{}).periodType||'',clock:(d.clock||{}).timeRemaining||'',inter:!!(d.clock||{}).inIntermission,away:T(d.awayTeam),home:T(d.homeTeam),tv:(d.tvBroadcasts||[]).map(b=>b.network).slice(0,6),plays}),{headers:{'content-type':'application/json','cache-control':'max-age=8'}}); await c.put(key,r.clone()); }
+      const h=new Headers(r.headers); for(const k in CORS) h.set(k,CORS[k]); return new Response(r.body,{headers:h}); }
     if(url.pathname==='/nhl'){ /* live NHL scoreboard, passed through from the NHL's public score feed (cached 30 s) */
       const c=caches.default, key=new Request('https://nhl.cache/score-now'); let r=await c.match(key);
       if(!r){ const up=await fetch('https://api-web.nhle.com/v1/score/now',{headers:{'user-agent':'ArcadeRivals/1.0'}}).catch(()=>null); if(!up||!up.ok) return J({err:'nhl'},502);
         const d=await up.json(); const T=t=>({ab:t.abbrev,name:(t.name||{}).default||t.abbrev,logo:t.logo,score:t.score,sog:t.sog});
         const games=(d.games||[]).map(g=>({id:g.id,state:g.gameState,start:g.startTimeUTC,period:(g.periodDescriptor||{}).number||g.period||0,ptype:(g.periodDescriptor||{}).periodType||'',clock:(g.clock||{}).timeRemaining||'',inter:!!(g.clock||{}).inIntermission,away:T(g.awayTeam),home:T(g.homeTeam),
           goals:(g.goals||[]).slice(-6).map(x=>({p:(x.periodDescriptor||{}).number||x.period,t:x.timeInPeriod,who:(x.name||{}).default||'',team:(x.teamAbbrev&&x.teamAbbrev.default)||x.teamAbbrev||''}))}));
-        r=new Response(JSON.stringify({date:d.currentDate,games}),{headers:{'content-type':'application/json','cache-control':'max-age=30'}}); await c.put(key,r.clone()); }
+        /* is the NHL's YouTube channel streaming live right now? */
+        let yt=null; try{ const lh=await (await fetch('https://www.youtube.com/@NHL/live',{headers:{'user-agent':'Mozilla/5.0','accept-language':'en-US'}})).text(); const vid=(lh.match(/<link rel="canonical" href="https:\/\/www\.youtube\.com\/watch\?v=([A-Za-z0-9_-]{11})"/)||[])[1];
+          if(vid&&/"isLiveNow":true|"isLive":true/.test(lh)){ const tt=(lh.match(/<meta name="title" content="([^"]{0,140})"/)||[])[1]||'NHL live'; yt={id:vid,title:tt.replace(/&amp;/g,'&').replace(/&#39;/g,"'").replace(/&quot;/g,'"')}; } }catch(e){}
+        r=new Response(JSON.stringify({date:d.currentDate,games,yt}),{headers:{'content-type':'application/json','cache-control':'max-age=30'}}); await c.put(key,r.clone()); }
       const h=new Headers(r.headers); for(const k in CORS) h.set(k,CORS[k]); return new Response(r.body,{headers:h}); }
     if(url.pathname==='/site'){ if(req.method==='OPTIONS') return new Response(null,{headers:CORS}); return env.SITE.get(env.SITE.idFromName('SITE')).fetch(req); }
     if(url.pathname==='/tourney'||url.pathname==='/play'||url.pathname==='/daily'||url.pathname==='/like'||url.pathname==='/vote'||url.pathname==='/namecheck'||url.pathname.startsWith('/feed/')){ if(req.method==='OPTIONS') return new Response(null,{headers:CORS}); const cf=req.cf||{}, h=new Headers(req.headers); h.set('x-rr-asn',String(cf.asn||'')); h.set('x-rr-aso',String(cf.asOrganization||'').slice(0,80)); h.set('x-rr-cc',String(cf.country||'')); return env.SITE.get(env.SITE.idFromName('SITE')).fetch(new Request(req,{headers:h})); }
