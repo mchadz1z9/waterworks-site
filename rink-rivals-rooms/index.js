@@ -9,6 +9,8 @@ export default {
     ctx.waitUntil(chat.fetch(new Request('https://do/admin',{method:'POST',headers:{'content-type':'application/json','x-admin-role':'full'},body:JSON.stringify({op:'clear'})})));
   },
   async fetch(req, env){
+    /* requests that came through the site's backup route (rink-rivals.pages.dev/rr): trust the player's real IP and network it passes on */
+    let RCF=null; if(env.RELAY_KEY&&req.headers.get('x-rr-relay')===env.RELAY_KEY){ const h=new Headers(req.headers), ip=h.get('x-rr-r-ip'); if(ip) h.set('cf-connecting-ip',ip); RCF={asn:+(h.get('x-rr-r-asn')||0),asOrganization:h.get('x-rr-r-aso')||'',country:h.get('x-rr-r-cc')||''}; for(const k of ['x-rr-relay','x-rr-r-ip','x-rr-r-asn','x-rr-r-aso','x-rr-r-cc']) h.delete(k); req=new Request(req,{headers:h}); }
     const url=new URL(req.url);
     const m=url.pathname.match(/^\/room\/([A-Z0-9]{4,8})$/);
     if(m){
@@ -39,7 +41,7 @@ export default {
         r=new Response(JSON.stringify({date:d.currentDate,games,yt}),{headers:{'content-type':'application/json','cache-control':'max-age=30'}}); await c.put(key,r.clone()); }
       const h=new Headers(r.headers); for(const k in CORS) h.set(k,CORS[k]); return new Response(r.body,{headers:h}); }
     if(url.pathname==='/site'){ if(req.method==='OPTIONS') return new Response(null,{headers:CORS}); return env.SITE.get(env.SITE.idFromName('SITE')).fetch(req); }
-    if(url.pathname==='/tourney'||url.pathname==='/play'||url.pathname==='/daily'||url.pathname==='/like'||url.pathname==='/vote'||url.pathname==='/namecheck'||url.pathname.startsWith('/feed/')){ if(req.method==='OPTIONS') return new Response(null,{headers:CORS}); const cf=req.cf||{}, h=new Headers(req.headers); h.set('x-rr-asn',String(cf.asn||'')); h.set('x-rr-aso',String(cf.asOrganization||'').slice(0,80)); h.set('x-rr-cc',String(cf.country||'')); return env.SITE.get(env.SITE.idFromName('SITE')).fetch(new Request(req,{headers:h})); }
+    if(url.pathname==='/tourney'||url.pathname==='/play'||url.pathname==='/daily'||url.pathname==='/like'||url.pathname==='/vote'||url.pathname==='/namecheck'||url.pathname.startsWith('/feed/')){ if(req.method==='OPTIONS') return new Response(null,{headers:CORS}); const cf=RCF||req.cf||{}, h=new Headers(req.headers); h.set('x-rr-asn',String(cf.asn||'')); h.set('x-rr-aso',String(cf.asOrganization||'').slice(0,80)); h.set('x-rr-cc',String(cf.country||'')); return env.SITE.get(env.SITE.idFromName('SITE')).fetch(new Request(req,{headers:h})); }
     const lb=url.pathname.match(/^\/lb\/([a-z0-9]{2,16})$/);
     if(lb){ if(req.method==='OPTIONS') return new Response(null,{headers:CORS}); return env.BOARDS.get(env.BOARDS.idFromName(lb[1])).fetch(req); }
     const pm=url.pathname.match(/^\/party\/([A-Z0-9]{4,8})$/);
@@ -173,7 +175,7 @@ async function sameSecret(a,b){ const [x,y]=await Promise.all([crypto.subtle.dig
 const J=(o,st)=>new Response(JSON.stringify(o),{status:st||200,headers:{...CORS,'content-type':'application/json','cache-control':'no-store'}});
 const BAD=/fuck|shit|cunt|nigg|fag|bitch|whore|slut|rape|hitler|nazi|dick|pussy|cock/i;
 export class Board {
-  constructor(ctx){ this.ctx=ctx; this.sql=ctx.storage.sql; this.sql.exec('CREATE TABLE IF NOT EXISTS s(b TEXT, pid TEXT, name TEXT, score REAL, txt TEXT, ts INTEGER, PRIMARY KEY(b,pid))'); this.rate=new Map(); }
+  constructor(ctx){ this.ctx=ctx; this.sql=ctx.storage.sql; this.sql.exec('CREATE TABLE IF NOT EXISTS s(b TEXT, pid TEXT, name TEXT, score REAL, txt TEXT, ts INTEGER, PRIMARY KEY(b,pid))'); try{ this.sql.exec('CREATE INDEX IF NOT EXISTS s_bs ON s(b,score)'); }catch(e){} this.rate=new Map(); }
   top(b,dir,n){ return this.sql.exec(`SELECT pid,name,score,txt,ts FROM s WHERE b=? ORDER BY score ${dir==='asc'?'ASC':'DESC'}, ts ASC LIMIT ?`,b,n).toArray(); }
   async fetch(req){ const url=new URL(req.url);
     if(url.pathname==='/admin'){ let m={}; try{ m=await req.json(); }catch(e){}
@@ -238,7 +240,9 @@ export class Chat {
     this.sql.exec('CREATE TABLE IF NOT EXISTS dmsg(id INTEGER PRIMARY KEY AUTOINCREMENT, ts INTEGER, fpub TEXT, fname TEXT, tpub TEXT, tname TEXT, text TEXT, seen INTEGER DEFAULT 0)');
     for(const c of ['uah TEXT','ip TEXT','created INTEGER','last INTEGER','ua TEXT']) try{ this.sql.exec('ALTER TABLE sess ADD COLUMN '+c); }catch(e){}
     this.sql.exec('CREATE TABLE IF NOT EXISTS alog(id INTEGER PRIMARY KEY AUTOINCREMENT, ts INTEGER, who TEXT, ip TEXT, what TEXT, detail TEXT)');
-    this.sql.exec('CREATE TABLE IF NOT EXISTS llog(id INTEGER PRIMARY KEY AUTOINCREMENT, ts INTEGER, ok INTEGER, ip TEXT, why TEXT, ua TEXT)'); }
+    this.sql.exec('CREATE TABLE IF NOT EXISTS llog(id INTEGER PRIMARY KEY AUTOINCREMENT, ts INTEGER, ok INTEGER, ip TEXT, why TEXT, ua TEXT)');
+    this._ixq=['CREATE INDEX IF NOT EXISTS m_hid ON m(hid,id)','CREATE INDEX IF NOT EXISTS dmsg_t ON dmsg(tpub,id)','CREATE INDEX IF NOT EXISTS dmsg_f ON dmsg(fpub,id)','CREATE INDEX IF NOT EXISTS grnt2_pub ON grnt2(pubid)']; this.ensureIx(); }
+  ensureIx(){ if(this._ixOk) return; try{ for(const q of this._ixq) this.sql.exec(q); this._ixOk=true; }catch(e){} }
   cfgGet(k){ const r=this.sql.exec('SELECT v FROM cfg WHERE k=?',k).toArray()[0]; return r?r.v:null; }
   cfgSet(k,v){ this.sql.exec('INSERT OR REPLACE INTO cfg(k,v) VALUES(?,?)',k,String(v)); }
   socks(){ return this.ctx.getWebSockets().filter(ws=>ws.deserializeAttachment()); }
@@ -255,7 +259,7 @@ export class Chat {
     const list=[...m.values()].map(x=>({name:x.name,game:x.game,id:pubId(x.me),tag:this.tagOf(x.name)}));
     for(const ws of this.socks()){ const a=ws.deserializeAttachment(); const mine=pubId(a.who); this.send(ws,{t:'who',list:list.map(x=>({...x,me:mine===x.id}))}); } }
   hist(){ return this.sql.exec('SELECT id,ts,name,text,game FROM m WHERE hid=0 ORDER BY id DESC LIMIT 60').toArray().reverse().map(r=>({...r,tag:this.tagOf(r.name)})); }
-  async fetch(req){
+  async fetch(req){ this.ensureIx();
     const path=new URL(req.url).pathname;
     if(path==='/authpid'){ let m={}; try{ m=await req.json(); }catch(e){} const pid=String(m.pid||'').replace(/[^a-z0-9]/gi,'').slice(0,24); return J({lvl:pid.length>=8?await this.grantOfWho(pid):null}); }
     if(path==='/sec'){ let m={}; try{ m=await req.json(); }catch(e){} const now=Date.now(), ip=String(m.ip||'?').slice(0,64);
@@ -421,7 +425,10 @@ export class Site {
     this.sql.exec('CREATE TABLE IF NOT EXISTS fban(pid TEXT PRIMARY KEY, ts INTEGER)');
     /* every visit: who, when they came on, when they were last seen, and where they were */
     this.sql.exec('CREATE TABLE IF NOT EXISTS visit(id INTEGER PRIMARY KEY AUTOINCREMENT, pid TEXT, name TEXT, start INTEGER, last INTEGER, game TEXT, games TEXT, dev TEXT, aso TEXT, proxy INTEGER DEFAULT 0)');
-    this.sql.exec('CREATE TABLE IF NOT EXISTS pxok(pid TEXT PRIMARY KEY, ts INTEGER)'); }
+    this.sql.exec('CREATE TABLE IF NOT EXISTS pxok(pid TEXT PRIMARY KEY, ts INTEGER)');
+    /* indexes so every check-in reads a handful of rows, not whole tables (the free plan allows 5 million row reads a day) */
+    this._ixq=['CREATE INDEX IF NOT EXISTS pl_lname ON pl(lower(name))','CREATE INDEX IF NOT EXISTS pl_last ON pl(last)','CREATE INDEX IF NOT EXISTS visit_pid ON visit(pid,id)','CREATE INDEX IF NOT EXISTS cmd_pid ON cmd(pid,ts)','CREATE INDEX IF NOT EXISTS cmd_ts ON cmd(ts)','CREATE INDEX IF NOT EXISTS pnames_name ON pnames(name)','CREATE INDEX IF NOT EXISTS fcom_id ON fcom(id)','CREATE INDEX IF NOT EXISTS flike_id ON flike(id)']; this.ensureIx(); }
+  ensureIx(){ if(this._ixOk) return; try{ for(const q of this._ixq) this.sql.exec(q); this._ixOk=true; }catch(e){} }
   /* is this name already someone else's? (reserved names are allowed for the devices they're reserved for) */
   nameTaken(name,pid,set){ const k=String(name||'').toLowerCase().trim(); if(!k||/^player\d*$/.test(k)) return false;  const r=(set.reserved||[]).find(x=>nameKey(name).startsWith(x.n)); if(r&&(r.pids||[]).includes(pid)) return false;
     /* the earliest accounts to use a name keep it — 1 per name, except "Aiden" which up to 10 people can share */ const cap=k==='aiden'?10:1, n=this.sql.exec('SELECT COUNT(*) n FROM pl WHERE lower(name)=? AND pid<>? AND first<COALESCE((SELECT first FROM pl WHERE pid=? AND lower(name)=?),9e15)',k,pid,pid,k).one().n; return n>=cap; }
@@ -436,7 +443,7 @@ export class Site {
   async trackDay(d){ const days=(await this.s.get('ptDays'))||[]; if(days.includes(d)) return; days.push(d); while(days.length>10){ const old=days.shift(); await this.s.delete('pt:'+old); } await this.s.put('ptDays',days); }
   async addAch(pid,e){ const k='ach:'+pid, a=(await this.s.get(k))||[]; a.push({ts:Date.now(),...e}); await this.s.put(k,a.slice(-100)); }
   async archiveChal(){ const c=await this.s.get('chal'); if(!c) return; const h=(await this.s.get('chalHist'))||[]; h.push({day:c.day,game:c.game,goal:c.goal,winner:c.winner?c.winner.name:null,prize:c.pick?c.pick.prize:null}); await this.s.put('chalHist',h.slice(-30)); }
-  async fetch(req){
+  async fetch(req){ this.ensureIx();
     const url=new URL(req.url);
     const cleanPid=v=>String(v||'').replace(/[^a-z0-9]/gi,'').slice(0,24), cleanName=v=>String(v||'').replace(/[<>]/g,'').trim().slice(0,20)||'Player';
 

@@ -1,8 +1,17 @@
+/* Arcade Rivals: if a network (a school filter, say) blocks the game server's own address, switch every page to the site's
+   backup route (/rr on this site). Switches back on its own once the direct address works again. */
+(function(){ if(!/^https?:$/.test(location.protocol)) return; const D='https://rink-rivals-rooms.mitchellchad2026.workers.dev';
+  let relay=false; try{ relay=localStorage.getItem('rrSrv')==='relay'; }catch(e){}
+  const ping=(u,ms)=>new Promise(r=>{ let done=false; const c=window.AbortController?new AbortController():null, t=setTimeout(()=>{ if(c) c.abort(); if(!done){ done=true; r(false); } },ms);
+    fetch(u,{cache:'no-store',signal:c?c.signal:undefined}).then(x=>{ clearTimeout(t); if(!done){ done=true; r(x.status<500); } }).catch(()=>{ clearTimeout(t); if(!done){ done=true; r(false); } }); });
+  setTimeout(async()=>{ const direct=await ping(D+'/',6000);
+    if(!relay&&!direct){ if(await ping(location.origin+'/rr/',6000)){ try{ localStorage.setItem('rrSrv','relay'); if(!sessionStorage.getItem('rrSw')){ sessionStorage.setItem('rrSw','1'); location.reload(); } }catch(e){} } }
+    else if(relay&&direct){ try{ localStorage.setItem('rrSrv','direct'); }catch(e){} } },1200); })();
 /* Arcade Rivals site config: a full-screen update announcement that everyone sees when they open the site,
    and admin player edits that the games pick up. All set from the /admin page. Read-only here. */
 (function(){ if(window.RRSITE) return;
   const qs=new URLSearchParams(location.search);
-  const SERVER=(qs.get('server')||'wss://rink-rivals-rooms.mitchellchad2026.workers.dev').replace(/^ws/,'http');
+  const SERVER=(qs.get('server')||((()=>{try{if(localStorage.getItem('rrSrv')==='relay')return location.origin.replace(/^http/,'ws')+'/rr'}catch(e){}return 'wss://rink-rivals-rooms.mitchellchad2026.workers.dev'})())).replace(/^ws/,'http');
   const OFF=/[?&]test\b/.test(location.search)||location.protocol==='file:';
   const PAGE=window.RR_ADMIN?'admin':(location.pathname.split('/').pop()||'').replace(/\.html$/,'');
   const ls={ get:k=>{ try{ return localStorage.getItem(k); }catch(e){ return null; } }, set:(k,v)=>{ try{ localStorage.setItem(k,v); }catch(e){} } };

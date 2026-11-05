@@ -2,7 +2,7 @@
    A game calls RRO.init({game, maxPlayers, onStart, onMsg, onPeers}) (dropIn: true skips the waiting room; publicRoom: 'GYM' makes "Play anyone" join one shared open room) and gets RRO.send / RRO.me / RRO.peers / RRO.isHost(). */
 (function(){
   const qs=new URLSearchParams(location.search);
-  const SERVER=qs.get('server')||'wss://rink-rivals-rooms.mitchellchad2026.workers.dev';
+  const SERVER=qs.get('server')||((()=>{try{if(localStorage.getItem('rrSrv')==='relay')return location.origin.replace(/^http/,'ws')+'/rr'}catch(e){}return 'wss://rink-rivals-rooms.mitchellchad2026.workers.dev'})());
   /* automated test pages (opened from disk or with ?test) never show up in the lobby or post records */
   const TESTPAGE=/[?&]test\b/.test(location.search)||location.protocol==='file:';
   const NAMEK='rrOnlineName';
@@ -121,7 +121,7 @@
 /* Arcade Rivals leaderboards: every game keeps world records on the rooms server.
    A game calls RRL.boards(game,[{id,name,mode:'max'|'min'|'sum'}]) and RRL.post(id,score,text) when a result is final. */
 (function(){
-  const qs=new URLSearchParams(location.search), API=(qs.get('server')||'wss://rink-rivals-rooms.mitchellchad2026.workers.dev').replace(/^ws/,'http')+'/lb/';
+  const qs=new URLSearchParams(location.search), API=(qs.get('server')||((()=>{try{if(localStorage.getItem('rrSrv')==='relay')return location.origin.replace(/^http/,'ws')+'/rr'}catch(e){}return 'wss://rink-rivals-rooms.mitchellchad2026.workers.dev'})())).replace(/^ws/,'http')+'/lb/';
   const esc=s=>String(s).replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
   let game=null, defs=[], panel=null, tab=0, toastEl=null;
   const pid=(()=>{ try{ let p=localStorage.getItem('rrPid'); if(!p){ p=(Math.random().toString(36).slice(2)+Math.random().toString(36).slice(2)).slice(0,20); localStorage.setItem('rrPid',p); } return p; }catch(e){ return 'anon'+Math.floor(Math.random()*1e9); } })();
