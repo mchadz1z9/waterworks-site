@@ -357,6 +357,11 @@ body{background:radial-gradient(1200px 600px at 10% -10%,#1e1b4b 0,transparent 6
     <div class="msg" id="uMsg"></div>
   </div>
 
+  <div class="card full" data-grp="dash" id="useCard">
+    <h2>📊 Server usage today</h2>
+    <p class="mut">Cloudflare's free plan allows about 100,000 server requests and 100,000 database writes a day (it resets at 7–8 p.m. Toronto time). If a bar goes red, chat and online play can stop until the reset.</p>
+    <div id="useBox"><span class="mut">Loading…</span></div>
+  </div>
   <div class="card full" data-grp="dash">
     <h2>📈 Activity</h2>
     <div class="row"><div><h3 class="sec">Players each hour (last 48 h)</h3><div class="bars" id="acHours"></div></div></div>
@@ -883,7 +888,12 @@ function initArcade(){ if(initArcade.done) return; initArcade.done=1;
       const r=await api('/admin/chat','grantPid',{pid:p.pid,lvl:'arcade',name:p.name}).catch(()=>({})); setMsg('arMsgOut',r.ok?`${p.name} is now an Arcade admin.`:'Could not grant.',r.ok?1:0); arGrants(); };
     $('arGList').onclick=async e=>{ const b=e.target.closest('[data-arung]'); if(!b||!confirm('Remove their Arcade admin controls?')) return; await api('/admin/chat','ungrant',{pubid:b.dataset.arung}); arGrants(); }; }
   arLoad(); setInterval(()=>{ if(document.visibilityState==='visible'&&(ROLE==='arcade'||typeof CURG==='undefined'||CURG==='arcade'||CURG==='all')) arLoad() },30000); }
-function initV2(set){ if(initV2.done) return; initV2.done=1; initNav(); initFeedAdm(); initVisits(set); initArcade();
+
+/* ---- server usage (checked once a minute, only while this tab is open) ---- */
+async function loadUse(){ if(ROLE!=='full') return; try{ const u=await api('/admin/site','usage'); const bar=(n,l,t)=>{const p=Math.min(100,n/l*100),c=p>85?'#ef4444':p>60?'#f59e0b':'#22c55e';return `<div style="margin:8px 0"><div style="display:flex;justify-content:space-between;font-size:13px"><b>${t}</b><span>${n.toLocaleString()} / ${l.toLocaleString()} · ${p.toFixed(0)}%</span></div><div style="height:10px;border-radius:6px;background:rgba(255,255,255,.1);overflow:hidden"><div style="height:100%;width:${p}%;background:${c}"></div></div></div>`};
+  const T=u.today, y=u.yesterday, h=Math.floor(u.resetIn/60), mi=u.resetIn%60, sitePct=T.req/u.limits.req;
+  $('useBox').innerHTML=bar(T.req,u.limits.req,'Site requests (check-ins, admin, Clips…)')+bar(T.wr,u.limits.wr,'Database writes (approx.)')+`<div class="mut" style="font-size:13px">${T.beat.toLocaleString()} check-ins today · ${u.online} online now · resets in ${h} h ${mi} min${y?` · yesterday: ${(y.req||0).toLocaleString()} requests, ${(y.wr||0).toLocaleString()} writes`:''}</div>`+(sitePct>.85?'<div style="color:#fca5a5;margin-top:6px;font-weight:700">Close to the daily limit. Think about Cloudflare\'s $5/month plan if this happens often.</div>':''); }catch(e){ $('useBox').innerHTML='<span class="mut">Could not load (the server may be over today\'s limit).</span>'; } }
+function initV2(set){ if(initV2.done) return; initV2.done=1; loadUse(); setInterval(()=>{ if(document.visibilityState==='visible') loadUse() },60000); initNav(); initFeedAdm(); initVisits(set); initArcade();
   $('wcText').value=set.welcome||''; $('pnText').value=set.pin||'';
   $('acGo').onclick=loadActivity; $('acPeak').onclick=async()=>{ if(!confirm('Reset the online record?')) return; await api('/admin/site','peakReset'); loadActivity(); };
   $('plAll').onchange=()=>{ for(const p of PL) $('plAll').checked?TICK.add(p.pid):TICK.delete(p.pid); document.querySelectorAll('[data-tick]').forEach(c=>c.checked=TICK.has(c.dataset.tick)); bulkUpd(); };

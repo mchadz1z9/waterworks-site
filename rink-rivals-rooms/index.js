@@ -402,7 +402,8 @@ export class Chat {
 /* Site config: a full-screen update announcement and admin player edits, read by every page from /site.
    Only the admin tools (with a key) can change it. */
 export class Site {
-  constructor(ctx){ this.ctx=ctx; this.s=ctx.storage; this.sql=ctx.storage.sql;
+  useTick(kind,n){ const d=new Date().toISOString().slice(0,10); if(!this.use||this.use.d!==d) this.use={d,req:0,beat:0,wr:0,saved:0}; this.use[kind]=(this.use[kind]||0)+(n||1); }
+  constructor(ctx){ this.ctx=ctx; this.s=ctx.storage; const raw=ctx.storage.sql; this.sql={exec:(q,...a)=>{ if(/^\s*(INSERT|UPDATE|DELETE|REPLACE)/i.test(q)) this.useTick('wr'); return raw.exec(q,...a); }};   /* counts database writes for the admin usage card */
     /* every player who opens the site, things queued for them (messages, gifts, kicks), and site-wide bans */
     this.sql.exec('CREATE TABLE IF NOT EXISTS pl(pid TEXT PRIMARY KEY, name TEXT, first INTEGER, last INTEGER, beats INTEGER, game TEXT, iph TEXT, secs REAL DEFAULT 0)');
     this.sql.exec('CREATE TABLE IF NOT EXISTS cmd(id INTEGER PRIMARY KEY AUTOINCREMENT, pid TEXT, kind TEXT, data TEXT, ts INTEGER)');
@@ -443,7 +444,7 @@ export class Site {
   async trackDay(d){ const days=(await this.s.get('ptDays'))||[]; if(days.includes(d)) return; days.push(d); while(days.length>10){ const old=days.shift(); await this.s.delete('pt:'+old); } await this.s.put('ptDays',days); }
   async addAch(pid,e){ const k='ach:'+pid, a=(await this.s.get(k))||[]; a.push({ts:Date.now(),...e}); await this.s.put(k,a.slice(-100)); }
   async archiveChal(){ const c=await this.s.get('chal'); if(!c) return; const h=(await this.s.get('chalHist'))||[]; h.push({day:c.day,game:c.game,goal:c.goal,winner:c.winner?c.winner.name:null,prize:c.pick?c.pick.prize:null}); await this.s.put('chalHist',h.slice(-30)); }
-  async fetch(req){ this.ensureIx();
+  async fetch(req){ this.ensureIx(); this.useTick('req'); if(new URL(req.url).pathname==='/play') this.useTick('beat');
     const url=new URL(req.url);
     const cleanPid=v=>String(v||'').replace(/[^a-z0-9]/gi,'').slice(0,24), cleanName=v=>String(v||'').replace(/[<>]/g,'').trim().slice(0,20)||'Player';
 
@@ -520,7 +521,7 @@ export class Site {
       const inc=r.l&&now-r.l<=90000?Math.min(75,(now-r.l)/1000):0;          /* only count time between live beats */
       r.s+=inc; r.l=now; r.n=name; map[pid]=r; this.ptDirty=this.ptDirty||{}; this.ptDirty[k]=map; this.ptCache={k,m:map};
       if(inc){ this.ptaMap=this.ptaMap||((await this.s.get('pta'))||{}); const a=this.ptaMap[pid]||{n:name,s:0}; a.s+=inc; a.n=name; this.ptaMap[pid]=a; this.ptaDirty=true; }
-      if(!this.ptFlush||now-this.ptFlush>60000){ this.ptFlush=now; for(const kk in this.ptDirty) await this.s.put(kk,this.ptDirty[kk]); this.ptDirty={}; if(this.ptaDirty){ await this.s.put('pta',this.ptaMap); this.ptaDirty=false; } await this.trackDay(d); }
+      if(!this.ptFlush||now-this.ptFlush>60000){ this.ptFlush=now; for(const kk in this.ptDirty) await this.s.put(kk,this.ptDirty[kk]); this.ptDirty={}; if(this.use){ const prev=(await this.s.get('use:'+this.use.d))||{req:0,beat:0,wr:0}; const add=k2=>(prev[k2]||0)+(this.use[k2]||0)-(this.use['_'+k2]||0); const nx={req:add('req'),beat:add('beat'),wr:add('wr')}; for(const k2 of ['req','beat','wr']) this.use['_'+k2]=this.use[k2]; await this.s.put('use:'+this.use.d,nx); } if(this.ptaDirty){ await this.s.put('pta',this.ptaMap); this.ptaDirty=false; } await this.trackDay(d); }
       return J({ok:true,s:Math.round(r.s),...extra}); }
     if(url.pathname==='/namecheck'){ let m={}; try{ m=await req.json(); }catch(e){} const set=(await this.s.get('settings'))||{}; const pid=cleanPid(m.pid), name=cleanName(m.name); if(reservedFor(name,pid,set.reserved)) return J({taken:true,why:'reserved'}); return J({taken:this.nameTaken(name,pid,set)}); }
     if(url.pathname==='/vote'){ let m={}; try{ m=await req.json(); }catch(e){} const pid=cleanPid(m.pid), poll=await this.s.get('poll'); if(!poll||!poll.open||poll.id!==m.id||pid.length<8) return J({err:'closed'},400); const o=Math.round(+m.opt); if(!(o>=0&&o<poll.opts.length)) return J({err:'bad'},400);
@@ -559,6 +560,9 @@ export class Site {
     if(url.pathname==='/admin'){ let m={}; try{ m=await req.json(); }catch(e){}
       const role=req.headers.get('x-admin-role')||'full', full=role==='full';
       if(m.op==='get') return J({...await this.state(),role});
+      if(m.op==='usage'&&role==='full'){ const d=new Date(), t=d.toISOString().slice(0,10), y=new Date(d-864e5).toISOString().slice(0,10), mem=this.use&&this.use.d===t?this.use:null, sv=(await this.s.get('use:'+t))||{req:0,beat:0,wr:0}, live=k=>(sv[k]||0)+(mem?(mem[k]||0)-(mem['_'+k]||0):0);
+        let on=0; for(const [,tt] of (this.live||new Map())) if(Date.now()-tt<100000) on++;
+        return J({today:{req:live('req'),beat:live('beat'),wr:live('wr')},yesterday:(await this.s.get('use:'+y))||null,online:on,limits:{req:100000,wr:100000},resetIn:Math.round((Date.UTC(d.getUTCFullYear(),d.getUTCMonth(),d.getUTCDate()+1)-d)/60000)}); }
       if(role==='arcade'){ const now=Date.now();
         if(m.op==='arcadePlayers') return J({players:this.sql.exec("SELECT pid,name,game,last,dev FROM pl WHERE game LIKE 'sa-%' AND last>? ORDER BY last DESC LIMIT 200",now-90000).toArray()});
         if(m.op==='pcmd'){ const kind=String(m.kind||''); if(!['msg','confetti','emoji','award','sagift'].includes(kind)) return J({err:'forbidden'},403);
