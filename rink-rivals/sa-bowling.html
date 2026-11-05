@@ -18,6 +18,7 @@ h1{margin:0;font-size:30px;letter-spacing:-.5px}h2{margin:0 0 10px;font-size:13p
 .sc{overflow-x:auto}.sc table{min-width:620px;text-align:center}.sc td,.sc th{text-align:center;border:1px solid var(--line);padding:3px 2px}.sc td.nm{text-align:left;font-weight:800;padding:5px 8px;white-space:nowrap}.sc .cur{background:rgba(255,79,216,.22)}.sc .rl{font-size:12px;color:var(--mut);height:18px}.sc .cm{font-size:15px;font-weight:800}
 .tip{font-size:12px;color:var(--mut)}
 </style></head><body><div class="wrap" id="app"></div>
+<script>window.SA3D_ON=true;</script>
 <script id="gfx-boost">
 /* Graphics boost: bloom, vignette, colour grade and soft shadows-of-light applied to the 2D game canvas. Auto-lowers quality if the device is slow. */
 (function(){if(window.__gfx)return;window.__gfx=1;
@@ -58,6 +59,7 @@ function layer(w,h){lay.width=w;lay.height=h;
  off.width=Math.max(8,w>>2);off.height=Math.max(8,h>>2)}
 let grade=null;
 function post(t){
+ if(window.SA3D_ON)return;
  if(!on||lvl<=0)return;
  if(!cv||!cv.offsetParent||!cv.isConnected){if(tries++%30===0)cv=findCanvas();if(cv)cx=cv.getContext('2d');if(!cv)return}
  const w=cv.width,h=cv.height;if(w!==lw||h!==lh){layer(w,h);grade=null}
@@ -80,6 +82,7 @@ window.requestAnimationFrame=function(fn){return raf(function(t){fn(t);if(t!==la
 const st=document.createElement('style');st.textContent='button,.btn,.tab{transition:transform .12s,box-shadow .15s,filter .15s}button:not(:disabled):hover{transform:translateY(-1px);filter:brightness(1.08)}button:not(:disabled):active{transform:translateY(1px)}canvas{border-radius:12px;box-shadow:0 10px 34px rgba(0,0,0,.45)}';document.head.appendChild(st);
 })();
 </script>
+<script src="r3lib.js"></script><script src="physique.js"></script><script src="sa3d.js"></script>
 <script>
 const $=s=>document.querySelector(s),clamp=(v,a,b)=>Math.max(a,Math.min(b,v));
 let sv={diff:1,best:0,wins:0};try{Object.assign(sv,JSON.parse(localStorage.sz1||'{}'))}catch(e){}
@@ -112,12 +115,32 @@ function updateCam(dt){const g=G,b=g.ball;let E,T,f=820;
  const k=CAM.init?1-Math.exp(-dt*(g.ph==='roll'?9:4)):1;CAM.init=true;for(let j=0;j<3;j++){CAM.E[j]+=(E[j]-CAM.E[j])*k;CAM.T[j]+=(T[j]-CAM.T[j])*k}CAM.f+=(f-CAM.f)*k;
  const fv=nrm([CAM.T[0]-CAM.E[0],CAM.T[1]-CAM.E[1],CAM.T[2]-CAM.E[2]]);let r=nrm([fv[1],-fv[0],0]);const u=[r[1]*fv[2]-r[2]*fv[1],r[2]*fv[0]-r[0]*fv[2],r[0]*fv[1]-r[1]*fv[0]];CAM.fv=fv;CAM.r=r;CAM.u=u}
 const cs=(x,y,z)=>{const d0=x-CAM.E[0],d1=y-CAM.E[1],d2=z-CAM.E[2],r=CAM.r,u=CAM.u,f=CAM.fv;return[d0*r[0]+d1*r[1]+d2*r[2],d0*u[0]+d1*u[1]+d2*u[2],d0*f[0]+d1*f[1]+d2*f[2]]};
-const sp2=c=>[500+c[0]*CAM.f/c[2],300-c[1]*CAM.f/c[2]],NEAR=20;
+const sp2=c=>[500+c[0]*CAM.f/c[2],280-c[1]*CAM.f/c[2]],NEAR=20;
 function clipPoly(P){const o=[];for(let i=0;i<P.length;i++){const a=P[i],b=P[(i+1)%P.length],ia=a[2]>=NEAR,ib=b[2]>=NEAR;if(ia)o.push(a);if(ia!==ib){const t=(NEAR-a[2])/(b[2]-a[2]);o.push([a[0]+(b[0]-a[0])*t,a[1]+(b[1]-a[1])*t,NEAR])}}return o}
 function poly3(x,P,fill,stroke,lw){const c=clipPoly(P.map(p=>cs(p[0],p[1],p[2]||0)));if(c.length<3)return;x.beginPath();c.forEach((q,i)=>{const s=sp2(q);i?x.lineTo(s[0],s[1]):x.moveTo(s[0],s[1])});x.closePath();if(fill){x.fillStyle=fill;x.fill()}if(stroke){x.strokeStyle=stroke;x.lineWidth=lw||1;x.stroke()}}
 function line3(x,A,B,col,lw){let a=cs(A[0],A[1],A[2]||0),b=cs(B[0],B[1],B[2]||0);if(a[2]<NEAR&&b[2]<NEAR)return;if(a[2]<NEAR){const t=(NEAR-a[2])/(b[2]-a[2]);a=[a[0]+(b[0]-a[0])*t,a[1]+(b[1]-a[1])*t,NEAR]}else if(b[2]<NEAR){const t=(NEAR-a[2])/(b[2]-a[2]);b=[a[0]+(b[0]-a[0])*t,a[1]+(b[1]-a[1])*t,NEAR]}const sa=sp2(a),sb=sp2(b);x.strokeStyle=col;x.lineWidth=lw;x.beginPath();x.moveTo(sa[0],sa[1]);x.lineTo(sb[0],sb[1]);x.stroke()}
 /* ---------- menus */
-function render(){cancelAnimationFrame(raf);let h='<div class="top"><div><h1>Strike Zone</h1><div class="sub">10 frames. Time your power and spin. Beat the CPU.</div></div><div class="sp"></div>'+(V==='game'?'<button class="btn g s" data-a="title">Quit</button>':'')+'</div>';
+/* ---------- 3D bowling alley (cm in the game → metres; x across, y down the lane → -Z, z up → Y) ---------- */
+const W3=(x,y,z)=>[x/100,z/100,-y/100];
+const V3=window.SA3D?SA3D({virtual:[1000,560],cam:{eye:[0,1.3,3.3],center:[0,0,-9],fov:38},sky:[.02,.01,.05],bright:1.05}):null;
+const V3s=[];if(V3){V3.setStatic(({sb,sc})=>{
+  const lw=LW/100,L=PITY/100,neon=['#ff4fd8','#38e1ff','#ffd23f','#7a5cff'];
+  for(let k=0;k<39;k++)sb(-lw/2+(k+.5)*lw/39,-.01,-L/2,lw/39-.002,.02,L,k%2?'#e2ad66':'#d9a35a');   /* maple boards */
+  sb(0,.0005,-PINY/100+.2,1.4,.001,1.6,'#f0c486');sb(0,.001,0,lw,.002,.05,'#c8202a');
+  for(let k=-3;k<=3;k++){const ay=(420+Math.abs(k)*-26+78)/100;sb(k*lw/10,.002,-ay,.04,.002,.22,'#6a3a12')}for(let k=-3;k<=3;k++)sb(k*lw/10,.002,-1.5,.03,.002,.03,'#6a3a12');
+  for(const sx of [-1,1]){sb(sx*(lw/2+.135),-.06,-L/2,.27,.04,L,'#08050f');sb(sx*(lw/2+.29),.03,-L/2,.05,.12,L,'#2a1a55');   /* gutters and capping */
+   sb(sx*1.42,1.65,-6,.08,3.3,26,'#0c0720');for(let k=0;k<9;k++)sb(sx*1.38,1.55,-(-5+k*3),.02,.1,1.6,neon[k%4]);sb(sx*2.5,-.02,-6,2,.02,26,'#1a1030')}   /* side walls with neon */
+  sb(0,-.02,2.5,6,.02,6,'#2a1f4a');for(const sx of [-1,1]){sb(sx*1.05,.45,1.2,.5,.9,1.2,'#1c1238');sb(sx*1.05,.95,1.2,.4,.12,1,'#38e1ff');for(let k=0;k<3;k++)V3s.push([sx*1.05,1.08,.8+k*.28])}   /* approach & ball returns at the sides */
+  sb(0,1.6,-20.8,5.2,3.5,.1,'#0d0820');for(let i=0;i<8;i++)sb(-2.1+i*.6,1.7,-20.74,.52,2.6,.02,i%2?'#18485a':'#4a1844');   /* back wall */
+  sb(0,1.55,-PITY/100+.04,2.8,.3,.06,'#2a1a55');sb(0,.75,-PITY/100-.4,2.4,1.5,.02,'#090514');   /* masking unit + pit */
+  for(let k=0;k<6;k++)sb(0,2.6,-(-2+k*4),2.4,.05,.12,k%2?'#38e1ff':'#ff4fd8');sb(0,3.3,-6,6,.1,30,'#07040f');
+  for(const sx of [-1,1])for(let k=0;k<3;k++){sb(sx*(2.4+k*.0),-.0,-k*7,1.1,.02,26,'#140a2a')}
+ });}
+function pin3(p){ const b=W3(p.x,p.y,0),R3=V3.R3,m0=R3.mm(R3.T(b[0]*100,0,b[2]*100),R3.RZ(p.down?-(p.dir||1)*p.tilt:0),R3.RX(p.down?-p.tilt*.25:0));
+  const prof=[[0,2.6],[3,3.8],[7,5.4],[11,6],[15,5.5],[19,4.2],[23,2.9],[26,2.3],[29,2.5],[33,2.9],[36,2.6]];   /* the lathe profile (height, radius in cm) */
+  for(let k=0;k<prof.length-1;k++){const [h0,r0]=prof[k],[h1,r1]=prof[k+1];R3.part(R3.UC,R3.mm(m0,R3.T(0,(h0+h1)/2,0),R3.S((r0+r1)/2,h1-h0+.2,(r0+r1)/2)),k===6||k===7?'#e0262f':'#f8fafc')}
+  R3.part(R3.US,R3.mm(m0,R3.T(0,37,0),R3.S(2.7,2.7,2.7)),'#f8fafc'); if(!p.down) V3.shadow(b[0],b[2],.06); }
+function render(){cancelAnimationFrame(raf);if(V3&&V!=='game')V3.canvas.style.display='none';let h='<div class="top"><div><h1>Strike Zone</h1><div class="sub">10 frames. Time your power and spin. Beat the CPU.</div></div><div class="sp"></div>'+(V==='game'?'<button class="btn g s" data-a="title">Quit</button>':'')+'</div>';
  if(V==='title')h+='<div class="hero"><div class="card"><h2>Play</h2><div class="sub" style="margin-bottom:12px">You against a CPU bowler. Full 10-frame scoring with strikes and spares.</div><div style="display:grid;gap:8px"><button class="btn" data-a="start">Start game</button><button class="btn g" data-a="diff">CPU level: '+DN[sv.diff]+'</button></div><div class="tip" style="margin-top:10px">Best score: <b style="color:var(--gold)">'+sv.best+'</b> · Wins: <b style="color:var(--gold)">'+sv.wins+'</b></div></div><div class="card"><h2>How to bowl</h2><table><tr><td>1. Aim</td><td>A / D (or arrows) slide the ball, W / S angle it</td></tr><tr><td>2. Power</td><td>Press Space when the bar is high but not red</td></tr><tr><td>3. Spin</td><td>Press Space again. Center is straight, sides hook</td></tr></table><div class="tip" style="margin-top:8px">On touch screens use the on-screen buttons. Aim for the pocket between the head pin and the pin beside it.</div></div></div>';
  else if(V==='game')h+=vGame();$('#app').innerHTML=h;if(V==='game'){loop();refreshSB()}}
 function vGame(){return '<canvas id="cv" width="1000" height="560"></canvas><div class="card sc" id="sb" style="margin-top:12px"></div><div id="ovl"></div>'}
@@ -244,7 +267,21 @@ function drawHud(x,g){const pl=g.pl[g.turn];x.fillStyle='rgba(8,5,18,.88)';x.beg
   x.beginPath();x.roundRect(bx,by,w,h,8);x.fill();x.fillStyle='#fff';x.fillRect(bx+g.m*w-3,by-6,6,h+12);x.strokeStyle='rgba(255,255,255,.5)';x.lineWidth=2;x.stroke()}
  if(g.pl[g.turn].human&&g.ph==='aim'){x.fillStyle='rgba(8,5,18,.85)';x.beginPath();x.roundRect(250,508,500,36,10);x.fill();x.fillStyle='#fff';x.font='700 13px system-ui';x.fillText('A / D slide ball   W / S angle   Space continue',500,531)}
  if(TCH&&g.pl[g.turn].human){TB.forEach(b=>{x.fillStyle='rgba(255,255,255,.2)';x.strokeStyle='rgba(255,255,255,.6)';x.lineWidth=3;x.beginPath();x.arc(b.x,b.y,b.r,0,7);x.fill();x.stroke();x.fillStyle='#fff';x.font='800 '+(b.k==='act'?16:22)+'px system-ui';x.fillText(b.t,b.x,b.y+7)})}}
-function draw(){const cv=$('#cv');if(!cv||!G)return;const x=cv.getContext('2d');updateCam(1/60);drawScene(x,G);drawHud(x,G)}
+function draw(){const cv=$('#cv');if(!cv||!G)return;const x=cv.getContext('2d');updateCam(1/60);
+ if(!V3){drawScene(x,G);drawHud(x,G);return}
+ const g=G,r=cv.getBoundingClientRect();V3.place(r.left,r.top,r.width,r.height);V3.canvas.style.display='';cv.style.position='relative';cv.style.zIndex='1';cv.style.background='transparent';x.clearRect(0,0,1000,560);
+ V3.cam.eye=W3(...CAM.E);V3.cam.center=W3(...CAM.T);V3.cam.fov=2*Math.atan(280/CAM.f)*180/Math.PI;
+ V3.frame(()=>{
+  V3s.forEach((q,i)=>V3.sph(q[0],q[1],q[2],.11,['#ef4444','#22c55e','#3b82f6','#f59e0b','#a855f7','#14b8a6'][i%6]));
+  for(const p of g.pins) if(!p.gone) pin3(p);
+  /* aim guide on the lane */ if((g.ph==='aim'||g.ph==='power'||g.ph==='spin')&&g.pl[g.turn].human){const a=g.ang*Math.PI/180;for(let y=40;y<1100;y+=60){const q=W3(g.aimX+Math.tan(a)*y,y,.6);V3.box(q[0],q[1],q[2],.045,.004,.08,'#ff4fd8')}}
+  /* the ball, rolling, with its finger holes */ const b=g.ball;if(b.y<PITY+20){const c=W3(b.x,b.y,RB+(b.z||0)),rr=RB/100;V3.shadow(c[0],c[2],rr*1.1);V3.sph(c[0],c[1],c[2],rr,'#5a1fa8');
+   for(const [hx,hy] of [[0,-.38],[-.2,-.22],[.2,-.22]]){const a=b.rot+hy*3,q=[c[0]+hx*rr,c[1]+Math.cos(a)*rr*.98,c[2]+Math.sin(a)*rr*.98];V3.sph(q[0],q[1],q[2],rr*.13,'#10061f')}
+   for(let k=0;k<10;k++){const a=k/10*Math.PI*2+b.rot;V3.sph(c[0]+Math.cos(a)*rr*.4,c[1]+Math.sin(a)*rr*.92,c[2]+Math.cos(a+1)*rr*.2,rr*.09,'#c06bff')}}
+  /* the bowler, on the approach while you line up */ if(g.ph==='aim'||g.ph==='power'||g.ph==='spin'){const q=W3(b.x+62,-35,0);V3.person(q[0],q[2],Math.PI,{top:g.turn===0?'#ff4fd8':'#38e1ff',legs:'#111827',buff:1.05},'stand',0,J=>{J.hand1=[.2,.55,.15];J.elb1=[.24,.85,.05]})}
+ },1/60);
+ if(g.flash>0){x.fillStyle='rgba(255,255,255,.08)';x.fillRect(0,0,1000,560)}
+ drawHud(x,g)}
 function loop(){let last=performance.now();const f=now=>{const dt=Math.min(.033,(now-last)/1000||0);last=now;if(G){step(dt);draw()}if(V==='game')raf=requestAnimationFrame(f)};raf=requestAnimationFrame(f)}
 render();
 </script><a id="saBack" href="sports-arcade" style="position:fixed;left:10px;top:10px;z-index:2147482000;background:rgba(15,23,42,.88);color:#fff;border:1px solid rgba(255,255,255,.25);border-radius:999px;padding:7px 13px;font:700 13px system-ui,sans-serif;text-decoration:none;box-shadow:0 4px 14px rgba(0,0,0,.4)">← Sports Arcade</a>
