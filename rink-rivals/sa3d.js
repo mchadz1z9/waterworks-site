@@ -48,7 +48,9 @@ window.SA3D=function(opt){
   /* world point → virtual screen (for 2D labels that should follow 3D things) */
   function toScreen(p){ const {f,r,u}=basis(), q=sub(p,cam.eye), z=q[0]*f[0]+q[1]*f[1]+q[2]*f[2]; if(z<=.01) return null; const t=Math.tan(cam.fov*PI/360), A=VW/VH;
     return [((q[0]*r[0]+q[1]*r[1]+q[2]*r[2])/(z*t*A)*.5+.5)*VW,(.5-(q[0]*u[0]+q[1]*u[1]+q[2]*u[2])/(z*t)*.5)*VH,z]; }
-  function frame(draw,dt,shake){ const e=cam.eye.slice(); if(shake){ e[0]+=(Math.random()-.5)*shake; e[1]+=(Math.random()-.5)*shake; }
+  /* hide the 3D canvas whenever the game stops drawing it (menus, results pages) */
+  let lastF=0; setInterval(()=>{ if(performance.now()-lastF>350&&glc.style.display!=='none') glc.style.display='none'; },200);
+  function frame(draw,dt,shake){ lastF=performance.now(); if(glc.style.display==='none') glc.style.display=''; const e=cam.eye.slice(); if(shake){ e[0]+=(Math.random()-.5)*shake; e[1]+=(Math.random()-.5)*shake; }
     R3.frame({eye:e.map(v=>v*K),center:cam.center.map(v=>v*K),fov:cam.fov,near:5,far:90000,sky:cam.sky,bright:cam.bright,fog:cam.fog,fogMax:cam.fogMax},draw,dt); }
   return {R3,PHY,K,cam,place,box,boxR,sph,cyl,beam,shadow,person,tilt,setStatic,ray,toPlane,toScreen,frame,canvas:glc};
 };
