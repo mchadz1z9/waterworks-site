@@ -734,7 +734,7 @@ async function loadReserved(){ try{ const d=await api('/admin/site','reserved');
 function initPlayers(){ if(initPlayers.done) return; initPlayers.done=1;
   $('nlOn').onchange=async()=>{ const on=$('nlOn').checked; const r=await api('/admin/site','settings',{patch:{nameLock:on}}).catch(()=>({})); setMsg('plMsgOut',r.ok?(on?'Name lock on — name changes now need your approval.':'Name lock off — players can change names freely (still unique).'):'Could not save.',r.ok?1:0); };
   $('nrList').onclick=async e=>{ const b=e.target.closest('[data-nrok],[data-nrno]'); if(!b) return; const ok=!!b.dataset.nrok; const r=await api('/admin/site',ok?'nameOk':'nameNo',{pid:ok?b.dataset.nrok:b.dataset.nrno}).catch(()=>({})); if(r.err==='taken') alert('Someone else already has that name.'); loadNameReqs(); loadPlayers(); };
-  api('/admin/site','get').then(d=>{ $('nlOn').checked=!!(d.settings&&d.settings.nameLock); }).catch(()=>{}); loadNameReqs(); setInterval(loadNameReqs,30000);
+  api('/admin/site','get').then(d=>{ $('nlOn').checked=!!(d.settings&&d.settings.nameLock); }).catch(()=>{}); loadNameReqs(); setInterval(()=>{ if(document.visibilityState==='visible') loadNameReqs() },60000);
   $('rsGo').onclick=async()=>{ const n=$('rsName').value.trim(); if(n.length<3) return; const r=await api('/admin/site','reserve',{name:n}).catch(()=>({})); if(r.ok){ const h=(r.reserved.find(x=>x.label===n)||{}).pids||[]; setMsg('plMsgOut',`"${n}" is reserved for ${h.length} existing account${h.length===1?'':'s'}.`,1); $('rsName').value=''; } loadReserved(); };
   $('rsList').onclick=async e=>{ const a=e.target.closest('[data-unres]'), b=e.target.closest('[data-unhold]'), c=e.target.closest('[data-addhold]');
     if(a&&confirm('Remove this reservation? Anyone could use the name again.')) await api('/admin/site','unreserve',{n:a.dataset.unres});
@@ -860,7 +860,7 @@ function initVisits(set){ if(initVisits.done) return; initVisits.done=1; $('pxOn
   $('vsQ').oninput=()=>renderVisits();
   $('pxOn').onchange=async()=>{ const on=$('pxOn').checked; const r=await api('/admin/site','settings',{patch:{proxyBlock:on}}).catch(()=>({})); setMsg('pxMsg',r.ok?(on?'Proxy & VPN blocking is on.':'Proxy & VPN blocking is off.'):'Could not save.',r.ok?1:0); };
   $('pxGo').onclick=loadPx; $('pxList').closest('.card').onclick=async e=>{ const b=e.target.closest('[data-pxok],[data-pxno]'); if(!b) return; await api('/admin/site','pxAllow',{pid:b.dataset.pxok||b.dataset.pxno,on:!!b.dataset.pxok}); loadPx(); };
-  loadVisits(); loadPx(); setInterval(loadVisits,20000); setInterval(loadPx,60000); setInterval(()=>renderVisits(),30000); }
+  loadVisits(); loadPx(); setInterval(()=>{ if(document.visibilityState==='visible') loadVisits() },40000); setInterval(()=>{ if(document.visibilityState==='visible'&&(typeof CURG==='undefined'||CURG==='sec'||CURG==='all'||CURG==='dash')) loadPx() },120000); setInterval(()=>renderVisits(),30000); }
 
 /* ---- arcade admin (Connor's role) ---- */
 let AROn=[], ARSel=null;
@@ -882,7 +882,7 @@ function initArcade(){ if(initArcade.done) return; initArcade.done=1;
       if(!exact.length){ setMsg('arMsgOut','No player called "'+n+'".',0); return; } const p=exact.sort((a,b)=>b.last-a.last)[0]; if(!confirm(`Give ${p.name} Arcade admin controls? (They get an admin button in chat that opens only the Arcade tools.)`)) return;
       const r=await api('/admin/chat','grantPid',{pid:p.pid,lvl:'arcade',name:p.name}).catch(()=>({})); setMsg('arMsgOut',r.ok?`${p.name} is now an Arcade admin.`:'Could not grant.',r.ok?1:0); arGrants(); };
     $('arGList').onclick=async e=>{ const b=e.target.closest('[data-arung]'); if(!b||!confirm('Remove their Arcade admin controls?')) return; await api('/admin/chat','ungrant',{pubid:b.dataset.arung}); arGrants(); }; }
-  arLoad(); setInterval(arLoad,20000); }
+  arLoad(); setInterval(()=>{ if(document.visibilityState==='visible'&&(ROLE==='arcade'||typeof CURG==='undefined'||CURG==='arcade'||CURG==='all')) arLoad() },30000); }
 function initV2(set){ if(initV2.done) return; initV2.done=1; initNav(); initFeedAdm(); initVisits(set); initArcade();
   $('wcText').value=set.welcome||''; $('pnText').value=set.pin||'';
   $('acGo').onclick=loadActivity; $('acPeak').onclick=async()=>{ if(!confirm('Reset the online record?')) return; await api('/admin/site','peakReset'); loadActivity(); };
