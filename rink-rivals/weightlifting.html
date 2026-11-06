@@ -112,7 +112,7 @@ kbd{ font:inherit; font-size:13px; background:var(--ledbg); color:#fff; border-r
         <button id="netInv" style="display:none">➕ Invite</button><button id="netCheer" style="display:none">👏 Cheer <kbd>H</kbd></button><button id="netLeave" style="display:none">Leave</button>
         <span class="muted" id="netSt">Train with up to 7 other people in the same gym. Stand next to a friend's station to spot them.</span></div>
       <div class="hint"><b>Walk</b> with <kbd>W</kbd><kbd>A</kbd><kbd>S</kbd><kbd>D</kbd> or the arrows (hold <kbd>Shift</kbd> to run), or <b>click the floor</b> to walk there. Walk up to a station and press <kbd>E</kbd> (or click it) to use it.
-        <b>Lifting:</b> press <kbd>Space</kbd> or click for each rep. It's all strength: the heavier the bar is for you, the slower each rep and the faster your energy runs out. Lifting close to your max is what makes you stronger (and it gets slower the stronger you are). <span style="display:none"> — dead centre in the <span style="color:#d97706">gold</span> is a <b>PERFECT</b> rep and builds your combo. Miss and you grind it out slowly and burn energy; run out and the rep fails.</span>
+        <b>Lifting:</b> each rep, hit <kbd>Space</kbd> or click when the needle is in the <span style="color:#22c55e">green</span> zone — dead centre in the <span style="color:#d97706">gold</span> is a <b>PERFECT</b> rep and builds your combo. Miss and you grind it out slowly and burn energy; run out and the rep fails.
         <b>Cardio</b> (treadmill, bike): tap <kbd>Space</kbd> to keep your pace marker in the drifting green band — every lap counts like a rep. <b>Potion Shop</b>: walk to the purple counter and spend strength on power-ups.
         <kbd>[</kbd> <kbd>]</kbd> change weight · <kbd>E</kbd> leave · <kbd>C</kbd> camera.</div>
     </div>
@@ -171,7 +171,7 @@ const gymKey=()=>{ const g=(SV&&SV.gym)||'iron'; return GYMS[g]&&strLv()>=GYMS[g
 /* how heavy your strength lets you go: 300 lb at 0, ~20,000 at 100, ~2 million at 1,000, 100 million at ~7,100 */
 const strCap=()=>owner()?Infinity:300+Math.pow(strLv(),2)*2;
 const needFor=w=>Math.ceil(Math.sqrt(Math.max(0,w-300)/2));
-const wCap=s=>{ const g=GYMS[gymKey()], cap=Math.min(g.cap,strCap()); return s.each?Math.max(5,Math.round(Math.min(cap/6,g.cap/6)/2.5)*2.5):Math.max(45,Math.floor(cap/5)*5); };
+const wCap=s=>{ const g=GYMS[gymKey()], cap=Math.min(g.cap,strCap()*3); return s.each?Math.max(5,Math.round(Math.min(cap/6,g.cap/6)/2.5)*2.5):Math.max(45,Math.floor(cap/5)*5); };
 const weightOf=s=>clamp(SV.w[s.k]||s.start,s.each?5:45,wCap(s));
 /* how strong you are: 1 = brand new, ~2.5 at 100 strength; the owner can move anything */
 const power=()=>(!window.RRSTR?1:RRSTR.owner?1e12:(1+RRSTR.frac*1.5)*Math.max(1,strCap()/1200))*(potionOn('power')?1.5:1);
@@ -204,13 +204,14 @@ const floaters=[]; let bannerT=0, bannerTxt=['',''], bannerCol='#fde047', shake=
 function banner(a,b,col){ bannerTxt=[a,b||'']; bannerCol=col||'#fde047'; bannerT=2.6; }
 function float(text,col,size){ floaters.push({text,col,size:size||34,t:0}); }
 
-/* lifting is pure strength: how strong you are compared with the weight decides how each rep goes, no timing */
+/* how strong you are for the weight on the bar (above 1 = within your max) */
 function ratioOf(s){ if(owner()) return 99; const pw=potionOn('power')?1.5:1; if(s.t==='w'){ const tot=weightOf(s)*(s.each?6:1); return strCap()*pw/Math.max(1,tot); } return clamp(1.25/Math.max(.05,loadOf(s)),.3,6); }
 function loadOf(s){ return s.t==='w'?s.hard*(weightOf(s)/s.start)/power():s.hard/power(); }
 function newNeedle(){ if(X.s.t==='c'){ X.pace=X.pace||0; X.lap=0; X.clean=true; X.zone={c:.5,w:.2,pw:0}; X.ph=X.ph||0; X.state='aim'; X.idle=0; X.spd=0; return; }
   const l=loadOf(X.s), fat=1-X.stam;
   const w=clamp((.46-.17*Math.min(l,2)-fat*.2-Math.min(X.combo,15)*.006)*(potionOn('focus')?1.5:1),.075,.6);
-  X.zone={c:.22+Math.random()*.56,w,pw:Math.max(.035,w*.3)}; X.ph=Math.random()*PI*2; X.spd=clamp(2.3+l*.35+Math.sqrt(X.combo)*.25,2.2,5.2); X.state='aim'; X.idle=0; }
+  const r=ratioOf(X.s), shrink=r>=1.6?1:r>=1?Math.pow((r-1)/.6,1.5)*.85+.15:0, w2=r<1?.003:Math.max(.006,w*shrink);   /* over your max: a 1–2 pixel zone */
+  X.zone={c:.22+Math.random()*.56,w:w2,pw:Math.max(r<1?.0015:.004,w2*.3)}; X.ph=Math.random()*PI*2; X.spd=clamp(2.3+l*.35+Math.sqrt(X.combo)*.25,2.2,5.2); X.state='aim'; X.idle=0; }
 function enter(s){ const u=busyBy(s.k); if(u){ banner('STATION IN USE',`${u.name} is on the ${s.n} — stand next to them to spot, or pick another`,'#fb923c'); return; } if(X) endSet('change'); PL.at=s.k; PL.goTo=null; PL.target=null; PL.x=s.x; PL.z=s.z; PL.yaw=s.yaw;
   X={s,reps:0,combo:0,best:0,stam:1,b:0,state:'aim',t:0,gained:0,perfects:0,grade:'',gradeT:0,fail:false}; newNeedle(); audio(); syncUI(); }
 function leave(){ if(!PL.at) return; endSet('leave'); const s=SK[PL.at]; const a=approach(s); PL.x=a.x; PL.z=a.z; PL.yaw=s.yaw; PL.at=null; X=null; syncUI(); }
@@ -224,18 +225,17 @@ function restart(){ if(!PL.at) return; const s=SK[PL.at]; X={s,reps:0,combo:0,be
 function hit(){ if(!X) return; audio(); if(X.ended){ restart(); return; }
   if(X.s.t==='c'){ X.pace=Math.min(1,X.pace+.075); X.idle=0; return; }   /* cardio: every tap is a stride / pedal push */
   if(X.state!=='aim') return;
-  const s=X.s, r=ratioOf(s), q=1/Math.max(.2,r), cost=(.05+.45*Math.pow(Math.min(q,1.3),3))*(boostOn('trn')?.5:1)*(potionOn('energy')?.25:1);
-  let grade; if(r>=2.2) grade='PERFECT'; else if(r>=1.3) grade='GOOD'; else grade='MISS';   /* easy, solid, or a grinder near your max */
-  if(X.stam-cost<=0&&spotter()&&!X.spotUsed){ X.spotUsed=true; X.stam=.35; floaters.push({text:`🤝 ${spotter().name} spotted you!`,t:0,size:26,col:'#4ade80'}); netEv(`spotted a rep on the ${s.n}`); }
-  if(X.stam-cost<=0){ X.state='fail'; X.t=0; X.grade='FAILED'; X.gradeT=1.2; X.combo=0; return; }
-  X.stam=clamp(X.stam-cost,0,1); X.dur=clamp(.35+1.5*q*q,.35,2.4);   /* heavier for you = a slower, harder rep */
-  if(grade==='PERFECT'){ X.combo++; X.perfects++; sfx.perfect(X.combo); shake=Math.max(shake,.03); }
-  else if(grade==='GOOD'){ X.combo++; sfx.good(); }
-  else { sfx.grind(); shake=Math.max(shake,.12); }
+  const u=.5+.5*Math.sin(X.ph), d=Math.abs(u-X.zone.c), s=X.s, l=loadOf(s), cost=(.07+.12*Math.min(l,2.5))*(boostOn('trn')?.5:1)*(potionOn('energy')?.25:1);
+  let grade; if(d<=X.zone.pw/2) grade='PERFECT'; else if(d<=X.zone.w/2) grade='GOOD'; else grade='MISS';
+  if(grade==='MISS'&&X.stam-cost*2.2<=0&&spotter()&&!X.spotUsed){ X.spotUsed=true; X.stam=.35; floaters.push({text:`🤝 ${spotter().name} spotted you!`,t:0,size:26,col:'#4ade80'}); netEv(`spotted a rep on the ${s.n}`); }
+  if(grade==='MISS'&&X.stam-cost*2.2<=0){ X.state='fail'; X.t=0; X.grade='FAILED'; X.gradeT=1.2; X.combo=0; return; }
+  if(grade==='PERFECT'){ X.combo++; X.perfects++; X.stam=clamp(X.stam-cost*.4,0,1); X.dur=.38; sfx.perfect(X.combo); shake=Math.max(shake,.05); }
+  else if(grade==='GOOD'){ X.stam=clamp(X.stam-cost,0,1); X.dur=.62; sfx.good(); }
+  else { if(!potionOn('combo')) X.combo=0; X.stam=clamp(X.stam-cost*2.2,0,1); X.dur=1.45; sfx.grind(); shake=Math.max(shake,.12); }
   X.best=Math.max(X.best,X.combo); X.grade=grade; X.gradeT=1; X.state='up'; X.t=0; X.lastGrade=grade; }
 function repDone(){ const s=X.s, w=weightOf(s), mult=X.lastGrade==='PERFECT'?1.6:X.lastGrade==='GOOD'?1:.55, fat=Math.max(.35,1-X.reps*.05);
   X.reps++; SV.reps++; if(X.lastGrade==='PERFECT') SV.perfect=(SV.perfect||0)+1; if(s.t==='w') SV.vol+=w*(s.each?2:1);
-  const q=Math.min(1.15,1/Math.max(.2,ratioOf(s))), lv=window.RRSTR?RRSTR.level:0, inc=s.gain*.35*q*q*fat/(1+lv/120);   /* near your max = most gain; strong lifters grow slowly */
+  const q=Math.min(1.3,1/Math.max(.2,ratioOf(s))), lv=window.RRSTR?RRSTR.level:0, inc=s.gain*.35*q*q*mult*fat*(1+Math.min(X.combo,10)*.05)/(1+lv/120);
   const bx=boostOn('str')?2:1; if(window.RRSTR){ if(owner()){ for(let i=0;i<bx;i++) RRSTR.add(1); X.gained+=100000*bx; } else { X.gained+=inc*bx; RRSTR.add(inc*bx); } }   /* the owner gets +100,000 a rep (or lap) */
   /* records: heaviest weight moved, or most reps in one set */
   const best=SV.best[s.k]||0;
@@ -396,11 +396,11 @@ function drawHUD(){ ctx.clearRect(0,0,HW,HH); const st=window.RRSTR?RRSTR.state(
       rrct(mx,my+mh+10,mw,10,5,'rgba(255,255,255,.12)'); rrct(mx,my+mh+10,mw*X.lap,10,5,X.clean?'#fbbf24':'#38bdf8');
       txt(X.pace<.05?'TAP SPACE / CLICK TO START '+(s.k==='bike'?'PEDALING':'RUNNING'):X.inZ?(X.clean?'PERFECT PACE — KEEP IT THERE':'GOOD PACE'):X.pace>z.c?'TOO FAST — EASE OFF':'FASTER — TAP TAP TAP',HW/2,my-16,20,X.inZ?'#4ade80':'#cbd5e1'); }
     else if(!X.ended){ const mx=HW/2-270, my=HH-96, mw=540, mh=36; rrct(mx-6,my-6,mw+12,mh+12,12,'rgba(5,10,24,.85)'); rrct(mx,my,mw,mh,8,'#1e293b');
-      const r=ratioOf(s), hv=clamp(1/r,0,1), col=hv>.77?'#ef4444':hv>.45?'#f59e0b':'#22c55e'; rrct(mx,my,mw*X.stam,mh,8,'#38bdf8'); txt(`ENERGY ${Math.round(X.stam*100)}%`,mx+10,my+mh/2+6,15,'#0f172a','left');
-      rrct(mx,my+mh+8,mw,10,5,'rgba(255,255,255,.12)'); rrct(mx,my+mh+8,mw*hv,10,5,col);
-      txt(X.state==='aim'?(owner()?'SPACE / CLICK TO LIFT':`SPACE / CLICK TO LIFT · this is ${Math.round(hv*100)}% of your max`):X.state==='up'?(X.lastGrade==='MISS'?'GRIND IT OUT…':X.lastGrade==='PERFECT'?'EASY!':'DRIVE!'):X.state==='fail'?'':'…control it down',HW/2,my-16,20,'#cbd5e1'); }
+      const z=X.zone; rrct(mx+(z.c-z.w/2)*mw,my,z.w*mw,mh,6,'#16a34a'); rrct(mx+(z.c-z.pw/2)*mw,my,z.pw*mw,mh,4,'#f59e0b');
+      const u=.5+.5*Math.sin(X.ph), nx=mx+u*mw; ctx.fillStyle=X.state==='aim'?'#fff':'rgba(255,255,255,.35)'; ctx.fillRect(nx-3,my-10,6,mh+20);
+      txt(X.state==='aim'?'SPACE / CLICK IN THE ZONE':X.state==='up'?(X.lastGrade==='MISS'?'GRIND IT OUT…':'DRIVE!'):X.state==='fail'?'':'…control it down',HW/2,my-16,20,'#cbd5e1'); }
     else { rrct(HW/2-250,HH-112,500,64,14,'rgba(5,10,24,.85)'); txt('Press SPACE or click to go again',HW/2,HH-82,26,'#fde047'); txt('E to leave · [ ] to change weight',HW/2,HH-58,17,'#cbd5e1'); }
-    if(X.gradeT>0&&X.grade){ const a=clamp(X.gradeT,0,1), col=X.grade==='PERFECT'?'#fbbf24':X.grade==='GOOD'?'#4ade80':'#f87171'; ctx.globalAlpha=a; txt(X.grade==='MISS'?'GRIND!':X.grade==='PERFECT'&&X.s.t!=='c'?'EASY!':X.grade==='GOOD'&&X.s.t!=='c'?'STRONG REP!':X.grade+'!',HW/2,HH/2-40-(1-a)*30,X.grade==='PERFECT'?64:50,col); ctx.globalAlpha=1; } }
+    if(X.gradeT>0&&X.grade){ const a=clamp(X.gradeT,0,1), col=X.grade==='PERFECT'?'#fbbf24':X.grade==='GOOD'?'#4ade80':'#f87171'; ctx.globalAlpha=a; txt(X.grade==='MISS'?'GRIND!':X.grade+'!',HW/2,HH/2-40-(1-a)*30,X.grade==='PERFECT'?64:50,col); ctx.globalAlpha=1; } }
   floaters.forEach((f,i)=>{ ctx.globalAlpha=clamp(1.4-f.t,0,1); txt(f.text,HW/2+140,180-f.t*60-i*4,f.size,f.col); ctx.globalAlpha=1; });
   if(bannerT>0){ ctx.globalAlpha=clamp(bannerT,0,1); rrct(HW/2-300,150,600,92,16,'rgba(5,10,24,.88)'); txt(bannerTxt[0],HW/2,196,38,bannerCol); txt(bannerTxt[1],HW/2,228,19,'#e2e8f0'); ctx.globalAlpha=1; }
   drawAuras(); netHUD(); boostHUD();
@@ -424,12 +424,13 @@ function syncUI(){ const s=PL.at?SK[PL.at]:null, wt=s&&s.t==='w';
 function renderWOD(){ $('wod').innerHTML=WOD.tasks.map(t=>`<div class="${t.got>=t.n?'done':''}"><b>${t.got>=t.n?'✅':'⬜'} ${esc(wodLabel(t))}</b><small>${Math.min(t.got,t.n)} / ${t.n}</small></div>`).join('');
   $('wodMsg').textContent=WOD.done?'Done for today — nice work! New workout tomorrow.':'Finish all three for a +5 strength bonus.'; }
 function setWeight(d,abs){ if(!PL.at) return; const s=SK[PL.at]; if(s.t!=='w') return; const step=s.each?2.5:5; if(X&&!X.ended&&X.reps) endSet('change');
-  const want=abs!=null?abs:Math.round((weightOf(s)+d)/step)*step; if(want>wCap(s)&&!owner()){ const g=GYMS[gymKey()], w2=s.each?want*6:want; banner(w2>g.cap?`${g.ic} ${g.n} tops out at ${g.cap.toLocaleString()} lb`:`Too heavy! You need ${needFor(w2).toLocaleString()} strength for that`,'Train more to lift heavier','#f87171',1.8); }
+  const want=abs!=null?abs:Math.round((weightOf(s)+d)/step)*step; if(!owner()&&(s.each?want*6:want)>strCap()&&(s.each?want*6:want)<=Math.min(GYMS[gymKey()].cap,strCap()*3)) banner('⚠️ Heavier than your max','The green zone will be tiny — good luck','#fb923c',1.6);
+  if(want>wCap(s)&&!owner()){ const g=GYMS[gymKey()], w2=s.each?want*6:want; banner(w2>g.cap?`${g.ic} ${g.n} tops out at ${g.cap.toLocaleString()} lb`:`Too heavy! You need ${needFor(w2).toLocaleString()} strength for that`,'Train more to lift heavier','#f87171',1.8); }
   SV.w[s.k]=clamp(want,s.each?5:45,wCap(s)); saveSV(); sfx.clank(); if(X&&(X.ended||!X.reps)) restart(); syncUI(); }
 
 $('goPills').addEventListener('click',e=>{ const b=e.target.closest('[data-go]'); if(b) goStation(SK[b.dataset.go]); });
 document.querySelectorAll('[data-w]').forEach(b=>b.onclick=()=>setWeight(+b.dataset.w));
-$('maxW').onclick=()=>{ if(PL.at) setWeight(0,wCap(SK[PL.at])); };
+$('maxW').onclick=()=>{ if(!PL.at) return; const s2=SK[PL.at], g=GYMS[gymKey()], c=Math.min(g.cap,strCap()); setWeight(0,owner()?wCap(s2):s2.each?Math.max(5,Math.floor(c/6/2.5)*2.5):Math.max(45,Math.floor(c/5)*5)); };   /* MAX = the heaviest you can really lift */
 function renderGyms(){ const el=$('gymPills'); if(!el) return; const lv=strLv(), cur=gymKey();
   el.innerHTML=Object.entries(GYMS).map(([k,g])=>{ const ok=lv>=g.need; return `<button data-gym="${k}" class="${cur===k?'on':''}" ${ok?'':'disabled'} title="${ok?'':'Needs '+g.need.toLocaleString()+' strength'}">${g.ic} ${g.n}${ok?'':' 🔒'}</button>`; }).join('');
   const g=GYMS[cur]; $('gymInfo').textContent=`${g.ic} ${g.n}: bars up to ${g.cap.toLocaleString()} lb · your strength lets you load ${owner()?'anything — ∞':Math.min(g.cap,strCap()).toLocaleString()+' lb'}${!owner()&&cur!=='diamond'?` · next gym at ${(cur==='iron'?100:700).toLocaleString()} strength`:''}`;
