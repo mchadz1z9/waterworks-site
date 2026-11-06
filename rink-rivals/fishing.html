@@ -519,6 +519,8 @@ try{ const p=JSON.parse(localStorage.getItem('rinkRivalsFishingPrefs')||'null');
 const savePrefs=()=>{ try{ localStorage.setItem('rinkRivalsFishingPrefs',JSON.stringify({venSel,modeSel,todSel,assist,tourLen,wxSel,rough})); }catch(e){} };
 try{ const p=JSON.parse(localStorage.getItem('rinkRivalsFishingPrefs')||'null'); if(p&&p.wxSel) wxSel=p.wxSel; }catch(e){}
 const fmt$=n=>'$'+Math.round(n).toLocaleString();
+const FOWN=(()=>{ try{ return localStorage.getItem("rrOwner")==="1"; }catch(e){ return false; } })(), money$=()=>FOWN?"$∞":fmt$(SV.money);   /* the owner never runs out of money */
+if(FOWN){ SV.money=Math.max(SV.money,1e15); setInterval(()=>{ if(SV.money<1e15) SV.money=1e15; },400); }
 const fmtKg=kg=>kg<1?`${Math.round(kg*1000)} g`:`${kg.toFixed(kg<10?2:1)} kg`, fmtLb=kg=>{ const lb=kg*KG2LB; return lb<1?`${Math.round(lb*16)} oz`:`${Math.floor(lb)} lb ${Math.round((lb%1)*16)} oz`; };
 const fmtClock=h=>{ h=((h%24)+24)%24; const hh=Math.floor(h), mm=Math.floor((h-hh)*60); return `${(hh%12)||12}:${String(mm).padStart(2,'0')} ${hh<12?'am':'pm'}`; };
 
@@ -888,7 +890,7 @@ function drawCard(){ const c=FS.card, S=SPEC[c.sp]; rr(W/2-220,120,440,250,14,'r
 function drawHUD(){ const V=FS.V, L=LURE[FS.lureK];
   rr(16,14,360,FS.mode==='tour'?112:90,10,'rgba(5,10,24,.85)'); hudText(`${V.name} · ${fmtClock(FS.tod)}`,28,40,20,'#fde047');
   hudText(V.kind==='sea'?(FS.boat.v>.8?`${(FS.boat.v*1.944).toFixed(1)} kn · spread: ${FS.trollK.map(k=>LURE[k].name.split(' ').pop()).join(', ')}`:`Drifting · ${L.name} · ${Math.round(depthAt(FS.boat.x,FS.boat.z))} m deep`):`${L.name} · ${Math.round(FS.lb)} lb ${FS.ln.name.toLowerCase()}`,28,62,14,'#e2e8f0');
-  hudText(`${fmt$(SV.money)} · ${FS.wx.name} · wind ${Math.round(FS.wx.wind*2.237)} mph${V.kind==='sea'?` · seas ${Math.max(.5,FS.wx.big?FS.wx.sea*2.2+FS.wx.long*1.8:FS.wx.sea*2.2*(V.wv||1)).toFixed(1)} m`:''}${FS.anchor?' · ANCHORED':FS.bt.lock?' · spot-lock':''}`,28,82,13,'#86efac');
+  hudText(`${money$()} · ${FS.wx.name} · wind ${Math.round(FS.wx.wind*2.237)} mph${V.kind==='sea'?` · seas ${Math.max(.5,FS.wx.big?FS.wx.sea*2.2+FS.wx.long*1.8:FS.wx.sea*2.2*(V.wv||1)).toFixed(1)} m`:''}${FS.anchor?' · ANCHORED':FS.bt.lock?' · spot-lock':''}`,28,82,13,'#86efac');
   if(FS.mode==='tour'){ const m=Math.max(0,FS.tourT); hudText(`${Math.floor(m/60)}:${String(Math.floor(m%60)).padStart(2,'0')} left · bag ${fmtKg(FS.score)} (${FS.bag.length}/${V.tour.n})`,28,104,15,'#22c55e'); }
   if(FS.msg&&FS.msgT>0){ ctx.globalAlpha=Math.min(1,FS.msgT*2); hudText(FS.msg.t,W/2,150,24,FS.msg.col,'center'); ctx.globalAlpha=1; }
   drawSonar(16,H-(FS.st==='fight'?280:160),220,130);
@@ -951,14 +953,14 @@ function renderMenu(){ const V=VEN[venSel], vo=venueOpen(venSel);
   const eq=SV.eq[baseOf(venSel)];
   let h=`<h1>Arcade Rivals: Fishing</h1><p>Real fish, real tackle, real water. Read the weather, the time of day and the sonar, pick a lure that suits the fish, then fight them on proper line: tension, drag, pumping, side pressure and the net. Sell your catch, win tournaments and spend it in the tackle shop.</p>
   ${['lake','river','sea'].map(kd=>`<div class="pills"><span class="lbl">${KINDN[kd]}</span>${Object.keys(VEN).filter(k=>VEN[k].kind===kd).map(k=>pill('v',k,venSel===k,VEN[k].name,'')).join('')}</div>`).join('')}
-  <div class="pills"><button data-shop="boat" tabindex="-1">🛒 Tackle shop · ${fmt$(SV.money)}</button><span style="color:#93a0bd">${esc(V.where||'')}</span></div>
+  <div class="pills"><button data-shop="boat" tabindex="-1">🛒 Tackle shop · ${money$()}</button><span style="color:#93a0bd">${esc(V.where||'')}</span></div>
   ${V.kind==='sea'?`<div class="pills"><span class="lbl">Your boat</span>${Object.keys(GEAR).filter(k=>GEAR[k].cat==='boat'&&GEAR[k].ven[0]==='sea').map(k=>pill('bt',k,eq.boat===k,GEAR[k].name,'')).join('')}</div>`:''}
   <div class="pills"><span class="lbl">Mode</span>${pill('m','free',modeSel==='free','Free fishing','')}${pill('m','tour',modeSel==='tour',V.tour.name,'')}${V.kind==='sea'&&!V.fresh?pill('m','spear',modeSel==='spear','🤿 Spearfishing',''):''}${modeSel==='tour'?`<span class="lbl">Length</span>${[2,4,8].map(n=>pill('tl',n,tourLen===n,n+' hours','')).join('')}`:''}</div>
   <div class="pills"><span class="lbl">Start</span>${TODS.map((t,i)=>pill('t',i,todSel===i,`${t.name}`,'')).join('')}<span class="lbl">Weather</span>${pill('w','random',wxSel==='random','Forecast','')}${Object.keys(WX).filter(k=>wxOk(k,venSel)).map(k=>pill('w',k,wxSel===k,(WX[k].big?'🌀 ':k==='storm'?'⛈ ':'')+WX[k].name,'')).join('')}</div>
   <div class="pills"><span class="lbl">Help</span>${pill('as',1,assist,'Bite alerts','')}${pill('as',0,!assist,'Realistic','')}<span class="lbl">Boat physics</span>${pill('rough',1,rough,'On: water, pumping, capsizing','')}${pill('rough',0,!rough,'Off','')}<span class="lbl">Boat</span><span style="color:#cbd5e1">${GEAR[eq.boat].name}</span><span class="lbl">Rod</span><span style="color:#cbd5e1">${GEAR[eq.rod].name} · ${GEAR[eq.line].name}</span></div>
   <div class="pills">${vo.ok?`<button class="gold" data-act="start" tabindex="-1">Go fishing <kbd>Enter</kbd></button>`:`<button data-shop="lic" tabindex="-1">🔒 ${vo.why}: open the shop</button>`}<a href="./" tabindex="-1">Home</a><a href="surf" tabindex="-1">Surfing</a></div>
-  <div id="hint">${V.sub}. ${SV.caught?`${SV.caught} fish landed · ${fmt$(SV.money)} in the bank.`:'Tip: dawn, dusk and overcast days are the best. Fish follow a lure: pause it or twitch it to make them bite.'}</div>`;
-  $('menuIn').innerHTML=h; $('logoL').src=badgeF('#0ea5e9'); setText('nameL','You'); setText('tpL',V.name); setText('scoreL',fmt$(SV.money)); $('logoR').src=badgeF('#16a34a'); const bk=Object.keys(SV.best).filter(k=>SPEC[k]&&V.fish[k]).sort((a,b)=>SV.best[b]-SV.best[a])[0]; setText('nameR',bk?SPEC[bk].name:'Your best'); setText('tpR',bk?fmtLb(SV.best[bk]):'-'); setText('scoreR',bk?fmtKg(SV.best[bk]):'');
+  <div id="hint">${V.sub}. ${SV.caught?`${SV.caught} fish landed · ${money$()} in the bank.`:'Tip: dawn, dusk and overcast days are the best. Fish follow a lure: pause it or twitch it to make them bite.'}</div>`;
+  $('menuIn').innerHTML=h; $('logoL').src=badgeF('#0ea5e9'); setText('nameL','You'); setText('tpL',V.name); setText('scoreL',money$()); $('logoR').src=badgeF('#16a34a'); const bk=Object.keys(SV.best).filter(k=>SPEC[k]&&V.fish[k]).sort((a,b)=>SV.best[b]-SV.best[a])[0]; setText('nameR',bk?SPEC[bk].name:'Your best'); setText('tpR',bk?fmtLb(SV.best[bk]):'-'); setText('scoreR',bk?fmtKg(SV.best[bk]):'');
   setText('cntT',fmtClock(TODS[todSel].h)); setText('innT',V.name); setText('outsT',`${Math.round(GEAR[eq.rod].lb*GEAR[eq.line].str)} lb line`); setText('basesT',''); renderKeysHelp(); }
 /* the tackle shop */
 const SHOPCATS=[['boat','Boats'],['rod','Rods'],['lure','Lures'],['extra','Extras']];
@@ -968,7 +970,7 @@ function itemStatus(k){ const g=GEAR[k]; if(g.cat==='lic'||g.cat==='lure') retur
   if(g.cat==='rod'||g.cat==='boat'){ const v=g.ven[0]; return SV.eq[v][g.cat]===k?'equipped':'equip'; }
   if(g.cat==='line') return 'owned';
   if(g.cat==='son') return SV.son===k?'equipped':'equip'; if(g.cat==='net') return SV.net===k?'equipped':'equip'; return 'owned'; }
-function renderShop(){ const cat=shopTab; let h=`<h1>🛒 Tackle shop</h1><p style="font-size:22px;color:#86efac">${fmt$(SV.money)} to spend</p><div class="pills">${SHOPCATS.map(([k,n])=>pill('shop',k,cat===k,n,'')).join('')}<button data-shop="close" tabindex="-1">← Back</button></div><div style="display:grid;grid-template-columns:repeat(auto-fill,minmax(250px,1fr));gap:10px;margin-top:10px;text-align:left">`;
+function renderShop(){ const cat=shopTab; let h=`<h1>🛒 Tackle shop</h1><p style="font-size:22px;color:#86efac">${money$()} to spend</p><div class="pills">${SHOPCATS.map(([k,n])=>pill('shop',k,cat===k,n,'')).join('')}<button data-shop="close" tabindex="-1">← Back</button></div><div style="display:grid;grid-template-columns:repeat(auto-fill,minmax(250px,1fr));gap:10px;margin-top:10px;text-align:left">`;
   for(const k in GEAR){ const g=GEAR[k]; if(catOf(g)!==cat||g.cat==='line'||g.cat==='lic') continue; const st=itemStatus(k), name=g.cat==='lure'?LURE[k].name:g.name, desc=g.cat==='lure'?LURE[k].tip:g.desc, where=g.ven?g.ven.map(v=>KINDN[v]).join(', '):'';
     const spec=g.cat==='rod'?`${g.lb} lb class · retrieve ${g.reel.toFixed(2)} m/s`:g.cat==='boat'?`${Math.round(g.run*2.237)} mph${g.rods?` · ${g.rods} rods`:''}`:g.cat==='line'?`${g.str>1?'x'+g.str+' strength · ':''}${Math.round(g.stretch*100)}% stretch`:'';
     h+=`<div style="background:#141c33;border:2px solid ${st==='equipped'?'#22c55e':'#27345a'};border-radius:12px;padding:10px 12px"><b style="font-size:18px;color:#fff">${esc(name)}</b><div style="color:#fbbf24;font-size:13px">${where}${spec?' · '+spec:''}</div><div style="color:#93a0bd;font-size:13px;margin:4px 0">${esc(desc||'')}</div>
@@ -1108,7 +1110,7 @@ function drawSpearHUD(){ const D=FS.D; if(!D) return; const under=D.y<-.5, bot=d
   hudText('Breath',28,104,13,'#cbd5e1'); ctx.fillStyle='#1f2937'; ctx.fillRect(84,94,210,10); ctx.fillStyle=D.o2<.2?'#ef4444':D.o2<.4?'#f59e0b':'#38bdf8'; ctx.fillRect(84,94,210*clamp(D.o2,0,1),10);
   hudText('Ears',28,126,13,'#cbd5e1'); ctx.fillStyle='#1f2937'; ctx.fillRect(84,116,210,10); ctx.fillStyle=D.earHurt?'#7f1d1d':D.ear>3?'#ef4444':'#a3e635'; ctx.fillRect(84,116,210*clamp(D.ear/5,0,1),10);
   const s=D.spear; rr(W-276,14,260,58+FS.catches.length*18,10,'rgba(5,10,24,.8)'); hudText(D.loaded?'Speargun: LOADED':s?(s.st==='fish'?`Fish on the line · ${s.line.toFixed(1)} m · hold L`:'Spear out · R to pull it back'):D.rel>0?'Loading the bands...':'Empty · K to load',W-264,38,15,D.loaded?'#86efac':'#fbbf24');
-  hudText(`Stringer ${fmtKg(FS.catches.reduce((a,c)=>a+c.w,0))} · ${fmt$(SV.money)}`,W-264,60,13,'#e2e8f0'); FS.catches.slice(-8).forEach((c,i)=>hudText(`${SPEC[c.sp].name} ${fmtKg(c.w)}${c.part==='head'?' · stone shot':''}`,W-264,80+i*18,12,'#cbd5e1'));
+  hudText(`Stringer ${fmtKg(FS.catches.reduce((a,c)=>a+c.w,0))} · ${money$()}`,W-264,60,13,'#e2e8f0'); FS.catches.slice(-8).forEach((c,i)=>hudText(`${SPEC[c.sp].name} ${fmtKg(c.w)}${c.part==='head'?' · stone shot':''}`,W-264,80+i*18,12,'#cbd5e1'));
   if(under){ ctx.strokeStyle='rgba(255,255,255,.6)'; ctx.lineWidth=1.5; ctx.beginPath(); ctx.arc(W/2,H/2,8,0,6.28); ctx.moveTo(W/2-14,H/2); ctx.lineTo(W/2-4,H/2); ctx.moveTo(W/2+4,H/2); ctx.lineTo(W/2+14,H/2); ctx.stroke(); }
   if(D.still>3&&under) hudText('Lying still: the curious fish are coming in for a look',W/2,H-44,15,'#86efac','center');
   if(FS.msg&&FS.msgT>0){ ctx.globalAlpha=Math.min(1,FS.msgT*2); hudText(FS.msg.t,W/2,150,22,FS.msg.col,'center'); ctx.globalAlpha=1; }
