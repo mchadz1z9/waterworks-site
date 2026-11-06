@@ -50,7 +50,7 @@ const mix3=(a,b,t)=>[a[0]+(b[0]-a[0])*t,a[1]+(b[1]-a[1])*t,a[2]+(b[2]-a[2])*t];
 function OB(c,ax,ay,az,sx,sy,sz,col){ R3.part(R3.UB,new Float32Array([ax[0]*sx*K,ax[1]*sx*K,ax[2]*sx*K,0, ay[0]*sy*K,ay[1]*sy*K,ay[2]*sy*K,0, az[0]*sz*K,az[1]*sz*K,az[2]*sz*K,0, c[0]*K,c[1]*K,c[2]*K,1]),col); }
 const LB=(a,b,th,tw,col)=>R3.part(R3.UB,R3.beam(mul3(a,K),mul3(b,K),th*K,tw*K),col);
 const SP=(p,r,col)=>R3.part(R3.US,R3.mm(R3.T(p[0]*K,p[1]*K,p[2]*K),R3.S(r*K,r*K,r*K)),col);
-function drawBody(J,f,lk){ if(lk.olympia) return drawOlympia(J,f,lk); const m=(lk.buff||1)*(1+(lk.flex||0)*.08), bsh=1+(m-1)*.6, barm=1+(m-1)*.8, bch=1+(m-1)*.2, bleg=1+(m-1)*.35, W=p=>wp(f,p), D=v=>nrm3(wd(f,v));
+function drawBody(J,f,lk){ if(lk.olympia) return drawOlympia(J,f,lk); const m=(lk.buff||1)*(1+(lk.flex||0)*.08), bk=lk.bulk||1, bsh=1+(m-1)*.6, barm=(1+(m-1)*.8)*Math.sqrt(bk), bch=(1+(m-1)*.2)*bk, bleg=(1+(m-1)*.35)*bk, W=p=>wp(f,p), D=v=>nrm3(wd(f,v));
   for(const sx of [-1,1]){ const h=W(J['hip'+sx]), k=W(J['knee'+sx]), a=W(J['ank'+sx]); LB(h,k,.085*bleg,.1*bleg,lk.legs); LB(k,a,.06*bleg,.07*bleg,lk.skin);
     const toe=D(J.toe), up=[0,1,0], sd=nrm3(crs3(Math.abs(toe[1])>.9?[1,0,0]:up,toe)), u2=crs3(toe,sd); OB(add3(a,mul3(toe,.06)),sd,u2,toe,.11,.07,.22,lk.shoe); }
   const pel=W(J.pelvis), ch=W(J.chest), A=nrm3(sub3(ch,pel)); let Fv=D(J.F); Fv=nrm3(sub3(Fv,mul3(A,dot3(Fv,A)))); const Wd=nrm3(crs3(A,Fv)), len=Math.hypot(...sub3(ch,pel));
