@@ -220,6 +220,18 @@ const sstep=(a,b,x)=>{ const t=clamp((x-a)/(b-a),0,1); return t*t*(3-2*t); };
 const BIKES={
  mx:{name:'450cc motocross bike',m:180,I:62,wb:1.49,r:.34,hc:.92,P:41000,F0:1400,vmax:29,s0:.09,T:.30,zeta:.38,mu:.95,lean:170,gyro:70,cda:.55,head:1.05},
  bmx:{name:'20-inch race BMX',m:82,I:15,wb:1.0,r:.255,hc:.88,P:1500,F0:460,vmax:16.5,s0:.025,T:.07,zeta:.55,mu:1.0,lean:95,gyro:0,cda:.32,head:1.0}};
+/* pedal bikes you can pick in BMX mode: the race BMX plus three mountain bikes (bigger wheels, suspension, heavier) */
+const BIKEV={bmx:BIKES.bmx,
+ mtb:{name:'Hardtail mountain bike',m:88,I:18,wb:1.18,r:.37,hc:1.0,P:1400,F0:420,vmax:15.5,s0:.035,T:.12,zeta:.5,mu:1.06,lean:100,gyro:0,cda:.36,head:1.1,fork:1,col:[.1,.55,.25]},
+ dh:{name:'Downhill mountain bike',m:95,I:20,wb:1.25,r:.37,hc:1.02,P:1350,F0:400,vmax:17,s0:.06,T:.22,zeta:.45,mu:1.1,lean:105,gyro:0,cda:.38,head:1.1,fork:2,col:[.85,.35,.08]},
+ dj:{name:'Dirt jump bike',m:84,I:16,wb:1.06,r:.33,hc:.95,P:1450,F0:450,vmax:16,s0:.03,T:.1,zeta:.52,mu:1.0,lean:98,gyro:0,cda:.34,head:1.05,fork:1,col:[.15,.3,.8]}};
+/* motocross engine sizes: 250 is light and nimble, 450 the classic, 750 and the 1000cc Suzuki are monsters (heavier, so they rotate slower in the air) */
+const MXV={m250:{name:'250cc motocross bike',m:168,I:56,wb:1.47,r:.34,hc:.91,P:29000,F0:1250,vmax:26.5,s0:.09,T:.30,zeta:.38,mu:.95,lean:180,gyro:58,cda:.53,head:1.04,cc:250},
+ mx:Object.assign(BIKES.mx,{cc:450}),
+ m750:{name:'750cc motocross bike',m:196,I:68,wb:1.52,r:.345,hc:.93,P:62000,F0:1750,vmax:33,s0:.095,T:.31,zeta:.39,mu:.96,lean:160,gyro:82,cda:.57,head:1.06,cc:750,col:['#111827','#ef4444']},
+ m1000:{name:'1000cc Suzuki',m:212,I:74,wb:1.55,r:.35,hc:.94,P:92000,F0:2100,vmax:39,s0:.1,T:.32,zeta:.4,mu:.97,lean:150,gyro:95,cda:.6,head:1.08,cc:1000,col:['#facc15','#1d4ed8']}};
+let bikeSel='bmx', mxSel='mx';
+const bikeOf=veh=>veh==='bmx'?(BIKEV[bikeSel]||BIKES.bmx):veh==='mx'?(MXV[mxSel]||BIKES.mx):BIKES[veh];
 
 /* ---------- tracks ----------
    A track is a smoothed centreline (closed loop, or open for BMX) with a width. Features (jumps, whoops, berms) are laid
@@ -364,7 +376,7 @@ function groundH(x,z){ const T=TRK; if(!T) return 0; const q=nearT(x,z), b=baseH
 function groundSlope(x,z,hd){ const e=.3, fx=Math.sin(hd), fz=Math.cos(hd); return (groundH(x+fx*e,z+fz*e)-groundH(x-fx*e,z-fz*e))/(2*e); }
 
 /* ---------- the rider and the bike: pitch-plane rigid body on two suspended wheels, kinematic steering ---------- */
-function mkBike(veh,s,w){ const B=BIKES[veh], sp=sampleAt(s), lx=-sp.tz, lz=sp.tx, x=sp.x+lx*w, z=sp.z+lz*w;
+function mkBike(veh,s,w){ const B=bikeOf(veh), sp=sampleAt(s), lx=-sp.tz, lz=sp.tx, x=sp.x+lx*w, z=sp.z+lz*w;
   const b={veh,B,p:[x,0,z],v:[0,0,0],hd:sp.hd,th:0,om:0,x:[B.s0,B.s0],xd:[0,0],on:[true,true],air:0,airMax:0,lean:0,steer:0,whip:0,in:{thr:0,brk:0,steer:0,lean:0,pop:0},crash:0,
     wheelA:[0,0],trick:null,rot:0,spin:0,pre:0,popT:0,rpm:.2,cased:0,landQ:''}; b.th=Math.atan(groundSlope(x,z,b.hd)); b.p[1]=groundH(x,z)+B.hc; return b; }
 const fwdV=b=>[Math.sin(b.hd),0,Math.cos(b.hd)];
@@ -444,16 +456,16 @@ const LVL=['Amateur','Pro','Factory'], LVLK=[.88,.95,1.0];
 const keys=new Set(); const held=a=>a.some(k=>keys.has(k));
 const SKEY='rinkRivalsMotocrossV1'; let SV=(()=>{ try{ return Object.assign({best:{},lap:{},free:{},wins:0,races:0},JSON.parse(localStorage.getItem(SKEY)||'null')||{}); }catch(e){ return {best:{},lap:{},free:{},wins:0,races:0}; } })();
 const saveSV=()=>{ try{ localStorage.setItem(SKEY,JSON.stringify(SV)); }catch(e){} };
-try{ const p=JSON.parse(localStorage.getItem('rinkRivalsMotocrossPrefs')||'null'); if(p){ vehSel=p.vehSel||vehSel; trackSel=TRACKS[p.trackSel]?p.trackSel:trackSel; lvl=p.lvl??lvl; camMode=p.camMode||0; } }catch(e){}
+try{ const p=JSON.parse(localStorage.getItem('rinkRivalsMotocrossPrefs')||'null'); if(p){ vehSel=p.vehSel||vehSel; trackSel=TRACKS[p.trackSel]?p.trackSel:trackSel; lvl=p.lvl??lvl; camMode=p.camMode||0; if(p.bikeSel&&BIKEV[p.bikeSel]) bikeSel=p.bikeSel; if(p.mxSel&&MXV[p.mxSel]) mxSel=p.mxSel; } }catch(e){}
 if(!VEH_TRACKS[vehSel].includes(trackSel)) trackSel=VEH_TRACKS[vehSel][0];
-const savePrefs=()=>{ try{ localStorage.setItem('rinkRivalsMotocrossPrefs',JSON.stringify({vehSel,trackSel,lvl,camMode})); }catch(e){} };
+const savePrefs=()=>{ try{ localStorage.setItem('rinkRivalsMotocrossPrefs',JSON.stringify({vehSel,trackSel,lvl,camMode,bikeSel,mxSel})); }catch(e){} };
 const fmtT=s=>`${Math.floor(s/60)}:${(s%60).toFixed(2).padStart(5,'0')}`;
 /* the field: team colours, numbers and names (fictional riders) */
 const TEAMS=[{c:'#dc2626',c2:'#f8fafc'},{c:'#1d4ed8',c2:'#f8fafc'},{c:'#16a34a',c2:'#111827'},{c:'#f97316',c2:'#111827'},{c:'#facc15',c2:'#111827'},{c:'#e2e8f0',c2:'#1d4ed8'},{c:'#7c3aed',c2:'#f8fafc'},{c:'#0f172a',c2:'#facc15'}];
 const NAMES=['Kowalski','Dupont','Hayes','Moreno','Lindqvist','Tanaka','Ferreira','Okafor','Brennan','Vidal','Novak','Schulz','Romero','Ito','Walsh','Petrov'];
 
 /* ---------- a run ---------- */
-function newRun(){ const T=buildTrack(trackSel), veh=T.veh, B=BIKES[veh], race=T.kind==='race';
+function newRun(){ const T=buildTrack(trackSel), veh=T.veh, B=bikeOf(veh), race=T.kind==='race';
   const start=T.closed?4:(trackSel==='olympic'?2.5:4), n=race?8:1, myLane=race?Math.floor(Math.random()*n):0, sp=race?(veh==='bmx'?.92:1.25):0;
   const names=NAMES.slice().sort(()=>Math.random()-.5);
   MX={T,veh,race,t:0,state:race?'gate':'run',cd:race?6.5:0,gateT:0,clock:race?0:120,score:0,fx:[],feed:[],msg:null,riders:[],shake:0,holeshot:null,finish:[],over:false,lastJump:null,cam:camMode,camE:null,camC:null};
@@ -559,7 +571,7 @@ function land(b,vy){ const J=MX.jump, sl=(()=>{ let a=0; for(let i=0;i<2;i++){ c
   /* short of a gap jump's landing: the wheels hit the up-face (landing on the next whoop or roller is just riding) */
   const qL=nearT(b.p[0],b.p[2]), fL=qL&&MX.T.F.find(f=>qL.s>=f.s0&&qL.s<f.s0+f.len), gapCase=fL&&fL.gap&&qL.s-fL.s0>fL.a&&qL.s-fL.s0<fL.a+fL.gap+.5;
   let caseUp=false; if(sl>.15&&gapCase){ caseUp=true; if(vy<-9.5||rel<-1.3) return crash(b,'Cased the landing and went over the bars!'); b.v=mul(b.v,.55); b.om*=.3; feed('Cased the landing!','#fb923c'); }
-  else { if(rel>.85) return crash(b,'Landed on the back wheel and looped out!'); if(rel<-.75) return crash(b,'Nose-dived the landing!'); }
+  else { if(rel>.85) return crash(b,'Landed on the back wheel and looped out!'); if(rel<-.75){ const lim=MX.veh==='mx'?-1.0:-.75; if(rel<lim&&!(MX.veh==='mx'&&rel>-1.4&&Math.random()<.35)) return crash(b,'Nose-dived the landing!'); b.v=mul(b.v,.7); b.om=0; b.th=sl; feed('Saved the nose-dive!','#fb923c'); } }
   const flips=Math.round(b.rot/(2*Math.PI)), spins=Math.round(b.whip/(2*Math.PI));
   if(J){ if(flips) J.tricks.push({name:flips>0?(flips>1?'Double Backflip':'Backflip'):(flips<-1?'Double Front Flip':'Front Flip'),pts:Math.abs(flips)>1?1600*Math.abs(flips)-1600:flips>0?650:900});
     if(spins) J.tricks.push({name:Math.abs(spins)>1?'720':'360',pts:Math.abs(spins)>1?1400:520});
@@ -632,7 +644,7 @@ function draw(){ ctx.clearRect(0,0,W,H); if(view3) render3D(frameDtG); if(!MX||p
 let toastT=0, bannerT=0;
 const setText=(id,t)=>{ const e=$(id); if(e&&e.textContent!==String(t)) e.textContent=t; };
 const badgeB=(c,c2)=>svg(`<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 100 100"><circle cx="50" cy="50" r="46" fill="${c}"/><circle cx="30" cy="62" r="14" fill="none" stroke="${c2}" stroke-width="6"/><circle cx="72" cy="62" r="14" fill="none" stroke="${c2}" stroke-width="6"/><path d="M30 62 L48 40 L72 62 M48 40 L62 36" stroke="${c2}" stroke-width="6" fill="none"/></svg>`);
-function updateBoard(){ if(!MX) return; const b=MX.me, T=MX.T; $('logoL').src=badgeB(b.team.c,b.team.c2); setText('nameL',`#${b.num} You`); setText('tpL',BIKES[MX.veh].name); setText('scoreL',MX.race?(b.pos?`P${b.pos}`:'-'):Math.round(MX.score)); $('sideL').style.setProperty('--tc',b.team.c);
+function updateBoard(){ if(!MX) return; const b=MX.me, T=MX.T; $('logoL').src=badgeB(b.team.c,b.team.c2); setText('nameL',`#${b.num} You`); setText('tpL',(MX.me&&MX.me.B||BIKES[MX.veh]).name); setText('scoreL',MX.race?(b.pos?`P${b.pos}`:'-'):Math.round(MX.score)); $('sideL').style.setProperty('--tc',b.team.c);
   const lead=MX.race?standings().find(r=>!r.me):null; $('logoR').src=badgeB(lead?lead.team.c:'#475569','#fff'); setText('nameR',lead?`#${lead.num} ${lead.name}`:'Your best'); setText('tpR',lead?'Leader':T.name); setText('scoreR',lead?`P${standings().indexOf(lead)+1}`:(SV.free[T.key]||'-'));
   setText('cntT',MX.race?(MX.state==='run'?fmtT(MX.t-MX.gateT).slice(0,-3):'Gate'):`${Math.ceil(Math.max(0,MX.clock))}s`); setText('innT',T.name); setText('outsT',MX.race?(T.closed?`Lap ${Math.min(T.laps,b.lap+1)}/${T.laps}`:'One lap'):'Freestyle'); setText('basesT',''); }
 function toast(t,col='#34d399'){ const e=$('toast'); e.textContent=t; e.style.borderColor=col; e.classList.add('on'); toastT=2.2; }
@@ -655,16 +667,16 @@ addEventListener('keyup',e=>keys.delete(e.code)); addEventListener('blur',()=>ke
 /* ---------- menu ---------- */
 const pill=(attr,val,on,label,key)=>`<button data-${attr}="${val}" class="${on?'on':''}" tabindex="-1">${label}${key?` <kbd>${key}</kbd>`:''}</button>`;
 function renderMenu(){ const T=TRACKS[trackSel];
-  let h=`<h1>Arcade Rivals: Motocross & BMX</h1><p>A 450cc motocross bike (55 hp, 105 kg, 300 mm of travel) or a 20-inch race BMX. Real suspension, wheelies, the gyro of the rear wheel in the air, whips and crashes when you land it wrong. Gate starts against seven riders, or freestyle on big ramps and dirt jumps.</p>
-  <div class="pills"><span class="lbl">Bike</span>${pill('v','mx',vehSel==='mx','🏍 Motocross 450','')}${pill('v','bmx',vehSel==='bmx','🚲 BMX','')}</div>
+  let h=`<h1>Arcade Rivals: Motocross & BMX</h1><p>Motocross bikes from 250cc up to a 1000cc Suzuki (the bigger the engine, the faster and heavier), or BMX and mountain bikes. Real suspension, wheelies, the gyro of the rear wheel in the air, whips and crashes when you land it wrong. Gate starts against seven riders, or freestyle on big ramps and dirt jumps.</p>
+  <div class="pills"><span class="lbl">Bike</span>${pill('v','mx',vehSel==='mx','🏍 Motocross','')}${pill('v','bmx',vehSel==='bmx','🚲 BMX & mountain bikes','')}</div>${vehSel==='bmx'?`<div class="pills"><span class="lbl">Bike type</span>${Object.entries(BIKEV).map(([k,b])=>pill('bk',k,bikeSel===k,(k==='bmx'?'🚲 ':'🚵 ')+b.name,'')).join('')}</div>`:''}${vehSel==='mx'?`<div class="pills"><span class="lbl">Engine</span>${Object.entries(MXV).map(([k,b])=>pill('mxe',k,mxSel===k,'🏍 '+(k==='m1000'?'1000cc Suzuki':b.cc+'cc'),'')).join('')}</div>`:''}
   <div class="pills"><span class="lbl">Track</span>${VEH_TRACKS[vehSel].map(k=>pill('t',k,trackSel===k,(TRACKS[k].kind==='race'?'🏁 ':'🤸 ')+TRACKS[k].name,'')).join('')}</div>
   ${T.kind==='race'?`<div class="pills"><span class="lbl">Riders</span>${LVL.map((l,i)=>pill('l',i,lvl===i,l,String(i+1))).join('')}</div>`:''}
   <div class="pills"><button class="gold" data-act="start" tabindex="-1">${T.kind==='race'?'To the gate':'Drop in'} <kbd>Enter</kbd></button><a href="./" tabindex="-1">Home</a><a href="monster" tabindex="-1">Monster Truck</a><a href="moto" tabindex="-1">MotoGP</a></div>
   <div id="hint">${T.sub}${SV.best[trackSel]?` · your best ${fmtT(SV.best[trackSel])}`:''}${SV.lap[trackSel]?` · best lap ${fmtT(SV.lap[trackSel])}`:''}${SV.free[trackSel]?` · best score ${SV.free[trackSel].toLocaleString()}`:''}</div>`;
-  $('menuIn').innerHTML=h; $('logoL').src=badgeB(TEAMS[0].c,TEAMS[0].c2); setText('nameL','You'); setText('tpL',BIKES[vehSel].name); setText('scoreL',''); $('logoR').src=badgeB('#475569','#fff'); setText('nameR',T.kind==='race'?`${LVL[lvl]} field`:'Freestyle'); setText('tpR',T.name); setText('scoreR','');
+  $('menuIn').innerHTML=h; $('logoL').src=badgeB(TEAMS[0].c,TEAMS[0].c2); setText('nameL','You'); setText('tpL',bikeOf(vehSel).name); setText('scoreL',''); $('logoR').src=badgeB('#475569','#fff'); setText('nameR',T.kind==='race'?`${LVL[lvl]} field`:'Freestyle'); setText('tpR',T.name); setText('scoreR','');
   setText('cntT',vehSel==='mx'?'MX':'BMX'); setText('innT',T.name); setText('outsT',T.kind==='race'?(T.closed?`${T.laps} laps`:'One lap'):'2:00 jam'); setText('basesT',''); renderKeysHelp(); }
 $('menuIn').addEventListener('mousedown',e=>{ if(e.target.closest('button')) e.preventDefault(); });
-$('menuIn').addEventListener('click',e=>{ const b=e.target.closest('button'); if(!b) return; const d=b.dataset; audio(); sfx.click(); if(d.v){ vehSel=d.v; trackSel=VEH_TRACKS[vehSel][0]; } else if(d.t) trackSel=d.t; else if(d.l!==undefined) lvl=+d.l; else if(d.act==='start'){ startGame(); return; } savePrefs(); renderMenu(); });
+$('menuIn').addEventListener('click',e=>{ const b=e.target.closest('button'); if(!b) return; const d=b.dataset; audio(); sfx.click(); if(d.bk){ bikeSel=d.bk; } else if(d.mxe){ mxSel=d.mxe; } else if(d.v){ vehSel=d.v; trackSel=VEH_TRACKS[vehSel][0]; } else if(d.t) trackSel=d.t; else if(d.l!==undefined) lvl=+d.l; else if(d.act==='start'){ startGame(); return; } savePrefs(); renderMenu(); });
 function startGame(){ audio(); savePrefs(); newRun(); }
 function renderKeysHelp(){ $('keysHelp').innerHTML=(vehSel==='mx'?'<div><b>Gas</b> W</div>':'<div><b>Pedal</b> W</div>')+'<div><b>Brake</b> S</div><div><b>Steer</b> A D</div><div><b>Lean fwd / back</b> ↑ ↓</div><div><b>Pre-load / pump</b> Space</div><div><b>Tricks (air)</b> J K L U</div><div><b>Flip</b> hold ↓ in the air</div><div><b>Whip / 360</b> Shift + A D in the air</div><div><b>Camera</b> C</div><div><b>Reset</b> R</div><div><b>Pause</b> Esc</div>'; }
 function toMenu(){ phase='menu'; MX=null; $('result').classList.add('hidden'); $('menu').classList.remove('hidden'); renderMenu(); }
@@ -1066,11 +1078,11 @@ function ik(a,b,l1,l2,hint){ const d=sub(b,a), L=Math.min(len(d),l1+l2-.001), u=
 const lerp3=(a,b,t)=>[lerp(a[0],b[0],t),lerp(a[1],b[1],t),lerp(a[2],b[2],t)];
 const SKIN3=['#e0b48f','#c68e63','#8d5a3b','#f1c7a1'];
 /* the state a drawing needs, from the player bike, an AI rider or a ghost */
-function riderView(o){ const mx=o.veh==='mx', B=BIKES[o.veh];
+function riderView(o){ const mx=o.veh==='mx', B=o.B||BIKES[o.veh];
   if(o.ai) return {veh:o.veh,B,p:o.p,hd:o.hd,th:o.th,lean:o.lean,whip:0,wa:o.wheelA,x:[B.s0,B.s0],team:o.team,num:o.num,pose:0,trick:null,down:o.crashT>0,thr:o.air?0:1,steer:0,air:o.air,id:o};
   return {veh:o.veh,B,p:o.p,hd:o.hd,th:o.th,lean:o.lean,whip:o.whip||0,wa:o.wheelA,x:o.x,team:o.team,num:o.num,pose:o.pose||0,trick:o.trick,down:o.crash>0,rag:o.ragdoll,thr:o.in.thr,steer:o.in.steer,air:!(o.on[0]||o.on[1]),id:o,me:o.me}; }
 function drawRider(v,opt={}){ const K=K3, {T,S,RX,RY,RZ,mm,UB,UC,US}=R3, mx=v.veh==='mx', B=v.B, rig=RIG[v.veh], tc=v.team||TEAMS[0], ghost=opt.ghost;
-  const C1=ghost?hx3(opt.col||'#f59e0b'):hx3(tc.c), C2=ghost?[.95,.95,.95]:hx3(tc.c2), DARK=[.08,.09,.11], CH=[.72,.74,.78];
+  const C1=ghost?hx3(opt.col||'#f59e0b'):hx3(mx&&B.col&&v.me?B.col[0]:tc.c), C2=ghost?[.95,.95,.95]:hx3(mx&&B.col&&v.me?B.col[1]:tc.c2), DARK=[.08,.09,.11], CH=[.72,.74,.78];
   const tr=v.trick, tname=tr?tr.d.name:'', tp=tr?(tr.d.spin?Math.sin(Math.PI*tr.p):tr.p):0;
   /* the bike's frame: heading, lean, pitch; a whip turns the bike under the rider */
   const extraRoll=tname==='Turndown'?-.55*tp:0, down=v.down&&!v.rag;
@@ -1093,6 +1105,7 @@ function drawRider(v,opt={}){ const K=K3, {T,S,RX,RY,RZ,mm,UB,UC,US}=R3, mx=v.ve
   const fW=[0,wy(1),hw2], rW=[0,wy(0),-hw2];
   if(!opt.noBike){
     wheel(fr,fW,1); wheel(rr,rW,0);
+    if(!mx&&B.fork){ for(const sx of [-1,1]){ bm(fr([sx*.07,H[1]+.02,H[2]-.02]),fr([sx*.07,fW[1]+.12,fW[2]]),.04,CH); bm(fr([sx*.07,fW[1]+.2,fW[2]]),fr([sx*.07,fW[1],fW[2]]),.055,[.12,.12,.14]); } if(B.fork>1){ bm(W([0,ay+.3,-.05]),W([0,ay+.12,-.3]),.06,[.85,.7,.15]); } bm(W([0,ay+.42,.3]),W([0,ay+.1,-.1]),.06,B.col); bm(W([0,ay+.1,-.1]),rr(rW),.04,B.col); }
     if(mx){ /* fork, triple clamps, bars, number plate, front fender */
       for(const sx of [-1,1]){ bm(fr([sx*.09,H[1]+.06,H[2]-.02]),fr([sx*.09,fW[1],fW[2]]),.055,CH); bm(fr([sx*.09,H[1]-.25,H[2]+.1]),fr([sx*.09,fW[1]+.05,fW[2]]),.07,[.85,.65,.15]); }
       bm(fr([.4,H[1]+.18,H[2]-.08]),fr([-.4,H[1]+.18,H[2]-.08]),.028,DARK); P(fr,[0,H[1]+.12,H[2]-.06],.22,.05,.08,CH);
