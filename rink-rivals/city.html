@@ -110,7 +110,8 @@ const HZ0=-40, HZ1=CW+40, HRAMP=170;
 function deckH(x,z){ if(Math.abs(x-HX)>HWY_W) return null; if(z<HZ0-HRAMP||z>HZ1+HRAMP) return null; if(z<HZ0) return HWY_Y*(z-(HZ0-HRAMP))/HRAMP; if(z>HZ1) return HWY_Y*((HZ1+HRAMP)-z)/HRAMP; return HWY_Y; }
 /* the suburbs: every house block holds four homes; the south-east one is the one for sale */
 /* house tiers by area: the old suburbs are mostly cheaper homes, Oakridge has the big ones */
-const tierOf=b=>{ const h=Math.floor(((Math.sin(b.i*12.9898+b.j*78.233)*43758.5453)%1+1)%1*6); return (b.j>=11&&b.i<=12?[0,1,2,3,4,5]:[0,0,1,1,2,3])[h]; }, TIERDIM=[{W:8,D:5},{W:10,D:8},{W:12,D:10},{W:13,D:12},{W:14,D:14},{W:14,D:16}];
+const tierOf0=b=>{ const h=Math.floor(((Math.sin(b.i*12.9898+b.j*78.233)*43758.5453)%1+1)%1*6); return (b.j>=11&&b.i<=12?[0,1,2,3,4,5]:[0,0,1,1,2,3])[h]; }, TIERDIM=[{W:8,D:5},{W:10,D:8},{W:12,D:10},{W:13,D:12},{W:14,D:14},{W:14,D:16},{W:14,D:18}];
+let MEGA_B=null; const tierOf=b=>{ const t=tierOf0(b); if(!owner()) return t; if(!MEGA_B){ for(const q of BLOCKS) if(q.type==='house'&&q.j>=11&&q.i<=12&&tierOf0(q)===5){ MEGA_B=q; break; } } return b===MEGA_B?6:t; };
 const HOUSES=[]; { const hr=(s0=>()=>{ s0=(s0*16807)%2147483647; return s0/2147483647; })(777);
   for(const b of BLOCKS){ if(b.type!=='house') continue; for(const [qx,qz] of [[0,0],[1,0],[0,1],[1,1]]){ const lx=b.x0+qx*26, north=qz===0, face=north?-1:1;
       HOUSES.push({b,hx:lx+10,gx:lx+20,hz:north?b.z0+12:b.z1-12,face,main:qx===1&&qz===1,H:qx===1&&qz===1?6.2:(hr()<.5?3.4:6.2),
@@ -184,7 +185,7 @@ const BUILDS=[{k:'garden',n:'🌷 Flower garden',p:6000},{k:'tree',n:'🌳 Treeh
 function buildHTML(ht){ SV.build=SV.build||{}; return `<div style="margin-top:8px"><b>🔨 Build at your ${ht.n.toLowerCase()}:</b></div><div class="shop">`+BUILDS.filter(b=>!(b.k==='pool'&&ht.pool)).map(b=>`<button data-build="${b.k}" class="${SV.build[b.k]?'own':''}"><b>${b.n}</b><small>${SV.build[b.k]?'Built ✓':'$'+b.p.toLocaleString()}</small></button>`).join('')+'</div>'; }
 document.addEventListener('click',e=>{ const t=e.target.closest('[data-build]'); if(!t) return; SV.build=SV.build||{}; const b=BUILDS.find(q=>q.k===t.dataset.build); if(!b||SV.build[b.k]) return; if(SV.money<b.p){ say(`Not enough money — $${b.p.toLocaleString()}`,'#f87171'); return; } SV.build[b.k]=1; pay(-b.p,`— built: ${b.n}`); say(`🔨 Built: ${b.n}!`,'#4ade80',2.5); saveSV(); renderPanel(); });
 function v4Step(dt){ const c=ME.car;
-  if(c&&!c.M.plane&&!c.M.heli&&!c.M.boat) for(const cam of SPEEDCAMS){ if(T-cam.last<8) continue; if(Math.hypot(cam.x-c.x,cam.z-c.z)<8&&(!cam.fwy||c.onDeck)&&Math.abs(c.v)*3.6>speedLimit()+12){ cam.last=T; V4FLASH=1; SV.tickets=(SV.tickets||0)+1; pay(-120,'— 📸 speed camera fine'); say(`📸 Speed camera! ${Math.round(Math.abs(c.v)*3.6)} km/h in a ${speedLimit()} zone — $120 fine`,'#fbbf24',2.6); } }
+  if(c&&!c.M.plane&&!c.M.heli&&!c.M.boat) for(const cam of SPEEDCAMS){ if(T-cam.last<8) continue; if(!owner()&&Math.hypot(cam.x-c.x,cam.z-c.z)<8&&(!cam.fwy||c.onDeck)&&Math.abs(c.v)*3.6>speedLimit()+12){ cam.last=T; V4FLASH=1; SV.tickets=(SV.tickets||0)+1; pay(-120,'— 📸 speed camera fine'); say(`📸 Speed camera! ${Math.round(Math.abs(c.v)*3.6)} km/h in a ${speedLimit()} zone — $120 fine`,'#fbbf24',2.6); } }
   V4FLASH=Math.max(0,V4FLASH-dt*3); }
 let V4FLASH=0;
 if(TEST) setTimeout(()=>{ if(window.__city) window.__city.v4=()=>({GIVERS,AP,HOUSES,HT,STORES,SV,JOB,ME}); },0);
@@ -230,7 +231,7 @@ const curStore=()=>ME.indoor==='store'?STORES[ME.store]:null;
 /* where the outside world thinks you are (inside a store = at its door) */
 const outPos=()=>{ const st=curStore(); return st?{x:st.x,z:st.z}:ME.car||ME; };
 /* v4: every house for sale is a different tier — from a trailer to a mansion */
-const HT=[{n:'Trailer',p:12000,W:8,D:5,H:2.8},{n:'Starter home',p:35000,W:10,D:8,H:3.4},{n:'Family house',p:60000,W:12,D:10,H:6.2},{n:'Big house',p:150000,W:13,D:12,H:6.8},{n:'Villa',p:400000,W:14,D:14,H:7.4,pool:1},{n:'Mansion',p:1500000,W:14,D:16,H:10.2,pool:1}];
+const HT=[{n:'Trailer',p:12000,W:8,D:5,H:2.8},{n:'Starter home',p:35000,W:10,D:8,H:3.4},{n:'Family house',p:60000,W:12,D:10,H:6.2},{n:'Big house',p:150000,W:13,D:12,H:6.8},{n:'Villa',p:400000,W:14,D:14,H:7.4,pool:1},{n:'Mansion',p:1500000,W:14,D:16,H:10.2,pool:1},{n:'Owner Mega Mansion',p:0,W:14,D:18,H:13.4,pool:1}];
 for(const h of HOUSES) if(h.main){ const t=tierOf(h.b); h.tier=t; h.H=HT[t].H; }
 const placeHouse=pl=>pl&&pl.type==='house'?HOUSES.find(h=>h.b===pl.b&&h.main):null, houseTier=pl=>{ const h=placeHouse(pl); return HT[h?h.tier:2]; };
 const myHouse=()=>SV.home!=null&&PLACES[SV.home]&&PLACES[SV.home].type==='house'?HOUSES.find(h=>h.b===PLACES[SV.home].b&&h.main):null;
@@ -428,6 +429,7 @@ if(owner()&&SV.money<1000000&&!SV.ownerBonus){ SV.money+=1000000; SV.ownerBonus=
 if(owner()&&!SV.ownerRides){ SV.ownerRides=1; for(const k of ['hyper','heli']) if(!SV.cars.includes(k)) SV.cars.push(k);  if(SV.home==null){ const hi=PLACES.findIndex(p=>p.type==='house'); if(hi>=0) SV.home=hi; } setTimeout(()=>{ try{ say('👑 Owner garage: a Hypercar and a helicopter are waiting at your house!','#facc15',4.5); }catch(e){} },6000); }
 if(owner()&&!SV.ownerRed){ SV.ownerRed=1; SV.colors.hyper='#dc2626'; }
 if(owner()&&!SV.ownerBonus100m){ SV.money+=100000000; SV.ownerBonus100m=1; setTimeout(()=>{ try{ say('👑 Owner bonus: +$100,000,000!','#facc15',4); }catch(e){} },1500); }
+if(owner()){ const mi=PLACES.findIndex(pl=>pl.type==='house'&&pl.b===MEGA_B); if(mi>=0&&SV.home!==mi){ SV.home=mi; SV.build={}; setTimeout(()=>{ try{ say('👑 Welcome to your Owner Mega Mansion in Oakridge!','#facc15',4); }catch(e){} },3500); } if(mi>=0){ SV.build=SV.build||{}; for(const k of ['garden','tree','court','solar','garage2','fountain','statue']) SV.build[k]=1; } }
 if(owner()&&!SV.ownerBonus1t){ SV.money=Math.max(SV.money||0,1e12); SV.ownerBonus1t=1; setTimeout(()=>{ try{ say('👑 Owner bonus: $1,000,000,000,000!','#facc15',4); }catch(e){} },2500); }
 const fpNow=()=>SV.fp&&!ME.car&&!ME.ride&&!(ME.down>0)&&!ME.lift;
 const saveSV=()=>{ SV.tod=TOD; try{ localStorage.setItem(SVK,JSON.stringify(SV)); }catch(e){} };
@@ -855,7 +857,7 @@ function spikeStep(){ const me=ME.car; if(Math.ceil(heat)>=5&&!SPIKES.length&&me
   if(me&&!me.flat&&!(me.mods&&me.mods.bpt)) for(const sp of SPIKES){ const dx=me.x-sp.x, dz=me.z-sp.z; if(sp.alongX?Math.abs(dx)<1.2&&Math.abs(dz)<ROAD:Math.abs(dz)<1.2&&Math.abs(dx)<ROAD){ me.flat=true; noise(.6,.3,2000); say('💥 Your tyres are shredded! Get it to a 🔧 garage','#f87171',3); } } }
 /* traffic stops: a patrol car that clocks you speeding lights up and pulls you over */
 let STOP=null;
-function startStop(cop){ cop.ai=null; cop.siren=true; cop.stopCar=true; STOP={cop,t:0,still:0}; sfx.siren(); say('🚨 Police — pull over! (stop the car)','#93c5fd',3); }
+function startStop(cop){ if(owner()) return; cop.ai=null; cop.siren=true; cop.stopCar=true; STOP={cop,t:0,still:0}; sfx.siren(); say('🚨 Police — pull over! (stop the car)','#93c5fd',3); }
 function stopStep(dt){ if(!STOP) return; const s2=STOP, cop=s2.cop, me=ME.car||ME, d=Math.hypot(cop.x-me.x,cop.z-me.z); s2.t+=dt;
   if(s2.done){ aiDriveTo(cop,cop.x+Math.sin(cop.yaw)*50,cop.z+Math.cos(cop.yaw)*50,dt,14); s2.leave-=dt; if(s2.leave<=0){ const k=CARS.indexOf(cop); if(k>=0) CARS.splice(k,1); STOP=null; spawnTraffic(1); } return; }
   if(heat>0){ s2.done=true; s2.leave=0; return; }
@@ -1122,7 +1124,7 @@ function step(dt){ T+=dt; TOD=(TOD+dt/30)%24; if(msgT>0) msgT-=dt;
     if(c.hp<=0&&!c.dead){ c.dead=true; say('The engine is wrecked! Get out (F)','#f87171',3); }
     /* the law watches: speeding or running a red light next to a cop */
     if(!c.M.cop){ for(const cop of CARS){ if(!cop.ai||!cop.M.cop||cop.off) continue; const d=Math.hypot(cop.x-c.x,cop.z-c.z); if(d<35&&Math.abs(c.v)>22&&!heat&&!STOP){ startStop(cop); break; } }
-      const ix=Math.round(c.x/P), iz=Math.round(c.z/P), ax=Math.abs(Math.sin(c.yaw))>.7?'x':'z'; if(Math.hypot(c.x-ix*P,c.z-iz*P)<5&&Math.abs(c.v)>6&&ix>=0&&iz>=0&&ix<NL&&iz<NL){ if(light(ix,iz,ax)==='r'&&c.lastRed!==ix+'_'+iz){ c.lastRed=ix+'_'+iz; for(const cop of CARS) if(cop.model==='police'&&cop!==c&&Math.hypot(cop.x-c.x,cop.z-c.z)<45){ crime(1,'ran a red light in front of the police'); break; } } } } }
+      const ix=Math.round(c.x/P), iz=Math.round(c.z/P), ax=Math.abs(Math.sin(c.yaw))>.7?'x':'z'; if(Math.hypot(c.x-ix*P,c.z-iz*P)<5&&Math.abs(c.v)>6&&ix>=0&&iz>=0&&ix<NL&&iz<NL){ if(light(ix,iz,ax)==='r'&&c.lastRed!==ix+'_'+iz&&!owner()){ c.lastRed=ix+'_'+iz; for(const cop of CARS) if(cop.model==='police'&&cop!==c&&Math.hypot(cop.x-c.x,cop.z-c.z)<45){ crime(1,'ran a red light in front of the police'); break; } } } } }
   else if(ME.ride){ ME.spd=0; }
   else { const m=Math.hypot(st,thr-brk); let ix=st, iz=thr-brk; if(m>1){ ix/=m; iz/=m; } const run=keys.has('ShiftLeft')||keys.has('ShiftRight'), sp=(run?6.2:3.2)*(owner()?1.15:1)*(ME.energyT>0?1.35:1); if(ME.energyT>0) ME.energyT-=dt; if(ME.painT>0) ME.painT-=dt;
     const fx=-Math.sin(camYaw), fz=-Math.cos(camYaw), rx=Math.cos(camYaw), rz=-Math.sin(camYaw), wx=fx*iz+rx*ix, wz=fz*iz+rz*ix;
@@ -1293,7 +1295,7 @@ function build(){ if(built||!R3.ok) return; built=true;
           box(h.hx-W*.3,H+2.6,h.hz-f*1.5,.9,2.4,.9,'#7c2d12');
           box(h.hx,1.25,fz+f*.04,1.1,2.1,.08,'#5b3a1a'); box(h.hx+.35,1.25,fz+f*.09,.08,.08,.05,'#facc15');
           box(h.hx,.4,fz+f*1,3,.4,2,'#a8a29e'); box(h.hx,2.75,fz+f*1.2,3.4,.15,2.4,h.roof); for(const sx of [-1.5,1.5]) box(h.hx+sx,1.4,fz+f*2.2,.15,2.6,.15,'#f8fafc');
-          for(const wx of [-3.5,3.5]) for(const wy of H>8?[1.6,4.6,7.6]:H>5?[1.6,4.6]:[1.6]){ box(h.hx+wx,wy,fz+f*.05,1.8,1.3,.06,'#f8fafc'); box(h.hx+wx,wy,fz+f*.08,1.5,1.05,.04,'#93c5fd'); }
+          for(const wx of [-3.5,3.5]) for(const wy of H>11?[1.6,4.6,7.6,10.6]:H>8?[1.6,4.6,7.6]:H>5?[1.6,4.6]:[1.6]){ box(h.hx+wx,wy,fz+f*.05,1.8,1.3,.06,'#f8fafc'); box(h.hx+wx,wy,fz+f*.08,1.5,1.05,.04,'#93c5fd'); }
           for(const wz of [-2.5,2.5]) for(const sx of [-1,1]) box(h.hx+sx*(W/2+.05),1.6,h.hz+wz,.06,1.2,1.5,'#93c5fd');
           if(!h.main){ box(h.gx,1.6,h.hz-f*1,6,3,8,h.col); box(h.gx,3.2,h.hz-f*1,6.4,.25,8.4,h.roof); box(h.gx,1.3,h.hz+f*3.02,4.6,2.4,.06,'#e5e7eb'); for(let k=0;k<5;k++) box(h.gx,.4+k*.48,h.hz+f*3.06,4.6,.04,.04,'#9ca3af'); }
           else { for(const sx of [-1,1]) box(h.gx+sx*2.95,1.6,h.hz-f*1,.2,3,8,h.col); box(h.gx,1.6,h.hz-f*4.95,6,3,.2,h.col); box(h.gx,3.2,h.hz-f*1,6.4,.25,8.4,h.roof); box(h.gx,2.85,h.hz+f*3,6,.5,.25,h.col);
