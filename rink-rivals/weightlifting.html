@@ -82,7 +82,7 @@ kbd{ font:inherit; font-size:13px; background:var(--ledbg); color:#fff; border-r
 
       <div class="split">
         <div>
-          <h3>Gym</h3><div class="pills" id="gymPills"></div><div class="muted" id="gymInfo" style="font-size:13px;margin:4px 0 8px"></div><div id="rebirthBox" style="margin:0 0 10px;padding:10px 12px;border-radius:12px;background:linear-gradient(135deg,rgba(168,85,247,.18),rgba(236,72,153,.14));border:1px solid rgba(216,180,254,.35)"></div>
+          <h3>Gym</h3><div class="pills" id="gymPills"></div><div class="muted" id="gymInfo" style="font-size:13px;margin:4px 0 8px"></div><div id="petBox" style="margin:0 0 10px"></div><div id="rebirthBox" style="margin:0 0 10px;padding:10px 12px;border-radius:12px;background:linear-gradient(135deg,rgba(168,85,247,.18),rgba(236,72,153,.14));border:1px solid rgba(216,180,254,.35)"></div>
           <h3>Go to a station</h3>
           <div class="pills" id="goPills"></div>
           <div class="row" id="wRow" style="margin-top:6px"><span class="muted">Weight:</span>
@@ -240,7 +240,7 @@ function hit(){ if(!X) return; audio(); if(X.ended){ restart(); return; }
 function repDone(){ const s=X.s, w=weightOf(s), mult=X.lastGrade==='PERFECT'?1.6:X.lastGrade==='GOOD'?1:.55, fat=Math.max(.35,1-X.reps*.05);
   X.reps++; SV.reps++; if(X.lastGrade==='PERFECT') SV.perfect=(SV.perfect||0)+1; if(s.t==='w') SV.vol+=w*(s.each?2:1);
   const q=Math.min(1.3,1/Math.max(.2,ratioOf(s))), lv=window.RRSTR?RRSTR.level:0, inc=s.gain*.35*q*q*mult*fat*(1+Math.min(X.combo,10)*.05)/(1+lv/120);
-  const bx=boostOn('str')?2:1; if(window.RRSTR){ if(owner()){ for(let i=0;i<bx;i++) RRSTR.add(1); X.gained+=100000*bx; } else { X.gained+=inc*bx; RRSTR.add(inc*bx); } }   /* the owner gets +100,000 a rep (or lap) */
+  const bx=boostOn('str')?2:1; if(window.RRSTR){ if(owner()){ for(let i=0;i<bx;i++) RRSTR.add(1); X.gained+=100000*bx; } else { X.gained+=inc*bx*WM(); RRSTR.add(inc*bx*WM()); } }   /* the owner gets +100,000 a rep (or lap) */
   /* records: heaviest weight moved, or most reps in one set */
   const best=SV.best[s.k]||0;
   if(s.t==='w'&&w>best){ SV.best[s.k]=w; netEv(`hit a PR: ${s.n} ${w.toLocaleString()} lb${s.each?' each':''} 🏆`); banner('NEW PERSONAL RECORD!',`${s.n} · ${w} lb${s.each?' each':''}`,'#fde047'); sfx.pr(); }
@@ -295,19 +295,88 @@ function cardioStep(dt){ const trn=(boostOn('trn')?.5:1)*(potionOn('energy')?.25
   if(X.stam<=0) endSet('fail'); }
 
 /* ---------- 3D gym ---------- */
-let built=false;
-function buildGym(){ if(built||!R3.ok) return; built=true; buildColliders();
-  R3.setStatic((g,c,P)=>{ const {primBox,primCyl,T,S,RY,RZ,RX,mm}=P, B=primBox(), CY=primCyl(16);
+/* ---------- worlds: every gym is its own place, with its own look and its own strength boost ---------- */
+const WORLD={iron:{floor:'#262d3b',grid:'#323b4d',wall:'#2b344d',side:'#27304a',trim:'#f59e0b',sky:[.04,.06,.12],mult:1},
+  gold:{floor:'#3b2f17',grid:'#6b5222',wall:'#4a3a1a',side:'#3f3116',trim:'#facc15',sky:[.08,.06,.02],mult:1.5,deco:'gold'},
+  diamond:{floor:'#123047',grid:'#1e4a66',wall:'#0e3a52',side:'#0c3346',trim:'#67e8f9',sky:[.02,.08,.12],mult:2,deco:'crystal'},
+  titan:{floor:'#3f3f46',grid:'#52525b',wall:'#57534e',side:'#4b4642',trim:'#d6d3d1',sky:[.1,.1,.11],mult:3,deco:'statue'},
+  olympus:{floor:'#e7e5e4',grid:'#cbd5e1',wall:'#f5f5f4',trim:'#facc15',sky:[.5,.72,.95],open:1,mult:5,deco:'cloud'},
+  volcano:{floor:'#1c1917',grid:[2.4,.7,.1],wall:'#292524',trim:'#f97316',sky:[.22,.06,.03],open:1,mult:8,deco:'lava'},
+  cosmic:{floor:'#0f0a1f',grid:[.9,.4,2.2],wall:'#1e1b4b',trim:'#a855f7',sky:[.015,.01,.05],open:1,mult:12,deco:'space'},
+  infinity:{floor:'#09090b',grid:'rainbow',wall:'#18181b',trim:'#ec4899',sky:[.1,.02,.09],open:1,mult:20,deco:'infinity'}};
+const world=()=>WORLD[gymKey()]||WORLD.iron;
+/* pets follow you around and boost every rep. Bought once with strength, yours forever (even after a rebirth) */
+const PETS=[{k:'dog',n:'Puppy',ic:'🐶',m:1.1,cost:100,c:['#d6a35c','#7c4a1e']},{k:'cat',n:'Kitten',ic:'🐱',m:1.2,cost:300,c:['#9ca3af','#4b5563']},
+  {k:'bull',n:'Bulldog',ic:'🐕',m:1.35,cost:1000,c:['#e7e5e4','#a16207']},{k:'panda',n:'Panda',ic:'🐼',m:1.6,cost:3000,c:['#f8fafc','#111827']},
+  {k:'gorilla',n:'Gorilla',ic:'🦍',m:2,cost:8000,rb:1,c:['#27272a','#52525b']},{k:'tiger',n:'Tiger',ic:'🐯',m:2.5,cost:12000,rb:2,c:['#f97316','#111827']},
+  {k:'dragon',n:'Dragon',ic:'🐉',m:3.5,cost:20000,rb:3,c:['#16a34a','#facc15'],fly:1},{k:'phoenix',n:'Phoenix',ic:'🔥',m:5,cost:50000,rb:5,c:[[2.4,.9,.15],[2.4,2,.3]],fly:1},
+  {k:'unicorn',n:'Unicorn',ic:'🦄',m:7,cost:80000,rb:7,c:['#fdf4ff','#e879f9']},{k:'whale',n:'Cosmic Whale',ic:'🐋',m:12,cost:150000,rb:10,c:[[.5,.3,2.2],[1.6,1.2,2.4]],fly:1}];
+SV.pets=SV.pets||[]; const ownsPet=k=>owner()||SV.pets.includes(k), petOf=()=>PETS.find(p=>p.k===SV.pet&&ownsPet(p.k));
+const WM=()=>world().mult*(petOf()?petOf().m:1);
+const PET={x:0,z:4,yaw:0};
+function drawPet(dt){ const p=petOf(); if(!p) return; const s=PL.at?SK[PL.at]:null, tx=s?s.x+1.4:PL.x+Math.cos(PL.yaw)*.8, tz=s?s.z+.8:PL.z-Math.sin(PL.yaw)*.8, d=Math.hypot(tx-PET.x,tz-PET.z);
+  if(d>.05){ PET.x+=(tx-PET.x)*Math.min(1,dt*3); PET.z+=(tz-PET.z)*Math.min(1,dt*3); if(d>.15) PET.yaw=Math.atan2(tx-PET.x,tz-PET.z); }
+  const big=p.k==='whale'?2.2:p.k==='gorilla'||p.k==='tiger'||p.k==='unicorn'?1.4:p.k==='dragon'?1.6:1, hop=d>.15?Math.abs(Math.sin(T0*10))*.06:0, fy=p.fly?1.3+Math.sin(T0*2)*.15:0, c1=p.c[0], c2=p.c[1];
+  const P=(lx,ly,lz,sx,sy,sz,col)=>{ const cy=Math.cos(PET.yaw), sy2=Math.sin(PET.yaw), x=PET.x+(lx*cy+lz*sy2)*big, z=PET.z+(-lx*sy2+lz*cy)*big; R3.part(R3.UB,R3.mm(R3.T(x*K,(fy+hop+ly*big)*K,z*K),R3.RY(PET.yaw),R3.S(sx*big*K,sy*big*K,sz*big*K)),col); };
+  if(p.k==='whale'){ P(0,0,0,.5,.4,1.2,c1); P(0,-.1,0,.42,.2,1.1,c2); P(0,.05,-.75,.6,.08,.3,c1); P(0,.1,.62,.3,.25,.1,c2); for(let i=0;i<5;i++) P(Math.sin(T0*3+i)*.3,.4+i*.12,.3,.05,.05,.05,[2,2,2.4]); return; }
+  P(0,.28,0,.32,.26,.55,c1); P(0,.45,.34,.26,.26,.26,c2===c1?c1:c1); P(0,.42,.48,.14,.1,.08,c2);
+  for(const sx of [-1,1]) P(sx*.1,.62,.32,.06,.12,.05,c2);
+  if(!p.fly) for(const [lx,lz] of [[-.11,.18],[.11,.18],[-.11,-.18],[.11,-.18]]) P(lx,.1+(d>.15?Math.sin(T0*12+lx*20+lz*9)*.03:0),lz,.08,.2,.08,c2);
+  P(0,.36,-.32,.06,.06,.22+.06*Math.sin(T0*8),c2);
+  if(p.k==='unicorn') P(0,.66,.46,.04,.18,.04,[2.4,2,.4]);
+  if(p.fly) for(const sx of [-1,1]){ const f=Math.sin(T0*9)*.5; R3.part(R3.UB,R3.mm(R3.T((PET.x+Math.cos(PET.yaw)*sx*.3*big)*K,(fy+.35*big)*K,(PET.z-Math.sin(PET.yaw)*sx*.3*big)*K),R3.RY(PET.yaw),R3.RZ(sx*f),R3.T(sx*.3*big*K,0,0),R3.S(.6*big*K,.04*big*K,.35*big*K)),c2); } }
+/* the static part of each world, added to the gym when it's built */
+function worldDeco(box,g,B,CY,SP,mm,T,S,RY,RX,RZ){ const W=world(), dk=W.deco, cy=(x,y,z,r,h,col)=>g.add(CY,mm(T(x*K,y*K,z*K),S(r*K,h*K,r*K)),col), sp=(x,y,z,r,col)=>g.add(SP,mm(T(x*K,y*K,z*K),S(r*K,r*K,r*K)),col), rb=(x,y,z,sx,sy,sz,col,ry,rz)=>g.add(B,mm(T(x*K,y*K,z*K),RY(ry||0),RZ(rz||0),S(sx*K,sy*K,sz*K)),col);
+  const R=n=>{ const v=Math.sin(n*127.1+31.7)*43758.5453; return v-Math.floor(v); };
+  if(dk==='gold'){ for(const [x,z] of [[-11.6,-7.6],[11.6,-7.6],[-11.6,7.6],[11.6,7.6]]){ cy(x,2.3,z,.35,4.6,'#ca8a04'); cy(x,4.5,z,.5,.2,'#facc15'); }
+    for(let i=0;i<7;i++){ const x=-9+i*3; box(x,4.25,-8.0,.5,.12,.3,'#a16207'); cy(x,4.45,-7.95,.12,.3,'#facc15'); cy(x,4.7,-7.95,.18,.18,'#fde047'); }
+    for(const x of [-6,0,6]){ cy(x,4.4,0,.05,.4,'#a16207'); cy(x,4.1,0,.7,.25,'#facc15'); for(let k=0;k<6;k++) sp(x+Math.cos(k)*.6,3.95,Math.sin(k)*.6,.07,[2.4,2.1,1.2]); } }
+  if(dk==='crystal'){ for(let i=0;i<22;i++){ const a=R(i)*PI*2, x=(R(i+9)<.5?-1:1)*(10.6+R(i+3)*1.2), z=-7.5+R(i+5)*15, h=.6+R(i+7)*2.2; rb(x,h/2,z,.25+R(i+2)*.3,h,.25+R(i+2)*.3,R(i)<.5?[.5,1.8,2.4]:[1.6,1.2,2.4],a,(R(i+1)-.5)*.6); }
+    for(let i=0;i<9;i++) rb(-10+i*2.5,4.5,-8.05,.3,.6,.1,[.6,2,2.4],0,PI/4); }
+  if(dk==='statue'){ for(const sx of [-1,1]){ const x=sx*10.8, z=-6.4; box(x,.4,z,1.6,.8,1.6,'#78716c'); box(x,2.2,z,.9,2.8,.6,'#a8a29e'); box(x,4,z,.55,.6,.5,'#a8a29e'); for(const a of [-1,1]){ box(x+a*.75,3.35,z,.7,.32,.32,'#a8a29e'); box(x+a*1.05,3.75,z,.3,.65,.3,'#a8a29e'); cy(x+a*1.05,4.1,z,.22,.2,'#a8a29e'); } box(x-.25,.8+.4,z,.32,1.6,.35,'#a8a29e'); box(x+.25,.8+.4,z,.32,1.6,.35,'#a8a29e'); }
+    for(const z of [-3,1,5]) for(const sx of [-1,1]) cy(sx*11.6,2.3,z,.4,4.6,'#d6d3d1'); }
+  if(dk==='cloud'){ for(let i=0;i<40;i++){ const a=R(i)*PI*2, r=16+R(i+4)*22, x=Math.cos(a)*r, z=Math.sin(a)*r-2; if(Math.abs(x)<13&&z>-9&&z<9) continue; for(let k=0;k<4;k++) sp(x+(R(i*7+k)-.5)*4,-1.5+R(i+k)*3,z+(R(i*3+k)-.5)*3,1.2+R(i+k*2)*1.6,'#f8fafc'); }
+    box(0,-.6,0,90,.2,90,'#e2e8f0'); for(const z of [-6,-2,2,6]) for(const sx of [-1,1]){ cy(sx*12.2,2.6,z,.35,5.2,'#f5f5f4'); box(sx*12.2,5.25,z,.9,.2,.9,'#facc15'); }
+    for(const sx of [-1,1]){ const x=sx*15, z=-3; box(x,.6,z,2,1.2,2,'#f5f5f4'); box(x,3,z,1,3.6,.7,'#facc15'); box(x,5.1,z,.6,.6,.55,'#facc15'); box(x+sx*-.9,4.2,z,.35,1.4,.35,'#facc15'); box(x+sx*.9,4.2,z,.35,1.4,.35,'#facc15'); } }
+  if(dk==='lava'){ box(0,-.4,0,120,.1,120,'#1c1917'); for(let i=0;i<14;i++){ const a=i/14*PI*2+R(i)*.3, r=15+R(i+2)*10; box(Math.cos(a)*r,-.32,Math.sin(a)*r,4+R(i)*5,.05,2+R(i+1)*3,[2.4,.7,.08]); }
+    for(let i=0;i<6;i++) box(-12+i*4.8,-.33,10.5,3.6,.05,1.1,[2.4,.55,.06]); for(let k=0;k<8;k++) cy(0,k*4,-60,30-k*3.4,4,k>6?[2,.5,.1]:'#292524'); cy(0,32,-60,4,.4,[2.4,.8,.1]);
+    for(let i=0;i<24;i++){ const a=R(i+50)*PI*2, r=14+R(i+60)*12; rb(Math.cos(a)*r,.4,Math.sin(a)*r,1+R(i)*2,.8+R(i+1)*1.6,1+R(i+2)*2,'#292524',a,0); } }
+  if(dk==='space'){ for(let i=0;i<260;i++){ const a=R(i)*PI*2, e=R(i+400)*1.2-.15, r=55+R(i+800)*20; box(Math.cos(a)*Math.cos(e)*r,Math.sin(e)*r,Math.sin(a)*Math.cos(e)*r,.25,.25,.25,[2.4,2.4,2.4]); }
+    sp(-26,14,-40,8,'#7c3aed'); sp(30,9,-35,5,'#0ea5e9'); cy(30,9,-35,8,.15,'#e9d5ff'); sp(-18,4,-22,2,'#f97316'); box(0,-.4,0,26,.4,18,'#1e1b4b');
+    for(const sx of [-1,1]) for(const z of [-6,-2,2,6]) box(sx*12.3,.2,z,.3,.06,2.6,[.8,.3,2.2]); }
+  if(dk==='infinity'){ const RC=[[2.4,.3,.3],[2.4,1.4,.2],[2.2,2.2,.3],[.3,2.2,.5],[.3,1.2,2.4],[1.6,.4,2.4]];
+    for(let i=0;i<12;i++){ const x=(i%2?-1:1)*(12.6+R(i)*2), z=-7.5+Math.floor(i/2)*3; cy(x,3,z,.12,6,RC[i%6]); }
+    for(let k=0;k<48;k++){ const t=k/48*PI*2, sc=4, x=sc*Math.cos(t)/(1+Math.sin(t)**2), y=sc*Math.sin(t)*Math.cos(t)/(1+Math.sin(t)**2); sp(x*1.6,8+y*1.6,-9,.22,RC[k%6]); }
+    for(let i=0;i<30;i++){ const a=R(i)*PI*2, r=16+R(i+3)*16; rb(Math.cos(a)*r,2+R(i+5)*8,Math.sin(a)*r,.8,.8,.8,RC[i%6],a,a); } } }
+let EMB=[];
+function worldFX(dt){ const W=world(), dk=W.deco;
+  if(dk==='lava'){ if(EMB.length<60&&Math.random()<dt*30) EMB.push({x:(Math.random()-.5)*30,y:0,z:(Math.random()-.5)*24,v:.6+Math.random(),t:0}); EMB=EMB.filter(e=>(e.t+=dt)<4); for(const e of EMB) R3.part(R3.UB,R3.mm(R3.T((e.x+Math.sin(e.t*2)*.3)*K,(e.y+e.t*e.v)*K,e.z*K),R3.S(.06*K,.06*K,.06*K)),[2.4,.6+e.t*.1,.1]); }
+  if(dk==='cosmic'||dk==='space'){ const t=(T0*.15)%1; R3.part(R3.UB,R3.mm(R3.T((-40+t*80)*K,(25-t*12)*K,-50*K),R3.RZ(-.15),R3.S(2.4*K,.08*K,.08*K)),[2.4,2.4,2.4]); }
+  if(dk==='infinity'){ const h=(T0*.4)%1, c=[Math.abs(Math.sin(h*PI*2))*2.4,Math.abs(Math.sin((h+.33)*PI*2))*2.4,Math.abs(Math.sin((h+.66)*PI*2))*2.4]; for(const sx of [-1,1]) R3.part(R3.UB,R3.mm(R3.T(sx*12.1*K,.05*K,0),R3.S(.08*K,.04*K,16.4*K)),c); R3.part(R3.UB,R3.mm(R3.T(0,4.4*K,-8.0*K),R3.S(24*K,.08*K,.06*K)),c); }
+  if(dk==='cloud'){ for(let i=0;i<3;i++){ const t=(T0*.03+i/3)%1; R3.part(R3.US,R3.mm(R3.T((-40+t*80)*K,(6+i)*K,(-20-i*6)*K),R3.S(2.4*K,1*K,1.6*K)),'#ffffff'); } } }
+/* pets panel + the daily chest */
+function renderPets(){ const el=$('petBox'); if(!el||!window.RRSTR) return; const own=owner(), lv=RRSTR.level, rb=RRSTR.rebirths, today=new Date().toDateString(), chest=own||SV.chestDay!==today, W=world();
+  el.innerHTML=`<div style="display:flex;justify-content:space-between;align-items:center;gap:8px;flex-wrap:wrap;margin-bottom:6px"><b>🐾 Pets · ${W===WORLD.iron?'':'world boost ×'+W.mult+' · '}total boost ×${(WM()).toLocaleString()}</b><button id="chestBtn" ${chest?'':'disabled'}>${chest?'🎁 Open daily chest':'🎁 Come back tomorrow'}</button></div><div class="pills">`+
+    PETS.map(p=>{ const have=ownsPet(p.k), eq=SV.pet===p.k&&have, lock=!own&&(p.rb||0)>rb; return `<button data-pet="${p.k}" class="${eq?'on':''}" ${lock?'disabled':''} title="${p.n}: every rep ×${p.m}">${p.ic} ${p.n} ×${p.m}${eq?' ✓':have?'':lock?` 🔒 ${p.rb} rebirth${p.rb>1?'s':''}`:` · ${own?'free':p.cost.toLocaleString()+' 💪'}`}</button>`; }).join('')+'</div>';
+  const cb=$('chestBtn'); if(cb) cb.onclick=()=>{ if(!own&&SV.chestDay===today) return; SV.chestDay=today; saveSV(); const g=own?1e9:Math.round(Math.max(25,lv*.08+rb*50)*W.mult); RRSTR.add(own?1:g); banner('🎁 DAILY CHEST!',own?'Owner chest: +100,000 strength':`+${g.toLocaleString()} strength · come back tomorrow`,'#facc15',2.6); sfx.pr&&sfx.pr(); renderPets(); refreshStats(); }; }
+document.addEventListener('click',e=>{ const b=e.target.closest('[data-pet]'); if(!b||b.disabled||!window.RRSTR) return; const p=PETS.find(q=>q.k===b.dataset.pet); if(!p) return;
+  if(!ownsPet(p.k)){ if(!RRSTR.spend(p.cost)){ banner('Not enough strength',`${p.n} costs ${p.cost.toLocaleString()} strength`,'#f87171',1.8); return; } SV.pets.push(p.k); banner(`${p.ic} NEW PET: ${p.n}!`,`Every rep ×${p.m} while it follows you`,'#4ade80',2.5); }
+  SV.pet=b.classList.contains('on')?null:p.k; PET.x=PL.x; PET.z=PL.z; saveSV(); renderPets(); refreshStats(); });
+
+let built=null;
+function buildGym(){ const wk=gymKey(); if(built===wk||!R3.ok) return; built=wk; buildColliders();
+  R3.setStatic((g,c,P)=>{ const {primBox,primCyl,T,S,RY,RZ,RX,mm}=P, B=primBox(), CY=primCyl(16), SP=P.primSphere(8,12), W=world(), GC=i=>W.grid==='rainbow'?[[2.4,.3,.3],[2.4,1.6,.2],[.3,2.2,.5],[.3,1.2,2.4],[1.6,.4,2.4]][(i+50)%5]:W.grid;
     const box=(x,y,z,sx,sy,sz,col,ry)=>g.add(B,mm(T(x*K,y*K,z*K),RY(ry||0),S(sx*K,sy*K,sz*K)),col);
     const cyl=(m,col)=>g.add(CY,m,col);
     /* floor, walls, mirrors */
-    box(0,-.05,0,24.4,.1,16.6,'#262d3b');
-    for(let x=-11;x<=11;x+=2) box(x,.002,0,.02,.004,16.4,'#323b4d'); for(let z=-7;z<=7;z+=2) box(0,.003,z,24.4,.004,.02,'#323b4d');
-    box(0,2.3,-8.2,24.4,4.6,.25,'#2b344d'); box(-12.2,2.3,0,.25,4.6,16.6,'#27304a'); box(12.2,2.3,0,.25,4.6,16.6,'#27304a');
-    box(0,3.9,-8.05,24.2,.14,.05,'#f59e0b'); box(-12.05,3.9,0,.05,.14,16.4,'#f59e0b'); box(12.05,3.9,0,.05,.14,16.4,'#f59e0b');
+    box(0,-.05,0,24.4,.1,16.6,W.floor);
+    for(let x=-11;x<=11;x+=2) box(x,.002,0,.02,.004,16.4,GC(x)); for(let z=-7;z<=7;z+=2) box(0,.003,z,24.4,.004,.02,GC(z+3));
+    box(0,2.3,-8.2,24.4,4.6,.25,W.wall); if(!W.open){ box(-12.2,2.3,0,.25,4.6,16.6,W.side); box(12.2,2.3,0,.25,4.6,16.6,W.side); }
+    box(0,3.9,-8.05,24.2,.14,.05,W.trim); if(!W.open){ box(-12.05,3.9,0,.05,.14,16.4,W.trim); box(12.05,3.9,0,.05,.14,16.4,W.trim); } else { for(const sz of [-1,1]) box(0,.02,sz*8.3,24.6,.04,.12,W.trim); for(const sx of [-1,1]) box(sx*12.25,.02,0,.12,.04,16.6,W.trim); }
     for(const x of [-8.2,-3.3,1.6,6.5]) { box(x,1.45,-8.06,4.2,2.3,.04,'#9fb2d3'); box(x,1.45,-8.07,4.36,2.46,.03,'#3a4561'); }   /* mirrors */
-    box(12.06,1.45,1.0,.04,2.2,3.6,'#9fb2d3');
-    for(const z of [-5,-1.5,2]) box(-12.06,3.0,z,.04,1.3,2.6,'#bfdbfe'); /* windows */
+    if(!W.open){ box(12.06,1.45,1.0,.04,2.2,3.6,'#9fb2d3');
+    for(const z of [-5,-1.5,2]) box(-12.06,3.0,z,.04,1.3,2.6,'#bfdbfe'); } /* windows */
+    worldDeco(box,g,B,CY,SP,mm,T,S,RY,RX,RZ);
     /* lifting platforms + stations, built in each station's own frame */
     for(const s of ST){ const lb=(lx,ly,lz,sx,sy,sz,col)=>{ const p=wp(s,[lx,ly,lz]); box(p[0],p[1],p[2],sx,sy,sz,col,s.yaw); };
       const lc=(lx,ly,lz,axis,len,r,col)=>{ const p=wp(s,[lx,ly,lz]); cyl(mm(T(p[0]*K,p[1]*K,p[2]*K),RY(s.yaw),axis==='x'?RZ(PI/2):axis==='z'?RX(PI/2):S(1,1,1),S(r*K,len*K,r*K)),col); };
@@ -358,13 +427,14 @@ function render(dt){ if(!R3.ok) return; buildGym(); T0+=dt;
   else { eye=[PL.x,6.3,PL.z+7.4]; ctr=[PL.x,.9,PL.z-.4]; fov=50; }
   const kf=Math.min(1,dt*(PL.at?5:6)); for(let i=0;i<3;i++){ camEye[i]=lerp(camEye[i],eye[i],kf); camCtr[i]=lerp(camCtr[i],ctr[i],kf); }
   const sh=shake*.6;
-  R3.frame({eye:[(camEye[0]+(Math.random()-.5)*sh)*K,camEye[1]*K,(camEye[2]+(Math.random()-.5)*sh)*K],center:[camCtr[0]*K,camCtr[1]*K,camCtr[2]*K],fov,near:8,far:8000},()=>{
+  R3.frame({eye:[(camEye[0]+(Math.random()-.5)*sh)*K,camEye[1]*K,(camEye[2]+(Math.random()-.5)*sh)*K],center:[camCtr[0]*K,camCtr[1]*K,camCtr[2]*K],fov,near:8,far:20000,sky:world().sky,fog:world().open?[4000,14000]:null,fogMax:.7},()=>{
     /* racked bars / dumbbells at weighted stations nobody is using */
     for(const s of ST){ if(s.t!=='w'||PL.at===s.k||s.k==='curl'||busyBy(s.k)) continue; const wt=weightOf(s); barbell(s,s.k==='bench'?[0,.99,-.55]:s.k==='squat'?[0,1.47,.42]:s.k==='press'?[0,1.45,-.42]:[0,.24,.2],wt); }
     /* gym-goers: a runner on a treadmill and someone curling by the water cooler */
     drawBody(pose('run',0,T0*9,.19),{x:-5.1,z:6.4,yaw:PI},{...LOOK.n1,buff:1.25});
     drawBody(pose('curl',(Math.sin(T0*2.2)*.5+.5),0,.18),{x:-10.6,z:-6.6,yaw:PI/2.4},LOOK.n2);
     drawBody(pose('stand',0,0,.18),{x:SHOP.x,z:SHOP.z+1.45,yaw:PI},LOOK.n3);   /* the potion seller */
+    drawPet(dt); worldFX(dt);
     drawOthers();
     if(PL.at&&X){ const s=SK[PL.at], J=pose(s.k,X.b,s.t==='c'?X.ph:T0,w,(X.state==='up'&&X.lastGrade==='MISS'?Math.sin(T0*40)*.015:0)); drawBody(J,s,me);
       if(J.bar) barbell(s,J.bar,weightOf(s),X.state==='up'&&X.lastGrade==='MISS'?Math.sin(T0*30)*.04:0); }
@@ -409,7 +479,7 @@ function drawHUD(){ ctx.clearRect(0,0,HW,HH); const st=window.RRSTR?RRSTR.state(
   if(bannerT>0){ ctx.globalAlpha=clamp(bannerT,0,1); rrct(HW/2-300,150,600,92,16,'rgba(5,10,24,.88)'); txt(bannerTxt[0],HW/2,196,38,bannerCol); txt(bannerTxt[1],HW/2,228,19,'#e2e8f0'); ctx.globalAlpha=1; }
   drawAuras(); netHUD(); boostHUD();
   const done=WOD.tasks.filter(t=>t.got>=t.n).length; txt(`WORKOUT ${done}/3${WOD.done?' ✓':''}`,HW-18,30,19,WOD.done?'#4ade80':'#cbd5e1','right');
-  txt('STRENGTH '+st.level.toLocaleString()+(st.badge?'  '+st.badge:''),18,30,19,'#e2e8f0','left'); }
+  txt('STRENGTH '+(st.owner?'∞ · REBIRTHS ∞':st.level.toLocaleString()+(st.rebirths?' · 🔁 '+st.rebirths:''))+(st.badge?'  '+st.badge:'')+(world().mult>1?'  · '+gymKey().toUpperCase()+' ×'+world().mult:''),18,30,19,'#e2e8f0','left'); }
 
 /* ---------- panel ---------- */
 
@@ -443,9 +513,9 @@ document.querySelectorAll('[data-w]').forEach(b=>b.onclick=()=>setWeight(+b.data
 $('maxW').onclick=()=>{ if(!PL.at) return; const s2=SK[PL.at], g=GYMS[gymKey()], c=Math.min(g.cap,strCap()); setWeight(0,owner()?wCap(s2):s2.each?Math.max(5,Math.floor(c/6/2.5)*2.5):Math.max(45,Math.floor(c/5)*5)); };   /* MAX = the heaviest you can really lift */
 function renderGyms(){ const el=$('gymPills'); if(!el) return; const lv=strLv(), cur=gymKey();
   el.innerHTML=Object.entries(GYMS).map(([k,g])=>{ const ok=gymOk(g); return `<button data-gym="${k}" class="${cur===k?'on':''}" ${ok?'':'disabled'} title="${ok?'':'Needs '+g.need.toLocaleString()+' strength'+(g.rb?' and '+g.rb+' rebirth'+(g.rb>1?'s':''):'')}">${g.ic} ${g.n}${ok?'':' 🔒'}</button>`; }).join('');
-  const g=GYMS[cur], nx=Object.values(GYMS).find(q=>!gymOk(q)), fmtL=v=>v>=1e21?'∞':v.toLocaleString(); $('gymInfo').textContent=`${g.ic} ${g.n}: bars up to ${fmtL(g.cap)} lb · your strength lets you load ${owner()?'anything — ∞':fmtL(Math.min(g.cap,strCap()))+' lb'}${!owner()&&nx?` · next: ${nx.ic} ${nx.n} at ${nx.need.toLocaleString()} strength${nx.rb?' + '+nx.rb+' rebirth'+(nx.rb>1?'s':''):''}`:''}`; renderRebirth();
+  const g=GYMS[cur], nx=Object.values(GYMS).find(q=>!gymOk(q)), fmtL=v=>v>=1e21?'∞':v.toLocaleString(); $('gymInfo').textContent=`${g.ic} ${g.n}: bars up to ${fmtL(g.cap)} lb · your strength lets you load ${owner()?'anything — ∞':fmtL(Math.min(g.cap,strCap()))+' lb'}${!owner()&&nx?` · next: ${nx.ic} ${nx.n} at ${nx.need.toLocaleString()} strength${nx.rb?' + '+nx.rb+' rebirth'+(nx.rb>1?'s':''):''}`:''} · world boost ×${world().mult}`; renderRebirth(); renderPets();
   let t=document.getElementById('gymTint'); if(!t){ t=document.createElement('div'); t.id='gymTint'; t.style.cssText='position:absolute;inset:0;pointer-events:none;border-radius:inherit;mix-blend-mode:screen;transition:background .4s'; const st=$('stage'); if(st){ if(getComputedStyle(st).position==='static') st.style.position='relative'; st.appendChild(t); } } t.style.background=g.tint?`radial-gradient(ellipse at 50% 30%,${g.tint},transparent 70%)`:'transparent'; }
-document.addEventListener('click',e=>{ const b=e.target.closest('[data-gym]'); if(!b||b.disabled) return; SV.gym=b.dataset.gym; for(const s2 of ST) if(SV.w[s2.k]>wCap(s2)) SV.w[s2.k]=wCap(s2); saveSV(); renderGyms(); syncUI(); const g=GYMS[SV.gym]; banner(`${g.ic} Welcome to the ${g.n}`,`Bars up to ${g.cap.toLocaleString()} lb`,'#facc15',2); });
+document.addEventListener('click',e=>{ const b=e.target.closest('[data-gym]'); if(!b||b.disabled) return; SV.gym=b.dataset.gym; for(const s2 of ST) if(SV.w[s2.k]>wCap(s2)) SV.w[s2.k]=wCap(s2); saveSV(); renderGyms(); syncUI(); const g=GYMS[SV.gym]; banner(`${g.ic} Welcome to the ${g.n}`,`Bars up to ${g.cap>=1e21?"∞":g.cap.toLocaleString()} lb`,'#facc15',2); });
 addEventListener('rrstr-change',()=>renderGyms()); setTimeout(renderGyms,300); setInterval(renderGyms,3000);
 $('leaveBtn').onclick=leave;
 $('endBtn').onclick=()=>{ if(X&&!X.ended) endSet('stop'); syncUI(); };
