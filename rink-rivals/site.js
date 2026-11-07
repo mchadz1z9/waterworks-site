@@ -85,14 +85,14 @@
     fetch(SERVER+'/tourney',{method:'POST',headers:{'content-type':'application/json'},body:JSON.stringify({op:'leave',id:t.id,pid:pid()})}).then(()=>{ setJoined(joinedIds().filter(x=>x!==t.id)); btn.disabled=false; btn.classList.remove('on'); btn.textContent='Join tournament'; const bb=document.getElementById('rrTourBtn'); if(bb) bb.innerHTML='🏆 Tournament'; }).catch(()=>{ btn.disabled=false; btn.textContent="✓ You're in — tap to leave"; }); }
 
   /* ---------- graphics: a colour grade and vignette over every 3D game, with a High / Low switch ---------- */
-  const GFX=()=>ls.get('rrGfx')==='low'?'low':'high';
+  const GFX=()=>{ const g=ls.get('rrGfx'); return g==='low'||g==='ultra'?g:'high'; };
   if(GFX()==='low'){ try{ Object.defineProperty(window,'devicePixelRatio',{get:()=>1,configurable:true}); }catch(e){} }
-  function gfxApply(){ const gl=document.getElementById('gl'); if(!gl) return; const hi=GFX()==='high';
-    gl.style.filter=hi?'saturate(1.22) contrast(1.1) brightness(1.04)':''; let v=document.getElementById('rrVig');
+  function gfxApply(){ const gl=document.getElementById('gl'); if(!gl) return; const hi=GFX()!=='low';
+    gl.style.filter=hi?(GFX()==='ultra'?'saturate(1.12) contrast(1.04)':'saturate(1.18) contrast(1.07) brightness(1.03)'):''; let v=document.getElementById('rrVig');
     if(hi&&!v&&gl.parentNode){ v=document.createElement('div'); v.id='rrVig'; v.style.cssText='position:absolute;inset:0;pointer-events:none;background:radial-gradient(ellipse at 50% 45%,rgba(0,0,0,0) 55%,rgba(0,0,0,.34) 100%);border-radius:inherit'; gl.insertAdjacentElement('afterend',v); }
     if(!hi&&v) v.remove();
-    const tools=document.querySelector('.tools'); if(tools&&!document.getElementById('rrGfxBtn')){ const b=document.createElement('button'); b.id='rrGfxBtn'; b.title='Graphics quality (Low runs faster on slow computers)'; tools.appendChild(b); b.onclick=()=>{ ls.set('rrGfx',GFX()==='high'?'low':'high'); location.reload(); }; }
-    const b=document.getElementById('rrGfxBtn'); if(b) b.textContent=hi?'✨ Graphics: High':'⚡ Graphics: Low'; }
+    const tools=document.querySelector('.tools'); if(tools&&!document.getElementById('rrGfxBtn')){ const b=document.createElement('button'); b.id='rrGfxBtn'; b.title='Graphics quality: Low (fastest) → High → Ultra 4K (sharpest, needs a strong computer)'; tools.appendChild(b); b.onclick=()=>{ ls.set('rrGfx',{low:'high',high:'ultra',ultra:'low'}[GFX()]); location.reload(); }; }
+    const b=document.getElementById('rrGfxBtn'); if(b) b.textContent=GFX()==='ultra'?'💎 Graphics: Ultra 4K':hi?'✨ Graphics: High':'⚡ Graphics: Low'; }
   if(PAGE!=='admin'){ if(document.readyState==='loading') addEventListener('DOMContentLoaded',gfxApply); else gfxApply(); }
   /* ---------- admin controls that reach every page ---------- */
   const admDev=()=>!!ls.get('rrAdmUrl');
