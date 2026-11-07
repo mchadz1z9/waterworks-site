@@ -88,7 +88,7 @@ function engine(){ const a=audio(); if(!a||engO) return; engO=a.createOscillator
 const sfx={ crash:v=>noise(.4,clamp(v,.05,.5),900), horn:()=>{ tone(400,.35,'square',.05); tone(500,.35,'square',.04); }, siren:()=>{ tone(700,.4,'sine',.05,500); tone(1200,.4,'sine',.05,-500,.4); }, cash:()=>{ tone(1046,.08,'square',.05); tone(1568,.18,'square',.05,0,.08); }, door:()=>tone(160,.08,'square',.05), star:()=>{ tone(520,.12,'square',.05); tone(392,.2,'square',.05,0,.12); }, bust:()=>{ tone(300,.5,'sawtooth',.06,-150); } };
 
 /* ---------- the city: a grid of roads every 70 m, four lanes each, sidewalks, then a block ---------- */
-const P=70, NL=19, OLDN=11, ROAD=6, WALK=9, CW=(NL-1)*P;   /* v3: the map grew from 10x10 to 18x18 blocks — the old town is the north-west corner */          /* roads run along x = i·P and z = j·P for i,j = 0..10 — downtown in the middle-west, new suburbs, hills and parks out east and south */
+const P=70, NL=21, OLDN=11, ROAD=6, WALK=9, CW=(NL-1)*P;   /* v3: the map grew from 10x10 to 18x18 blocks — the old town is the north-west corner */          /* roads run along x = i·P and z = j·P for i,j = 0..10 — downtown in the middle-west, new suburbs, hills and parks out east and south */
 const LANES=[1.6,4.4];                                      /* lane centres from the middle line (drive on the right) */
 const rnd=(s=>()=>{ s=(s*1664525+1013904223)>>>0; return s/4294967296; })(20251101);
 /* what each block is */
@@ -98,8 +98,12 @@ for(let i=0;i<OLDN-1;i++) for(let j=0;j<OLDN-1;j++){ const k=bkey(i,j), dc=Math.
 /* the new two-thirds of the map: the Riverside, Uptown skyscrapers, Oakridge suburbs, the Docks and a stadium & fun fair */
 const RIVER_I=13, RX0=RIVER_I*P+WALK-3, RX1=(RIVER_I+1)*P-WALK+3, HX=7*P, HWY_Y=13, HWY_W=7;
 const SPECIAL2={'16,15':'stadium','11,15':'fair','15,11':'park','6,14':'park','2,12':'park','10,10':'gas','15,8':'diner','17,2':'clothes','4,16':'gas','12,6':'guns','10,3':'park','16,9':'gas','8,12':'diner','17,13':'park','11,12':'clothes','15,17':'house','17,16':'house','14,16':'gas'};
-for(let i=0;i<NL-1;i++) for(let j=0;j<NL-1;j++){ if(i<OLDN-1&&j<OLDN-1) continue; const k=bkey(i,j), du=Math.hypot(i-16,j-4);
+for(let i=0;i<18;i++) for(let j=0;j<18;j++){ if(i<OLDN-1&&j<OLDN-1) continue; const k=bkey(i,j), du=Math.hypot(i-16,j-4);
   const type=i===RIVER_I?'river':SPECIAL2[k]||(du<1.7?'tower':du<3.2?'mid':(j>=11&&i<=12)?(((i*7+j*3)%5)?'house':'low'):(i>=14&&j>=11)?'docks':'low');
+  BLK[k]={i,j,type,x0:i*P+WALK,x1:(i+1)*P-WALK,z0:j*P+WALK,z1:(j+1)*P-WALK}; }
+/* v6: the map grows again — Rival Hills (luxury homes) to the east, Harbor Point (a new business district) to the south */
+for(let i=0;i<NL-1;i++) for(let j=0;j<NL-1;j++){ if(i<18&&j<18) continue; const k=bkey(i,j);
+  const type=i===RIVER_I?'river':i>=18&&j<18?(((i+j)%4)?'house':'park'):(i>=7&&i<=12&&j===18)||(i>=8&&i<=11)?'tower':(((i*5+j)%6)?'mid':'plaza');
   BLK[k]={i,j,type,x0:i*P+WALK,x1:(i+1)*P-WALK,z0:j*P+WALK,z1:(j+1)*P-WALK}; }
 const BLOCKS=Object.values(BLK), LANDB=BLOCKS.filter(b=>b.type!=='river');
 /* open plazas dotted through the new districts */ for(const b of BLOCKS) if(b.type==='low'&&(b.i>=OLDN-1||b.j>=OLDN-1)&&(b.i*13+b.j*7)%9===0) b.type='plaza';
@@ -110,7 +114,7 @@ const HZ0=-40, HZ1=CW+40, HRAMP=170;
 function deckH(x,z){ if(Math.abs(x-HX)>HWY_W) return null; if(z<HZ0-HRAMP||z>HZ1+HRAMP) return null; if(z<HZ0) return HWY_Y*(z-(HZ0-HRAMP))/HRAMP; if(z>HZ1) return HWY_Y*((HZ1+HRAMP)-z)/HRAMP; return HWY_Y; }
 /* the suburbs: every house block holds four homes; the south-east one is the one for sale */
 /* house tiers by area: the old suburbs are mostly cheaper homes, Oakridge has the big ones */
-const tierOf0=b=>{ const h=Math.floor(((Math.sin(b.i*12.9898+b.j*78.233)*43758.5453)%1+1)%1*6); return (b.j>=11&&b.i<=12?[0,1,2,3,4,5]:[0,0,1,1,2,3])[h]; }, TIERDIM=[{W:8,D:5},{W:10,D:8},{W:12,D:10},{W:13,D:12},{W:14,D:14},{W:14,D:16},{W:14,D:18}];
+const tierOf0=b=>{ const h=Math.floor(((Math.sin(b.i*12.9898+b.j*78.233)*43758.5453)%1+1)%1*6); return (b.i>=18?[3,4,4,5,5,5]:b.j>=11&&b.i<=12?[0,1,2,3,4,5]:[0,0,1,1,2,3])[h]; }, TIERDIM=[{W:8,D:5},{W:10,D:8},{W:12,D:10},{W:13,D:12},{W:14,D:14},{W:14,D:16},{W:14,D:18}];
 let MEGA_B=null; const tierOf=b=>{ const t=tierOf0(b); if(!owner()) return t; if(!MEGA_B){ for(const q of BLOCKS) if(q.type==='house'&&q.j>=11&&q.i<=12&&tierOf0(q)===5){ MEGA_B=q; break; } } return b===MEGA_B?6:t; };
 const HOUSES=[]; { const hr=(s0=>()=>{ s0=(s0*16807)%2147483647; return s0/2147483647; })(777);
   for(const b of BLOCKS){ if(b.type!=='house') continue; for(const [qx,qz] of [[0,0],[1,0],[0,1],[1,1]]){ const lx=b.x0+qx*26, north=qz===0, face=north?-1:1;
@@ -188,7 +192,7 @@ function v4Step(dt){ const c=ME.car;
   if(c&&!c.M.plane&&!c.M.heli&&!c.M.boat) for(const cam of SPEEDCAMS){ if(T-cam.last<8) continue; if(!owner()&&Math.hypot(cam.x-c.x,cam.z-c.z)<8&&(!cam.fwy||c.onDeck)&&Math.abs(c.v)*3.6>speedLimit()+12){ cam.last=T; V4FLASH=1; SV.tickets=(SV.tickets||0)+1; pay(-120,'— 📸 speed camera fine'); say(`📸 Speed camera! ${Math.round(Math.abs(c.v)*3.6)} km/h in a ${speedLimit()} zone — $120 fine`,'#fbbf24',2.6); } }
   V4FLASH=Math.max(0,V4FLASH-dt*3); }
 let V4FLASH=0;
-if(TEST) setTimeout(()=>{ if(window.__city) window.__city.v4=()=>({GIVERS,AP,HOUSES,HT,STORES,SV,JOB,ME,HOTELS,V5R,v5go,interact,cy:a=>{ camYaw=a; },OT,PASS:()=>PASS,NET:()=>NET,getIn}); },0);
+if(TEST) setTimeout(()=>{ if(window.__city) window.__city.v4=()=>({TUT,SECR,SECDOORS,v6secret,GIVERS,AP,HOUSES,HT,STORES,SV,JOB,ME,HOTELS,V5R,v5go,interact,cy:(a,pt)=>{ camYaw=a; if(pt!=null) camPitch=pt; },OT,PASS:()=>PASS,NET:()=>NET,getIn}); },0);
 function v4Draw(){ if(ME.indoor) return; const me=ME.car||ME, P3=(x,y,z,w,h,d,col)=>R3.part(R3.UB,R3.mm(R3.T(x*K,y*K,z*K),R3.S(w*K,h*K,d*K)),col);
   for(const g of GIVERS){ if(Math.hypot(g.x-me.x,g.z-me.z)>160) continue; PHY.drawBody(PHY.pose('stand',0,T*.5,.2),{x:g.x,z:g.z,yaw:Math.atan2(me.x-g.x,me.z-g.z)},{top:g.col,legs:'#1f2937',skin:'#c68642',shoe:'#111',hair:'#111',buff:1.1});
     const done=(SV.gig&&SV.gig[g.id]||0)>=g.ms.length, b=Math.sin(T*3)*.25; R3.part(R3.UC,R3.mm(R3.T(g.x*K,(3.2+b)*K,g.z*K),R3.RY(T*2),R3.S(.5*K,1.2*K,.5*K)),done?[.4,1.6,.5]:[2.4,2,.3]); R3.part(R3.US,R3.mm(R3.T(g.x*K,(2.3+b)*K,g.z*K),R3.S(.32*K,.32*K,.32*K)),done?[.4,1.6,.5]:[2.4,2,.3]); }
@@ -262,23 +266,70 @@ const HF={ lobby:v5room('Hotel lobby',46,30,0,[['exit',0,14.6],['desk',0,-9],['f
   casino:v5room('Casino floor',46,30,0,[['casino',-14,-4],['casino',-14,5],['casino',-4,-4],['casino',-4,5],['dj',10,-11],['bar',12,10],['arcade',18,0]],'#3b0764'),
   pent:v5room('Penthouse suite',46,30,0,[['bed',-15,-6],['closet',-15,10],['aquarium',2,-12.2],['cinema',12,12.9],['piano',4,3],['safe',-19,2],['trophy',20,-6],['kitchen',12,-4],['rug',-3,6]],'#fafaf9'),
   roof:v5room('Hotel rooftop',46,30,1,[['pool',-6,-2],['hottub',10,-6],['lounge',-6,9],['bar',12,10],['helipad',14,1]]) };
+/* ---- v6: skyscraper floors, secret rooms and the things in them ---- */
+Object.assign(V5I,{
+ desks:{d:(b,c,x,z)=>{ for(let r=0;r<3;r++) for(let k=0;k<4;k++){ const dx=x-6+k*4, dz=z-5+r*5; b(dx,.75,dz,2.6,.08,1.4,'#e7e5e4'); b(dx,.37,dz,2.4,.74,.06,'#9ca3af'); b(dx,1.15,dz-.4,1,.6,.06,'#111827'); b(dx,1.15,dz-.37,.9,.5,.02,'#38bdf8'); b(dx,.5,dz+1,.6,.9,.6,'#1f2937'); } }},
+ cooler:{s:[.8,.8],d:(b,c,x,z)=>{ b(x,.55,z,.6,1.1,.6,'#e5e7eb'); c(x,1.35,z,.25,.5,'#7dd3fc'); }},
+ screens:{n:'📈 F — check the stock market',d:(b,c,x,z)=>{ b(x,2.4,z,20,3.6,.2,'#020617'); for(let k=0;k<6;k++) b(x-8.3+k*3.3,2.4,z+.12,3,3.2,.02,['#065f46','#7f1d1d','#065f46','#1e3a8a','#065f46','#7f1d1d'][k]); },
+   a:()=>{ const g=Math.random()<.55, pct=(Math.random()*9+1).toFixed(1); if(SV.money>=20000){ pay(g?20000:-20000,g?`— 📈 stocks up ${pct}%!`:`— 📉 stocks down ${pct}%`); } else say(`📈 The market is ${g?'up':'down'} ${pct}% today`,'#86efac',2.5); }},
+ telescope:{n:'🔭 F — look through the telescope',s:[.8,.8],d:(b,c,x,z)=>{ b(x,.7,z,.12,1.4,.12,'#374151'); b(x,1.5,z,.3,.3,1.2,'#9ca3af'); },
+   a:()=>say(['🔭 You can see the whole city — and the beach','🔭 A plane is landing at Rival Airport','🔭 Somebody is speeding on the freeway… the police are on it','🔭 Is that a secret door behind the diner?','🔭 The Ferris wheel at the fun fair is lit up','🔭 You spot your own house!'][Math.floor(Math.random()*6)],'#bae6fd',3.5)},
+ painting:{n:'🖼️ F — this painting looks crooked…',d:(b,c,x,z)=>{ b(x,2.2,z,.08,2,3,'#a16207'); b(x+.05,2.2,z,.04,1.7,2.7,'#1e40af'); b(x+.07,2.1,z+.4,.02,.8,.8,'#facc15'); },a:()=>v6secret('speak')},
+ vent:{n:'🌀 F — crawl into the air vent',d:(b,c,x,z)=>{ b(x,.6,z,1.6,1,.08,'#9ca3af'); for(let k=0;k<4;k++) b(x,.25+k*.22,z+.05,1.4,.04,.04,'#4b5563'); },a:()=>v6secret('lab')},
+ redbook:{n:'📕 F — pull the red book…',s:[.4,.4],d:(b,c,x,z)=>b(x,1.6,z,.3,.5,.35,'#dc2626'),a:()=>v6secret('panic')},
+ back:{n:'↩️ F — go back the way you came',d:(b,c,x,z)=>{ b(x,1.3,z+.2,1.6,2.6,.12,'#57534e'); b(x+.5,1.3,z+.12,.12,.12,.05,'#facc15'); },a:()=>v6back()},
+ gold:{d:(b,c,x,z)=>{ for(let r=0;r<4;r++) for(let k=0;k<4-r;k++) b(x-1+k*.7+r*.35,.12+r*.24,z,.6,.22,1.2,'#facc15'); }},
+ diamond:{n:'💎 F — admire the diamonds',s:[2,1],d:(b,c,x,z)=>{ b(x,.6,z,1.8,1.2,.9,'#1f2937'); b(x,1.45,z,1.6,.5,.8,'#bae6fd'); for(let k=0;k<3;k++) b(x-.5+k*.5,1.35,z,.18,.18,.18,'#e0f2fe'); },a:()=>say('💎 The Rival Star — the biggest diamond in the city. All yours.','#bae6fd',3)},
+ monitors:{d:(b,c,x,z)=>{ for(let k=0;k<4;k++) for(let r=0;r<2;r++) b(x-3.3+k*2.2,1.6+r*1.3,z,2,1.1,.1,'#0f172a'); b(x,.45,z+.8,8,.9,1,'#334155'); }},
+ suit:{n:'🦺 F — put on body armor',s:[1.2,1.2],d:(b,c,x,z)=>{ b(x,1,z,1,2,.6,'#475569'); b(x,1.3,z+.32,.8,.9,.05,'#1d4ed8'); },a:()=>{ SV.armor=100; ME.hp=100; say('🦺 Armor on and fully healed','#93c5fd',2.5); saveSV(); }},
+ crate:{n:'📦 F — pry open the crate',s:[1.4,1.4],d:(b,c,x,z)=>{ b(x,.6,z,1.2,1.2,1.2,'#92400e'); b(x,.6,z+.62,1.2,.12,.04,'#451a03'); b(x,1.21,z,1.24,.04,1.24,'#78350f'); },
+   a:()=>{ SV.crates=SV.crates||{}; const R=V5R[ME.room], n=R.items.filter(q=>q[0]==='crate').length, got=SV.crates[R.i]||0; if(got>=n){ say('📦 Empty. Someone got here first (you).','#a8a29e',2); return; } SV.crates[R.i]=got+1; pay(50000,'— 📦 a crate full of old cash!'); saveSV(); }},
+ teleporter:{n:'🌀 F — step on the teleporter',d:(b,c,x,z)=>{ c(x,.1,z,2,.2,'#334155'); c(x,.22,z,1.6,.04,'#22d3ee'); for(let k=0;k<4;k++){ const a=k*PI/2; b(x+Math.cos(a)*2.2,1.5,z+Math.sin(a)*2.2,.3,3,.3,'#64748b'); } },a:()=>v6teleport()},
+ hacker:{n:'💻 F — hack the police database',s:[2.4,1.2],d:(b,c,x,z)=>{ b(x,.6,z,2.4,1.2,1,'#1f2937'); for(const o of [-.7,0,.7]) b(x+o,1.5,z-.3,.6,.5,.05,'#111827'); },
+   a:()=>{ if(heat>0){ heat=0; say('💻 Wanted level wiped. The police have no idea who you are.','#4ade80',3); } else say('💻 Your record is spotless. For now.','#86efac',2.5); }},
+ ghosttrain:{d:(b,c,x,z)=>{ b(x,.05,z,40,.1,3,'#292524'); for(const o of [-.75,.75]) b(x,.15,z+o,40,.1,.12,'#78716c'); b(x-4,1.7,z,14,2.8,2.8,'#57534e'); for(let k=0;k<5;k++) b(x-9.5+k*2.6,2,z+1.42,1.6,1,.04,'#1c1917'); }},
+ jukebox:{n:'🎵 F — play the jukebox',s:[1.4,1],d:(b,c,x,z)=>{ b(x,.9,z,1.3,1.8,.8,'#9f1239'); b(x,1.3,z+.41,.9,.6,.02,'#fde68a'); },a:()=>{ [392,440,494,523,494,440,392].forEach((f,i)=>tone(f,.2,'triangle',.05,0,i*.22)); say('🎵 An old swing tune crackles to life','#fda4af',2.5); }},
+ casino100:{n:'💎 F — bet $100,000 (high stakes)',s:[4.4,2.6],d:(b,c,x,z)=>{ b(x,.85,z,4.2,.15,2.4,'#312e81'); b(x,.45,z,3.6,.8,1.8,'#1c1917'); for(let k=0;k<6;k++) c(x-1.2+k*.45,.98,z+.4,.14,.1,'#facc15'); },
+   a:()=>{ if(SV.money<100000){ say('Come back with $100,000','#f87171'); return; } if(Math.random()<.47) pay(100000,'— 💎 won big at the high-stakes table'); else pay(-100000,'— 💎 lost at the high-stakes table'); }}});
+const SF={ lobby:v5room('Tower lobby',46,30,0,[['exit',0,14.6],['desk',0,-9],['fountain',0,2],['couch',-14,4],['couch',14,4],['plant',-21,13],['plant',21,13],['plant',-21,-13],['plant',21,-13]],'#e2e8f0'),
+  office:v5room('Office floor',46,30,0,[['desks',-9,1],['desks',9,1],['cooler',20,10],['vent',-20,-14.4],['plant',21,-12],['couch',-15,11]],'#f1f5f9'),
+  trade:v5room('Trading floor',46,30,0,[['screens',0,-14.6],['desks',-9,4],['desks',9,4],['cooler',-21,12]],'#1e293b'),
+  lounge:v5room('Sky lounge',46,30,0,[['bar',-12,-10],['piano',8,-6],['lounge',-6,9],['aquarium',12,14.2],['couch',-14,4],['plant',21,-13]],'#334155'),
+  deck:v5room('Observation deck',46,30,1,[['telescope',-15,10],['telescope',0,12],['telescope',15,10],['helipad',12,-5],['lounge',-10,-7]]) };
+MF.vault&&V5R[MF.vault].items.push(['redbook',8,11.4]);
+V5R[HF.lobby].items.push(['painting',-22.8,-5]);
+/* secret rooms: no lift, one way in and one way out */
+const v6sec=(n,w,d,items,col)=>{ const i=v5room(n,w,d,0,items,col); V5R[i].nolift=1; V5R[i].secret=1; return i; };
+const SECR={ panic:v6sec('Panic room & treasure vault',30,20,[['back',0,9.4],['gold',-8,-6],['gold',-3,-6],['diamond',8,-6],['monitors',0,-9.4],['safe',11,4],['suit',-11,5],['crate',4,5]],'#1f2937'),
+  speak:v6sec('The Speakeasy',36,24,[['back',0,11.4],['bar',-10,-9],['piano',8,-6],['casino100',-6,3],['casino100',6,3],['jukebox',15,9]],'#3f2a1d'),
+  lab:v6sec('Secret lab',36,24,[['back',0,11.4],['teleporter',0,-3],['monitors',0,-11.4],['suit',-13,4],['hacker',12,-6]],'#0b1220'),
+  tunnel:v6sec("Bootlegger's tunnel",40,12,[['back',-17,5.4],['crate',-6,-3],['crate',2,-3],['crate',10,-3],['jukebox',16,2]],'#57534e'),
+  subway:v6sec('Abandoned subway station',46,16,[['back',-20,7.4],['ghosttrain',0,-4.5],['crate',16,4],['crate',-8,4]],'#44403c'),
+  den:v6sec("Hacker's den",26,18,[['back',0,8.4],['hacker',-6,-6],['monitors',4,-8.4],['couch',4,3],['crate',9,-4]],'#111827') };
 /* which floors you get: a villa has one floor upstairs, a mansion three, the owner's mega mansion all five */
 const v5houseFloors=()=>{ const h=myHouse(); if(!h) return []; return h.tier>=6?[MF.suite,MF.gym,MF.club,MF.vault,MF.roof]:h.tier>=5?[MF.suite,MF.gym,MF.roof]:h.tier>=4?[MF.suite]:[]; };
 /* hotels: four tower blocks around town become hotels you can buy (they pay you every two minutes) */
 const HOTELS=[]; { const pick=BLOCKS.filter(b=>(b.type==='tower'||b.type==='mid')&&!(b.i===3&&b.j===2)&&!(b.i===16&&b.j===4)&&b.i>0&&b.j>0).sort((a,b2)=>((a.i*37+a.j*61)%97)-((b2.i*37+b2.j*61)%97));
-  const DEF=[{n:'Rival Inn',p:2500000,H:30,col:'#b45309',ac:'#fde68a',rooms:60,fl:[HF.lobby,HF.guest,HF.roof]},{n:'Grand Rival Hotel',p:9000000,H:64,col:'#e7e5e4',ac:'#b91c1c',rooms:240,fl:[HF.lobby,HF.guest,HF.spa,HF.casino,HF.roof]},
-    {n:'Skyline Tower Hotel',p:30000000,H:124,col:'#1e3a5f',ac:'#38bdf8',rooms:620,fl:[HF.lobby,HF.guest,HF.spa,HF.casino,HF.pent,HF.roof]},{n:'Royal Palms Resort',p:75000000,H:172,col:'#fef3c7',ac:'#d97706',rooms:1100,fl:[HF.lobby,HF.guest,HF.spa,HF.casino,HF.pent,HF.roof]}];
+  const DEF=[{n:'Rival Inn',p:50000000,H:30,col:'#b45309',ac:'#fde68a',rooms:60,fl:[HF.lobby,HF.guest,HF.roof]},{n:'Grand Rival Hotel',p:200000000,H:64,col:'#e7e5e4',ac:'#b91c1c',rooms:240,fl:[HF.lobby,HF.guest,HF.spa,HF.casino,HF.roof]},
+    {n:'Skyline Tower Hotel',p:500000000,H:124,col:'#1e3a5f',ac:'#38bdf8',rooms:620,fl:[HF.lobby,HF.guest,HF.spa,HF.casino,HF.pent,HF.roof]},{n:'Royal Palms Resort',p:1000000000,H:172,col:'#fef3c7',ac:'#d97706',rooms:1100,fl:[HF.lobby,HF.guest,HF.spa,HF.casino,HF.pent,HF.roof]}];
   const used=[]; for(const D of DEF){ const b=pick.find(q=>!used.some(u=>Math.abs(u.i-q.i)+Math.abs(u.j-q.j)<4)); if(!b) break; used.push(b); const cx=(b.x0+b.x1)/2;
     const H={...D,id:HOTELS.length,b,x:cx,z:b.z0-.6,inc:Math.round(D.p*.004)}; b.hotel=H; HOTELS.push(H); } }
+/* v6: skyscrapers you can buy — billions of dollars, offices that pay you, an observation deck on top */
+{ const taken=new Set(HOTELS.map(H=>H.b)); const near=(a,b2)=>Math.abs(a.i-b2.i)+Math.abs(a.j-b2.j)<2;
+  const SDEF=[{n:'Rival Trade Center',p:2500000000,H:240,col:'#1e3a5f',ac:'#cbd5e1',rooms:900,want:'3,2'},{n:'Apex Spire',p:6000000000,H:320,col:'#164e63',ac:'#e2e8f0',rooms:1400,want:'16,4'},
+    {n:'Harbor Point Tower',p:15000000000,H:390,col:'#0f172a',ac:'#38bdf8',rooms:2100,want:'10,19'},{n:'The Crown',p:40000000000,H:470,col:'#1f2937',ac:'#facc15',rooms:3000,want:null}];
+  const towers=BLOCKS.filter(b=>b.type==='tower'&&!taken.has(b)&&!b.hotel);
+  for(const D of SDEF){ let b=D.want&&BLK[D.want]; if(!b||b.hotel||!['tower','mid','low','plaza'].includes(b.type)) b=towers.find(q=>!q.hotel&&!HOTELS.some(H=>near(H.b,q))); if(!b) continue;
+    const H={...D,sky:true,id:HOTELS.length,b,x:(b.x0+b.x1)/2,z:b.z0-.6,inc:Math.round(D.p*.003),fl:[SF.lobby,SF.office,SF.trade,SF.office,SF.lounge,SF.deck]}; b.hotel=H; if(b.type!=='tower'){ b.type='tower'; SOLID.push({x0:b.x0+1.5,x1:b.x1-1.5,z0:b.z0+1.5,z1:b.z1-1.5}); } HOTELS.push(H); } }
 const ownsHotel=H=>owner()||!!(SV.hotels&&SV.hotels[H.id]);
 /* walls and furniture are solid */
 for(const R of V5R){ const x0=R.x-R.w/2, x1=R.x+R.w/2, z0=R.z-R.d/2, z1=R.z+R.d/2; SOLID.push({x0:x0-1,x1:x1+1,z0:z0-1,z1:z0},{x0:x0-1,x1:x1+1,z0:z1,z1:z1+1},{x0:x0-1,x1:x0,z0,z1},{x0:x1,x1:x1+1,z0,z1});
-  R.items.push(['up',R.w/2-3,-R.d/2+.5],['down',-R.w/2+3,-R.d/2+.5]);
+  if(!R.nolift) R.items.push(['up',R.w/2-3,-R.d/2+.5],['down',-R.w/2+3,-R.d/2+.5]);
   for(const [t,ix,iz] of R.items){ const I=V5I[t]; if(I.s) SOLID.push({x0:R.x+ix-I.s[0]/2,x1:R.x+ix+I.s[0]/2,z0:R.z+iz-I.s[1]/2,z1:R.z+iz+I.s[1]/2}); } }
-const v5spot=(t,ix,iz,R)=>{ const I=V5I[t], s=I.s; return {x:R.x+ix,z:R.z+iz+(t==='up'||t==='down'?1.6:t==='exit'?-1.5:s?s[1]/2+.9:2.2)}; };
+const v5spot=(t,ix,iz,R)=>{ const I=V5I[t], s=I.s; return {x:R.x+ix,z:R.z+iz+(t==='up'||t==='down'?1.6:t==='exit'||t==='back'?-1.5:s?s[1]/2+.9:2.2)}; };
 /* the stairs up from your house's ground floor (only villas and bigger) */
 const HSTAIR={x:HOME.x+7.5,z:HOME.z+3.6};
-function v5chain(){ return ME.bldg&&ME.bldg.hotel!=null?HOTELS[ME.bldg.hotel].fl:v5houseFloors(); }
+function v5chain(){ if(ME.bldg&&ME.bldg.secret) return [ME.room]; return ME.bldg&&ME.bldg.hotel!=null?HOTELS[ME.bldg.hotel].fl:v5houseFloors(); }
 function v5go(fl,from){ const ch=v5chain(); if(fl<0){ /* back down to the house */ ME.indoor='home'; ME.bldg=null; ME.x=HSTAIR.x-1.8; ME.z=HSTAIR.z; ME.yaw=-PI/2; camYaw=PI/2; say('🏠 Ground floor','#fde68a',1.5); renderPanel(); return; }
   if(fl>=ch.length) return; const R=V5R[ch[fl]]; ME.indoor='floor'; ME.room=R.i; ME.fl=fl; const k=from==='down'?'up':'down', it=R.items.find(q=>q[0]===k)||R.items.find(q=>q[0]==='exit'); const p=v5spot(it[0],it[1],it[2],R); ME.x=p.x; ME.z=p.z+.4; ME.yaw=0; camYaw=PI; camPitch=0;
   tone(880,.15,'sine',.04); tone(1175,.2,'sine',.04,0,.15); const H=ME.bldg&&ME.bldg.hotel!=null?HOTELS[ME.bldg.hotel]:null;
@@ -301,7 +352,7 @@ function v5talk(){ const n=v5near(); if(n){ audio(); n.a(); return true; } if(ME
       if(ownsHotel(H)){ v5enterHotel(H); say(`🏨 Welcome back, boss — ${H.n}`,'#4ade80',2.5); return true; }
       if(v5ask===H&&T-v5ask.t<6){ if(SV.money<H.p){ say(`You need $${H.p.toLocaleString()} — you have $${SV.money.toLocaleString()}`,'#f87171',2.5); v5ask=null; return true; }
         SV.hotels=SV.hotels||{}; SV.hotels[H.id]=Date.now(); pay(-H.p,`— 🏨 you bought ${H.n}!`); saveSV(); v5ask=null; V4FLASH=1; v5enterHotel(H); return true; }
-      v5ask=H; H.t=T; say(`🏨 ${H.n} — ${H.rooms} rooms, ${H.fl.length} floors you can visit. $${H.p.toLocaleString()} · earns $${H.inc.toLocaleString()} every 2 min. Press F again to buy`,'#fde68a',5); return true; } }
+      v5ask=H; H.t=T; say(`${H.sky?'🏙️':'🏨'} ${H.n} — ${H.rooms} ${H.sky?'offices':'rooms'}, ${H.fl.length} floors you can visit. $${H.p.toLocaleString()} · earns $${H.inc.toLocaleString()} every 2 min. Press F again to buy`,'#fde68a',5); return true; } }
   return false; }
 function v5Step(dt){ const own=HOTELS.filter(H=>SV.hotels&&SV.hotels[H.id]); if(own.length){ v5hotT-=dt; if(v5hotT<=0){ v5hotT=120; pay(own.reduce((s,H)=>s+H.inc,0),`— 🏨 hotel income (${own.length} hotel${own.length>1?'s':''})`); } } }
 /* moving bits: the stairs in your house, screens, disco lights, the hotel signs */
@@ -318,7 +369,7 @@ function v5Draw(){ const P3=(x,y,z,w,h,d,col)=>R3.part(R3.UB,R3.mm(R3.T(x*K,y*K,
   if(ME.indoor) return; const me=ME.car||ME, gl=.9+.5*Math.sin(T*4);
   for(const H of HOTELS){ if(Math.hypot(H.x-me.x,H.z-me.z)>400) continue; P3(H.x,.05,H.z,2.6,.04,1.6,ownsHotel(H)?[.4,1.8,.5]:[gl*1.6,gl*1.3,.2]); const sg=.7+.3*Math.sin(T*2); P3(H.x,H.H-3,H.b.z0+1.2,20,3.4,.2,[sg*1.6,sg*1.2,sg*.5]); } }
 function v5HUD(){ const n=v5near(); if(n) txt(n.n,HW/2,HH-30,22,'#fde047');
-  if(!ME.indoor){ const me=ME.car||ME; for(const H of HOTELS){ const d=Math.hypot(H.x-me.x,H.z-me.z); if(d>260) continue; const p=scr([H.x,H.H+6,H.b.z0+2]); if(p&&p[2]>0) txt(`🏨 ${H.n}${ownsHotel(H)?' ✓ yours':''}`,p[0],p[1],d<80?22:16,ownsHotel(H)?'#4ade80':'#fde68a');
+  if(!ME.indoor){ const me=ME.car||ME; for(const H of HOTELS){ const d=Math.hypot(H.x-me.x,H.z-me.z); if(d>(H.sky?700:260)) continue; const p=scr([H.x,H.H+6,H.b.z0+2]); if(p&&p[2]>0) txt(`${H.sky?'🏙️':'🏨'} ${H.n}${ownsHotel(H)?' ✓ yours':''}`,p[0],p[1],d<80?22:16,ownsHotel(H)?'#4ade80':'#fde68a');
       if(!ME.car&&d<4) txt(ownsHotel(H)?`F — go into ${H.n}`:`F — 🏨 ${H.n} for sale: $${H.p.toLocaleString()}`,HW/2,HH-60,22,'#fde68a'); } } }
 /* static: the rooms themselves and the hotel buildings */
 function v5Static(box,cyl){ for(const R of V5R){ const X=R.x, Z=R.z, w=R.w, d=R.d, H=R.h;
@@ -355,8 +406,8 @@ const curStore=()=>ME.indoor==='store'?STORES[ME.store]:null;
 /* where the outside world thinks you are (inside a store = at its door) */
 const outPos=()=>{ const st=curStore(); return st?{x:st.x,z:st.z}:ME.car||ME; };
 /* v4: every house for sale is a different tier — from a trailer to a mansion */
-const HT=[{n:'Trailer',p:12000,W:8,D:5,H:2.8},{n:'Starter home',p:35000,W:10,D:8,H:3.4},{n:'Family house',p:60000,W:12,D:10,H:6.2},{n:'Big house',p:150000,W:13,D:12,H:6.8},{n:'Villa',p:400000,W:14,D:14,H:7.4,pool:1},{n:'Mansion',p:1500000,W:14,D:16,H:10.2,pool:1},{n:'Owner Mega Mansion',p:0,W:14,D:18,H:13.4,pool:1}];
-for(const h of HOUSES) if(h.main){ const t=tierOf(h.b); h.tier=t; h.H=HT[t].H; }
+const HT=[{n:'Trailer',p:12000,W:8,D:5,H:2.8},{n:'Starter home',p:35000,W:10,D:8,H:3.4},{n:'Family house',p:60000,W:12,D:10,H:6.2},{n:'Big house',p:450000,W:13,D:12,H:6.8},{n:'Villa',p:3500000,W:14,D:14,H:7.4,pool:1},{n:'Mansion',p:20000000,W:14,D:16,H:10.2,pool:1},{n:'Owner Mega Mansion',p:0,W:14,D:18,H:13.4,pool:1}];
+for(const h of HOUSES) if(h.main){ const t=tierOf(h.b); h.tier=t; h.H=HT[t].H; if(t>=5){ const W=HT[t].W, D=HT[t].D; SOLID.push({x0:h.hx-W/2-4.4,x1:h.hx-W/2,z0:h.hz-D*.4,z1:h.hz+D*.4}); } }
 const placeHouse=pl=>pl&&pl.type==='house'?HOUSES.find(h=>h.b===pl.b&&h.main):null, houseTier=pl=>{ const h=placeHouse(pl); return HT[h?h.tier:2]; };
 const myHouse=()=>SV.home!=null&&PLACES[SV.home]&&PLACES[SV.home].type==='house'?HOUSES.find(h=>h.b===PLACES[SV.home].b&&h.main):null;
 /* the beach: sand east of town, then the ocean (with a pier you can walk or drive out on) */
@@ -366,7 +417,7 @@ const inSea=(x,z)=>x>SEA_X&&!(x<PIER.x1&&z>PIER.z0&&z<PIER.z1);
 const POSTS=[];
 function hitPost(x,z,r){ for(const q of POSTS){ const dx=x-q.x, dz=z-q.z, d=Math.hypot(dx,dz); if(d<r+q.r&&d>1e-4) return {nx:dx/d,nz:dz/d,pen:r+q.r-d}; } return null; }
 /* districts, for the name that pops up as you drive in */
-function district(x,z){ if(ME.indoor) return ME.indoor==='lair'?'Secret Lair':ME.indoor==='store'?STORE_T[curStore().type].n:ME.indoor==='floor'?V5R[ME.room].n:'Home'; if(x>CW+8) return 'Sunset Beach'; if(x<-40) return 'Rival Airport'; if(z>CW+20) return 'Union Station'; const i=Math.floor(x/P), j=Math.floor(z/P), b=BLK[bkey(clamp(i,0,NL-2),clamp(j,0,NL-2))]; if(x>RX0-8&&x<RX1+8) return 'Rival River'; if(Math.abs(x-HX)<HWY_W&&z<HZ0-10||Math.abs(x-HX)<HWY_W&&z>HZ1+10) return 'Freeway'; if(b&&b.type==='stadium') return 'Rival Stadium'; if(b&&b.type==='fair') return 'Pier Fun Fair'; if(b&&b.type==='park') return i>=OLDN-1||j>=OLDN-1?'Riverside Park':'Central Park'; if(i>=OLDN-1||j>=OLDN-1){ if(Math.hypot(i-16,j-4)<3.4) return 'Uptown'; if(j>=11&&i<=12) return 'Oakridge'; if(i>=14&&j>=11) return 'The Docks'; if(i>RIVER_I) return 'East Bank'; return i<=6?'Northgate':'Midtown East'; }
+function district(x,z){ if(ME.indoor) return ME.indoor==='lair'?'Secret Lair':ME.indoor==='store'?STORE_T[curStore().type].n:ME.indoor==='floor'?V5R[ME.room].n:'Home'; if(x>CW+8) return 'Sunset Beach'; if(x<-40) return 'Rival Airport'; if(z>CW+20) return 'Union Station'; const i=Math.floor(x/P), j=Math.floor(z/P), b=BLK[bkey(clamp(i,0,NL-2),clamp(j,0,NL-2))]; if(x>RX0-8&&x<RX1+8) return 'Rival River'; if(Math.abs(x-HX)<HWY_W&&z<HZ0-10||Math.abs(x-HX)<HWY_W&&z>HZ1+10) return 'Freeway'; if(i>=18&&j<18) return 'Rival Hills'; if(j>=18&&x<CW+8) return 'Harbor Point'; if(b&&b.type==='stadium') return 'Rival Stadium'; if(b&&b.type==='fair') return 'Pier Fun Fair'; if(b&&b.type==='park') return i>=OLDN-1||j>=OLDN-1?'Riverside Park':'Central Park'; if(i>=OLDN-1||j>=OLDN-1){ if(Math.hypot(i-16,j-4)<3.4) return 'Uptown'; if(j>=11&&i<=12) return 'Oakridge'; if(i>=14&&j>=11) return 'The Docks'; if(i>RIVER_I) return 'East Bank'; return i<=6?'Northgate':'Midtown East'; }
   if(Math.hypot(i-3,j-3)<1.6) return 'Downtown'; if(i<3&&j<3) return 'Old Harbor'; if(i>=4&&j<3) return 'Ironworks'; if(i<3&&j>=4) return 'Maple Heights'; if(i>=4&&j>=4) return 'Riverside'; return 'Midtown'; }
 function hitRect(x,z,r){ for(const s of SOLID){ const cx=clamp(x,s.x0,s.x1), cz=clamp(z,s.z0,s.z1), dx=x-cx, dz=z-cz, d=Math.hypot(dx,dz); if(d<r){ return {s,nx:d>1e-4?dx/d:0,nz:d>1e-4?dz/d:1,pen:r-d}; } } return null; }
 const onRoad=(x,z)=>{ const nx=Math.round(x/P)*P, nz=Math.round(z/P)*P; return Math.abs(x-nx)<ROAD||Math.abs(z-nz)<ROAD; };
@@ -410,7 +461,7 @@ function garageStep(dt){ const me=ME.car||ME, mine=myHouse(); for(const h of HOU
     const best=SV.cars.filter(k=>MODELS[k]&&!MODELS[k].boat&&!MODELS[k].heli&&!MODELS[k].bus).sort((a,b)=>MODELS[b].top-MODELS[a].top)[0];
     for(const [k,x,z,yaw] of [[best,mine.gx,mine.hz-f*1.2,f>0?0:PI],[SV.cars.includes('heli')?'heli':null,mine.hx+4,mine.hz-f*15,f>0?PI:0]]){ if(!k||CARS.some(c=>c.mine&&c.model===k)) continue; const c=mkCar(k,x,z,yaw,SV.colors[k]||(k==='hyper'?'#dc2626':undefined)); c.mine=true; c.fuel=1; c.mods=SV.mods[k]||null; c.rx=x; c.rz=z; c.ryaw=yaw; c.homePark=1; CARS.push(c); } } }
 let homeParked=false;
-function drawHomeBits(){ drawStoreBits(); drawDoors(); v4Draw(); v5Draw(); passDraw();
+function drawHomeBits(){ drawStoreBits(); drawDoors(); v4Draw(); v5Draw(); passDraw(); v6Draw();
   { const me=ME.car||ME; for(const h of HOUSES){ if(!h.main||Math.hypot(me.x-h.gx,me.z-h.hz)>140) continue; const f=h.face, o=h.door||0, zf=h.hz+f*3.02;
       if(o<.98){ const hgt=2.55*(1-o); R3.part(R3.UB,R3.mm(R3.T(h.gx*K,(2.65-hgt/2)*K,zf*K),R3.S(5.6*K,hgt*K,.08*K)),'#e5e7eb'); for(let k=0;k<5;k++){ const y=2.65-hgt+(k+.5)*hgt/5; R3.part(R3.UB,R3.mm(R3.T(h.gx*K,y*K,(zf+f*.05)*K),R3.S(5.6*K,.04*K,.04*K)),'#9ca3af'); } }
       if(o>.02) R3.part(R3.UB,R3.mm(R3.T(h.gx*K,2.72*K,(h.hz+f*(3-o*2.4))*K),R3.S(5.6*K,.06*K,o*4.8*K)),'#d1d5db'); } } const P3=(x,y,z,w,h,d,col)=>R3.part(R3.UB,R3.mm(R3.T(x*K,y*K,z*K),R3.S(w*K,h*K,d*K)),col);
@@ -736,6 +787,62 @@ const QUESTS=[
   ['bus1','🚌 Next stop!','Finish a bus route',()=>Q_ST('bus'),1,800], ['bins30','🗑️ Clean streets','Empty 30 bins',()=>Q_ST('bins'),30,2500], ['ice25','🍦 Mr Whippy','Sell 25 ice creams',()=>Q_ST('ices'),25,2000],
   ['pizza5','🍕 Pizza rider','Deliver 5 pizzas',()=>Q_ST('pizzas'),5,1200], ['pizza25','🍕 Fastest slice in town','Deliver 25 pizzas',()=>Q_ST('pizzas'),25,6000], ['dog','🐕 Best friend','Adopt a dog',()=>SV.dog?1:0,1,500], ['dogcatch','🐕 Good boy!','Have your dog catch a purse snatcher',()=>Q_ST('dogCatch'),1,1500], ['fish1','🎣 Gone fishing','Catch a fish off the pier',()=>Q_ST('fish'),1,300], ['fish20','🎣 Old salt','Catch 20 fish',()=>Q_ST('fish'),20,4000], ['fishbig','🐟 The big one','Land a fish over 30 kg',()=>Q_ST('bigFish'),30,8000],
   ['medkit','🩹 Patched up','Use a medkit',()=>Q_ST('medkit'),1,300], ['plane','✈️ Ace pilot','Fly the seaplane above 200 m',()=>Q_ST('planeTop'),200,6000], ['gym','🏋️ Gym rat','Finish 5 bench press sets at the Iron Temple Gym',()=>Q_ST('sets'),5,1500], ['trial','⏱️ Against the clock','Finish a time trial',()=>Q_ST('trials'),1,800], ['trials3','⏱️ Speedrunner','Set a time on all 3 time trials',()=>Object.keys(SV.tt||{}).length,3,5000], ['story2','📖 The Big Score','Finish all 10 story missions',()=>SV.story||0,10,60000], ['tank','🪖 Heavy metal','Buy the battle tank',()=>SV.cars.includes('tank')?1:0,1,10000], ['dance','🪩 Dancing queen','Dance on the nightclub floor',()=>Q_ST('danced'),1,500], ['medic','🚑 Life saver','Save 10 patients as a paramedic',()=>Q_ST('saves'),10,4000], ['fire','🚒 Hero','Put out 10 car fires',()=>Q_ST('fires'),10,4000], ['biz1','🏪 Entrepreneur','Buy a business',()=>Object.keys(SV.biz||{}).length,1,2000], ['biz5','🏪 Tycoon','Own 5 businesses',()=>Object.keys(SV.biz||{}).length,5,25000], ['bank','🏦 The big one','Rob the Rival City Bank',()=>Q_ST('banks'),1,10000], ['saver','🏦 Saver','Have $100,000 in the bank',()=>SV.bank||0,100000,5000], ['chute','🪂 Base jumper','Parachute down from 150 m or higher',()=>Q_ST('chuteTop'),150,3000], ['tune','🔧 Tuner','Fit 5 performance upgrades',()=>Q_ST('tunes'),5,4000], ['casino','🎰 High roller','Win $10,000 in one go at the casino',()=>Q_ST('casinoWin'),10000,2500], ['bounty1','🎯 Bounty hunter','Complete a bounty contract (phone: N)',()=>Q_ST('bounties'),1,1500], ['bounty10','🎯 Most feared','Complete 10 bounty contracts',()=>Q_ST('bounties'),10,15000], ['thief','👜 Have-a-go hero','Catch a purse snatcher',()=>Q_ST('thieves'),1,800], ['thief5','👜 Neighbourhood watch','Catch 5 purse snatchers',()=>Q_ST('thieves'),5,4000], ['respray','🎨 New look','Lose the police with a respray',()=>Q_ST('respray'),1,700], ['hours','⏱️ Local','Spend an hour in Rival City',()=>Q_ST('mins'),60,5000] ].map(([id,n,d,f,goal,rew])=>({id,n,d,f,goal,rew}));
+/* ================= v6: secret rooms around town, the starter quest, lots more quests ================= */
+/* hidden ways in: no marker, just something odd when you stand right on it */
+const SECDOORS=[]; { const d=BLK['2,2'], pk=BLK['3,3'], gu=BLK['12,6'];
+  if(d) SECDOORS.push({k:'tunnel',x:d.x0+4,z:d.z0-1.2,n:'🕳️ F — this cellar door is unlocked…'});
+  if(pk) SECDOORS.push({k:'subway',x:(pk.x0+pk.x1)/2+9,z:(pk.z0+pk.z1)/2+9,n:'🕳️ F — a rusty hatch in the grass…'});
+  if(gu) SECDOORS.push({k:'den',x:gu.x1+1.3,z:(gu.z0+gu.z1)/2,n:'🕳️ F — a manhole with fresh scratch marks…'}); }
+function v6secret(k){ const r=SECR[k]; if(r==null) return; SV.secrets=SV.secrets||{}; const first=!SV.secrets[k]; SV.secrets[k]=1;
+  const prev={indoor:ME.indoor||null,room:ME.room,fl:ME.fl,bldg:ME.bldg,x:ME.x,z:ME.z,yaw:ME.yaw};
+  const R=V5R[r], it=R.items.find(q=>q[0]==='back'); ME.indoor='floor'; ME.room=r; ME.fl=0; ME.bldg={secret:k,prev}; ME.x=R.x+it[1]; ME.z=R.z+it[2]-1.6; ME.yaw=PI; camYaw=0; camPitch=0;
+  tone(140,.7,'sawtooth',.03,-50); say(`🕵️ ${first?'SECRET FOUND: ':''}${R.n}${first?` (${Object.keys(SV.secrets).length}/${Object.keys(SECR).length} secret rooms)`:''}`,'#c084fc',3.5); saveSV(); renderPanel(); }
+function v6back(){ const p=ME.bldg&&ME.bldg.prev; if(!p){ v5leave(); return; } ME.indoor=p.indoor; ME.room=p.room; ME.fl=p.fl; ME.bldg=p.bldg; ME.x=p.x; ME.z=p.z+(p.indoor?0:1.2); ME.yaw=p.yaw||0; tone(140,.5,'sawtooth',.03,50); renderPanel(); }
+function v6teleport(){ const b=LANDB[Math.floor(Math.random()*LANDB.length)]; ME.indoor=null; ME.bldg=null; ME.x=b.x0-3; ME.z=(b.z0+b.z1)/2; V4FLASH=1; tone(1600,.4,'sine',.05,-1200); say(`🌀 ZAP! You landed in ${district(ME.x,ME.z)}`,'#22d3ee',3); renderPanel(); }
+function v6talk(){ if(ME.car||ME.indoor) return false; for(const s2 of SECDOORS) if(Math.hypot(s2.x-ME.x,s2.z-ME.z)<2.2){ audio(); v6secret(s2.k); return true; } return false; }
+/* ---- the starter quest: a tour of everything for new players ---- */
+const TUT=(()=>{ const dn=STORES.find(s=>s.type==='diner'&&s.b===BLK['2,2'])||STORES.find(s=>s.type==='diner'), gs=BLK['6,3'], top=HOTELS.slice().sort((a,b)=>b.p-a.p)[0], me=()=>ME.car||ME, near=(p,r)=>p&&Math.hypot(p.x-me().x,p.z-me().z)<r;
+  const gsP=gs&&{x:(gs.x0+gs.x1)/2,z:gs.z1+4};
+  return [{n:'Walk to the diner',d:'Follow the yellow marker',p:dn,f:()=>near(dn,9),r:200},
+    {n:'Get in a car',d:'Stand next to any car and press F',f:()=>!!ME.car,r:300},
+    {n:'Drive to the gas station',d:'Follow the yellow marker',p:gsP,f:()=>ME.car&&near(gsP,26),r:400},
+    {n:'Walk into a store',d:'Any shop door with a glowing mat — press F',f:()=>(SV.st&&SV.st.visited||[]).length>0,r:400},
+    {n:'Finish a job',d:'Pick taxi, delivery or another job in the panel below the game',f:()=>SV.jobs>=1,r:1500},
+    {n:'Start a mission',d:'Find a ❗ mission giver on the map and press F',f:()=>Object.values(SV.gig||{}).some(v=>v>=1)||JOB&&JOB.type==='gig',r:2000},
+    {n:'Buy your first home',d:'Walk to a house for sale and buy it in the panel',f:()=>SV.home!=null,r:5000},
+    {n:'Visit Rival Airport',d:'It\'s at the far west of the city',p:{x:AP.tx-10,z:AP.tz},f:()=>me().x<-40,r:3000},
+    {n:`See ${top?top.n:'the tallest tower'}`,d:'The most expensive building in the city — one day it could be yours',p:top&&{x:top.x,z:top.z-6},f:()=>near(top&&{x:top.x,z:top.z},70),r:5000}]; })();
+SV.tut=SV.tut||0;
+const v6tutTarget=()=>{ const s=TUT[SV.tut]; return s&&s.p&&!ME.indoor?s.p:null; };
+let v6T=1;
+function v6Step(dt){ v6T-=dt; if(v6T>0) return; v6T=1;
+  if(SV.tut<TUT.length){ const s=TUT[SV.tut]; let ok=false; try{ ok=!!s.f(); }catch(e){} if(ok){ pay(s.r,`— ⭐ starter quest: ${s.n}`); SV.tut++; if(SV.tut>=TUT.length){ pay(10000,'— ⭐ STARTER QUEST COMPLETE!'); say('⭐ Starter quest complete! Open 📜 Quests for 80+ more','#facc15',4); } saveSV(); } }
+  if(!ME.indoor){ SV.st=SV.st||{}; const dn=district(ME.car?ME.car.x:ME.x,ME.car?ME.car.z:ME.z); if(dn==='Rival Hills') SV.st.v_hills=1; if(dn==='Harbor Point') SV.st.v_harbor=1; } }
+function v6Draw(){ if(ME.indoor) return; const me=ME.car||ME; for(const s2 of SECDOORS){ if(Math.hypot(s2.x-me.x,s2.z-me.z)>90) continue; R3.part(R3.UC,R3.mm(R3.T(s2.x*K,.22*K,s2.z*K),R3.S(.6*K,.03*K,.6*K)),'#292524'); R3.part(R3.UC,R3.mm(R3.T(s2.x*K,.24*K,s2.z*K),R3.S(.45*K,.01*K,.45*K)),'#44403c'); } }
+function v6HUD(){ if(!ME.car&&!ME.indoor) for(const s2 of SECDOORS) if(Math.hypot(s2.x-ME.x,s2.z-ME.z)<2.2) txt(s2.n,HW/2,HH-60,22,'#c084fc');
+  if(SV.tut<TUT.length&&!BIGMAP){ const s=TUT[SV.tut]; rrct(18,182,330,58,12,'rgba(5,10,24,.8)'); txt(`⭐ Starter quest ${SV.tut+1}/${TUT.length}: ${s.n}`,30,204,16,'#facc15','left'); txt(`${s.d} · +$${s.r.toLocaleString()}`,30,226,13,'#cbd5e1','left'); } }
+/* counting what you do at home, for the quests */
+for(const [t,I] of Object.entries(V5I)) if(I.a){ const a0=I.a; I.a=()=>{ SV.st=SV.st||{}; SV.st['use_'+t]=(SV.st['use_'+t]||0)+1; a0(); }; }
+{ const own=sky=>HOTELS.filter(H=>H.sky===sky&&(owner()||SV.hotels&&SV.hotels[H.id])).length, nH=HOTELS.filter(H=>!H.sky).length, nS=HOTELS.filter(H=>H.sky).length;
+  QUESTS.push(...[
+  ['starter','⭐ Fresh start','Finish the starter quest',()=>SV.tut>=TUT.length?1:0,1,5000],
+  ['hotel1','🏨 Hotelier','Buy a hotel',()=>own(undefined),1,1000000], ['hotelall','🏨 Hotel empire',`Own all ${nH} hotels`,()=>own(undefined),nH,50000000],
+  ['sky1','🏙️ Skyscraper tycoon','Buy a skyscraper',()=>own(true),1,100000000], ['skyall','🏙️ Owner of the skyline',`Own every skyscraper (${nS})`,()=>own(true),nS,1000000000],
+  ['mil','💰 Millionaire','Have $1,000,000 in cash',()=>SV.money,1000000,50000], ['bil','💰 Billionaire','Have $1,000,000,000 in cash',()=>SV.money,1000000000,10000000],
+  ['villa','🏡 Moving up','Own a villa or bigger',()=>{ const h=myHouse(); return h&&h.tier>=4?1:0; },1,100000], ['mansion','🏰 Mansion life','Own a mansion',()=>{ const h=myHouse(); return h&&h.tier>=5?1:0; },1,1000000],
+  ['secret1','🕵️ Something hidden','Find a secret room',()=>Object.keys(SV.secrets||{}).length,1,5000], ['secret3','🕵️ Snoop','Find 3 secret rooms',()=>Object.keys(SV.secrets||{}).length,3,50000],
+  ['secretall','🕵️ Master of secrets',`Find all ${Object.keys(SECR).length} secret rooms`,()=>Object.keys(SV.secrets||{}).length,Object.keys(SECR).length,500000],
+  ['crate5','📦 Bootlegger loot','Open 5 hidden crates',()=>Q_ST('use_crate'),5,50000], ['tele','🌀 Beam me up','Use the teleporter in the secret lab',()=>Q_ST('use_teleporter'),1,25000], ['hack','💻 Ghost in the machine','Hack the police database',()=>Q_ST('use_hacker'),1,15000],
+  ['highroll','💎 High roller','Bet at the high-stakes table 5 times',()=>Q_ST('use_casino100'),5,100000], ['table20','🎰 Regular','Bet at a casino table 20 times',()=>Q_ST('use_casino'),20,25000],
+  ['movie3','🎬 Movie night','Watch 3 movies in a home cinema',()=>Q_ST('use_cinema'),3,5000], ['swim5','🏊 Swimmer','Swim laps 5 times',()=>Q_ST('use_pool'),5,5000], ['bowl10','🎳 Bowler','Bowl 10 frames',()=>Q_ST('use_bowling'),10,8000],
+  ['piano5','🎹 Pianist','Play the piano 5 times',()=>Q_ST('use_piano'),5,3000], ['lift10','🏋️ Home gym','Lift weights at home 10 times',()=>Q_ST('use_weights'),10,5000], ['tub','🛁 Relaxed','Use a hot tub',()=>Q_ST('use_hottub'),1,1000],
+  ['scope','🔭 Top of the world','Look through a telescope on an observation deck',()=>Q_ST('use_telescope'),1,30000], ['roofheli','🚁 Rooftop takeoff','Take off from a rooftop helipad',()=>Q_ST('use_helipad'),1,20000],
+  ['stocks10','📈 Day trader','Check the stock market 10 times',()=>Q_ST('use_screens'),10,30000], ['dj','🎧 DJ','Drop the beat 5 times',()=>Q_ST('use_dj'),5,5000], ['juke','🎵 Old school','Play a jukebox',()=>Q_ST('use_jukebox'),1,2000],
+  ['km100','🛣️ Road tripper','Drive 100 km',()=>SV.st&&SV.st.km||0,100,25000], ['km500','🛣️ Long hauler','Drive 500 km',()=>SV.st&&SV.st.km||0,500,150000],
+  ['spd250','💨 Speed demon','Hit 250 km/h',()=>SV.st&&SV.st.top||0,250,20000], ['spd350','💨 Land rocket','Hit 350 km/h',()=>SV.st&&SV.st.top||0,350,75000],
+  ['hills','🏡 Rival Hills','Visit the Rival Hills district',()=>Q_ST('v_hills'),1,5000], ['harbor','🏙️ Harbor Point','Visit Harbor Point',()=>Q_ST('v_harbor'),1,5000],
+  ['carpool','👥 Carpool','Ride as a passenger in someone else\'s car (online)',()=>Q_ST('rides'),1,5000], ['hours3','⏱️ Resident','Spend 3 hours in Rival City',()=>Q_ST('mins'),180,30000], ['hours10','⏱️ Lifer','Spend 10 hours in Rival City',()=>Q_ST('mins'),600,250000]
+  ].map(([id,n,d,f,goal,rew])=>({id,n,d,f,goal,rew}))); }
 SV.qd=SV.qd||{}; let questT=1;
 function questStep(dt){ questT-=dt; if(questT>0) return; questT=1; for(const q of QUESTS){ if(SV.qd[q.id]) continue; let v=0; try{ v=q.f()||0; }catch(e){} if(v>=q.goal){ SV.qd[q.id]=1; pay(q.rew,''); say(`📜 QUEST COMPLETE: ${q.n} — +$${q.rew.toLocaleString()}`,'#facc15',3.5); [523,659,784,1047].forEach((f,i)=>tone(f,.25,'triangle',.06,0,i*.1)); renderQuests(); saveSV(); return; } } }
 function renderQuests(){ const el=$('quests'); if(!el) return; const done=QUESTS.filter(q=>SV.qd[q.id]).length; $('qCount').textContent=`${done}/${QUESTS.length} done`;
@@ -1191,7 +1298,7 @@ function useSpot(k){ audio();
   if(k==='console'){ BIGMAP=true; say(heat>0?'🛰️ Scanner: the police are losing your trail…':'🛰️ Command centre online — the whole city on screen','#93c5fd',2.5); return; }
   if(k==='vault'||k==='garage'){ say(k==='vault'?'💰 The vault is open — use the panel below':'🚗 Choose a car in the panel below','#fde047',2.5); renderPanel(); return; } }
 function exitWithCar(k){ const h=myHouse(); if(!h) return; ME.indoor=null; const c=mkCar(k,h.gx,h.hz+h.face*7,h.face>0?0:PI,SV.colors[k]); c.mine=true; c.fuel=1; c.mods=SV.mods[k]||null; c.rx=c.x; c.rz=c.z; CARS.push(c); ME.car=c; c.driver=true; camYaw=0; engine(); say(`The garage door rolls up — your ${MODELS[k].n} is ready`,'#4ade80',2.5); renderPanel(); }
-function interact(){ if(v5talk()||gigTalk()||airportTalk()) return true; const st=curStore(); if(st){ if(Math.hypot(st.door.x-ME.x,st.door.z-ME.z)<3.2){ leaveStore(); } else say('Walk back to the door to leave','#fbbf24',1.2); return true; }
+function interact(){ if(v6talk()||v5talk()||gigTalk()||airportTalk()) return true; const st=curStore(); if(st){ if(Math.hypot(st.door.x-ME.x,st.door.z-ME.z)<3.2){ leaveStore(); } else say('Walk back to the door to leave','#fbbf24',1.2); return true; }
   if(!ME.car&&!ME.indoor){ let bs=null, bd=3.6; for(const s2 of STORES){ const d=Math.hypot(s2.x-ME.x,s2.z-ME.z); if(d<bd){ bd=d; bs=s2; } } if(bs){ enterStore(bs); return true; } }
   if(ME.indoor){ for(const k in SPOTS){ const inHome=k==='door'||k==='shelf'||k==='bed'; if(inHome!==(ME.indoor==='home')) continue; const sp=SPOTS[k]; if(Math.hypot(sp.x-ME.x,sp.z-ME.z)<2.8){ useSpot(k); return true; } } return true; }
   if(!ME.car){ const mine=myHouse(); for(const hh of HOUSES){ if(!hh.main) continue; if(Math.hypot(hh.hx-ME.x,hh.hz+hh.face*(HT[hh.tier].D/2+1.5)-ME.z)<3){ if(hh===mine) enterHome(); else say(`🏠 ${HT[hh.tier].n} for sale — $${HT[hh.tier].p.toLocaleString()} (buy it from the panel)`,'#fde68a',2.5); return true; } } }
@@ -1205,7 +1312,7 @@ const ridersOf=id=>[...OT.values()].filter(o=>o.pass===id);
 function passBoard(){ if(!NET||!NET.on) return false; let best=null, bd=5; for(const [id,o] of OT){ if(!o.car||o.pass) continue; const d=Math.hypot(o.x-ME.x,o.z-ME.z); if(d<bd+o.car.M.len*.3){ bd=d; best=[id,o]; } } if(!best) return false;
   const [id,o]=best, n=SEATS(o.car.model), taken=ridersOf(id).map(r=>r.seat); let seat=-1; for(let k=1;k<n;k++) if(!taken.includes(k)){ seat=k; break; }
   if(seat<0){ say(`🚗 ${o.name}'s ${o.car.M.n} is full (${n} seats)`,'#fbbf24',2); return true; }
-  PASS={id,seat}; ME.ride='car'; camYaw=0; sfx.door(); say(`👥 You hopped in ${o.name}'s ${o.car.M.n} (${seat===1?'front passenger seat':'back seat'}) — F to get out`,'#a5f3fc',3); renderPanel(); return true; }
+  PASS={id,seat}; ME.ride='car'; SV.st=SV.st||{}; SV.st.rides=(SV.st.rides||0)+1; camYaw=0; sfx.door(); say(`👥 You hopped in ${o.name}'s ${o.car.M.n} (${seat===1?'front passenger seat':'back seat'}) — F to get out`,'#a5f3fc',3); renderPanel(); return true; }
 function passOff(msg){ const o=PASS&&OT.get(PASS.id); PASS=null; ME.ride=false; if(o&&o.car){ const s=Math.cos(o.yaw), n=-Math.sin(o.yaw); ME.x=o.x+s*(o.car.M.w/2+1.2); ME.z=o.z+n*(o.car.M.w/2+1.2); if(o.car.y>3) say('🪂 You jumped out — parachute open!','#7dd3fc',2); } ME.y=0; sfx.door(); if(msg) say(msg,'#fbbf24',2.5); renderPanel(); }
 function passStep(dt){ if(!PASS) return; const o=OT.get(PASS.id); if(!o||!o.car||!NET||!NET.on){ passOff(o?`${o.name} got out of the car`:'The driver left'); return; } ME.x=o.x; ME.z=o.z; ME.yaw=o.yaw; ME.spd=0; }
 /* people sitting in cars: the driver and everyone riding along */
@@ -1286,7 +1393,7 @@ function step(dt){ T+=dt; if(owner()&&SV.money<1e15) SV.money=1e15;   /* the own
   /* traffic, cops, suspects */
   { const busy=TOD>=7&&TOD<9.5||TOD>=16&&TOD<19?1:TOD>=22||TOD<5.5?.45:.75; for(const c of CARS) if(c.ai&&c.rush!=null){ const want=c.rush<busy, me2=ME.car||ME; if(!want&&!c.off&&Math.hypot(c.x-me2.x,c.z-me2.z)>140){ c.off=true; c.x=c.rx=-99999; c.z=c.rz=-99999; } else if(want&&c.off){ const q=laneXZ(c.ai); if(Math.hypot(q[0]-me2.x,q[1]-me2.z)>140){ c.off=false; c.x=c.rx=q[0]; c.z=c.rz=q[1]; } } } }
   for(const c of CARS){ if(c.off) continue; if(c.M.heli&&c!==ME.car){ if(c.y>0||c.spin>0) heliFly(c,0,0,0,false,false,dt); continue; } if(c.M.plane&&c!==ME.car){ if(c.y>0||c.v>0) planeFly(c,0,1,0,false,true,dt); continue; } if(c.hwy){ hwyStep(c,dt); continue; } if(c.ai) trafficStep(c,dt); else if(c.flee) fleeStep(c,dt); else if(!c.cop&&c!==ME.car&&!c.racer&&!c.ambTo&&!c.stopCar){ if(Math.abs(c.v)>.1) drive(c,0,1,0,false,dt); } }
-  combatStep(dt); npcStep(dt); garageStep(dt); rescueStep(dt); pizzaStep(dt); routeStep(dt); dogStep(dt); fishStep(dt); lifeStep(dt); trialStep(dt); questStep(dt); v4Step(dt); v5Step(dt); passStep(dt); pickStep(); eventStep(dt); bountyStep(dt); hotwireStep(dt); clubStep(dt); liftStep(dt); copsStep(dt); stopStep(dt); jobStep(dt); ambStep(dt); pkgStep(); trainStep(dt); skidStep(dt); policeChatter(dt); spikeStep();
+  combatStep(dt); npcStep(dt); garageStep(dt); rescueStep(dt); pizzaStep(dt); routeStep(dt); dogStep(dt); fishStep(dt); lifeStep(dt); trialStep(dt); questStep(dt); v4Step(dt); v5Step(dt); passStep(dt); v6Step(dt); pickStep(); eventStep(dt); bountyStep(dt); hotwireStep(dt); clubStep(dt); liftStep(dt); copsStep(dt); stopStep(dt); jobStep(dt); ambStep(dt); pkgStep(); trainStep(dt); skidStep(dt); policeChatter(dt); spikeStep();
   SV.st=SV.st||{km:0,top:0,stolen:0,mins:0}; SV.st.mins+=dt/60; if(ME.car){ SV.st.km+=Math.abs(ME.car.v)*dt/1000; SV.st.top=Math.max(SV.st.top,Math.abs(ME.car.v)*3.6); } heliStep(dt); roadblockStep(); weatherStep(dt);
   /* car vs car: shove apart, swap some speed, dent both */
   for(let i=0;i<CARS.length;i++) for(let j=i+1;j<CARS.length;j++){ const a=CARS[i], b=CARS[j]; if(a.off||b.off||(a.y||0)>1.5||(b.y||0)>1.5) continue; const dx=b.x-a.x, dz=b.z-a.z, d=Math.hypot(dx,dz), R=(a.M.len+b.M.len)*.28; if(d>=R||d<1e-4) continue;
@@ -1440,6 +1547,17 @@ function build(){ if(built||!R3.ok) return; built=true;
           box(h.hx,.4,fz+f*1,3,.4,2,'#a8a29e'); box(h.hx,2.75,fz+f*1.2,3.4,.15,2.4,h.roof); for(const sx of [-1.5,1.5]) box(h.hx+sx,1.4,fz+f*2.2,.15,2.6,.15,'#f8fafc');
           for(const wx of [-3.5,3.5]) for(const wy of H>11?[1.6,4.6,7.6,10.6]:H>8?[1.6,4.6,7.6]:H>5?[1.6,4.6]:[1.6]){ box(h.hx+wx,wy,fz+f*.05,1.8,1.3,.06,'#f8fafc'); box(h.hx+wx,wy,fz+f*.08,1.5,1.05,.04,'#93c5fd'); }
           for(const wz of [-2.5,2.5]) for(const sx of [-1,1]) box(h.hx+sx*(W/2+.05),1.6,h.hz+wz,.06,1.2,1.5,'#93c5fd');
+          /* v6: siding, trim, shutters, sills, flower beds, mailbox, porch light, trees — and columns, balconies and wings on the big ones */
+          { const shd=(c,k)=>{ const n=parseInt(c.slice(1),16); return '#'+[16,8,0].map(q=>Math.max(0,Math.min(255,Math.round(((n>>q)&255)*k))).toString(16).padStart(2,'0')).join(''); }, dk=shd(h.col,.88), tr='#f8fafc', T6=h.main?h.tier:(H>5?2:1), rows=H>11?[1.6,4.6,7.6,10.6]:H>8?[1.6,4.6,7.6]:H>5?[1.6,4.6]:[1.6];
+            for(let y=.9;y<H-.2;y+=.5) box(h.hx,y,fz+f*.025,W+.02,.04,.02,dk);
+            for(const sx of [-1,1]) box(h.hx+sx*W/2,H/2+.2,fz+f*.02,.28,H,.28,tr); box(h.hx,H+.28,fz+f*.3,W+.9,.22,.22,'#e5e7eb');
+            for(const wx of [-3.5,3.5]) for(const wy of rows){ box(h.hx+wx,wy-.72,fz+f*.14,2,.1,.26,tr); box(h.hx+wx,wy,fz+f*.1,.06,1.05,.03,tr); box(h.hx+wx,wy,fz+f*.1,1.5,.06,.03,tr); for(const s2 of [-1,1]) box(h.hx+wx+s2*1.18,wy,fz+f*.08,.42,1.3,.05,h.roof); }
+            for(const sx of [-1,1]){ const bx=h.hx+sx*(W/4+.9); box(bx,.32,fz+f*.85,Math.max(1,W/2-3.2),.24,1,'#5b3a1a'); for(let k=0;k<5;k++) box(bx+(k-2)*Math.max(.2,(W/2-3.2)/5),.56,fz+f*.85,.45,.38,.45,['#f472b6','#facc15','#ef4444','#a855f7','#fb923c'][(k+(sx>0?2:0))%5]); }
+            box(h.hx-2.4,.6,curb-f*1.2,.1,1.1,.1,'#44403c'); box(h.hx-2.4,1.22,curb-f*1.2,.36,.3,.56,'#1f2937'); box(h.hx+1,2.1,fz+f*.06,.5,.24,.03,'#111827'); box(h.hx-.9,2.1,fz+f*.1,.16,.26,.16,'#fde68a');
+            box(h.hx+W/2+.5,.5,h.hz-f*1.5,.8,.8,.8,'#d1d5db'); g.add(CY,mm(Tm((h.hx-W/2-3)*K,1.6*K,(fz+f*3)*K),S(.25*K,3.2*K,.25*K)),'#6b4423'); box(h.hx-W/2-3,4,fz+f*3,3,2.6,3,'#2f6b2a'); box(h.hx-W/2-3,5.3,fz+f*3,2,1.2,2,'#3f7d2a');
+            if(T6>=4){ for(const sx of [-2.6,2.6]) g.add(CY,mm(Tm((h.hx+sx)*K,1.75*K,(fz+f*2.6)*K),S(.24*K,3.5*K,.24*K)),'#f8fafc'); box(h.hx,3.6,fz+f*1.5,6.2,.3,3.2,'#f8fafc'); box(h.hx,3.9,fz+f*2.9,6.2,.5,.08,'#e5e7eb');
+              if(H>8){ box(h.hx,4.5,fz+f*2.95,6,.05,.05,'#1f2937'); for(let k=0;k<13;k++) box(h.hx-3+k*.5,4.2,fz+f*2.95,.04,.6,.04,'#1f2937'); box(h.hx,5.3,fz+f*.05,1.4,2.2,.06,'#93c5fd'); } }
+            if(T6>=5){ const wx=h.hx-W/2-2.2, wh=H*.55; box(wx,wh/2+.2,h.hz,4.4,wh,D*.8,h.col); box(wx,wh+.4,h.hz,4.9,.4,D*.8+.5,h.roof); box(wx,1.6,h.hz+f*D*.4,2.2,1.3,.06,'#93c5fd'); if(wh>4) box(wx,4.6,h.hz+f*D*.4,2.2,1.3,.06,'#93c5fd'); box(h.hx+W*.3,H+3.2,h.hz+f*1,.9,2.6,.9,'#7c2d12'); } }
           if(!h.main){ box(h.gx,1.6,h.hz-f*1,6,3,8,h.col); box(h.gx,3.2,h.hz-f*1,6.4,.25,8.4,h.roof); box(h.gx,1.3,h.hz+f*3.02,4.6,2.4,.06,'#e5e7eb'); for(let k=0;k<5;k++) box(h.gx,.4+k*.48,h.hz+f*3.06,4.6,.04,.04,'#9ca3af'); }
           else { for(const sx of [-1,1]) box(h.gx+sx*2.95,1.6,h.hz-f*1,.2,3,8,h.col); box(h.gx,1.6,h.hz-f*4.95,6,3,.2,h.col); box(h.gx,3.2,h.hz-f*1,6.4,.25,8.4,h.roof); box(h.gx,2.85,h.hz+f*3,6,.5,.25,h.col);
             box(h.gx,.215,h.hz-f*1,5.7,.02,7.8,'#a8a29e'); box(h.gx,2.9,h.hz-f*1,.5,.06,1.6,[2.4,2.3,2]); box(h.gx-2.75,1.2,h.hz-f*3,.3,1.6,1.4,'#475569'); box(h.gx+2.7,1.6,h.hz-f*1,.25,2,3,'#334155');
@@ -1678,7 +1796,7 @@ function drawHat(x,z,yaw,hat){ if(!hat) return; const m=R3.mm(R3.T(x*K,0,z*K),R3
   if(hat==='cap'){ B(0,1.78,0,.24,.1,.26,'#dc2626'); B(0,1.74,.17,.22,.03,.14,'#dc2626'); } if(hat==='beanie') B(0,1.79,0,.24,.15,.24,'#1e3a8a'); if(hat==='cowboy'){ B(0,1.74,0,.5,.03,.5,'#78350f'); B(0,1.82,0,.24,.14,.24,'#78350f'); } if(hat==='crown') B(0,1.8,0,.24,.12,.24,'#facc15'); }
 function myLook(){ const sh=SV.style.shirt||'#1d4ed8', hair=SV.style.hair||'#2a1f16'; return owner()?{olympia:true,skin:'#caa078',hi:'#dcb68f',shade:'#a37b55',top:sh,topHi:sh,topDk:sh,shorts:'#0f1726',shoe:'#121a2a',hair}:{top:sh,legs:'#0f1726',skin:'#caa078',shoe:'#121a2a',hair,buff:window.RRSTR?RRSTR.muscle():1}; }
 let WAYPT=null, BIGMAP=false;
-function markers(){ const out=[]; const mk=(p,col,r)=>p&&out.push({x:p.x,z:p.z,col:col,r:r||.9}); if(BOUNTY) mk(BOUNTY.tgt,[2.4,.2,.2],1.1); if(JOB&&JOB.type==='gig'){ if(JOB.tgt) mk(JOB.tgt,[2.4,1.8,.2],1.4); for(const q of JOB.items||[]) if(!q.got) mk(q,[.3,2.2,.4],.9); return out; } if(!JOB){ if(WAYPT) mk(WAYPT,[1.6,.4,2.2],1); return out; }
+function markers(){ const out=[]; const mk=(p,col,r)=>p&&out.push({x:p.x,z:p.z,col:col,r:r||.9}); if(BOUNTY) mk(BOUNTY.tgt,[2.4,.2,.2],1.1); if(JOB&&JOB.type==='gig'){ if(JOB.tgt) mk(JOB.tgt,[2.4,1.8,.2],1.4); for(const q of JOB.items||[]) if(!q.got) mk(q,[.3,2.2,.4],.9); return out; } if(!JOB){ if(WAYPT) mk(WAYPT,[1.6,.4,2.2],1); else { const tp=v6tutTarget(); if(tp) mk(tp,[2.4,1.9,.2],1.3); } return out; }
   if(JOB.type==='taxi') mk(JOB.stage==='pick'?JOB.from:JOB.to,JOB.stage==='pick'?[2,1.8,.2]:[.2,2,.4]);
   if(JOB.type==='deliver') for(const s of JOB.stops) mk(s,[.3,1.4,2.2]);
   if(JOB.type==='pizza'&&JOB.to&&!(JOB.wait>0)) mk(JOB.to,[2.4,1.1,.2],1.1);
@@ -1773,7 +1891,7 @@ function drawHUD(night){ ctx.clearRect(0,0,HW,HH); const me=ME.car||ME;
   if(ME.hurtT>0){ ctx.fillStyle=`rgba(220,38,38,${ME.hurtT*.5})`; ctx.fillRect(0,0,HW,HH); }
   if(ME.distT>0){ ctx.globalAlpha=clamp(ME.distT,0,1); txt(ME.dist,HW-24,HH-40,34,'#fde68a','right'); ctx.globalAlpha=1; }
   if(heat>0){ const n=Math.ceil(heat); txt('★'.repeat(n)+'☆'.repeat(5-n),HW-18,94,28,Math.sin(T*8)>0?'#fbbf24':'#f87171','right'); if(seenT>0) txt(`hiding ${Math.floor(seenT)}/${6+n*3}s`,HW-18,116,15,'#cbd5e1','right'); if(bustT>.3) txt('STOPPING YOU…',HW/2,140,34,'#f87171'); }
-  v4HUD(); v5HUD(); if(ME.car&&!ME.car.M.bike){ const r=NET&&NET.on?ridersOf(myNetId()):[]; txt(`👥 ${r.length+1}/${SEATS(ME.car.model)} seats${r.length?' · '+r.map(o=>o.name).join(', '):''}`,103,HH-100,14,r.length?'#a5f3fc':'#94a3b8'); }
+  v4HUD(); v5HUD(); v6HUD(); if(ME.car&&!ME.car.M.bike){ const r=NET&&NET.on?ridersOf(myNetId()):[]; txt(`👥 ${r.length+1}/${SEATS(ME.car.model)} seats${r.length?' · '+r.map(o=>o.name).join(', '):''}`,103,HH-100,14,r.length?'#a5f3fc':'#94a3b8'); }
   if(ME.car){ const c=ME.car; rrct(18,HH-92,170,76,14,'rgba(5,10,24,.75)'); txt(`${Math.round(Math.abs(c.v)*3.6)}`,70,HH-40,42,'#fff'); txt('KM/H',140,HH-44,16,'#93a0bd'); rrct(28,HH-30,150,8,4,'rgba(255,255,255,.15)'); rrct(28,HH-30,150*c.hp/100,8,4,c.hp<35?'#ef4444':'#22c55e'); txt(c.M.n,103,HH-70,15,'#cbd5e1');
     rrct(196,HH-92,60,76,14,'rgba(5,10,24,.75)'); txt(c.v<-.3?'R':c.gear!=null?String(c.gear+1):'N',226,HH-40,38,c.shiftT>0?'#fde047':'#fff'); const rp=clamp(((c.rpm||900)-900)/6000,0,1); rrct(204,HH-28,44,6,3,'rgba(255,255,255,.15)'); rrct(204,HH-28,44*rp,6,3,rp>.85?'#ef4444':'#38bdf8'); txt(`${Math.round((c.rpm||900)/100)*100}`,226,HH-76,11,'#93a0bd'); }
   else { let near=null, nd=4.2; for(const c of CARS){ const d=Math.hypot(c.x-ME.x,c.z-ME.z); if(d<nd&&!c.flee&&!c.racer&&(!c.cop||JOB&&JOB.type==='police')){ nd=d; near=c; } } if(near) txt(near.driver&&near.ai?`F — carjack the ${near.M.n} (crime!)`:`F — get in the ${near.M.n}`,HW/2,HH-30,22,near.driver&&near.ai?'#fca5a5':'#fde047'); }
