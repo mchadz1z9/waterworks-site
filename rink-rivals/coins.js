@@ -21,6 +21,18 @@
   const grant=g=>{ const q=J('rrGrant',{}); for(const k in g){ if(typeof g[k]==='number') q[k]=(q[k]||0)+g[k]; else if(Array.isArray(g[k])) q[k]=(q[k]||[]).concat(g[k]); } ls.set('rrGrant',JSON.stringify(q)); };
   const addStr=n=>{ if(window.RRSTR&&!RRSTR.owner&&RRSTR.set){ RRSTR.set(RRSTR.level+n); } else { const v=+ls.get('rrStrength')||0; ls.set('rrStrength',String(Math.round(v+n))); } };
   const ITEMS=[
+    {k:'armgold',cat:'🎽 Gear — worn in every game',ic:'💛',n:'Gold armband',d:'On your bicep in every game your player shows up in',p:200,slot:'arm',val:{c:[2,1.6,.3]}},
+    {k:'armcap',cat:'🎽 Gear — worn in every game',ic:'©️',n:'Captain armband',d:'The captain\'s armband — yellow with a badge',p:400,slot:'arm',val:{c:'#facc15',c2:'#111827'}},
+    {k:'armred',cat:'🎽 Gear — worn in every game',ic:'❤️',n:'Red armbands (both arms)',d:'A red band on each arm',p:250,slot:'arm',val:{c:'#dc2626',both:1}},
+    {k:'wristwhite',cat:'🎽 Gear — worn in every game',ic:'🤍',n:'White wristbands',d:'Classic sweatbands',p:100,slot:'wrist',val:{c:'#f8fafc'}},
+    {k:'wristneon',cat:'🎽 Gear — worn in every game',ic:'💚',n:'Neon wristbands',d:'Glowing green wristbands',p:200,slot:'wrist',val:{c:[.4,2.4,.5]}},
+    {k:'headred',cat:'🎽 Gear — worn in every game',ic:'🎀',n:'Red headband',d:'Sweatband round your head',p:120,slot:'head',val:{t:'band',c:'#dc2626'}},
+    {k:'capblue',cat:'🎽 Gear — worn in every game',ic:'🧢',n:'Blue cap',d:'A team cap',p:200,slot:'head',val:{t:'cap',c:'#1d4ed8',c2:'#1e3a8a'}},
+    {k:'crown',cat:'🎽 Gear — worn in every game',ic:'👑',n:'Gold crown',d:'Rule every game',p:3000,slot:'head',val:{t:'crown',c:[2.2,1.7,.3]}},
+    {k:'shades',cat:'🎽 Gear — worn in every game',ic:'🕶️',n:'Sunglasses',d:'Too cool',p:250,slot:'face',val:{c:'#0a0a0a'}},
+    {k:'chain',cat:'🎽 Gear — worn in every game',ic:'📿',n:'Gold chain',d:'With a big medallion',p:800,slot:'neck',val:{c:[2,1.6,.3],c2:[2.4,2,.5]}},
+    {k:'capered',cat:'🎽 Gear — worn in every game',ic:'🦸',n:'Hero cape',d:'A red superhero cape that flows behind you',p:1500,slot:'back',val:{c:'#dc2626',c2:'#facc15'}},
+    {k:'caperoyal',cat:'🎽 Gear — worn in every game',ic:'🟣',n:'Royal cape',d:'Purple velvet with gold trim',p:2500,slot:'back',val:{c:'#6d28d9',c2:[2,1.6,.3]}},
     {k:'city50k',cat:'🏙️ Rival City',ic:'💵',n:'$50,000 cash',d:'Paid straight into your Rival City wallet',p:150,buy:()=>grant({cityCash:50000}),many:1},
     {k:'city1m',cat:'🏙️ Rival City',ic:'💰',n:'$1,000,000 cash',d:'A million dollars in Rival City',p:1500,buy:()=>grant({cityCash:1000000}),many:1},
     {k:'cityhyper',cat:'🏙️ Rival City',ic:'🏎️',n:'Hypercar',d:'The 4-seat hypercar, parked in your garage',p:900,buy:()=>grant({cityCars:['hyper']})},
