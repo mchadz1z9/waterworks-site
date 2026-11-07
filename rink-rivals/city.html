@@ -814,8 +814,9 @@ const TUT=(()=>{ const dn=STORES.find(s=>s.type==='diner'&&s.b===BLK['2,2'])||ST
     {n:`See ${top?top.n:'the tallest tower'}`,d:'The most expensive building in the city — one day it could be yours',p:top&&{x:top.x,z:top.z-6},f:()=>near(top&&{x:top.x,z:top.z},70),r:5000}]; })();
 SV.tut=SV.tut||0;
 const v6tutTarget=()=>{ const s=TUT[SV.tut]; return s&&s.p&&!ME.indoor?s.p:null; };
-let v6T=1;
-function v6Step(dt){ v6T-=dt; if(v6T>0) return; v6T=1;
+let v6T=0;
+function v6Step(dt){ const nowR=performance.now(); if(nowR-v6T<1000) return; v6T=nowR;
+  /* things bought in the Arcade Shop */ try{ const q=JSON.parse(localStorage.getItem('rrGrant')||'{}'); let used=false; if(q.cityCash){ pay(q.cityCash,'— 🪙 from the Arcade Shop'); delete q.cityCash; used=true; } if(q.cityCars&&q.cityCars.length){ for(const k of q.cityCars) if(MODELS[k]&&!SV.cars.includes(k)) SV.cars.push(k); say(`🪙 New in your garage: ${q.cityCars.map(k=>MODELS[k]?MODELS[k].n:k).join(', ')}`,'#fde68a',3); delete q.cityCars; used=true; } if(used){ localStorage.setItem('rrGrant',JSON.stringify(q)); saveSV(); renderPanel(); } }catch(e){}
   if(SV.tut<TUT.length){ const s=TUT[SV.tut]; let ok=false; try{ ok=!!s.f(); }catch(e){} if(ok){ pay(s.r,`— ⭐ starter quest: ${s.n}`); SV.tut++; if(SV.tut>=TUT.length){ pay(10000,'— ⭐ STARTER QUEST COMPLETE!'); say('⭐ Starter quest complete! Open 📜 Quests for 80+ more','#facc15',4); } saveSV(); } }
   if(!ME.indoor){ SV.st=SV.st||{}; const dn=district(ME.car?ME.car.x:ME.x,ME.car?ME.car.z:ME.z); if(dn==='Rival Hills') SV.st.v_hills=1; if(dn==='Harbor Point') SV.st.v_harbor=1; } }
 function v6Draw(){ if(ME.indoor) return; const me=ME.car||ME; for(const s2 of SECDOORS){ if(Math.hypot(s2.x-me.x,s2.z-me.z)>90) continue; R3.part(R3.UC,R3.mm(R3.T(s2.x*K,.22*K,s2.z*K),R3.S(.6*K,.03*K,.6*K)),'#292524'); R3.part(R3.UC,R3.mm(R3.T(s2.x*K,.24*K,s2.z*K),R3.S(.45*K,.01*K,.45*K)),'#44403c'); } }
@@ -844,7 +845,7 @@ for(const [t,I] of Object.entries(V5I)) if(I.a){ const a0=I.a; I.a=()=>{ SV.st=S
   ['carpool','👥 Carpool','Ride as a passenger in someone else\'s car (online)',()=>Q_ST('rides'),1,5000], ['hours3','⏱️ Resident','Spend 3 hours in Rival City',()=>Q_ST('mins'),180,30000], ['hours10','⏱️ Lifer','Spend 10 hours in Rival City',()=>Q_ST('mins'),600,250000]
   ].map(([id,n,d,f,goal,rew])=>({id,n,d,f,goal,rew}))); }
 SV.qd=SV.qd||{}; let questT=1;
-function questStep(dt){ questT-=dt; if(questT>0) return; questT=1; for(const q of QUESTS){ if(SV.qd[q.id]) continue; let v=0; try{ v=q.f()||0; }catch(e){} if(v>=q.goal){ SV.qd[q.id]=1; pay(q.rew,''); say(`📜 QUEST COMPLETE: ${q.n} — +$${q.rew.toLocaleString()}`,'#facc15',3.5); [523,659,784,1047].forEach((f,i)=>tone(f,.25,'triangle',.06,0,i*.1)); renderQuests(); saveSV(); return; } } }
+function questStep(dt){ questT-=dt; if(questT>0) return; questT=1; for(const q of QUESTS){ if(SV.qd[q.id]) continue; let v=0; try{ v=q.f()||0; }catch(e){} if(v>=q.goal){ SV.qd[q.id]=1; pay(q.rew,''); if(window.RRCOIN) RRCOIN.add(25,'quest complete'); say(`📜 QUEST COMPLETE: ${q.n} — +$${q.rew.toLocaleString()}`,'#facc15',3.5); [523,659,784,1047].forEach((f,i)=>tone(f,.25,'triangle',.06,0,i*.1)); renderQuests(); saveSV(); return; } } }
 function renderQuests(){ const el=$('quests'); if(!el) return; const done=QUESTS.filter(q=>SV.qd[q.id]).length; $('qCount').textContent=`${done}/${QUESTS.length} done`;
   el.innerHTML=QUESTS.slice().sort((a,b)=>(SV.qd[a.id]?1:0)-(SV.qd[b.id]?1:0)).map(q=>{ let v=0; try{ v=q.f()||0; }catch(e){} const d=!!SV.qd[q.id], f=clamp(v/q.goal,0,1); return `<div style="opacity:${d?.55:1}"><b>${q.n}${d?' ✅':''}</b> <span class="muted">$${q.rew.toLocaleString()}</span><div class="muted" style="font-size:13px">${q.d}</div><div style="height:6px;border-radius:4px;background:var(--line);margin-top:3px"><div style="height:6px;border-radius:4px;width:${Math.round(f*100)}%;background:${d?'#22c55e':'#f59e0b'}"></div></div></div>`; }).join(''); }
 /* ---------- pickups lying around town (they come back after a few minutes) ---------- */

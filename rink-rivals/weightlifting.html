@@ -240,7 +240,7 @@ function hit(){ if(!X) return; audio(); if(X.ended){ restart(); return; }
 function repDone(){ const s=X.s, w=weightOf(s), mult=X.lastGrade==='PERFECT'?1.6:X.lastGrade==='GOOD'?1:.55, fat=Math.max(.35,1-X.reps*.05);
   X.reps++; SV.reps++; if(X.lastGrade==='PERFECT') SV.perfect=(SV.perfect||0)+1; if(s.t==='w') SV.vol+=w*(s.each?2:1);
   const q=Math.min(1.3,1/Math.max(.2,ratioOf(s))), lv=window.RRSTR?RRSTR.level:0, inc=s.gain*.35*q*q*mult*fat*(1+Math.min(X.combo,10)*.05)/(1+lv/120);
-  const bx=boostOn('str')?2:1; if(window.RRSTR){ if(owner()){ for(let i=0;i<bx;i++) RRSTR.add(1); X.gained+=100000*bx; } else { X.gained+=inc*bx*WM(); RRSTR.add(inc*bx*WM()); } }   /* the owner gets +100,000 a rep (or lap) */
+  const bx=boostOn('str')?2:1; if(window.RRSTR){ if(owner()){ for(let i=0;i<bx;i++) RRSTR.add(1); X.gained+=100000*bx; } else { X.gained+=inc*bx*WM(); RRSTR.add(inc*bx*WM()); if(window.RRCOIN&&X.reps%3===0) RRCOIN.add(1,'',true); } }   /* the owner gets +100,000 a rep (or lap) */
   /* records: heaviest weight moved, or most reps in one set */
   const best=SV.best[s.k]||0;
   if(s.t==='w'&&w>best){ SV.best[s.k]=w; netEv(`hit a PR: ${s.n} ${w.toLocaleString()} lb${s.each?' each':''} 🏆`); banner('NEW PERSONAL RECORD!',`${s.n} · ${w} lb${s.each?' each':''}`,'#fde047'); sfx.pr(); }
@@ -310,8 +310,10 @@ const PETS=[{k:'dog',n:'Puppy',ic:'🐶',m:1.1,cost:100,c:['#d6a35c','#7c4a1e']}
   {k:'bull',n:'Bulldog',ic:'🐕',m:1.35,cost:1000,c:['#e7e5e4','#a16207']},{k:'panda',n:'Panda',ic:'🐼',m:1.6,cost:3000,c:['#f8fafc','#111827']},
   {k:'gorilla',n:'Gorilla',ic:'🦍',m:2,cost:8000,rb:1,c:['#27272a','#52525b']},{k:'tiger',n:'Tiger',ic:'🐯',m:2.5,cost:12000,rb:2,c:['#f97316','#111827']},
   {k:'dragon',n:'Dragon',ic:'🐉',m:3.5,cost:20000,rb:3,c:['#16a34a','#facc15'],fly:1},{k:'phoenix',n:'Phoenix',ic:'🔥',m:5,cost:50000,rb:5,c:[[2.4,.9,.15],[2.4,2,.3]],fly:1},
-  {k:'unicorn',n:'Unicorn',ic:'🦄',m:7,cost:80000,rb:7,c:['#fdf4ff','#e879f9']},{k:'whale',n:'Cosmic Whale',ic:'🐋',m:12,cost:150000,rb:10,c:[[.5,.3,2.2],[1.6,1.2,2.4]],fly:1}];
-SV.pets=SV.pets||[]; const ownsPet=k=>owner()||SV.pets.includes(k), petOf=()=>PETS.find(p=>p.k===SV.pet&&ownsPet(p.k));
+  {k:'unicorn',n:'Unicorn',ic:'🦄',m:7,cost:80000,rb:7,c:['#fdf4ff','#e879f9']},{k:'whale',n:'Cosmic Whale',ic:'🐋',m:12,cost:150000,rb:10,c:[[.5,.3,2.2],[1.6,1.2,2.4]],fly:1},
+  {k:'goldie',n:'Golden Retriever',ic:'🦮',m:2.2,coin:'petgoldie',c:['#eab308','#a16207']},{k:'robo',n:'Robo Dog',ic:'🤖',m:4,coin:'petrobo',c:['#94a3b8',[.4,1.6,2.4]]}];
+const coinHas=k=>{ try{ return !!JSON.parse(localStorage.getItem('rrInv')||'{}')[k]; }catch(e){ return false; } };
+SV.pets=SV.pets||[]; const ownsPet=k=>{ const p=PETS.find(q=>q.k===k); return owner()||SV.pets.includes(k)||!!(p&&p.coin&&coinHas(p.coin)); }, petOf=()=>PETS.find(p=>p.k===SV.pet&&ownsPet(p.k));
 const WM=()=>world().mult*(petOf()?petOf().m:1);
 const PET={x:0,z:4,yaw:0};
 function drawPet(dt){ const p=petOf(); if(!p) return; const s=PL.at?SK[PL.at]:null, tx=s?s.x+1.4:PL.x+Math.cos(PL.yaw)*.8, tz=s?s.z+.8:PL.z-Math.sin(PL.yaw)*.8, d=Math.hypot(tx-PET.x,tz-PET.z);
@@ -357,9 +359,10 @@ function worldFX(dt){ const W=world(), dk=W.deco;
 /* pets panel + the daily chest */
 function renderPets(){ const el=$('petBox'); if(!el||!window.RRSTR) return; const own=owner(), lv=RRSTR.level, rb=RRSTR.rebirths, today=new Date().toDateString(), chest=own||SV.chestDay!==today, W=world();
   el.innerHTML=`<div style="display:flex;justify-content:space-between;align-items:center;gap:8px;flex-wrap:wrap;margin-bottom:6px"><b>🐾 Pets · ${W===WORLD.iron?'':'world boost ×'+W.mult+' · '}total boost ×${(WM()).toLocaleString()}</b><button id="chestBtn" ${chest?'':'disabled'}>${chest?'🎁 Open daily chest':'🎁 Come back tomorrow'}</button></div><div class="pills">`+
-    PETS.map(p=>{ const have=ownsPet(p.k), eq=SV.pet===p.k&&have, lock=!own&&(p.rb||0)>rb; return `<button data-pet="${p.k}" class="${eq?'on':''}" ${lock?'disabled':''} title="${p.n}: every rep ×${p.m}">${p.ic} ${p.n} ×${p.m}${eq?' ✓':have?'':lock?` 🔒 ${p.rb} rebirth${p.rb>1?'s':''}`:` · ${own?'free':p.cost.toLocaleString()+' 💪'}`}</button>`; }).join('')+'</div>';
+    PETS.map(p=>{ const have=ownsPet(p.k), eq=SV.pet===p.k&&have, lock=!own&&(p.rb||0)>rb; return `<button data-pet="${p.k}" class="${eq?'on':''}" ${lock?'disabled':''} title="${p.n}: every rep ×${p.m}">${p.ic} ${p.n} ×${p.m}${eq?' ✓':have?'':lock?` 🔒 ${p.rb} rebirth${p.rb>1?'s':''}`:p.coin?' · 🪙 coin shop':` · ${own?'free':p.cost.toLocaleString()+' 💪'}`}</button>`; }).join('')+'</div>';
   const cb=$('chestBtn'); if(cb) cb.onclick=()=>{ if(!own&&SV.chestDay===today) return; SV.chestDay=today; saveSV(); const g=own?1e9:Math.round(Math.max(25,lv*.08+rb*50)*W.mult); RRSTR.add(own?1:g); banner('🎁 DAILY CHEST!',own?'Owner chest: +100,000 strength':`+${g.toLocaleString()} strength · come back tomorrow`,'#facc15',2.6); sfx.pr&&sfx.pr(); renderPets(); refreshStats(); }; }
 document.addEventListener('click',e=>{ const b=e.target.closest('[data-pet]'); if(!b||b.disabled||!window.RRSTR) return; const p=PETS.find(q=>q.k===b.dataset.pet); if(!p) return;
+  if(!ownsPet(p.k)&&p.coin){ if(window.RRCOIN) RRCOIN.open('shop'); return; }
   if(!ownsPet(p.k)){ if(!RRSTR.spend(p.cost)){ banner('Not enough strength',`${p.n} costs ${p.cost.toLocaleString()} strength`,'#f87171',1.8); return; } SV.pets.push(p.k); banner(`${p.ic} NEW PET: ${p.n}!`,`Every rep ×${p.m} while it follows you`,'#4ade80',2.5); }
   SV.pet=b.classList.contains('on')?null:p.k; PET.x=PL.x; PET.z=PL.z; saveSV(); renderPets(); refreshStats(); });
 

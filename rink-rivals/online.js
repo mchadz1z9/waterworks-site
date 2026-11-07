@@ -146,7 +146,7 @@
     catch(e){ const B=panel&&panel.querySelector('#rrlB'); if(B) B.textContent='Could not reach the leaderboard server.'; } }
   function show(){ addCss(); if(panel) return; panel=document.createElement('div'); panel.id='rrlP'; document.body.appendChild(panel); panel.addEventListener('keydown',e=>e.stopPropagation()); panel.addEventListener('click',e=>{ if(e.target===panel) hide(); }); render(); }
   function hide(){ if(panel){ panel.remove(); panel=null; } }
-  async function post(id,score,txt){ if(/[?&]test\b/.test(location.search)||location.protocol==='file:') return; const d=defs.find(x=>x.id===id); if(!d||!game||!isFinite(score)) return;
+  async function post(id,score,txt){ try{ dispatchEvent(new CustomEvent('rr-result',{detail:{id,score}})); }catch(e){} if(/[?&]test\b/.test(location.search)||location.protocol==='file:') return; const d=defs.find(x=>x.id===id); if(!d||!game||!isFinite(score)) return;
     try{ const r=await fetch(API+game,{method:'POST',headers:{'content-type':'application/json'},body:JSON.stringify({b:id,pid,name:name()||'Player',score,txt:txt||String(score),mode:d.mode})}); const j=await r.json(); if(!j.ok) return;
       if(d.mode==='sum') note(`🏆 ${d.name}: ${j.score} · #${j.rank} in the world`); else if(j.improved) note(`🏆 New personal record! ${txt||score} · #${j.rank} on ${d.name}`); else if(j.rank<=10) note(`🏆 You're #${j.rank} on ${d.name}`); }catch(e){} }
   window.RRL={ boards(g,list){ game=g; for(const x of list) if(!defs.some(d=>d.id===x.id)) defs.push(x); }, post, show, get game(){ return game; } };
