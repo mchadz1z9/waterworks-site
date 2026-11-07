@@ -82,7 +82,7 @@ kbd{ font:inherit; font-size:13px; background:var(--ledbg); color:#fff; border-r
 
       <div class="split">
         <div>
-          <h3>Gym</h3><div class="pills" id="gymPills"></div><div class="muted" id="gymInfo" style="font-size:13px;margin:4px 0 8px"></div>
+          <h3>Gym</h3><div class="pills" id="gymPills"></div><div class="muted" id="gymInfo" style="font-size:13px;margin:4px 0 8px"></div><div id="rebirthBox" style="margin:0 0 10px;padding:10px 12px;border-radius:12px;background:linear-gradient(135deg,rgba(168,85,247,.18),rgba(236,72,153,.14));border:1px solid rgba(216,180,254,.35)"></div>
           <h3>Go to a station</h3>
           <div class="pills" id="goPills"></div>
           <div class="row" id="wRow" style="margin-top:6px"><span class="muted">Weight:</span>
@@ -165,9 +165,13 @@ const SV=(()=>{ let v=null; try{ v=JSON.parse(localStorage.getItem(SKEY)||'null'
 const saveSV=()=>{ try{ localStorage.setItem(SKEY,JSON.stringify(SV)); }catch(e){} };
 const owner=()=>!!(window.RRSTR&&RRSTR.owner);
 /* three gyms. The heaviest bar you may load depends on the gym AND your strength (the owner is infinitely strong) */
-const GYMS={iron:{n:'Iron Gym',ic:'🏋️',cap:1200,need:0,tint:''},gold:{n:'Gold Gym',ic:'🥇',cap:100000,need:100,tint:'rgba(250,204,21,.13)'},diamond:{n:'Diamond Gym',ic:'💎',cap:100000000,need:700,tint:'rgba(56,189,248,.14)'}};
+const GYMS={iron:{n:'Iron Gym',ic:'🏋️',cap:1200,need:0,tint:''},gold:{n:'Gold Gym',ic:'🥇',cap:100000,need:100,tint:'rgba(250,204,21,.13)'},diamond:{n:'Diamond Gym',ic:'💎',cap:100000000,need:700,tint:'rgba(56,189,248,.14)'},
+  titan:{n:'Titan Gym',ic:'🗿',cap:1e10,need:2500,tint:'rgba(148,163,184,.16)'},olympus:{n:'Olympus Gym',ic:'⚡',cap:1e13,need:1500,rb:1,tint:'rgba(253,224,71,.16)'},
+  volcano:{n:'Volcano Gym',ic:'🌋',cap:1e15,need:4000,rb:3,tint:'rgba(239,68,68,.16)'},cosmic:{n:'Cosmic Gym',ic:'🌌',cap:1e18,need:8000,rb:5,tint:'rgba(168,85,247,.18)'},
+  infinity:{n:'Infinity Gym',ic:'♾️',cap:1e21,need:15000,rb:10,tint:'rgba(236,72,153,.18)'}};
+const rebs=()=>window.RRSTR?RRSTR.rebirths:0, gymOk=g=>owner()||(strLv()>=g.need&&rebs()>=(g.rb||0));
 const strLv=()=>owner()?Infinity:(window.RRSTR?RRSTR.level:0);
-const gymKey=()=>{ const g=(SV&&SV.gym)||'iron'; return GYMS[g]&&strLv()>=GYMS[g].need?g:'iron'; };
+const gymKey=()=>{ const g=(SV&&SV.gym)||'iron'; return GYMS[g]&&gymOk(GYMS[g])?g:'iron'; };
 /* how heavy your strength lets you go: 300 lb at 0, ~20,000 at 100, ~2 million at 1,000, 100 million at ~7,100 */
 const strCap=()=>owner()?Infinity:300+Math.pow(strLv(),2)*2;
 const needFor=w=>Math.ceil(Math.sqrt(Math.max(0,w-300)/2));
@@ -408,12 +412,18 @@ function drawHUD(){ ctx.clearRect(0,0,HW,HH); const st=window.RRSTR?RRSTR.state(
   txt('STRENGTH '+st.level.toLocaleString()+(st.badge?'  '+st.badge:''),18,30,19,'#e2e8f0','left'); }
 
 /* ---------- panel ---------- */
-function refreshStats(){ const st=window.RRSTR?RRSTR.state():{level:0,frac:0,badge:'',owner:false}, own=st.owner;
-  const best=k=>{ const s=SK[k], v=SV.best[k]; if(own) return '1,000,000,000,000'; return v?(s.t==='w'?v.toLocaleString():v):'—'; };
-  $('stats').innerHTML=[['Strength',st.level.toLocaleString()],['Bench',best('bench')],['Squat',best('squat')],['Deadlift',best('dead')],['Press',best('press')],['Curls',best('curl')],['Pull-ups',best('pullup')],['Push-ups',best('pushup')],['Sit-ups',best('situp')],['Treadmill laps',best('tread')],['Bike laps',best('bike')],['Perfect reps',own?'1,000,000,000,000':(SV.perfect||0).toLocaleString()],['Lifted (lb)',own?'1,000,000,000,000':Math.round(SV.vol||0).toLocaleString()]]
+
+/* rebirths: trade your strength for a permanent gain boost and the rebirth-only gyms */
+function renderRebirth(){ const el=$('rebirthBox'); if(!el||!window.RRSTR) return; const own=owner(), r=RRSTR.rebirths, need=RRSTR.rebirthNeed(), lv=strLv(), ok=own||lv>=need;
+  el.innerHTML=`<div style="display:flex;justify-content:space-between;align-items:center;gap:10px;flex-wrap:wrap"><div><b style="font-size:16px">🔁 Rebirths: ${own?'∞ (max)':r.toLocaleString()}</b><div class="muted" style="font-size:12px">${own?'Owner: infinite rebirths, infinite boost':`Gains ×${RRSTR.rebirthMul} now · next rebirth makes it ×${(1+(r+1)*.5)} · needs ${need.toLocaleString()} strength (you have ${lv.toLocaleString()})`}</div></div>`+
+    (own?'<span class="tag owner">♾️ MAX REBIRTH</span>':`<button id="rebirthBtn" ${ok?'':'disabled'} style="font-weight:800">${ok?'🔁 Rebirth now':'🔒 '+Math.max(0,need-lv).toLocaleString()+' to go'}</button>`)+'</div>';
+  const b=$('rebirthBtn'); if(b) b.onclick=()=>{ if(!confirm(`Rebirth? Your strength goes back to 0, but every workout gives ×${1+(r+1)*.5} strength forever and new gyms unlock.`)) return; if(RRSTR.rebirth()){ banner(`🔁 REBIRTH ${RRSTR.rebirths}!`,`Strength gains are now ×${RRSTR.rebirthMul}`,'#e879f9',3); SV.gym='iron'; saveSV(); renderGyms(); refreshStats(); } }; }
+function refreshStats(){ try{ setTimeout(renderRebirth,0); }catch(e){}  const st=window.RRSTR?RRSTR.state():{level:0,frac:0,badge:'',owner:false}, own=st.owner;
+  const best=k=>{ const s=SK[k], v=SV.best[k]; if(own) return '∞'; return v?(s.t==='w'?v.toLocaleString():v):'—'; };
+  const INF='∞'; $('stats').innerHTML=[['Strength',own?INF:st.level.toLocaleString()],['Rebirths',own?INF:(st.rebirths||0).toLocaleString()],['Gain boost',own?INF:'×'+(window.RRSTR?RRSTR.rebirthMul:1)],['Bench',best('bench')],['Squat',best('squat')],['Deadlift',best('dead')],['Press',best('press')],['Curls',best('curl')],['Pull-ups',best('pullup')],['Push-ups',best('pushup')],['Sit-ups',best('situp')],['Treadmill laps',best('tread')],['Bike laps',best('bike')],['Perfect reps',own?'∞':(SV.perfect||0).toLocaleString()],['Lifted (lb)',own?'∞':Math.round(SV.vol||0).toLocaleString()]]
     .map(([n,v])=>`<div class="stat"><b>${v}</b><span>${n}</span></div>`).join('');
   $('sBarFill').style.width=(st.frac*100)+'%';
-  $('sBarTxt').textContent=own?'Owner — ∞ infinite strength: every gym is open and you can lift the full 100,000,000 lb in the Diamond Gym 👑':st.tier==='VIP'?'VIP — you start maxed at 100 strength ⭐':st.level>=100?'Maxed out — you are a Professional! 💪':st.tier==='PRO'?`PRO — you started at 75 · ${100-st.level} to max`:`${100-st.level} strength to go until Professional`;
+  $('sBarTxt').textContent=own?'Owner — ∞ strength, ∞ rebirths, ∞ boost: every gym is open, the Infinity Gym included, and every potion is free 👑':st.tier==='VIP'?'VIP — you start maxed at 100 strength ⭐':st.level>=100?'Maxed out — you are a Professional! 💪':st.tier==='PRO'?`PRO — you started at 75 · ${100-st.level} to max`:`${100-st.level} strength to go until Professional`;
   $('tagWrap').innerHTML=own?'<span class="tag owner">👑 OWNER</span>':st.tier==='VIP'?'<span class="tag owner">⭐ VIP</span>':(st.tier==='PRO'||st.level>=100)?'<span class="tag">💪 PRO</span>':(st.badge?`<span class="tag">${st.badge}</span>`:'<span class="muted">No tag yet — keep training</span>');
   syncUI(); }
 function syncUI(){ const s=PL.at?SK[PL.at]:null, wt=s&&s.t==='w';
@@ -432,8 +442,8 @@ $('goPills').addEventListener('click',e=>{ const b=e.target.closest('[data-go]')
 document.querySelectorAll('[data-w]').forEach(b=>b.onclick=()=>setWeight(+b.dataset.w));
 $('maxW').onclick=()=>{ if(!PL.at) return; const s2=SK[PL.at], g=GYMS[gymKey()], c=Math.min(g.cap,strCap()); setWeight(0,owner()?wCap(s2):s2.each?Math.max(5,Math.floor(c/6/2.5)*2.5):Math.max(45,Math.floor(c/5)*5)); };   /* MAX = the heaviest you can really lift */
 function renderGyms(){ const el=$('gymPills'); if(!el) return; const lv=strLv(), cur=gymKey();
-  el.innerHTML=Object.entries(GYMS).map(([k,g])=>{ const ok=lv>=g.need; return `<button data-gym="${k}" class="${cur===k?'on':''}" ${ok?'':'disabled'} title="${ok?'':'Needs '+g.need.toLocaleString()+' strength'}">${g.ic} ${g.n}${ok?'':' 🔒'}</button>`; }).join('');
-  const g=GYMS[cur]; $('gymInfo').textContent=`${g.ic} ${g.n}: bars up to ${g.cap.toLocaleString()} lb · your strength lets you load ${owner()?'anything — ∞':Math.min(g.cap,strCap()).toLocaleString()+' lb'}${!owner()&&cur!=='diamond'?` · next gym at ${(cur==='iron'?100:700).toLocaleString()} strength`:''}`;
+  el.innerHTML=Object.entries(GYMS).map(([k,g])=>{ const ok=gymOk(g); return `<button data-gym="${k}" class="${cur===k?'on':''}" ${ok?'':'disabled'} title="${ok?'':'Needs '+g.need.toLocaleString()+' strength'+(g.rb?' and '+g.rb+' rebirth'+(g.rb>1?'s':''):'')}">${g.ic} ${g.n}${ok?'':' 🔒'}</button>`; }).join('');
+  const g=GYMS[cur], nx=Object.values(GYMS).find(q=>!gymOk(q)), fmtL=v=>v>=1e21?'∞':v.toLocaleString(); $('gymInfo').textContent=`${g.ic} ${g.n}: bars up to ${fmtL(g.cap)} lb · your strength lets you load ${owner()?'anything — ∞':fmtL(Math.min(g.cap,strCap()))+' lb'}${!owner()&&nx?` · next: ${nx.ic} ${nx.n} at ${nx.need.toLocaleString()} strength${nx.rb?' + '+nx.rb+' rebirth'+(nx.rb>1?'s':''):''}`:''}`; renderRebirth();
   let t=document.getElementById('gymTint'); if(!t){ t=document.createElement('div'); t.id='gymTint'; t.style.cssText='position:absolute;inset:0;pointer-events:none;border-radius:inherit;mix-blend-mode:screen;transition:background .4s'; const st=$('stage'); if(st){ if(getComputedStyle(st).position==='static') st.style.position='relative'; st.appendChild(t); } } t.style.background=g.tint?`radial-gradient(ellipse at 50% 30%,${g.tint},transparent 70%)`:'transparent'; }
 document.addEventListener('click',e=>{ const b=e.target.closest('[data-gym]'); if(!b||b.disabled) return; SV.gym=b.dataset.gym; for(const s2 of ST) if(SV.w[s2.k]>wCap(s2)) SV.w[s2.k]=wCap(s2); saveSV(); renderGyms(); syncUI(); const g=GYMS[SV.gym]; banner(`${g.ic} Welcome to the ${g.n}`,`Bars up to ${g.cap.toLocaleString()} lb`,'#facc15',2); });
 addEventListener('rrstr-change',()=>renderGyms()); setTimeout(renderGyms,300); setInterval(renderGyms,3000);
@@ -598,7 +608,7 @@ const POTS=[{k:'energy',n:'Energy Drink',ic:'🥤',cost:2,min:3,d:'Sets and card
   {k:'speed',n:'Speed Potion',ic:'💨',cost:2,min:3,d:'Walk 80% faster, cardio laps go 50% faster'},{k:'combo',n:'Combo Keeper',ic:'🔥',cost:5,min:3,d:"A miss doesn't break your combo"},
   {k:'power',n:'Power Potion',ic:'🧪',cost:8,min:3,d:'Every weight feels 50% lighter'},{k:'hulk',n:'Hulk Potion',ic:'🦍',cost:10,min:3,d:'Turn green and huge — everyone online sees it'}];
 function potionOn(k){ return !!(FX&&FX.p&&FX.p[k]>Date.now()); }
-const potCost=p=>owner()?p.cost*10000:p.cost;
+const potCost=p=>owner()?0:p.cost;
 function hulkify(lk,on){ if(!on) return lk; return lk.olympia?{...lk,skin:'#4d9e3a',hi:'#6abf4b',shade:'#2f6b22'}:{...lk,skin:'#4d9e3a',buff:(lk.buff||1)+.6}; }
 function nearShop(){ return !PL.at&&Math.hypot(PL.x-SHOP.x,PL.z-SHOP.z)<1.2; }
 function goShop(){ if(PL.at) leave(); if(nearShop()){ openShop(); return; } PL.goTo=null; PL.shop=true; PL.target={x:SHOP.x,z:SHOP.z}; audio(); }

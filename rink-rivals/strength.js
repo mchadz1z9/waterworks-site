@@ -16,6 +16,9 @@
   /* the owner's strength is its own number: starts at 1 trillion and every rep adds another 100,000 */
   let ownerVal=(()=>{ const n=+ls.get('rrOwnerStr'); return isFinite(n)&&n>=OWNER_LVL?n:OWNER_LVL; })();
   const base=()=>Math.max(val,FLOOR[tier()]||0);
+  /* rebirths: start your strength over for a permanent boost (+50% strength gains each). The owner has infinite rebirths */
+  let reb=(()=>{ const n=+ls.get('rrRebirths'); return isFinite(n)?Math.max(0,Math.floor(n)):0; })();
+  const rebN=()=>isOwner()?Infinity:reb, rebMul=()=>isOwner()?Infinity:1+reb*.5, rebNeed=r=>Math.round(1000*Math.pow(1.6,r)/50)*50;
   function changed(){ try{ dispatchEvent(new CustomEvent('rrstr-change',{detail:RRSTR.state()})); }catch(e){} }
   function save(){ ls.set(K,String(Math.round(val))); changed(); }
   function level(){ return isOwner()?Math.round(ownerVal):Math.round(base()); }   /* 0..100; the owner starts at 1 trillion and keeps climbing */
@@ -26,12 +29,14 @@
   const RRSTR={
     MAX, get owner(){ return isOwner(); }, get level(){ return level(); }, get frac(){ return frac(); }, get tier(){ return tier(); },
     muscle, tag, badge,
-    add(n){ try{ if(JSON.parse(localStorage.getItem('rrSiteEvents')||'{}').str2x) n=(+n||0)*2; }catch(e){} if(isOwner()){ ownerVal+=100000; ls.set('rrOwnerStr',String(ownerVal)); changed(); return level(); } n=+n||0; if(n>0){ workouts++; ls.set('rrWorkouts',String(workouts)); n*=trainMul(); } val=Math.max(0,val+n); save(); return level(); },
+    add(n){ try{ if(JSON.parse(localStorage.getItem('rrSiteEvents')||'{}').str2x) n=(+n||0)*2; }catch(e){} if(isOwner()){ ownerVal+=100000; ls.set('rrOwnerStr',String(ownerVal)); changed(); return level(); } n=+n||0; if(n>0){ workouts++; ls.set('rrWorkouts',String(workouts)); n*=trainMul()*rebMul(); } val=Math.max(0,val+n); save(); return level(); },
     get workouts(){ return workouts; }, get multiplier(){ return +trainMul().toFixed(2); },
     /* spend strength (the potion shop). false if you don't have enough */
     spend(n){ n=Math.max(0,+n||0); if(level()<n) return false; if(isOwner()){ ownerVal=Math.max(OWNER_LVL,ownerVal-n); ls.set('rrOwnerStr',String(ownerVal)); changed(); return true; } val=Math.max(0,base()-n); save(); return true; },
     set(n){ val=Math.max(0,+n||0); save(); return level(); },
-    state(){ return {level:level(),frac:frac(),owner:isOwner(),tier:tier(),tag:tag(),badge:badge()}; } };
+    get rebirths(){ return rebN(); }, get rebirthMul(){ return rebMul(); }, rebirthNeed:()=>isOwner()?0:rebNeed(reb),
+    rebirth(){ if(isOwner()) return true; if(base()<rebNeed(reb)) return false; reb++; ls.set('rrRebirths',String(reb)); val=0; save(); return true; },
+    state(){ return {level:level(),frac:frac(),owner:isOwner(),tier:tier(),tag:tag(),badge:badge(),rebirths:rebN()}; } };
   window.RRSTR=RRSTR;
   /* keep our tag in step with what the admin gave us (the chat sends everyone's tags) */
   addEventListener('rrc-who',e=>{ const me=(e.detail||[]).find(p=>p&&p.me); if(!me) return; const nt=String(me.tag||''); if(nt!==String(ls.get('rrMyTag')||'')){ ls.set('rrMyTag',nt); changed(); } });
