@@ -61,10 +61,15 @@ function drawGear(J,f,lk){ if(!lk||!lk.me) return; const G=gearNow(); if(!G||!Ob
   if(G.head){ const t=G.head.t, c=G.head.c;
     if(t==='band') OB(add3(hd,mul3(HU,.035)),Wd,HU,HF,.215,.045,.215,c);
     else if(t==='cap'){ OB(add3(hd,mul3(HU,.075)),Wd,HU,HF,.21,.09,.21,c); OB(add3(add3(hd,mul3(HU,.04)),mul3(HF,.13)),Wd,HU,HF,.18,.02,.12,G.head.c2||c); }
+    else if(t==='horns'){ for(const sx of [-1,1]){ const b=add3(add3(hd,mul3(HU,.08)),mul3(Wd,sx*.07)); LB(b,add3(add3(b,mul3(HU,.1)),mul3(Wd,sx*.03)),.035,.008,c); } }
+    else if(t==='halo'){ const ctr=add3(hd,mul3(HU,.24)); for(let k=0;k<14;k++){ const a=k/14*PI*2; SP(add3(ctr,add3(mul3(Wd,Math.cos(a)*.12),mul3(HF,Math.sin(a)*.12))),.022,c); } }
     else if(t==='crown'){ OB(add3(hd,mul3(HU,.12)),Wd,HU,HF,.17,.06,.17,c); for(let k=0;k<5;k++){ const a=k/5*PI*2; SP(add3(add3(hd,mul3(HU,.17)),add3(mul3(Wd,Math.cos(a)*.08),mul3(HF,Math.sin(a)*.08))),.025,k%2?[2.4,.3,.3]:[.4,1.6,2.4]); } } }
   if(G.face) OB(add3(add3(hd,mul3(HF,.095)),mul3(HU,.015)),Wd,HU,HF,.19,.045,.03,G.face.c);
   if(G.neck){ const base=add3(mix3(ch,hd,.08),mul3(Fv,.1*bch)); for(let k=-4;k<=4;k++){ const t=k/4; SP(add3(add3(base,mul3(Wd,t*.09*bch)),mul3(A,-.06*(1-t*t)*bch+.02)),.017,G.neck.c); } SP(add3(base,mul3(A,-.08*bch)),.035,G.neck.c2||G.neck.c); }
-  if(G.back){ const top=add3(ch,mul3(Fv,-.14*bch)), bot=add3(add3(pel,mul3(Fv,-.22*bch)),mul3(A,-.45)), sw=Math.sin(Date.now()/300)*.04, mid=mix3(top,bot,.5), len=Math.hypot(...sub3(top,bot)), ax=nrm3(sub3(top,bot)), fz=nrm3(crs3(Wd,ax));
+  if(G.back&&G.back.t==='wings'){ const base=add3(mix3(ch,pel,.15),mul3(Fv,-.16*bch)), fl=Math.sin(Date.now()/260)*.25, sz=G.back.big?1.35:1;
+    for(const sx of [-1,1]){ for(let k=0;k<3;k++){ const ang=(.5+k*.32+fl*.4)*sx, dir=nrm3(add3(mul3(Wd,Math.cos(ang)*sx),add3(mul3(A,Math.sin(Math.abs(ang))*.9),mul3(Fv,-.25)))), L=(.45-k*.08)*sz, mid=add3(base,mul3(dir,L/2));
+      OB(mid,dir,nrm3(crs3(Fv,dir)),Fv,L,(.12-k*.02)*sz,.025,G.back.c); } } }
+  else   if(G.back){ const top=add3(ch,mul3(Fv,-.14*bch)), bot=add3(add3(pel,mul3(Fv,-.22*bch)),mul3(A,-.45)), sw=Math.sin(Date.now()/300)*.04, mid=mix3(top,bot,.5), len=Math.hypot(...sub3(top,bot)), ax=nrm3(sub3(top,bot)), fz=nrm3(crs3(Wd,ax));
     OB(add3(mid,mul3(fz,sw)),Wd,ax,fz,.4*bch,len,.025,G.back.c); OB(top,Wd,ax,fz,.42*bch,.05,.04,G.back.c2||G.back.c); } }
 function drawBody(J,f,lk){ if(lk.olympia){ const r=drawOlympia(J,f,lk); drawGear(J,f,lk); return r; } try{ drawGear(J,f,lk); }catch(e){} const m=(lk.buff||1)*(1+(lk.flex||0)*.08), bk=lk.bulk||1, bsh=1+(m-1)*.6, barm=(1+(m-1)*.8)*Math.sqrt(bk), bch=(1+(m-1)*.2)*bk, bleg=(1+(m-1)*.35)*bk, W=p=>wp(f,p), D=v=>nrm3(wd(f,v));
   for(const sx of [-1,1]){ const h=W(J['hip'+sx]), k=W(J['knee'+sx]), a=W(J['ank'+sx]); LB(h,k,.085*bleg,.1*bleg,lk.legs); LB(k,a,.06*bleg,.07*bleg,lk.skin);
