@@ -80,6 +80,7 @@ function build(){ if(built||!R3.ok) return; built=true;
     /* dance floor */ for(let i=-2;i<=2;i++) for(let j=-2;j<=2;j++) box(17+i*1.1,.02,3+j*1.1,1,.02,1,'#1e1b4b');
     /* race start line */ for(let i=0;i<8;i++) box(-1.75+i*.5,.02,9.5,.5,.02,.5,i%2?'#f8fafc':'#111827');
     /* trophy shelves */ box(18,1.6,15.5,6,3.2,.8,'#3f2a1d'); for(let r=0;r<3;r++) box(18,.6+r*1,15.2,5.8,.08,.9,'#78350f');
+    pkStatic(box);
     /* tall windows high on the walls (the sky shows through them) */ for(let x=-24;x<=24;x+=8){ box(x,6.4,HZ-.05,5,2.2,.1,'#0b1222'); }
   }); }
 /* ---- you ---- */
@@ -91,7 +92,7 @@ const gearNow=()=>{ const o={}; if(window.RRCOIN) for(const sl of ['arm','wrist'
 const kitCol=()=>(window.RRCOIN&&RRCOIN.equipped('kit'))||'#1d4ed8';
 function nearest(){ if(BOSS.on&&Math.hypot(ME.x-BOSS.x,ME.z-BOSS.z)<5.5) return {t:'boss'}; let best=null, bd=2.6; for(const C of CAB){ const fx=C.x+Math.sin(C.yaw)*1.2, fz=C.z+Math.cos(C.yaw)*1.2, d=Math.hypot(fx-ME.x,fz-ME.z); if(d<bd){ bd=d; best={t:'cab',C}; } }
   for(const k of KIOSK){ const d=Math.hypot(k.x-ME.x,k.z-ME.z); if(d<(k.k==='feat'?3.6:k.k==='dj'?3.4:2.6)&&d<bd+1){ bd=d; best={t:'kiosk',k}; } } return best; }
-function act(){ if(ROOM){ const rn=roomNear(); if(rn) roomAct(rn); return; } const n=nearest(); if(!n) return; if(n.t==='boss'){ bossHit(); return; } if(n.t==='cab'){ location.href=n.C.g[0]; return; } const k=n.k.k;
+function act(){ if(ME.sit){ ME.sit=null; return; } { const sn=seatNear(); if(sn&&!(ROOM&&ROOM.carry!=null)){ ME.sit=sn; ME.target=null; ME.vy=0; ME.y=0; return; } } if(ROOM){ const rn=roomNear(); if(rn) roomAct(rn); return; } const n=nearest(); if(!n) return; if(n.t==='boss'){ bossHit(); return; } if(n.t==='cab'){ location.href=n.C.g[0]; return; } const k=n.k.k;
   if(k==='casino'){ casinoOpen(); return; } if(k==='room'){ roomEnter(); camSnap=1; return; } if(n.k.mg){ mgStart(k); return; }
   if(k==='dj'){ djNext(); return; } if(k==='trophy'&&window.RRCOIN){ RRCOIN.open('trophies'); return; }
   if(k==='shop'&&window.RRCOIN) RRCOIN.open('shop'); else if(k==='acct'&&window.RRACCT) RRACCT.open(); else if(k==='arcade') location.href='sports-arcade'; else if(k==='feat'&&featKey()) location.href=featKey(); }
@@ -104,18 +105,18 @@ function step(dt){ T0+=dt; let ix=(keys.has('KeyD')||keys.has('ArrowRight')?1:0)
   if(MG&&MG.k!=='race'){ wx=0; wz=0; ME.target=null; } if(ME.stun>0){ ME.stun-=dt; wx*=.15; wz*=.15; } const m=Math.hypot(wx,wz); if(m>1){ wx/=m; wz/=m; } const sp=5.2; ME.x+=wx*sp*dt; ME.z+=wz*sp*dt; ME.spd=Math.min(1,m)*sp;
   if(m>.1){ const ty=Math.atan2(wx,wz); let d=ty-ME.yaw; while(d>PI) d-=2*PI; while(d<-PI) d+=2*PI; ME.yaw+=d*Math.min(1,dt*12); }
   if(BOSS.on){ const dx=ME.x-BOSS.x, dz=ME.z-BOSS.z, d=Math.hypot(dx,dz); if(d<3.2&&d>1e-4){ ME.x=BOSS.x+dx/d*3.2; ME.z=BOSS.z+dz/d*3.2; } }
-  if(!ROOM) for(const o of SOLID){ const dx=ME.x-o.x, dz=ME.z-o.z, d=Math.hypot(dx,dz), r=o.r+.35; if(d<r&&d>1e-4){ ME.x=o.x+dx/d*r; ME.z=o.z+dz/d*r; } }
-  if(ROOM) roomStep(); else { ME.x=clamp(ME.x,-HX+.6,HX-.6); ME.z=clamp(ME.z,-HZ+.6,HZ-.6); } ME.walk+=dt*ME.spd*2.3; ME.vy-=22*dt; ME.y=Math.max(0,ME.y+ME.vy*dt); if(ME.y===0) ME.vy=Math.max(0,ME.vy);
+  if(!ROOM&&ME.y<2.3) for(const o of SOLID){ const dx=ME.x-o.x, dz=ME.z-o.z, d=Math.hypot(dx,dz), r=o.r+.35; if(d<r&&d>1e-4){ ME.x=o.x+dx/d*r; ME.z=o.z+dz/d*r; } }
+  if(ROOM) roomStep(); else { ME.x=clamp(ME.x,-HX+.6,HX-.6); ME.z=clamp(ME.z,-HZ+.6,HZ-.6); } ME.walk+=dt*ME.spd*2.3; if(ME.sit){ if(m>.1||ME.vy>0){ ME.sit=null; } else { ME.x=ME.sit.x; ME.z=ME.sit.z; ME.yaw=ME.sit.yaw; ME.spd=0; } } const py=ME.y; ME.vy-=22*dt; const ny=ME.y+ME.vy*dt, [gr,pkOn]=pkGround(py,ny); ME.y=Math.max(gr,ny); ME.gnd=ME.y<=gr+1e-6; if(ME.gnd){ ME.y=gr; ME.vy=Math.max(0,ME.vy); } pkStep(dt,ME.gnd?pkOn:null);
   ME.flexT=Math.max(0,ME.flexT-dt); ME.waveT=Math.max(0,ME.waveT-dt);
-  const n=MG?null:ROOM?roomNear():nearest(), b=$('act'); roomUIStep(); if(MG&&(MG.k==='hoop'||MG.k==='bag')){ const t=MG.k==='hoop'?'🏀 SHOOT':'🥊 PUNCH'; if(b.textContent!==t) b.textContent=t; b.style.display='block'; } else if(n){ const t=ROOM?roomLabel(n):label(n); if(b.textContent!==t) b.textContent=t; b.style.display='block'; } else b.style.display='none';
+  const sn=!MG&&!ME.sit&&!(ROOM&&ROOM.carry!=null)&&seatNear(), n=MG?null:ME.sit?{t:'stand'}:sn?{t:'sit'}:ROOM?roomNear():nearest(), b=$('act'); roomUIStep(); if(MG&&(MG.k==='hoop'||MG.k==='bag')){ const t=MG.k==='hoop'?'🏀 SHOOT':'🥊 PUNCH'; if(b.textContent!==t) b.textContent=t; b.style.display='block'; } else if(n){ const t=n.t==='stand'?'🧍 Stand up':n.t==='sit'?'🪑 Sit down':ROOM?roomLabel(n):label(n); if(b.textContent!==t) b.textContent=t; b.style.display='block'; } else b.style.display='none';
   bossStep(dt); mgStep(dt); netStep(dt); }
 /* ---- other people in the Hub ---- */
 const OT=new Map(); let NET=null, netT=0, lastSig='', hbT=0;
 function netStep(dt){ for(const o of OT.values()){ const k=Math.min(1,dt*10); o.x=lerp(o.x,o.tx,k); o.z=lerp(o.z,o.tz,k); o.y=lerp(o.y||0,o.ty||0,k); o.walk+=dt*(o.spd||0)*2.3; }
   if(!NET||!NET.on) return; netT-=dt; if(netT>0) return; netT=.25;
-  /* save the free-plan request budget: only send when something changed, plus a heartbeat every 4 s */ const sig=[curRm(),ME.x.toFixed(1),ME.z.toFixed(1),ME.y.toFixed(1),ME.yaw.toFixed(1),ME.flexT>0,ME.waveT>0,window.RREMOTE?RREMOTE.t0:0].join(); hbT=(hbT||0)+.25; if(sig===lastSig&&hbT<4) return; lastSig=sig; hbT=0; NET.send({t:'p',rm:curRm(),x:+ME.x.toFixed(2),z:+ME.z.toFixed(2),y:+ME.y.toFixed(2),yaw:+ME.yaw.toFixed(2),s:+ME.spd.toFixed(1),nm:myName(),cr:myCrew()||'',kit:kitCol(),bf:window.RRSTR?+RRSTR.muscle().toFixed(2):1,fx:ME.flexT>0?1:0,wv:ME.waveT>0?1:0,gear:gearNow(),pet:myPet(),oly:isOwnerMe()?1:0,em:window.RREMOTE&&performance.now()-RREMOTE.t0<3500?RREMOTE.k:''}); }
+  /* save the free-plan request budget: only send when something changed, plus a heartbeat every 4 s */ const sig=[curRm(),ME.sit?1:0,ME.x.toFixed(1),ME.z.toFixed(1),ME.y.toFixed(1),ME.yaw.toFixed(1),ME.flexT>0,ME.waveT>0,window.RREMOTE?RREMOTE.t0:0].join(); hbT=(hbT||0)+.25; if(sig===lastSig&&hbT<4) return; lastSig=sig; hbT=0; NET.send({t:'p',rm:curRm(),st:ME.sit?ME.sit.y:0,x:+ME.x.toFixed(2),z:+ME.z.toFixed(2),y:+ME.y.toFixed(2),yaw:+ME.yaw.toFixed(2),s:+ME.spd.toFixed(1),nm:myName(),cr:myCrew()||'',kit:kitCol(),bf:window.RRSTR?+RRSTR.muscle().toFixed(2):1,fx:ME.flexT>0?1:0,wv:ME.waveT>0?1:0,gear:gearNow(),pet:myPet(),oly:isOwnerMe()?1:0,em:window.RREMOTE&&performance.now()-RREMOTE.t0<3500?RREMOTE.k:''}); }
 if(window.RRO){ NET=RRO.init({game:'hub',maxPlayers:8,minPlayers:1,dropIn:true,publicRoom:'HUBA',blurb:'Hang out in the Arcade Rivals Hub with everyone online.',
-  onStart:()=>{ OT.clear(); }, onMsg:m=>{ if(m.t==='dj'){ djSet(m.st|0,false); return; } if(m.t==='hit'){ BOSS.hits+=clamp(+m.n||1,0,3); return; } if(m.t!=='p') return; let o=OT.get(m.from); if(!o){ o={x:m.x,z:m.z,walk:0}; OT.set(m.from,o); } if((o.rm||'')!==String(m.rm||'')){ o.x=m.x; o.z=m.z; } Object.assign(o,{rm:String(m.rm||'').slice(0,24),tx:m.x,tz:m.z,ty:m.y||0,yaw:m.yaw,spd:m.s,nm:String(m.nm||'Player').slice(0,20),cr:String(m.cr||'').slice(0,6),kit:m.kit,bf:clamp(+m.bf||1,1,1.8),fx:m.fx,wv:m.wv,em:m.em&&m.em!==o.emk?{k:String(m.em).slice(0,12),t0:performance.now()}:(m.em?o.emote:null),emk:m.em||'',oly:m.oly?1:0,gear:m.gear&&typeof m.gear==='object'?m.gear:null,pet:m.pet&&typeof m.pet==='object'?m.pet:null}); if(o.pet&&!o.petSt) o.petSt={x:o.x+1,z:o.z+1,yaw:0}; },
+  onStart:()=>{ OT.clear(); }, onMsg:m=>{ if(m.t==='dj'){ djSet(m.st|0,false); return; } if(m.t==='hit'){ BOSS.hits+=clamp(+m.n||1,0,3); return; } if(m.t!=='p') return; let o=OT.get(m.from); if(!o){ o={x:m.x,z:m.z,walk:0}; OT.set(m.from,o); } if((o.rm||'')!==String(m.rm||'')){ o.x=m.x; o.z=m.z; } Object.assign(o,{rm:String(m.rm||'').slice(0,24),sit:clamp(+m.st||0,0,1),tx:m.x,tz:m.z,ty:m.y||0,yaw:m.yaw,spd:m.s,nm:String(m.nm||'Player').slice(0,20),cr:String(m.cr||'').slice(0,6),kit:m.kit,bf:clamp(+m.bf||1,1,1.8),fx:m.fx,wv:m.wv,em:m.em&&m.em!==o.emk?{k:String(m.em).slice(0,12),t0:performance.now()}:(m.em?o.emote:null),emk:m.em||'',oly:m.oly?1:0,gear:m.gear&&typeof m.gear==='object'?m.gear:null,pet:m.pet&&typeof m.pet==='object'?m.pet:null}); if(o.pet&&!o.petSt) o.petSt={x:o.x+1,z:o.z+1,yaw:0}; },
   onPeers:(api,kind,m)=>{ if(kind==='leave') OT.delete(m.id); }, onEnd:()=>OT.clear() });
   if(!TEST) setTimeout(()=>{ try{ if(!NET.on) NET.quick(); }catch(e){} },1800); }
 
@@ -226,10 +227,11 @@ const OLY=top=>({olympia:true,skin:'#caa078',hi:'#dcb68f',shade:'#a37b55',top,to
 const isOwnerMe=()=>!!(window.RRSTR&&RRSTR.owner);
 function look(o,me){ const top=me?kitCol():(o.kit||'#dc2626'); if(me?isOwnerMe():o.oly){ const lk=OLY(top); lk.flex=(me?ME.flexT>0:o.fx)?1:0; if(me) lk.me=true; else{ if(o.gear) lk.gear=o.gear; if(o.emote) lk.emote=o.emote; } return lk; } const lk={top,legs:'#0f1726',skin:me?'#caa078':'#c68642',shoe:'#111827',hair:'#2a1f16',buff:me?(window.RRSTR?RRSTR.muscle():1):(o.bf||1),flex:(me?ME.flexT>0:o.fx)?1:0}; if(me) lk.me=true; else{ if(o.gear) lk.gear=o.gear; if(o.emote) lk.emote=o.emote; } return lk; }
 function drawPerson(o,me){ const lk=look(o,me), w=lk.olympia?.27:.17*(1+((lk.buff||1)-1)*.6), wave=me?ME.waveT>0:o.wv; const J=PHY.pose(o.spd>.3?(o.spd>4?'run':'walk'):'stand',0,o.walk,w);
+  { const st=me?(ME.sit&&ME.sit.y):o.sit; if(st) sitPose(J,st); }
   if(wave){ J.hand1=[.32,1.85+Math.sin(T0*14)*.08,.1]; J.elb1=[.3,1.45,.05]; }
   PHY.drawBody(J,{x:o.x,z:o.z,yaw:o.yaw,y:o.y||0},lk); R3.shadow(o.x*K,o.z*K,.5*K); }
 function render(dt){ if(!R3.ok) return; build();
-  const d=ROOM?8:11, h=ROOM?6.2:7.5, e0=[ME.x+Math.sin(camYaw)*d,h,ME.z+Math.cos(camYaw)*d], ex=ROOM?clamp(e0[0],-RW+.6,RW-.6):clamp(e0[0],-HX+1,HX-1), ez=ROOM?clamp(e0[2],RZ-RD+.6,RZ+RD+3):clamp(e0[2],-HZ+1,HZ-1), cut=Math.hypot(e0[0]-ex,e0[2]-ez), eye=[ex,Math.min(7.8,h+cut*.45),ez], ctr=[ME.x,1,ME.z-Math.cos(camYaw)*.5], k=camSnap?1:Math.min(1,dt*5); camSnap=0; for(let i=0;i<3;i++){ camE[i]=lerp(camE[i],eye[i],k); camC[i]=lerp(camC[i],ctr[i],k); }
+  const d=ROOM?8:11, h=ROOM?6.2:7.5, e0=[ME.x+Math.sin(camYaw)*d,h,ME.z+Math.cos(camYaw)*d], ex=ROOM?clamp(e0[0],-RW+.6,RW-.6):clamp(e0[0],-HX+1,HX-1), ez=ROOM?clamp(e0[2],RZ-RD+.6,RZ+RD+3):clamp(e0[2],-HZ+1,HZ-1), cut=Math.hypot(e0[0]-ex,e0[2]-ez), eye=[ex,Math.min(7.85,Math.max(h+cut*.45,ME.y+2.6)),ez], ctr=[ME.x,1+ME.y*.85,ME.z-Math.cos(camYaw)*.5], k=camSnap?1:Math.min(1,dt*5); camSnap=0; for(let i=0;i<3;i++){ camE[i]=lerp(camE[i],eye[i],k); camC[i]=lerp(camC[i],ctr[i],k); }
   const SK=skyNow(); R3.frame({eye:camE.map(v=>v*K),center:camC.map(v=>v*K),fov:55,near:10,far:12000,sky:[.02,.02,.06],bright:SK.night?.78:1,fog:[2500,5000],fogMax:.6},()=>{
     const P3=(x,y,z,w,h,dd,col)=>R3.part(R3.UB,R3.mm(R3.T(x*K,y*K,z*K),R3.S(w*K,h*K,dd*K)),col);
     for(const C of CAB){ const fl=.6+.4*Math.sin(T0*3+C.x), col=C.g[3], n=parseInt(col.slice(1),16), rgb=[((n>>16)&255)/255,((n>>8)&255)/255,(n&255)/255].map(v=>v*1.8*fl), f=[Math.sin(C.yaw),Math.cos(C.yaw)];
@@ -258,11 +260,11 @@ function drawHUD(){ ctx.clearRect(0,0,HW,HH);
   { const SK=skyNow(); txt(`${SK.night?'🌙 Night':'☀️ Day'} · 🎧 ${STATIONS[dj].n}${muted?' (muted)':''}`,HW-18,40,18,'#cbd5e1','right'); }
   if(BOSS.on){ const f=clamp(1-BOSS.hits/BOSS.max,0,1); ctx.fillStyle='rgba(5,10,24,.8)'; ctx.beginPath(); ctx.roundRect(HW/2-220,60,440,44,12); ctx.fill(); ctx.fillStyle='#7f1d1d'; ctx.fillRect(HW/2-200,84,400,12); ctx.fillStyle='#ef4444'; ctx.fillRect(HW/2-200,84,400*f,12); txt(`🤖 MEGA BOT · ${Math.max(0,BOSS.max-BOSS.hits)} HP · your hits ${BOSS.mine}`,HW/2,80,17,'#fecaca');
     if(Math.hypot(ME.x-BOSS.x,ME.z-BOSS.z)<5.5) txt('Press F (or tap) to HIT IT! Jump over the shockwaves',HW/2,HH-110,22,'#fca5a5'); }
-  mgHUD(); if(djMsgT>0){ djMsgT-=1/60; txt(djMsg,HW/2,140,28,'#f0abfc'); } }
+  pkHUD(); mgHUD(); if(djMsgT>0){ djMsgT-=1/60; txt(djMsg,HW/2,140,28,'#f0abfc'); } }
 /* ---- input ---- */
 addEventListener('keydown',e=>{ const t=document.activeElement; if(t&&(t.tagName==='INPUT'||t.tagName==='TEXTAREA')) return; if(document.getElementById('rrShop')||document.getElementById('rrAcct')) return; if(['Space','ArrowUp','ArrowDown','ArrowLeft','ArrowRight'].includes(e.code)) e.preventDefault(); keys.add(e.code);
   if(MG&&!e.repeat&&mgKey(e.code)){ e.preventDefault(); return; }
-  if(e.repeat) return; if(e.code==='KeyF'||e.code==='Enter'){ if(!bossHit()) act(); } if(e.code==='KeyM'){ muted=!muted; if(mus) mus.gain.value=muted?0:.5; } audioOn(); if(e.code==='Space'&&ME.y===0) ME.vy=7; if(e.code==='Digit1') ME.flexT=2.5; if(e.code==='Digit2') ME.waveT=2.5; });
+  if(e.repeat) return; if(e.code==='KeyF'||e.code==='Enter'){ if(!bossHit()) act(); } if(e.code==='KeyM'){ muted=!muted; if(mus) mus.gain.value=muted?0:.5; } audioOn(); if(e.code==='Space'&&ME.gnd) ME.vy=7; if(e.code==='Digit1') ME.flexT=2.5; if(e.code==='Digit2') ME.waveT=2.5; });
 addEventListener('keyup',e=>keys.delete(e.code)); addEventListener('blur',()=>keys.clear());
 $('act').onclick=e=>{ e.stopPropagation(); audioOn(); if(MG&&mgKey('KeyF')) return; if(!bossHit()) act(); };
 $('gl').addEventListener('pointerdown',e=>{ audioOn(); const r=$('gl').getBoundingClientRect(); { const cx=(e.clientX-r.left)/r.width*HW, cy=(e.clientY-r.top)/r.height*HH; for(const o of OT.values()){ const q=scr([o.x,1.3+(o.y||0),o.z]); if(q&&Math.hypot(q[0]-cx,q[1]-cy)<45&&window.RRACCT&&RRACCT.profile){ RRACCT.profile(o.nm); return; } } } if(bossHit()) return; const g=R3.unproject((e.clientX-r.left)/r.width,(e.clientY-r.top)/r.height); if(g&&isFinite(g[0])) ME.target=ROOM?[clamp(g[0]/K,-RW+.5,RW-.5),clamp(g[1]/K,RZ-RD+.5,RZ+RD-.4)]:[clamp(g[0]/K,-HX+.6,HX-.6),clamp(g[1]/K,-HZ+.6,HZ-.6)]; });
@@ -306,10 +308,10 @@ const FKEYS=Object.keys(FURN);
 let ROOM=null, ROOMSEL=-1, roomUI=null, roomPrev=null;
 const roomLoad=()=>{ try{ const r=JSON.parse(localStorage.getItem('rrRoom')||'null'); if(r&&Array.isArray(r.i)) return r; }catch(e){} return {_lww:1,f:0,w:0,i:[]}; };
 function roomSave(){ if(!ROOM||!ROOM.own) return; ROOM.data._lww=Date.now(); try{ localStorage.setItem('rrRoom',JSON.stringify(ROOM.data)); }catch(e){} }
-function roomEnter(name,data){ if(MG) return; if(!ROOM) roomPrev={x:ME.x,z:ME.z}; const own=!name;
+function roomEnter(name,data){ if(MG) return; ME.sit=null; if(!ROOM) roomPrev={x:ME.x,z:ME.z}; const own=!name;
   ROOM={own,name:name||myName(),data:own?roomLoad():{f:+data.f||0,w:+data.w||0,i:(Array.isArray(data.i)?data.i:[]).slice(0,60).filter(x=>Array.isArray(x)&&FURN[x[0]])}};
   ME.x=0; ME.z=RZ+RD-1.2; ME.yaw=PI; ME.target=null; camYaw=0; ME.pet.x=1; ME.pet.z=ME.z; ROOMSEL=-1; roomPanel(); }
-function roomLeave(){ if(!ROOM) return; if(ROOM.carry!=null){ ROOM.carry=null; roomSave(); } ROOM=null; ROOMSEL=-1; const p=roomPrev||{x:-9,z:-7}; ME.x=p.x; ME.z=p.z; ME.pet.x=ME.x+1; ME.pet.z=ME.z; ME.target=null; if(roomUI){ roomUI.remove(); roomUI=null; } }
+function roomLeave(){ if(!ROOM) return; ME.sit=null; if(ROOM.carry!=null){ ROOM.carry=null; roomSave(); } ROOM=null; ROOMSEL=-1; const p=roomPrev||{x:-9,z:-7}; ME.x=p.x; ME.z=p.z; ME.pet.x=ME.x+1; ME.pet.z=ME.z; ME.target=null; if(roomUI){ roomUI.remove(); roomUI=null; } }
 async function roomVisit(name){ if(!name) return; if(window.RRACCT&&RRACCT.name&&name.toLowerCase()===RRACCT.name.toLowerCase()){ roomEnter(); return; }
   if(!window.RRACCT||!RRACCT.peek){ djMsg='Make an account to visit rooms'; djMsgT=3; return; } const P=await RRACCT.peek(name); if(!P){ djMsg='No account with that name'; djMsgT=3; return; }
   if(!P.room||!(P.room.i||[]).length){ djMsg=`${name} hasn’t decorated a room yet`; djMsgT=3; } roomEnter(name,P.room||{}); }
@@ -360,8 +362,43 @@ function roomPanel(){ if(roomUI){ roomUI.remove(); roomUI=null; } if(!ROOM) retu
 let roomSelLast=-2; function roomUIStep(){ if(ROOM&&ROOM.own&&ROOMSEL!==roomSelLast){ roomSelLast=ROOMSEL; roomPanel(); } }
 { const q=new URLSearchParams(location.search).get('room'); if(q) setTimeout(()=>roomVisit(q),1500); }
 
+/* ---- Hub parkour: a floating course around the walls, up to the ceiling and back down ---- */
+const PK=[]; { const pk=(x,y,z,w,d,t)=>PK.push({x,y,z,w,d,t:t||''});
+  pk(-26,.25,17.4,2.6,2.6,'start'); let y=.3;
+  for(let i=0;i<11;i++){ y+=.47; pk(-26.2+(i%2?.6:-.6),y,14.6-i*2.9,1.7,1.7,i===5?'beam':''); }
+  pk(-25.4,y+.1,-16.4,3,3,'cp'); y+=.1;
+  const back=[[2.2,1.4,0],[1,1,-.3],[2.6,.6,0],[1,1,.3],[1,1,.3],[3,.5,-.2],[1.2,1.2,0],[1,1,-.3],[1,1,0],[2.8,.6,.2],[1.2,1.2,0],[1,1,-.2],[1,1,.2],[1.4,1.4,0]];
+  let x=-22.6; for(const [w,d,dy] of back){ y=clamp(y+dy,5,5.6); x+=w/2; pk(x,y,-16.3+(Math.round(x)%2?.4:-.4),w,d,d<.7?'beam':''); x+=w/2+1.75; }
+  pk(x+1.5-1.75+1.75,y,-16.2,3,3,'cp');
+  for(let i=0;i<10;i++){ y=Math.max(1.1,y-.45); pk(26.1+(i%2?-.6:.6),y,-13.3+i*2.9,1.6,1.6,i%3===2?'small':''); }
+  pk(26,.6,17.4,2.8,2.8,'fin'); }
+const PKC={start:'#16a34a',fin:'#ca8a04',cp:'#0891b2',beam:'#e11d48',small:'#f59e0b','':'#7c3aed'};
+let PKR={st:'idle',t:0}; const pkBestT=()=>MGBEST.pkN?-MGBEST.pkN:0;
+function pkGround(py,ny){ let gr=0, on=null; if(ROOM) return [0,null]; for(const b of PK){ const top=b.y+.15; if(Math.abs(ME.x-b.x)<b.w/2+.12&&Math.abs(ME.z-b.z)<b.d/2+.12&&py>=top-.06&&ny<=top+.001&&top>gr){ gr=top; on=b; } } return [gr,on]; }
+function pkStep(dt,on){ const st=PKR.st;
+  if(on&&on.t==='start'){ if(st!=='ready'){ PKR={st:'ready',t:0}; } return; }
+  if(st==='ready'&&ME.y>.1&&!on){ PKR={st:'run',t:0}; }
+  if(st==='ready'&&ME.y===0&&Math.hypot(ME.x+26,ME.z-17.4)>2){ PKR={st:'idle',t:0}; }
+  if(st==='done'&&ME.y===0&&!on) PKR={st:'idle',t:0};
+  if(PKR.st==='run'){ PKR.t+=dt; if(on&&on.t==='fin'){ const t=PKR.t; PKR={st:'done',t}; const pb=!pkBestT()||t<pkBestT(); if(pb){ MGBEST.pkN=-Math.round(t*100)/100; saveBest(); }
+      djMsg=pb?`🧗 NEW BEST! ${t.toFixed(2)} s`:`🧗 Finished! ${t.toFixed(2)} s`; djMsgT=4; try{ window.RRL&&RRL.post('pk',-Math.round(t*100)/100,`${t.toFixed(2)} s`); }catch(e){}
+      const day=new Date().toDateString(); if(window.RRCOIN&&MGBEST.pkDay!==day){ MGBEST.pkDay=day; saveBest(); RRCOIN.add(150,'🧗 Hub parkour — first clear today'); } }
+    else if(ME.y===0){ PKR={st:'idle',t:0}; djMsg='💥 Fell! Climb back on at the green start pad'; djMsgT=2.5; } } }
+function pkStatic(box){ for(const b of PK){ box(b.x,b.y,b.z,b.w,.3,b.d,PKC[b.t]); box(b.x,b.y+.155,b.z,b.w*.86,.01,b.d*.86,b.t==='fin'?[2.4,1.9,.4]:b.t==='start'?[.4,2.2,.6]:b.t==='cp'?[.3,1.8,2.2]:[.9,.5,1.8]); if(b.y>1.4) box(b.x,b.y-.55,b.z,.08,.8,.08,'#334155'); }
+  box(-26,2.1,18.9,3.2,.9,.12,'#16a34a'); box(26,2.1,18.9,3.2,.9,.12,'#ca8a04'); }
+function pkHUD(){ const s=scr([-26,2.6,17.4]); if(s&&!ROOM) txt('🧗 HUB PARKOUR — start here',s[0],s[1],18,'#86efac'); const f=scr([26,2.6,17.4]); if(f&&!ROOM) txt('🏁 PARKOUR FINISH',f[0],f[1],18,'#fde68a');
+  if(PKR.st==='run'||PKR.st==='done') txt(`🧗 ${PKR.t.toFixed(2)} s${pkBestT()?` · best ${pkBestT().toFixed(2)} s`:''}`,HW/2,92,26,PKR.st==='done'?'#fde047':'#fff');
+  else if(PKR.st==='ready') txt(`🧗 Jump onto the purple blocks to start the clock${pkBestT()?` · best ${pkBestT().toFixed(2)} s`:''}`,HW/2,92,20,'#86efac'); }
+try{ window.RRL&&RRL.boards('hub',[{id:'pk',name:'Hub parkour (fastest)',mode:'max'}]); }catch(e){}
+/* ---- sitting: stools in the Hub, couches, chairs and thrones in rooms ---- */
+const SEATS={couch:.55,chair:.56,throne:.7,bean:.5,bench:.52,bed:.64};
+function seatNear(){ if(ROOM){ let b=null, bd=1.6; for(const it of ROOM.data.i){ const h=SEATS[it[0]]; if(h==null) continue; const d=Math.hypot(it[1]-ME.x,it[2]+RZ-ME.z); if(d<bd){ bd=d; b={x:it[1],z:it[2]+RZ,y:h,yaw:(it[3]||0)}; } } return b; }
+  for(const s of [-1,1]) for(let i=0;i<4;i++){ const x=s*(4+i*5), d=Math.hypot(x-ME.x,12-ME.z); if(d<1.3) return {x,z:12,y:.78,yaw:PI}; } return null; }
+function sitPose(J,h){ J.pelvis=[0,h,-.05]; J.chest=[0,h+.5,-.1]; J.head=[0,h+.7,-.08];
+  for(const sx of [-1,1]){ J['hip'+sx]=[sx*.11,h,0]; J['knee'+sx]=[sx*.14,h+.02,.42]; J['ank'+sx]=[sx*.14,.08,.48]; if(J['sho'+sx]) J['sho'+sx]=[J['sho'+sx][0],h+.47,-.1]; J['elb'+sx]=[sx*.26,h+.22,.05]; J['hand'+sx]=[sx*.17,h+.08,.3]; } if(J.toe1) J.toe1=[.14,.04,.6]; if(J['toe-1']) J['toe-1']=[-.14,.04,.6]; return J; }
+
 let camSnap=0; const curRm=()=>ROOM?ROOM.name.toLowerCase():'', sameRm=o=>(o.rm||'')===curRm();
-if(TEST) window.__hub={me:ME,act,nearest,room:()=>ROOM,roomEnter,roomBuy,roomVisit};
+if(TEST) window.__hub={pk:PK,pkr:()=>PKR,seatNear,me:ME,act,nearest,room:()=>ROOM,roomEnter,roomBuy,roomVisit};
 })();
 </script>
 <script src="site.js"></script>
