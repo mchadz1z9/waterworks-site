@@ -104,6 +104,8 @@
     {k:'str5k',cat:'🏋️ Gym',ic:'🦾',n:'+5,000 strength',d:'A huge strength boost',p:2000,buy:()=>addStr(5000),many:1},
     {k:'petgoldie',cat:'🏋️ Gym',ic:'🦮',n:'Golden Retriever pet',d:'Coin-shop pet: every rep ×2.2',p:600},
     {k:'petrobo',cat:'🏋️ Gym',ic:'🤖',n:'Robo Dog pet',d:'Coin-shop pet: every rep ×4',p:2500},
+    {k:'petshark',cat:'🏋️ Gym',ic:'🦈',n:'Sky Shark pet',d:'Coin-shop pet that swims through the air: every rep ×6',p:4000},
+    {k:'petalien',cat:'🏋️ Gym',ic:'👽',n:'Little Alien pet',d:'Coin-shop pet: every rep ×8',p:6000},
     {k:'mxgold',cat:'🏍️ Motocross',ic:'🏆',n:'Gold paint',d:'Gold & black bike and gear',p:300,slot:'mx',val:['#facc15','#111827']},
     {k:'mxneon',cat:'🏍️ Motocross',ic:'💜',n:'Neon paint',d:'Neon purple & pink',p:300,slot:'mx',val:['#a855f7','#f472b6']},
     {k:'mxice',cat:'🏍️ Motocross',ic:'🧊',n:'Ice paint',d:'Ice blue & white',p:300,slot:'mx',val:['#38bdf8','#f8fafc']},
@@ -352,5 +354,5 @@
   function mount(){ banners(); setTimeout(gcRender,1500); if(PAGE==='hq-owa9rwwt9kplpdbu'||window.RR_ADMIN||document.getElementById('rrCoin')) return; css(); pill=document.createElement('button'); pill.id='rrCoin'; pill.title='Arcade Coins — open the shop'; pill.onclick=()=>open(); document.body.appendChild(pill); render(); }
   if(document.readyState==='loading') addEventListener('DOMContentLoaded',mount); else mount();
   addEventListener('storage',e=>{ if(e.key==='rrCoins'){ bal=Math.max(0,+e.newValue||0); render(); } });
-  window.RRCOIN={ achievements:()=>ACH.map(a=>({...a,got:ACHD[a.id]||0})), stat, mapWeek:MAPWEEK, season:SEASONNOW, featured:FEAT, event:EVENT, carPaint, carDeco, get bal(){ return isOwner()?Infinity:bal; }, get level(){ return lvl(); }, add, spend, has, equipped, open, items:ITEMS, toast, track };
+  window.RRCOIN={ giveCrate:k=>{ const C=CRATES[k]; if(!C) return; inv[C.inv]=(inv[C.inv]||0)+1; save(); }, achievements:()=>ACH.map(a=>({...a,got:ACHD[a.id]||0})), stat, mapWeek:MAPWEEK, season:SEASONNOW, featured:FEAT, event:EVENT, carPaint, carDeco, get bal(){ return isOwner()?Infinity:bal; }, get level(){ return lvl(); }, add, spend, has, equipped, open, items:ITEMS, toast, track };
 })();
