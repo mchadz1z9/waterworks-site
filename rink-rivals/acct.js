@@ -22,11 +22,13 @@
   let A=J('rrAcct',null); const saveA=()=>{ if(A) ls.set('rrAcct',JSON.stringify(A)); else ls.del('rrAcct'); render(); };
   const api=(op,body,keep)=>fetch(SERVER+'/acct',{method:'POST',body:JSON.stringify({op,...(body||{})}),keepalive:!!keep}).then(r=>r.json()).catch(()=>({err:'net'}));
   const meta=()=>({life:Math.round(+ls.get('rrCoinLife')||0),str:Math.round(+ls.get('rrStrength')||0)});
+  /* the owner's account makes every device it logs in on the owner (infinite coins, strength, everything unlocked) */
+  function ownerOn(){ if(ls.get('rrOwner')==='1') return; ls.set('rrOwner','1'); try{ if(!sessionStorage.getItem('rrOwnRl')){ sessionStorage.setItem('rrOwnRl','1'); setTimeout(()=>location.reload(),600); } }catch(e){} }
   let busy=false, lastSync=0;
   async function push(force,keep){ if(!A||busy) return; const snap=JSON.stringify(collect()), h=hash(snap); if(!force&&h===A.h) return; busy=true; const r=await api('push',{token:A.token,data:snap,...meta()},keep); busy=false;
     if(r.ok){ A.ver=r.ver; A.h=h; lastSync=Date.now(); saveA(); } else if(r.err==='auth'){ A=null; saveA(); } }
   async function pull(){ if(!A) return; const r=await api('pull',{token:A.token,since:A.ver||0}); if(r.err==='auth'){ A=null; saveA(); return; } if(!r.ok) return;
-    A.crew=r.crew||null; if(r.name) A.name=r.name;
+    A.crew=r.crew||null; if(r.name) A.name=r.name; if(r.owner) ownerOn();
     if(!r.same&&r.ver>(A.ver||0)){ applyData(r.data); A.ver=r.ver; A.h=hash(JSON.stringify(collect())); saveA(); lastSync=Date.now();
       try{ if(!sessionStorage.getItem('rrAcctRl')){ sessionStorage.setItem('rrAcctRl','1'); toast('☁️ Synced your progress from your other device…'); setTimeout(()=>location.reload(),900); return; } }catch(e){} }
     lastSync=Date.now(); saveA(); }
@@ -49,11 +51,11 @@
       <div class="tabs"><button data-t="new" class="${tab!=='login'?'on':''}">Create account</button><button data-t="login" class="${tab==='login'?'on':''}">I already have one</button></div>`;
       if(tab!=='login') h+=`<div class="m">Name</div><input id="aN" maxlength="20" value="${esc(ls.get('rrName')||'')}"><div class="m">PIN (4–8 numbers — remember it!)</div><input id="aP" type="password" inputmode="numeric" maxlength="8"><div class="m">PIN again</div><input id="aP2" type="password" inputmode="numeric" maxlength="8"><button data-go="create">Create account &amp; save my progress</button>`;
       else h+=`<div class="m">Account name</div><input id="aN" maxlength="20"><div class="m">PIN</div><input id="aP" type="password" inputmode="numeric" maxlength="8"><button data-go="login">Log in on this device</button><p>Logging in combines this device's progress with your account — nothing gets reset.</p>`; }
-    else { h+=`<div class="tabs"><button data-t="acct" class="${tab!=='crew'?'on':''}">☁️ Account</button><button data-t="crew" class="${tab==='crew'?'on':''}">🏴 Crew</button></div>`;
-      if(tab!=='crew') h+=`<p class="ok">✓ Logged in on this device — your progress saves by itself.</p><div class="row"><span>Last synced</span><b>${lastSync?new Date(lastSync).toLocaleTimeString():'—'}</b></div><div class="row"><span>Crew</span><b>${A.crew?'['+esc(A.crew)+']':'none'}</b></div>
+    else { h+=`<div class="tabs" style="flex-wrap:wrap"><button data-t="acct" class="${tab==='acct'||tab==='new'||tab==='login'?'on':''}">☁️ Account</button><button data-t="crew" class="${tab==='crew'?'on':''}">🏴 Crew</button><button data-t="trade" class="${tab==='trade'?'on':''}">🔄 Trades${TR.inc.length?' ('+TR.inc.length+')':''}</button><button data-t="card" class="${tab==='card'?'on':''}">🪪 Player card</button></div>`;
+      if(tab==='trade') h+=tradeHTML(); else if(tab==='card') h+=`<canvas id="pc" width="640" height="360" style="width:100%;border-radius:14px"></canvas><p><button data-go="pcdl">⬇️ Download card</button> <span class="m">Share it with your friends!</span></p>`; else if(tab!=='crew') h+=`<p class="ok">✓ Logged in on this device — your progress saves by itself.</p><div class="row"><span>Last synced</span><b>${lastSync?new Date(lastSync).toLocaleTimeString():'—'}</b></div><div class="row"><span>Crew</span><b>${A.crew?'['+esc(A.crew)+']':'none'}</b></div>
         <p>On another device: open 👤, choose “I already have one”, and enter <b>${esc(A.name)}</b> and your PIN.</p><button data-go="sync">☁️ Save now</button> <button class="g" data-go="pin">Change PIN</button> <button class="g" data-go="out">Log out</button>`;
       else h+=crewHTML(); }
-    h+=`<div style="margin-top:8px">${msg}</div></div>`; box.innerHTML=h; }
+    h+=`<div style="margin-top:8px">${msg}</div></div>`; box.innerHTML=h; if(tab==='card') setTimeout(drawCard,0); }
   function crewHTML(){ const c=crewCache; let h='';
     if(c===undefined||c==='loading') return '<p>Loading…</p>';
     if(c){ h+=`<h3 style="margin:6px 0">🏴 [${esc(c.tag)}] ${esc(c.name)}</h3><div class="m">${c.members.length} member${c.members.length>1?'s':''} · crew total ${(c.total||0).toLocaleString()} lifetime coins</div>${c.code?`<p>Invite code: <b style="font-size:20px;color:#fde68a;letter-spacing:.1em">${esc(c.code)}</b> — friends enter it in 👤 → Crew → Join.</p>`:''}`+
@@ -61,6 +63,45 @@
     else h+=`<p>Team up! Crews add up every member's lifetime coins on the crew leaderboard.</p><div class="m">Crew name</div><input id="cN" maxlength="20"><div class="m">Tag (2–6 letters, shows next to your name)</div><input id="cT" maxlength="6" style="text-transform:uppercase"><button data-go="ccreate">Create crew</button>
       <h3 style="margin:14px 0 4px">Join with an invite code</h3><input id="cC" maxlength="6" style="text-transform:uppercase" placeholder="ABC123"><button data-go="cjoin">Join crew</button>`;
     h+=`<h3 style="margin:14px 0 4px">🏆 Top crews</h3>`+(topCache?topCache.map((r,i)=>`<div class="row"><span>${i+1}. [${esc(r.tag)}] ${esc(r.name)} · ${r.n} member${r.n>1?'s':''}</span><b>${(r.total||0).toLocaleString()} 🪙</b></div>`).join('')||'<p>No crews yet — be the first!</p>':'<p>Loading…</p>'); return h; }
+
+  /* ---- trading ---- */
+  const TR={inc:[],out:[]}; const DONE=()=>J('rrTradeDone',[]);
+  const C=()=>window.RRCOIN, nmOf=k=>C()?C().itemName(k):k, pk=t=>{ try{ return JSON.parse(t||'{}'); }catch(e){ return {}; } };
+  const listTxt=o=>[...(o.items||[]).map(nmOf),o.coins?`${o.coins.toLocaleString()} 🪙`:''].filter(Boolean).join(', ')||'nothing';
+  async function tradePoll(){ if(!A||!C()) return; const r=await api('tradeList',{token:A.token}); if(!r.ok) return; TR.inc=r.inc||[]; TR.out=r.out||[];
+    const done=DONE(); for(const t of TR.out){ if(t.st==='open'||done.includes(t.id)) continue; const g=pk(t.give), w=pk(t.want);
+      if(t.st==='accepted'){ C().tradeGive(w.items||[],w.coins||0); toast(`🔄 ${t.too} accepted your trade! You got ${listTxt(w)}`); } else { C().tradeGive(g.items||[],g.coins||0); toast(t.st==='declined'?`🔄 ${t.too} said no — your items are back`:'🔄 Trade cancelled — items back'); }
+      done.push(t.id); ls.set('rrTradeDone',JSON.stringify(done.slice(-200))); api('tradeClaim',{token:A.token,id:t.id}); }
+    TR.out=TR.out.filter(t=>t.st==='open'); if(TR.inc.length&&pill) pill.textContent=`👤 ${A.name}${A.crew?` [${A.crew}]`:''} 🔄${TR.inc.length}`; if(box&&tab==='trade') renderBox(); }
+  if(A){ setTimeout(tradePoll,6000); setInterval(()=>{ if(!document.hidden) tradePoll(); },60000); }
+  function tradeHTML(){ if(!C()) return '<p>Loading…</p>'; const T=C().tradeable(), mine=T.filter(i=>i.own), RC=['#e2e8f0','#94a3b8','#38bdf8','#c084fc','#fbbf24'];
+    let h=`<h3 style="margin:6px 0">📥 Offers for you</h3>`+(TR.inc.length?TR.inc.map(t=>`<div style="background:#111c33;border:1px solid #273449;border-radius:12px;padding:10px;margin:6px 0"><b>${esc(t.frm)}</b> offers <b style="color:#4ade80">${esc(listTxt(pk(t.give)))}</b><br>and wants <b style="color:#fbbf24">${esc(listTxt(pk(t.want)))}</b>${t.msg?`<div class="m">“${esc(t.msg)}”</div>`:''}<div style="margin-top:6px"><button data-acc="${t.id}">✓ Accept</button> <button class="g" data-dec="${t.id}">✕ Decline</button></div></div>`).join(''):'<p>No offers right now.</p>');
+    h+=TR.out.length?`<h3 style="margin:10px 0 4px">📤 Waiting for an answer</h3>`+TR.out.map(t=>`<div class="row"><span>To ${esc(t.too)}: ${esc(listTxt(pk(t.give)))} → ${esc(listTxt(pk(t.want)))}</span><button class="g" data-can="${t.id}">Cancel</button></div>`).join(''):'';
+    h+=`<h3 style="margin:14px 0 4px">➕ New trade</h3><div class="m">Their account name</div><input id="tTo" maxlength="20">
+      <div class="m">You give (tick up to 10)</div><div style="max-height:150px;overflow:auto;background:#0b1222;border:1px solid #334155;border-radius:10px;padding:6px">${mine.length?mine.map(i=>`<label style="display:block;color:${RC[i.rar]};font-size:14px"><input type="checkbox" data-gv="${i.k}" style="width:auto;margin:2px 6px"> ${esc(i.ic)} ${esc(i.n)}</label>`).join(''):'<span class="m">You don’t own any tradeable items yet</span>'}</div>
+      <div class="m" style="margin-top:6px">…and coins</div><input id="tGc" type="number" min="0" value="0">
+      <div class="m">You want (tick up to 10)</div><div style="max-height:150px;overflow:auto;background:#0b1222;border:1px solid #334155;border-radius:10px;padding:6px">${T.slice().sort((a,b)=>b.rar-a.rar).map(i=>`<label style="display:block;color:${RC[i.rar]};font-size:14px"><input type="checkbox" data-wt="${i.k}" style="width:auto;margin:2px 6px"> ${esc(i.ic)} ${esc(i.n)}</label>`).join('')}</div>
+      <div class="m" style="margin-top:6px">…and coins</div><input id="tWc" type="number" min="0" value="0"><div class="m">Message (optional)</div><input id="tMsg" maxlength="80"><button data-go="tsend">Send trade offer</button>
+      <p class="m">What you give is held until they answer. If they say no (or you cancel), you get it back.</p>`; return h; }
+  async function tradeGo(el){ const g=k=>box.querySelector('#'+k), id=+(el.dataset.acc||el.dataset.dec||el.dataset.can||0);
+    if(el.dataset.go==='tsend'){ const gi=[...box.querySelectorAll('[data-gv]:checked')].map(x=>x.dataset.gv).slice(0,10), wi=[...box.querySelectorAll('[data-wt]:checked')].map(x=>x.dataset.wt).slice(0,10), gc=Math.max(0,+g('tGc').value|0), wc=Math.max(0,+g('tWc').value|0), to=g('tTo').value.trim();
+      if(!to) return say('Type their account name'); if(!gi.length&&!gc) return say('Pick something to give'); if(!wi.length&&!wc) return say('Pick something you want');
+      if(!C().tradeTake(gi,gc)) return say('You don’t have that many coins'); const r=await api('tradeSend',{token:A.token,to,give:{items:gi,coins:gc},want:{items:wi,coins:wc},msg:g('tMsg').value});
+      if(!r.ok){ C().tradeGive(gi,gc); return say(r.err==='nouser'?'No account with that name':r.err==='many'?'You have 10 offers waiting already':'Couldn’t send it'); } say(`✓ Offer sent to ${esc(r.to)}`,true); tradePoll(); return; }
+    if(el.dataset.acc){ const t=TR.inc.find(x=>x.id===id); if(!t) return; const w=pk(t.want), gv=pk(t.give); if(!C().tradeTake(w.items||[],w.coins||0)) return say('You don’t have everything they want');
+      const r=await api('tradeRespond',{token:A.token,id,accept:true}); if(!r.ok){ C().tradeGive(w.items||[],w.coins||0); return say('That offer is gone'); } C().tradeGive(gv.items||[],gv.coins||0); say(`✓ Trade done! You got ${esc(listTxt(gv))}`,true); push(true); tradePoll(); return; }
+    if(el.dataset.dec){ await api('tradeRespond',{token:A.token,id,accept:false}); say('Declined',true); tradePoll(); return; }
+    if(el.dataset.can){ await api('tradeCancel',{token:A.token,id}); say('Cancelled — your items come back in a moment',true); tradePoll(); } }
+  /* ---- player card ---- */
+  function drawCard(){ const cv=box&&box.querySelector('#pc'); if(!cv) return; const x=cv.getContext('2d'), W=640, H=360, n=k=>+ls.get(k)||0, Cn=C();
+    const g=x.createLinearGradient(0,0,W,H); g.addColorStop(0,'#1e1b4b'); g.addColorStop(.6,'#4c1d95'); g.addColorStop(1,'#be185d'); x.fillStyle=g; x.fillRect(0,0,W,H);
+    x.strokeStyle='#facc15'; x.lineWidth=6; x.strokeRect(8,8,W-16,H-16); x.fillStyle='rgba(255,255,255,.06)'; for(let i=0;i<12;i++){ x.beginPath(); x.arc(560-i*12,60+i*20,40+i*6,0,7); x.fill(); }
+    const T=(t,X,Y,sz,col,al)=>{ x.font=`800 ${sz}px system-ui,sans-serif`; x.textAlign=al||'left'; x.fillStyle=col; x.fillText(t,X,Y); };
+    const lvl=Cn&&Cn.level!=null?Cn.level:0, ach=Cn&&Cn.achievements?Cn.achievements():[], got=ach.filter(a=>a.got).length, own=ls.get('rrOwner')==='1';
+    T('ARCADE RIVALS · PLAYER CARD',30,46,16,'#fde68a'); T(A?A.name:'Player',30,98,46,'#fff'); if(A&&A.crew) T(`[${A.crew}]`,30,128,22,'#c4b5fd'); if(own) T('👑 OWNER',W-30,98,26,'#facc15','right');
+    const stats=[['⭐ Arcade Level',own?'∞':lvl],['🪙 Lifetime coins',own?'∞':Math.round(n('rrCoinLife')).toLocaleString()],['💪 Strength',own?'∞':Math.round(n('rrStrength')).toLocaleString()],['🔁 Rebirths',own?'∞':n('rrRebirths')],['🏆 Achievements',`${got}/${ach.length}`],['📦 Crates opened',(J('rrCoinStat',{}).crates||0)]];
+    stats.forEach(([a,b],i)=>{ const cx=30+(i%3)*200, cy=180+Math.floor(i/3)*62; x.fillStyle='rgba(0,0,0,.28)'; x.fillRect(cx,cy-30,186,52); T(String(b),cx+10,cy+2,24,'#fff'); T(a,cx+10,cy+18,12,'#ddd6fe'); });
+    const best=Cn?Cn.tradeable().filter(i=>i.own&&i.rar).sort((a,b)=>b.rar-a.rar).slice(0,4):[]; T('Rarest items:',30,322,15,'#fde68a'); T(best.length?best.map(i=>`${i.ic} ${i.n}`).join('  ·  '):'— none yet —',140,322,15,'#fff'); }
   async function loadCrew(){ crewCache='loading'; renderBox(); const [a,b]=await Promise.all([api('crewInfo',{token:A.token}),api('crewTop',{token:A.token})]); crewCache=a.ok?a.crew:null; topCache=b.ok?b.rows:[]; if(A){ A.crew=crewCache?crewCache.tag:null; saveA(); } }
   const say=(t,ok)=>{ const keep={}; box.querySelectorAll('input').forEach(i=>keep[i.id]=i.value); msg=`<span class="${ok?'ok':'err'}">${t}</span>`; renderBox(); for(const id in keep){ const i=box.querySelector('#'+id); if(i) i.value=keep[id]; } };
   async function go(k){ const v=id=>{ const e=box.querySelector('#'+id); return e?e.value.trim():''; };
@@ -69,7 +110,8 @@
       A={name:r.name,token:r.token,ver:r.ver,h:hash(snap)}; ls.set('rrName',r.name); saveA(); tab='acct'; lastSync=Date.now(); say('✓ Account made — your progress is saved!',true); toast('☁️ Account created'); }
     if(k==='login'){ const n=v('aN'), p=v('aP'); if(!n||!p) return say('Enter your name and PIN'); say('Logging in…',true); const r=await api('login',{name:n,pin:p});
       if(r.err==='nouser') return say('No account with that name'); if(r.err==='locked') return say(`Too many wrong PINs — try again in ${r.mins} min`); if(r.err==='pin') return say(`Wrong PIN (${r.left} tries left)`); if(!r.ok) return say('Couldn’t reach the server — try again');
-      mergeIn(r.data); A={name:r.name,token:r.token,ver:r.ver,crew:r.crew,h:''}; ls.set('rrName',r.name); saveA(); say('✓ Logged in — combining this device with your account…',true); await push(true); setTimeout(()=>location.reload(),900); }
+      mergeIn(r.data); if(r.owner) ownerOn(); A={name:r.name,token:r.token,ver:r.ver,crew:r.crew,h:''}; if(!ls.get('rrName')) ls.set('rrName',r.name); saveA(); say('✓ Logged in — combining this device with your account…',true); await push(true); setTimeout(()=>location.reload(),900); }
+    if(k==='pcdl'){ const cv=box.querySelector('#pc'); if(cv){ const a=document.createElement('a'); a.download=`${(A&&A.name)||'player'}-card.png`; a.href=cv.toDataURL('image/png'); a.click(); } return; }
     if(k==='sync'){ await push(true); say('✓ Saved to your account',true); }
     if(k==='out'){ if(!confirm('Log out on this device? Your progress stays saved in your account.')) return; await push(true); api('logout',{token:A.token}); A=null; saveA(); msg=''; tab='new'; renderBox(); }
     if(k==='pin'){ const p=prompt('New PIN (4–8 numbers):'); if(!p) return; if(!/^\d{4,8}$/.test(p)) return say('PIN must be 4–8 numbers'); const r=await api('setpin',{token:A.token,pin:p}); say(r.ok?'✓ PIN changed':'Couldn’t change it',r.ok); }
@@ -77,7 +119,7 @@
     if(k==='cjoin'){ const r=await api('crewJoin',{token:A.token,code:v('cC')}); if(r.err==='nocrew') return say('No crew with that code'); if(r.err==='full') return say('That crew is full (30)'); if(!r.ok) return say('Couldn’t join'); A.crew=r.crew.tag; saveA(); say(`✓ You joined [${r.crew.tag}]!`,true); loadCrew(); }
     if(k==='leave'){ if(!confirm('Leave your crew?')) return; await api('crewLeave',{token:A.token}); A.crew=null; saveA(); say('You left the crew',true); loadCrew(); } }
   function open(t){ css(); if(t) tab=t; msg=''; if(!box){ box=document.createElement('div'); box.id='rrAcct'; document.body.appendChild(box);
-      box.addEventListener('click',e=>{ if(e.target===box||e.target.closest('[data-x]')){ box.remove(); box=null; return; } const tb=e.target.closest('[data-t]'); if(tb){ tab=tb.dataset.t; msg=''; if(tab==='crew'&&A) loadCrew(); renderBox(); return; } const g=e.target.closest('[data-go]'); if(g) go(g.dataset.go); });
+      box.addEventListener('click',e=>{ if(e.target===box||e.target.closest('[data-x]')){ box.remove(); box=null; return; } const tb=e.target.closest('[data-t]'); if(tb){ tab=tb.dataset.t; msg=''; if(tab==='crew'&&A) loadCrew(); if(tab==='trade'&&A) tradePoll(); renderBox(); return; } const tg=e.target.closest('[data-acc],[data-dec],[data-can],[data-go="tsend"]'); if(tg){ tradeGo(tg); return; } const g=e.target.closest('[data-go]'); if(g) go(g.dataset.go); });
       box.addEventListener('keydown',e=>e.stopPropagation()); }
     if(tab==='crew'&&A) loadCrew(); renderBox(); }
   function mount(){ if(document.getElementById('rrAcctB')) return; css(); pill=document.createElement('button'); pill.id='rrAcctB'; pill.title='Your account — progress on every device'; pill.onclick=()=>open(); document.body.appendChild(pill); render(); }

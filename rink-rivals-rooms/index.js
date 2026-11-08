@@ -750,11 +750,14 @@ export class Party {
 
 /* ---------- player accounts: your progress on every device, plus crews ----------
    One object for the whole site. A device logs in once with name + PIN and keeps a token, so it never asks again. */
+const OWNER_ACCTS=new Set(['aiden']);   /* accounts that are the site owner on every device they log in on */
 export class Acct {
   constructor(state){ this.state=state; this.sql=state.storage.sql;
     this.sql.exec('CREATE TABLE IF NOT EXISTS acct(nm TEXT PRIMARY KEY, disp TEXT, salt TEXT, ph TEXT, data TEXT, ver INTEGER, ts INTEGER, crew TEXT, life INTEGER, str INTEGER, fails INTEGER, lockt INTEGER)');
     this.sql.exec('CREATE TABLE IF NOT EXISTS tok(th TEXT PRIMARY KEY, nm TEXT, ts INTEGER)');
     this.sql.exec('CREATE TABLE IF NOT EXISTS crew(tag TEXT PRIMARY KEY, name TEXT, owner TEXT, code TEXT, ts INTEGER)');
+    this.sql.exec('CREATE TABLE IF NOT EXISTS trade(id INTEGER PRIMARY KEY AUTOINCREMENT, frm TEXT, too TEXT, give TEXT, want TEXT, msg TEXT, st TEXT, claimed INTEGER, ts INTEGER)');
+    this.sql.exec('CREATE INDEX IF NOT EXISTS ix_trade_too ON trade(too,st)'); this.sql.exec('CREATE INDEX IF NOT EXISTS ix_trade_frm ON trade(frm,claimed)');
     this.sql.exec('CREATE INDEX IF NOT EXISTS ix_acct_crew ON acct(crew)'); this.sql.exec('CREATE INDEX IF NOT EXISTS ix_tok_nm ON tok(nm)'); }
   async who(token){ if(!token) return null; const th=await sha('rr-acct:'+String(token).slice(0,80)); const r=this.sql.exec('SELECT nm FROM tok WHERE th=?',th).toArray()[0]; return r?r.nm:null; }
   async newTok(nm){ const raw=crypto.getRandomValues(new Uint8Array(32)), token=[...raw].map(v=>v.toString(16).padStart(2,'0')).join(''); this.sql.exec('INSERT INTO tok(th,nm,ts) VALUES(?,?,?)',await sha('rr-acct:'+token),nm,Date.now()); return token; }
@@ -773,9 +776,9 @@ export class Acct {
     if(m.op==='login'){ const nm=key(m.name), r=this.sql.exec('SELECT * FROM acct WHERE nm=?',nm).toArray()[0]; if(!r) return J({err:'nouser'},404);
       if(r.lockt>now) return J({err:'locked',mins:Math.ceil((r.lockt-now)/60000)},429);
       if(!pinOk(m.pin)||(await pbkdf(String(m.pin),r.salt))!==r.ph){ const f=(r.fails||0)+1; this.sql.exec('UPDATE acct SET fails=?, lockt=? WHERE nm=?',f>=5?0:f,f>=5?now+10*60000:0,nm); return J({err:'pin',left:Math.max(0,5-f)},403); }
-      this.sql.exec('UPDATE acct SET fails=0 WHERE nm=?',nm); return J({ok:true,name:r.disp,token:await this.newTok(nm),data:r.data,ver:r.ver,crew:r.crew}); }
+      this.sql.exec('UPDATE acct SET fails=0 WHERE nm=?',nm); return J({ok:true,name:r.disp,token:await this.newTok(nm),data:r.data,ver:r.ver,crew:r.crew,owner:OWNER_ACCTS.has(nm)}); }
     const nm=await this.who(m.token); if(!nm) return J({err:'auth'},401);
-    if(m.op==='pull'){ const r=this.sql.exec('SELECT disp,data,ver,crew FROM acct WHERE nm=?',nm).toArray()[0]; if(!r) return J({err:'auth'},401); return J(m.since!=null&&+m.since>=r.ver?{ok:true,ver:r.ver,same:true,crew:r.crew,name:r.disp}:{ok:true,ver:r.ver,data:r.data,crew:r.crew,name:r.disp}); }
+    if(m.op==='pull'){ const r=this.sql.exec('SELECT disp,data,ver,crew FROM acct WHERE nm=?',nm).toArray()[0]; if(!r) return J({err:'auth'},401); const ow=OWNER_ACCTS.has(nm); return J(m.since!=null&&+m.since>=r.ver?{ok:true,ver:r.ver,same:true,crew:r.crew,name:r.disp,owner:ow}:{ok:true,ver:r.ver,data:r.data,crew:r.crew,name:r.disp,owner:ow}); }
     if(m.op==='push'){ const data=String(m.data||''); if(data.length>600000) return J({err:'big'},413); const r=this.sql.exec('SELECT ver FROM acct WHERE nm=?',nm).toArray()[0]; const ver=(r?r.ver:0)+1;
       this.sql.exec('UPDATE acct SET data=?, ver=?, ts=?, life=?, str=? WHERE nm=?',data,ver,now,Math.max(0,+m.life||0),Math.max(0,+m.str||0),nm); return J({ok:true,ver}); }
     if(m.op==='logout'){ this.sql.exec('DELETE FROM tok WHERE th=?',await sha('rr-acct:'+String(m.token||'').slice(0,80))); return J({ok:true}); }
@@ -790,5 +793,16 @@ export class Acct {
     if(m.op==='crewLeave'){ const tag=me.crew; if(!tag) return J({ok:true}); this.sql.exec('UPDATE acct SET crew=NULL WHERE nm=?',nm); const c=this.sql.exec('SELECT owner FROM crew WHERE tag=?',tag).toArray()[0];
       const left=this.sql.exec('SELECT nm FROM acct WHERE crew=? ORDER BY life DESC LIMIT 1',tag).toArray()[0]; if(!left) this.sql.exec('DELETE FROM crew WHERE tag=?',tag); else if(c&&c.owner===nm) this.sql.exec('UPDATE crew SET owner=? WHERE tag=?',left.nm,tag); return J({ok:true}); }
     if(m.op==='crewInfo'){ const c=this.crewOf(me.crew); if(!c) return J({ok:true,crew:null}); if(c.owner!==nm) delete c.code; c.mine=true; return J({ok:true,crew:c}); }
+    /* trading: the sender's items are held by their device until the trade is answered */
+    const pack=o=>{ const it=(Array.isArray(o&&o.items)?o.items:[]).map(x=>String(x).replace(/[^\w]/g,'').slice(0,24)).filter(Boolean).slice(0,10); return JSON.stringify({items:[...new Set(it)],coins:Math.max(0,Math.min(1e7,Math.floor(+(o&&o.coins)||0)))}); };
+    if(m.op==='tradeSend'){ const to=key(m.to); if(!to||to===nm) return J({err:'who'},400); const t=this.sql.exec('SELECT disp FROM acct WHERE nm=?',to).toArray()[0]; if(!t) return J({err:'nouser'},404);
+      const open=this.sql.exec("SELECT COUNT(*) AS c FROM trade WHERE frm=? AND st='open'",nm).toArray()[0].c; if(open>=10) return J({err:'many'},429);
+      this.sql.exec("INSERT INTO trade(frm,too,give,want,msg,st,claimed,ts) VALUES(?,?,?,?,?,'open',0,?)",nm,to,pack(m.give),pack(m.want),String(m.msg||'').replace(/[<>]/g,'').slice(0,80),now); return J({ok:true,to:t.disp}); }
+    if(m.op==='tradeList'){ const name=n=>{ const r=this.sql.exec('SELECT disp FROM acct WHERE nm=?',n).toArray()[0]; return r?r.disp:n; };
+      const inc=this.sql.exec("SELECT id,frm,give,want,msg,ts FROM trade WHERE too=? AND st='open' ORDER BY id DESC LIMIT 20",nm).toArray().map(r=>({...r,frm:name(r.frm)}));
+      const out=this.sql.exec('SELECT id,too,give,want,msg,st,ts FROM trade WHERE frm=? AND claimed=0 ORDER BY id DESC LIMIT 20',nm).toArray().map(r=>({...r,too:name(r.too)})); return J({ok:true,inc,out}); }
+    if(m.op==='tradeRespond'){ const r=this.sql.exec("SELECT id FROM trade WHERE id=? AND too=? AND st='open'",+m.id,nm).toArray()[0]; if(!r) return J({err:'gone'},404); this.sql.exec('UPDATE trade SET st=? WHERE id=?',m.accept?'accepted':'declined',+m.id); return J({ok:true}); }
+    if(m.op==='tradeCancel'){ this.sql.exec("UPDATE trade SET st='cancelled' WHERE id=? AND frm=? AND st='open'",+m.id,nm); return J({ok:true}); }
+    if(m.op==='tradeClaim'){ this.sql.exec("UPDATE trade SET claimed=1 WHERE id=? AND frm=? AND st<>'open'",+m.id,nm); return J({ok:true}); }
     if(m.op==='crewTop'){ const rows=this.sql.exec('SELECT c.tag AS tag, c.name AS name, COUNT(a.nm) AS n, SUM(a.life) AS total FROM crew c JOIN acct a ON a.crew=c.tag GROUP BY c.tag ORDER BY total DESC LIMIT 25').toArray(); return J({ok:true,rows}); }
     return J({err:'op'},400); } }
