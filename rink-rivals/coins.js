@@ -35,6 +35,21 @@
   const grant=g=>{ const q=J('rrGrant',{}); for(const k in g){ if(typeof g[k]==='number') q[k]=(q[k]||0)+g[k]; else if(Array.isArray(g[k])) q[k]=(q[k]||[]).concat(g[k]); } ls.set('rrGrant',JSON.stringify(q)); };
   const addStr=n=>{ if(window.RRSTR&&!RRSTR.owner&&RRSTR.set){ RRSTR.set(RRSTR.level+n); } else { const v=+ls.get('rrStrength')||0; ls.set('rrStrength',String(Math.round(v+n))); } };
   const ITEMS=[
+    {k:'pgold',cat:'🏎️ Cars — every racing game',ic:'🥇',n:'Gold chrome paint',d:'Your car in shining gold (NASCAR, Drift, Kart, Rival City)',p:500,slot:'paint',val:['#d4a017','#111827']},
+    {k:'pblack',cat:'🏎️ Cars — every racing game',ic:'🖤',n:'Midnight black paint',d:'Murdered-out black with red trim',p:300,slot:'paint',val:['#0b0b0f','#ef4444']},
+    {k:'pred',cat:'🏎️ Cars — every racing game',ic:'❤️',n:'Candy red paint',d:'Deep candy red with white trim',p:300,slot:'paint',val:['#dc2626','#f8fafc']},
+    {k:'pice',cat:'🏎️ Cars — every racing game',ic:'🧊',n:'Ice blue paint',d:'Ice blue and white',p:300,slot:'paint',val:['#38bdf8','#f8fafc']},
+    {k:'ptoxic',cat:'🏎️ Cars — every racing game',ic:'☢️',n:'Toxic green paint',d:'Lime green and black',p:300,slot:'paint',val:['#84cc16','#111827']},
+    {k:'ppink',cat:'🏎️ Cars — every racing game',ic:'🩷',n:'Hot pink paint',d:'Hot pink with pale pink trim',p:300,slot:'paint',val:['#ec4899','#fdf2f8']},
+    {k:'pgalaxy',cat:'🏎️ Cars — every racing game',ic:'🌌',n:'Galaxy purple paint',d:'Deep purple with glowing pink trim',p:600,slot:'paint',val:['#6d28d9',[2,.6,2.2]]},
+    {k:'gblue',cat:'🏎️ Cars — every racing game',ic:'💙',n:'Blue underglow',d:'Neon lights under your car',p:400,slot:'glow',val:[.3,1.2,2.4]},
+    {k:'gpink',cat:'🏎️ Cars — every racing game',ic:'💗',n:'Pink underglow',d:'Neon pink lights under your car',p:400,slot:'glow',val:[2.4,.4,1.6]},
+    {k:'ggreen',cat:'🏎️ Cars — every racing game',ic:'💚',n:'Green underglow',d:'Neon green lights under your car',p:400,slot:'glow',val:[.4,2.4,.6]},
+    {k:'wgt',cat:'🏎️ Cars — every racing game',ic:'🪽',n:'GT spoiler',d:'A big rear wing',p:350,slot:'wing',val:{c:'#111827'}},
+    {k:'wcarbon',cat:'🏎️ Cars — every racing game',ic:'🛩️',n:'Carbon swan-neck wing',d:'A tall race wing with gold endplates',p:700,slot:'wing',val:{c:'#1f2937',e:[2,1.6,.3],tall:1}},
+    {k:'xflames',cat:'🏎️ Cars — every racing game',ic:'🔥',n:'Exhaust flames',d:'Flames shoot out the back when you\'re flat out',p:600,slot:'exhaust',val:{c:[2.4,1.1,.2]}},
+    {k:'swhite',cat:'🏎️ Cars — every racing game',ic:'🏁',n:'White racing stripes',d:'Two stripes down the middle',p:200,slot:'stripe',val:'#f8fafc'},
+    {k:'sgold',cat:'🏎️ Cars — every racing game',ic:'✨',n:'Gold racing stripes',d:'Shiny gold stripes',p:350,slot:'stripe',val:[2,1.6,.3]},
     {k:'armgold',cat:'🎽 Gear — worn in every game',ic:'💛',n:'Gold armband',d:'On your bicep in every game your player shows up in',p:200,slot:'arm',val:{c:[2,1.6,.3]}},
     {k:'armcap',cat:'🎽 Gear — worn in every game',ic:'©️',n:'Captain armband',d:'The captain\'s armband — yellow with a badge',p:400,slot:'arm',val:{c:'#facc15',c2:'#111827'}},
     {k:'armred',cat:'🎽 Gear — worn in every game',ic:'❤️',n:'Red armbands (both arms)',d:'A red band on each arm',p:250,slot:'arm',val:{c:'#dc2626',both:1}},
@@ -73,6 +88,13 @@
     {k:'xgalaxy',ic:'🌌',n:'Galaxy cape',rar:3,slot:'back',val:{c:[.6,.2,1.6],c2:[2.2,2.2,2.4]}},{k:'xfirecrown',ic:'🔥',n:'Fire crown',rar:4,slot:'head',val:{t:'crown',c:[2.4,.7,.1]}},
     {k:'xdragon',ic:'🐉',n:'Dragon wings',rar:4,slot:'back',val:{t:'wings',c:[.2,1.6,.3],big:1}},
     {k:'pcape',ic:'🎖️',n:'Season cape',rar:3,pass:1,slot:'back',val:{c:'#0ea5e9',c2:[2.4,2,.4]}},{k:'pwings',ic:'🎖️',n:'Season wings',rar:3,pass:1,slot:'back',val:{t:'wings',c:[2.4,2,.4],big:1}},{k:'pcrown',ic:'🎖️',n:'Season crown',rar:4,pass:1,slot:'head',val:{t:'crown',c:[.5,2.2,2.4]}}];
+  const EXCC=[
+    {k:'cxorange',ic:'🟧',n:'Orange stripes',rar:1,car:1,slot:'stripe',val:'#f97316'},{k:'cxred',ic:'🔴',n:'Red underglow',rar:1,car:1,slot:'glow',val:[2.4,.3,.3]},
+    {k:'cxchrome',ic:'🪞',n:'Chrome wing',rar:2,car:1,slot:'wing',val:{c:'#e5e7eb',e:[1.6,2,2.4],tall:1}},{k:'cxblue',ic:'🔵',n:'Blue flames',rar:2,car:1,slot:'exhaust',val:{c:[.4,1.2,2.4]}},
+    {k:'cxlava',ic:'🌋',n:'Lava paint',rar:3,car:1,slot:'paint',val:['#7c2d12',[2.4,.7,.1]]},{k:'cxgreenfl',ic:'💚',n:'Toxic flames',rar:3,car:1,slot:'exhaust',val:{c:[.5,2.4,.4]}},
+    {k:'cxrainbow',ic:'🌈',n:'Rainbow underglow',rar:4,car:1,slot:'glow',val:'rainbow'},{k:'cxdiamond',ic:'💎',n:'Diamond paint',rar:4,car:1,slot:'paint',val:['#a5f3fc',[2,2.4,2.4]]},
+  ];
+  EXC.push(...EXCC);
   const RAR=['','Common','Rare','Epic','Legendary'], RCOL=['','#94a3b8','#38bdf8','#c084fc','#fbbf24'], REFUND=[0,60,150,400,1500];
   for(const x of EXC) ITEMS.push({...x,cat:'✨ Exclusives',d:`${RAR[x.rar]}${x.pass?' · Arcade Pass':' · from crates'}`,p:0,ex:1});
   function mystery(){ if(Math.random()<.7){ const c=Math.round(Math.random()*600); bal+=c; if(c) logIt(c,'Mystery box'); save(); toast(c?`🎁 ${c} coins inside!`:'🎁 Empty… better luck next time'); }
@@ -106,12 +128,21 @@
   function exchange(){ if(isOwner()){ toast('Owner: you already have ∞ of both 👑'); return; } const sv=window.RRSTR?RRSTR.level:(+ls.get('rrStrength')||0); if(sv<100){ toast('You need 100 strength to trade','#f87171'); return; }
     if(window.RRSTR&&RRSTR.spend) RRSTR.spend(100); else ls.set('rrStrength',String(Math.max(0,sv-100))); bal+=20; logIt(20,'Traded 100 strength'); save(); toast('💱 100 strength → 20 🪙'); }
 
+
+  /* ---- your car's look in every racing game: paint, underglow, wing, exhaust flames, stripes ---- */
+  function carPaint(){ return equipped('paint'); }
+  function carDeco(P,L,W,H,spd,ax){ const g=equipped('glow'), w=equipped('wing'), x=equipped('exhaust'), st=equipped('stripe'); if(!g&&!w&&!x&&!st) return;
+    const Q=ax==='z'?(f,y,s,sf,sy,ss,col)=>P(s,y,f,ss,sy,sf,col):P, t=performance.now()/1000;
+    if(g){ const c=g==='rainbow'?[1.2+1.2*Math.sin(t*3),1.2+1.2*Math.sin(t*3+2.1),1.2+1.2*Math.sin(t*3+4.2)]:g; Q(0,.05,0,L*.92,.03,W*1.04,c); Q(0,.04,0,L*1.1,.01,W*1.4,c.map?c.map(v=>v*.35):c); }
+    if(st) for(const s of [-1,1]) Q(0,H+.012,s*W*.11,L*.96,.02,W*.08,st);
+    if(w){ const hh=w.tall?.55:.35; Q(-L*.46,H+hh,0,.4,.05,W*.98,w.c); for(const s of [-1,1]){ Q(-L*.46,H+hh/2,s*W*.3,.1,hh,.05,'#111827'); Q(-L*.46,H+hh,s*W*.49,.5,.22,.03,w.e||w.c); } }
+    if(x&&spd>.35) for(const s of [-1,1]){ const f=.5+Math.random()*.8*Math.min(1.5,spd); Q(-L/2-.28*f,.35,s*W*.2,.55*f,.13,.13,x.c); Q(-L/2-.12*f,.35,s*W*.2,.25*f,.08,.08,[2.4,2.4,1.6]); } }
   /* ---- crates: open them for exclusive gear (duplicates turn back into coins) ---- */
-  const CRATES={common:{n:'Arcade Crate',ic:'📦',p:200,inv:'crateCommon',w:[0,70,24,5,1]},epic:{n:'Epic Crate',ic:'🎁',p:800,inv:'crateEpic',w:[0,30,40,24,6]},legend:{n:'Legendary Crate',ic:'👑',p:3000,inv:'crateLegend',w:[0,0,30,45,25]}};
+  const CRATES={common:{n:'Arcade Crate',ic:'📦',p:200,inv:'crateCommon',w:[0,70,24,5,1]},epic:{n:'Epic Crate',ic:'🎁',p:800,inv:'crateEpic',w:[0,30,40,24,6]},legend:{n:'Legendary Crate',ic:'👑',p:3000,inv:'crateLegend',w:[0,0,30,45,25]},car:{n:'Car Crate',ic:'🏎️',p:500,inv:'crateCar',w:[0,45,33,16,6],car:1}};
   let crateAnim=null;
   function openCrate(k){ const C=CRATES[k]; if(!C||crateAnim) return; if((inv[C.inv]||0)>0) inv[C.inv]--; else if(!spend(C.p,`${C.ic} ${C.n}`)){ toast(`A ${C.n} costs ${C.p.toLocaleString()} 🪙`,'#f87171'); return; }
-    let r=Math.random()*100, rar=1; for(let i=1;i<=4;i++){ r-=C.w[i]; if(r<=0){ rar=i; break; } } const pool=EXC.filter(x=>x.rar===rar&&!x.pass), win=pool[Math.floor(Math.random()*pool.length)];
-    const strip=[]; for(let i=0;i<34;i++){ const rr=Math.random()<.6?1:Math.random()<.7?2:Math.random()<.8?3:4, pp=EXC.filter(x=>x.rar===rr&&!x.pass); strip.push(pp[Math.floor(Math.random()*pp.length)]); } strip[28]=win;
+    let r=Math.random()*100, rar=1; for(let i=1;i<=4;i++){ r-=C.w[i]; if(r<=0){ rar=i; break; } } const pool=EXC.filter(x=>x.rar===rar&&!x.pass&&(!C.car||x.car)), win=pool[Math.floor(Math.random()*pool.length)];
+    const strip=[]; for(let i=0;i<34;i++){ const rr=Math.random()<.6?1:Math.random()<.7?2:Math.random()<.8?3:4, pp=EXC.filter(x=>x.rar===rr&&!x.pass&&(!C.car||x.car)); strip.push(pp[Math.floor(Math.random()*pp.length)]); } strip[28]=win;
     crateAnim={strip,win,done:false}; tab='crates'; renderShop(); requestAnimationFrame(()=>requestAnimationFrame(()=>{ const el=box&&box.querySelector('.reel'); if(el){ crateAnim.tx=-(28*110)+(el.parentNode.clientWidth/2-55); el.style.transform=`translateX(${crateAnim.tx}px)`; } }));
     setTimeout(()=>{ const dup=!isOwner()&&inv[win.k]; if(dup){ const c=REFUND[win.rar]; bal+=c; logIt(c,`Duplicate ${win.n}`); } else { inv[win.k]=1; const it=ITEMS.find(i=>i.k===win.k); if(it&&it.slot&&!eq[it.slot]) eq[it.slot]=win.k; }
       crateAnim.done=true; crateAnim.dup=dup; save(); toast(dup?`Duplicate ${win.ic} ${win.n} → ${REFUND[win.rar]} 🪙`:`${RAR[win.rar].toUpperCase()}! ${win.ic} ${win.n}`,RCOL[win.rar]); renderShop(); },4200); }
@@ -157,7 +188,7 @@
 #rrShop .cal{display:grid;grid-template-columns:repeat(7,1fr);gap:8px}#rrShop .cal div{background:#111c33;border:1px solid #273449;border-radius:12px;padding:10px 4px;text-align:center;font-size:13px}#rrShop .cal div.now{border-color:#facc15;box-shadow:0 0 0 1px #facc15 inset}#rrShop .cal div.done{opacity:.55}
 #rrShop .code input{background:#0b1222;border:1px solid #334155;border-radius:10px;color:#fff;padding:8px 12px;font-size:16px;text-transform:uppercase}@keyframes rrGoldB{from{transform:translateY(0) rotate(-8deg)}to{transform:translateY(-14px) rotate(8deg)}}
 #rrShop .hist div{display:flex;justify-content:space-between;border-bottom:1px solid #1e293b;padding:5px 0;font-size:14px}`; document.head.appendChild(s); }
-  const passReady=()=>{ const T=tierOf(); for(let t=1;t<=T;t++) if(!PASS.claimed.includes(t)) return true; return false; }, crateCount=()=>(inv.crateCommon||0)+(inv.crateEpic||0)+(inv.crateLegend||0);
+  const passReady=()=>{ const T=tierOf(); for(let t=1;t<=T;t++) if(!PASS.claimed.includes(t)) return true; return false; }, crateCount=()=>(inv.crateCommon||0)+(inv.crateEpic||0)+(inv.crateLegend||0)+(inv.crateCar||0);
   function render(){ if(!pill) return; pill.innerHTML=`${equipped('badge')||''}🪙 ${fmt(bal)}${dbl()?' <small>×2</small>':''} <small style="opacity:.8">Lv ${lvl()}</small>${(D.m||[]).some(m=>m.got>=m.goal&&!m.claimed)||!D.spun||passReady()||crateCount()?' <small>❗</small>':''}`; if(box&&!(crateAnim&&!crateAnim.done)&&!(tab==='rewards'&&document.activeElement&&document.activeElement.id==='rrCodeIn')) renderShop(); }
   let tT=null; function toast(t,col){ let el=document.getElementById('rrCoinT'); if(!el){ el=document.createElement('div'); el.id='rrCoinT'; document.body.appendChild(el); } el.textContent=t; el.style.color=col||'#fde68a'; el.style.opacity=1; clearTimeout(tT); tT=setTimeout(()=>el.style.opacity=0,2600); }
   function renderShop(){ const own=isOwner(), cats=[...new Set(ITEMS.map(i=>i.cat))];
@@ -198,5 +229,5 @@
   function mount(){ if(PAGE==='hq-owa9rwwt9kplpdbu'||window.RR_ADMIN||document.getElementById('rrCoin')) return; css(); pill=document.createElement('button'); pill.id='rrCoin'; pill.title='Arcade Coins — open the shop'; pill.onclick=()=>open(); document.body.appendChild(pill); render(); }
   if(document.readyState==='loading') addEventListener('DOMContentLoaded',mount); else mount();
   addEventListener('storage',e=>{ if(e.key==='rrCoins'){ bal=Math.max(0,+e.newValue||0); render(); } });
-  window.RRCOIN={ get bal(){ return isOwner()?Infinity:bal; }, get level(){ return lvl(); }, add, spend, has, equipped, open, items:ITEMS, toast, track };
+  window.RRCOIN={ carPaint, carDeco, get bal(){ return isOwner()?Infinity:bal; }, get level(){ return lvl(); }, add, spend, has, equipped, open, items:ITEMS, toast, track };
 })();
