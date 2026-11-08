@@ -56,7 +56,7 @@ const HX=30, HZ=20, CAB=[];
   left.forEach((g,i)=>CAB.push({g,x:-HX+1.3,z:-11+i*4.2,yaw:PI/2}));
   right.forEach((g,i)=>CAB.push({g,x:HX-1.3,z:-11+i*4.2,yaw:-PI/2})); }
 const KIOSK=[{k:'shop',x:-9,z:7,ic:'🪙',n:'Arcade Shop',col:'#ca8a04'},{k:'acct',x:9,z:7,ic:'👤',n:'Account & Crews',col:'#2563eb'},{k:'feat',x:0,z:-3,ic:'⭐',n:'Game of the day',col:'#facc15'},{k:'arcade',x:0,z:17.5,ic:'🏟️',n:'Sports Arcade',col:'#7c3aed'},{k:'dj',x:-18,z:13,ic:'🎧',n:'DJ booth — change the music',col:'#db2777'},{k:'trophy',x:18,z:13,ic:'🏆',n:'Trophy cabinet',col:'#ca8a04'},
-  {k:'casino',x:-17,z:3,ic:'🎰',n:'Casino — slots & roulette',col:'#dc2626'},{k:'hoop',x:-17,z:-7,ic:'🏀',n:'Free throws',col:'#ea580c',mg:1},{k:'bag',x:17,z:-7,ic:'🥊',n:'Punching bag',col:'#b91c1c',mg:1},{k:'dance',x:17,z:3,ic:'🕺',n:'Dance floor',col:'#a855f7',mg:1},{k:'race',x:0,z:9.5,ic:'🏁',n:'Hub sprint (time trial)',col:'#16a34a',mg:1}];
+  {k:'casino',x:-17,z:3,ic:'🎰',n:'Casino — slots & roulette',col:'#dc2626'},{k:'hoop',x:-17,z:-7,ic:'🏀',n:'Free throws',col:'#ea580c',mg:1},{k:'bag',x:17,z:-7,ic:'🥊',n:'Punching bag',col:'#b91c1c',mg:1},{k:'dance',x:17,z:3,ic:'🕺',n:'Dance floor',col:'#a855f7',mg:1},{k:'race',x:0,z:9.5,ic:'🏁',n:'Hub sprint (time trial)',col:'#16a34a',mg:1},{k:'room',x:-9,z:-9,ic:'🏠',n:'My room — decorate it',col:'#0d9488'}];
 const SOLID=[]; for(const c of CAB) SOLID.push({x:c.x,z:c.z,r:1.05}); for(const k of KIOSK) if(!k.mg) SOLID.push({x:k.x,z:k.z,r:k.k==='feat'?2.2:1.1});
 let built=false;
 function build(){ if(built||!R3.ok) return; built=true;
@@ -91,8 +91,8 @@ const gearNow=()=>{ const o={}; if(window.RRCOIN) for(const sl of ['arm','wrist'
 const kitCol=()=>(window.RRCOIN&&RRCOIN.equipped('kit'))||'#1d4ed8';
 function nearest(){ if(BOSS.on&&Math.hypot(ME.x-BOSS.x,ME.z-BOSS.z)<5.5) return {t:'boss'}; let best=null, bd=2.6; for(const C of CAB){ const fx=C.x+Math.sin(C.yaw)*1.2, fz=C.z+Math.cos(C.yaw)*1.2, d=Math.hypot(fx-ME.x,fz-ME.z); if(d<bd){ bd=d; best={t:'cab',C}; } }
   for(const k of KIOSK){ const d=Math.hypot(k.x-ME.x,k.z-ME.z); if(d<(k.k==='feat'?3.6:k.k==='dj'?3.4:2.6)&&d<bd+1){ bd=d; best={t:'kiosk',k}; } } return best; }
-function act(){ const n=nearest(); if(!n) return; if(n.t==='boss'){ bossHit(); return; } if(n.t==='cab'){ location.href=n.C.g[0]; return; } const k=n.k.k;
-  if(k==='casino'){ casinoOpen(); return; } if(n.k.mg){ mgStart(k); return; }
+function act(){ if(ROOM){ const rn=roomNear(); if(rn) roomAct(rn); return; } const n=nearest(); if(!n) return; if(n.t==='boss'){ bossHit(); return; } if(n.t==='cab'){ location.href=n.C.g[0]; return; } const k=n.k.k;
+  if(k==='casino'){ casinoOpen(); return; } if(k==='room'){ roomEnter(); camSnap=1; return; } if(n.k.mg){ mgStart(k); return; }
   if(k==='dj'){ djNext(); return; } if(k==='trophy'&&window.RRCOIN){ RRCOIN.open('trophies'); return; }
   if(k==='shop'&&window.RRCOIN) RRCOIN.open('shop'); else if(k==='acct'&&window.RRACCT) RRACCT.open(); else if(k==='arcade') location.href='sports-arcade'; else if(k==='feat'&&featKey()) location.href=featKey(); }
 function label(n){ if(!n) return '';
@@ -104,18 +104,18 @@ function step(dt){ T0+=dt; let ix=(keys.has('KeyD')||keys.has('ArrowRight')?1:0)
   if(MG&&MG.k!=='race'){ wx=0; wz=0; ME.target=null; } if(ME.stun>0){ ME.stun-=dt; wx*=.15; wz*=.15; } const m=Math.hypot(wx,wz); if(m>1){ wx/=m; wz/=m; } const sp=5.2; ME.x+=wx*sp*dt; ME.z+=wz*sp*dt; ME.spd=Math.min(1,m)*sp;
   if(m>.1){ const ty=Math.atan2(wx,wz); let d=ty-ME.yaw; while(d>PI) d-=2*PI; while(d<-PI) d+=2*PI; ME.yaw+=d*Math.min(1,dt*12); }
   if(BOSS.on){ const dx=ME.x-BOSS.x, dz=ME.z-BOSS.z, d=Math.hypot(dx,dz); if(d<3.2&&d>1e-4){ ME.x=BOSS.x+dx/d*3.2; ME.z=BOSS.z+dz/d*3.2; } }
-  for(const o of SOLID){ const dx=ME.x-o.x, dz=ME.z-o.z, d=Math.hypot(dx,dz), r=o.r+.35; if(d<r&&d>1e-4){ ME.x=o.x+dx/d*r; ME.z=o.z+dz/d*r; } }
-  ME.x=clamp(ME.x,-HX+.6,HX-.6); ME.z=clamp(ME.z,-HZ+.6,HZ-.6); ME.walk+=dt*ME.spd*2.3; ME.vy-=22*dt; ME.y=Math.max(0,ME.y+ME.vy*dt); if(ME.y===0) ME.vy=Math.max(0,ME.vy);
+  if(!ROOM) for(const o of SOLID){ const dx=ME.x-o.x, dz=ME.z-o.z, d=Math.hypot(dx,dz), r=o.r+.35; if(d<r&&d>1e-4){ ME.x=o.x+dx/d*r; ME.z=o.z+dz/d*r; } }
+  if(ROOM) roomStep(); else { ME.x=clamp(ME.x,-HX+.6,HX-.6); ME.z=clamp(ME.z,-HZ+.6,HZ-.6); } ME.walk+=dt*ME.spd*2.3; ME.vy-=22*dt; ME.y=Math.max(0,ME.y+ME.vy*dt); if(ME.y===0) ME.vy=Math.max(0,ME.vy);
   ME.flexT=Math.max(0,ME.flexT-dt); ME.waveT=Math.max(0,ME.waveT-dt);
-  const n=MG?null:nearest(), b=$('act'); if(MG&&(MG.k==='hoop'||MG.k==='bag')){ const t=MG.k==='hoop'?'🏀 SHOOT':'🥊 PUNCH'; if(b.textContent!==t) b.textContent=t; b.style.display='block'; } else if(n){ const t=label(n); if(b.textContent!==t) b.textContent=t; b.style.display='block'; } else b.style.display='none';
+  const n=MG?null:ROOM?roomNear():nearest(), b=$('act'); roomUIStep(); if(MG&&(MG.k==='hoop'||MG.k==='bag')){ const t=MG.k==='hoop'?'🏀 SHOOT':'🥊 PUNCH'; if(b.textContent!==t) b.textContent=t; b.style.display='block'; } else if(n){ const t=ROOM?roomLabel(n):label(n); if(b.textContent!==t) b.textContent=t; b.style.display='block'; } else b.style.display='none';
   bossStep(dt); mgStep(dt); netStep(dt); }
 /* ---- other people in the Hub ---- */
 const OT=new Map(); let NET=null, netT=0, lastSig='', hbT=0;
 function netStep(dt){ for(const o of OT.values()){ const k=Math.min(1,dt*10); o.x=lerp(o.x,o.tx,k); o.z=lerp(o.z,o.tz,k); o.y=lerp(o.y||0,o.ty||0,k); o.walk+=dt*(o.spd||0)*2.3; }
   if(!NET||!NET.on) return; netT-=dt; if(netT>0) return; netT=.25;
-  /* save the free-plan request budget: only send when something changed, plus a heartbeat every 4 s */ const sig=[ME.x.toFixed(1),ME.z.toFixed(1),ME.y.toFixed(1),ME.yaw.toFixed(1),ME.flexT>0,ME.waveT>0,window.RREMOTE?RREMOTE.t0:0].join(); hbT=(hbT||0)+.25; if(sig===lastSig&&hbT<4) return; lastSig=sig; hbT=0; NET.send({t:'p',x:+ME.x.toFixed(2),z:+ME.z.toFixed(2),y:+ME.y.toFixed(2),yaw:+ME.yaw.toFixed(2),s:+ME.spd.toFixed(1),nm:myName(),cr:myCrew()||'',kit:kitCol(),bf:window.RRSTR?+RRSTR.muscle().toFixed(2):1,fx:ME.flexT>0?1:0,wv:ME.waveT>0?1:0,gear:gearNow(),pet:myPet(),oly:isOwnerMe()?1:0,em:window.RREMOTE&&performance.now()-RREMOTE.t0<3500?RREMOTE.k:''}); }
+  /* save the free-plan request budget: only send when something changed, plus a heartbeat every 4 s */ const sig=[curRm(),ME.x.toFixed(1),ME.z.toFixed(1),ME.y.toFixed(1),ME.yaw.toFixed(1),ME.flexT>0,ME.waveT>0,window.RREMOTE?RREMOTE.t0:0].join(); hbT=(hbT||0)+.25; if(sig===lastSig&&hbT<4) return; lastSig=sig; hbT=0; NET.send({t:'p',rm:curRm(),x:+ME.x.toFixed(2),z:+ME.z.toFixed(2),y:+ME.y.toFixed(2),yaw:+ME.yaw.toFixed(2),s:+ME.spd.toFixed(1),nm:myName(),cr:myCrew()||'',kit:kitCol(),bf:window.RRSTR?+RRSTR.muscle().toFixed(2):1,fx:ME.flexT>0?1:0,wv:ME.waveT>0?1:0,gear:gearNow(),pet:myPet(),oly:isOwnerMe()?1:0,em:window.RREMOTE&&performance.now()-RREMOTE.t0<3500?RREMOTE.k:''}); }
 if(window.RRO){ NET=RRO.init({game:'hub',maxPlayers:8,minPlayers:1,dropIn:true,publicRoom:'HUBA',blurb:'Hang out in the Arcade Rivals Hub with everyone online.',
-  onStart:()=>{ OT.clear(); }, onMsg:m=>{ if(m.t==='dj'){ djSet(m.st|0,false); return; } if(m.t==='hit'){ BOSS.hits+=clamp(+m.n||1,0,3); return; } if(m.t!=='p') return; let o=OT.get(m.from); if(!o){ o={x:m.x,z:m.z,walk:0}; OT.set(m.from,o); } Object.assign(o,{tx:m.x,tz:m.z,ty:m.y||0,yaw:m.yaw,spd:m.s,nm:String(m.nm||'Player').slice(0,20),cr:String(m.cr||'').slice(0,6),kit:m.kit,bf:clamp(+m.bf||1,1,1.8),fx:m.fx,wv:m.wv,em:m.em&&m.em!==o.emk?{k:String(m.em).slice(0,12),t0:performance.now()}:(m.em?o.emote:null),emk:m.em||'',oly:m.oly?1:0,gear:m.gear&&typeof m.gear==='object'?m.gear:null,pet:m.pet&&typeof m.pet==='object'?m.pet:null}); if(o.pet&&!o.petSt) o.petSt={x:o.x+1,z:o.z+1,yaw:0}; },
+  onStart:()=>{ OT.clear(); }, onMsg:m=>{ if(m.t==='dj'){ djSet(m.st|0,false); return; } if(m.t==='hit'){ BOSS.hits+=clamp(+m.n||1,0,3); return; } if(m.t!=='p') return; let o=OT.get(m.from); if(!o){ o={x:m.x,z:m.z,walk:0}; OT.set(m.from,o); } if((o.rm||'')!==String(m.rm||'')){ o.x=m.x; o.z=m.z; } Object.assign(o,{rm:String(m.rm||'').slice(0,24),tx:m.x,tz:m.z,ty:m.y||0,yaw:m.yaw,spd:m.s,nm:String(m.nm||'Player').slice(0,20),cr:String(m.cr||'').slice(0,6),kit:m.kit,bf:clamp(+m.bf||1,1,1.8),fx:m.fx,wv:m.wv,em:m.em&&m.em!==o.emk?{k:String(m.em).slice(0,12),t0:performance.now()}:(m.em?o.emote:null),emk:m.em||'',oly:m.oly?1:0,gear:m.gear&&typeof m.gear==='object'?m.gear:null,pet:m.pet&&typeof m.pet==='object'?m.pet:null}); if(o.pet&&!o.petSt) o.petSt={x:o.x+1,z:o.z+1,yaw:0}; },
   onPeers:(api,kind,m)=>{ if(kind==='leave') OT.delete(m.id); }, onEnd:()=>OT.clear() });
   if(!TEST) setTimeout(()=>{ try{ if(!NET.on) NET.quick(); }catch(e){} },1800); }
 
@@ -229,7 +229,7 @@ function drawPerson(o,me){ const lk=look(o,me), w=lk.olympia?.27:.17*(1+((lk.buf
   if(wave){ J.hand1=[.32,1.85+Math.sin(T0*14)*.08,.1]; J.elb1=[.3,1.45,.05]; }
   PHY.drawBody(J,{x:o.x,z:o.z,yaw:o.yaw,y:o.y||0},lk); R3.shadow(o.x*K,o.z*K,.5*K); }
 function render(dt){ if(!R3.ok) return; build();
-  const d=11, h=7.5, e0=[ME.x+Math.sin(camYaw)*d,h,ME.z+Math.cos(camYaw)*d], ex=clamp(e0[0],-HX+1,HX-1), ez=clamp(e0[2],-HZ+1,HZ-1), cut=Math.hypot(e0[0]-ex,e0[2]-ez), eye=[ex,Math.min(7.8,h+cut*.45),ez], ctr=[ME.x,1,ME.z-Math.cos(camYaw)*.5], k=Math.min(1,dt*5); for(let i=0;i<3;i++){ camE[i]=lerp(camE[i],eye[i],k); camC[i]=lerp(camC[i],ctr[i],k); }
+  const d=ROOM?8:11, h=ROOM?6.2:7.5, e0=[ME.x+Math.sin(camYaw)*d,h,ME.z+Math.cos(camYaw)*d], ex=ROOM?clamp(e0[0],-RW+.6,RW-.6):clamp(e0[0],-HX+1,HX-1), ez=ROOM?clamp(e0[2],RZ-RD+.6,RZ+RD+3):clamp(e0[2],-HZ+1,HZ-1), cut=Math.hypot(e0[0]-ex,e0[2]-ez), eye=[ex,Math.min(7.8,h+cut*.45),ez], ctr=[ME.x,1,ME.z-Math.cos(camYaw)*.5], k=camSnap?1:Math.min(1,dt*5); camSnap=0; for(let i=0;i<3;i++){ camE[i]=lerp(camE[i],eye[i],k); camC[i]=lerp(camC[i],ctr[i],k); }
   const SK=skyNow(); R3.frame({eye:camE.map(v=>v*K),center:camC.map(v=>v*K),fov:55,near:10,far:12000,sky:[.02,.02,.06],bright:SK.night?.78:1,fog:[2500,5000],fogMax:.6},()=>{
     const P3=(x,y,z,w,h,dd,col)=>R3.part(R3.UB,R3.mm(R3.T(x*K,y*K,z*K),R3.S(w*K,h*K,dd*K)),col);
     for(const C of CAB){ const fl=.6+.4*Math.sin(T0*3+C.x), col=C.g[3], n=parseInt(col.slice(1),16), rgb=[((n>>16)&255)/255,((n>>8)&255)/255,(n&255)/255].map(v=>v*1.8*fl), f=[Math.sin(C.yaw),Math.cos(C.yaw)];
@@ -237,8 +237,8 @@ function render(dt){ if(!R3.ok) return; build();
       if(C.g[0]===featKey()){ const b=Math.sin(T0*3)*.15; P3(C.x,2.95+b,C.z,.5,.5,.5,[2.4,2,.3]); } }
     { const fk=featKey(), g=GAMES.find(x=>x[0]===fk), col=g?g[3]:'#facc15', n=parseInt(col.slice(1),16), rgb=[((n>>16)&255)/255*2,((n>>8)&255)/255*2,(n&255)/255*2];
       R3.part(R3.UB,R3.mm(R3.T(0,(2.2+Math.sin(T0*1.5)*.2)*K,-3*K),R3.RY(T0),R3.S(1.6*K,1.6*K,1.6*K)),rgb); R3.part(R3.UC,R3.mm(R3.T(0,1.2*K,-3*K),R3.S(.08*K,1.4*K,.08*K)),[2.4,2,.4]); }
-    drawPerson(ME,true); for(const o of OT.values()) drawPerson(o,false);
-    drawPet(myPet(),ME,ME.pet,dt); for(const o of OT.values()) if(o.pet) drawPet(o.pet,o,o.petSt||(o.petSt={x:o.x,z:o.z,yaw:0}),dt);
+    roomDraw(P3); drawPerson(ME,true); for(const o of OT.values()) if(sameRm(o)) drawPerson(o,false);
+    drawPet(myPet(),ME,ME.pet,dt); for(const o of OT.values()) if(o.pet&&sameRm(o)) drawPet(o.pet,o,o.petSt||(o.petSt={x:o.x,z:o.z,yaw:0}),dt);
     /* windows: today's sky outside, stars at night */ for(let x=-24;x<=24;x+=8){ P3(x,6.4,HZ-.12,4.8,2,.02,SK.col.map(v=>v*1.6)); if(SK.night) for(let k=0;k<5;k++) P3(x-2+((k*37+x)%40)/10,5.6+((k*13)%15)/10,HZ-.14,.05,.05,.01,[2.4,2.4,2.4]); }
     /* DJ lights: they dance when music is on */ for(let k=0;k<6;k++){ const on=dj>0, a=T0*2+k, c=[[2.4,.3,1.6],[.3,1.6,2.4],[2.4,2,.3]][k%3]; P3(-18+Math.cos(a)*3.5,.03,12+Math.sin(a*1.3)*2,1.4,.02,1.4,on?c:[.15,.15,.2]); if(on) P3(-21+k*1.2,3,15.9,.25,.25,.25,c.map(v=>v*(.5+.5*Math.sin(T0*8+k)))); }
     /* trophies: one gold cup for every achievement you've unlocked */ { const n=window.RRCOIN&&RRCOIN.achievements?RRCOIN.achievements().filter(a=>a.got).length:0; for(let i=0;i<Math.min(n,24);i++){ const r=Math.floor(i/8), c=i%8; R3.part(R3.UC,R3.mm(R3.T((15.4+c*.72)*K,(.85+r*1)*K,15.2*K),R3.S(.14*K,.3*K,.14*K)),[2,1.6,.35]); R3.part(R3.UC,R3.mm(R3.T((15.4+c*.72)*K,(1.05+r*1)*K,15.2*K),R3.S(.2*K,.08*K,.2*K)),[2.2,1.8,.4]); } }
@@ -249,11 +249,11 @@ const cv=$('cv'), ctx=cv.getContext('2d'), HW=1000, HH=562;
 function txt(t,x,y,size,col,align='center'){ ctx.font=`800 ${size}px 'Big Shoulders Display','Arial Narrow',sans-serif`; ctx.textAlign=align; ctx.lineWidth=Math.max(3,size/6); ctx.strokeStyle='rgba(0,0,0,.7)'; ctx.strokeText(t,x,y); ctx.fillStyle=col; ctx.fillText(t,x,y); }
 const scr=p=>{ const q=R3.proj(p[0]*K,p[1]*K,p[2]*K); return q?[q[0]*HW,q[1]*HH,q[2]]:null; };
 function drawHUD(){ ctx.clearRect(0,0,HW,HH);
-  for(const C of CAB){ const dd=Math.hypot(C.x-ME.x,C.z-ME.z); if(dd>18) continue; const p=scr([C.x,2.75,C.z]); if(p) txt(`${C.g[1]} ${C.g[2]}`,p[0],p[1],dd<6?20:15,C.g[0]===featKey()?'#fde047':'#e2e8f0'); }
-  for(const k of KIOSK){ const p=scr([k.x,k.k==='feat'?3.4:4.1,k.z]); if(p) txt(k.k==='feat'&&window.RRCOIN&&RRCOIN.featured?`⭐ ${RRCOIN.featured[1]} · 2× coins`:`${k.ic} ${k.n}`,p[0],p[1],18,'#fde68a'); }
+  if(!ROOM) for(const C of CAB){ const dd=Math.hypot(C.x-ME.x,C.z-ME.z); if(dd>18) continue; const p=scr([C.x,2.75,C.z]); if(p) txt(`${C.g[1]} ${C.g[2]}`,p[0],p[1],dd<6?20:15,C.g[0]===featKey()?'#fde047':'#e2e8f0'); }
+  if(!ROOM) for(const k of KIOSK){ const p=scr([k.x,k.k==='feat'?3.4:4.1,k.z]); if(p) txt(k.k==='feat'&&window.RRCOIN&&RRCOIN.featured?`⭐ ${RRCOIN.featured[1]} · 2× coins`:`${k.ic} ${k.n}`,p[0],p[1],18,'#fde68a'); }
   { const p=scr([ME.x,2.35+ME.y,ME.z]); if(p) txt(`${myCrew()?'['+myCrew()+'] ':''}${myName()}`,p[0],p[1],16,'#7dd3fc'); }
-  for(const o of OT.values()){ const p=scr([o.x,2.35+(o.y||0),o.z]); if(p) txt(`${o.cr?'['+o.cr+'] ':''}${o.nm}`,p[0],p[1],15,'#fca5a5'); }
-  const n=1+OT.size; ctx.fillStyle='rgba(5,10,24,.75)'; ctx.beginPath(); ctx.roundRect(14,12,300,44,12); ctx.fill(); txt(`🏟️ THE HUB · ${n} here${NET&&NET.on?'':' (connecting…)'}`,28,42,20,'#fff','left');
+  for(const o of OT.values()){ if(!sameRm(o)) continue; const p=scr([o.x,2.35+(o.y||0),o.z]); if(p) txt(`${o.cr?'['+o.cr+'] ':''}${o.nm}`,p[0],p[1],15,'#fca5a5'); }
+  const n=1+OT.size; ctx.fillStyle='rgba(5,10,24,.75)'; ctx.beginPath(); ctx.roundRect(14,12,300,44,12); ctx.fill(); txt(ROOM?`🏠 ${ROOM.own?'MY ROOM':ROOM.name.toUpperCase()+'’S ROOM'} · ${1+[...OT.values()].filter(sameRm).length} here`:`🏟️ THE HUB · ${n} here${NET&&NET.on?'':' (connecting…)'}`,28,42,20,'#fff','left');
   if(T0<6) txt('Walk up to any machine to play · press 1 to flex, 2 to wave · M mutes the music',HW/2,HH-70,20,'#fde047');
   { const SK=skyNow(); txt(`${SK.night?'🌙 Night':'☀️ Day'} · 🎧 ${STATIONS[dj].n}${muted?' (muted)':''}`,HW-18,40,18,'#cbd5e1','right'); }
   if(BOSS.on){ const f=clamp(1-BOSS.hits/BOSS.max,0,1); ctx.fillStyle='rgba(5,10,24,.8)'; ctx.beginPath(); ctx.roundRect(HW/2-220,60,440,44,12); ctx.fill(); ctx.fillStyle='#7f1d1d'; ctx.fillRect(HW/2-200,84,400,12); ctx.fillStyle='#ef4444'; ctx.fillRect(HW/2-200,84,400*f,12); txt(`🤖 MEGA BOT · ${Math.max(0,BOSS.max-BOSS.hits)} HP · your hits ${BOSS.mine}`,HW/2,80,17,'#fecaca');
@@ -265,12 +265,103 @@ addEventListener('keydown',e=>{ const t=document.activeElement; if(t&&(t.tagName
   if(e.repeat) return; if(e.code==='KeyF'||e.code==='Enter'){ if(!bossHit()) act(); } if(e.code==='KeyM'){ muted=!muted; if(mus) mus.gain.value=muted?0:.5; } audioOn(); if(e.code==='Space'&&ME.y===0) ME.vy=7; if(e.code==='Digit1') ME.flexT=2.5; if(e.code==='Digit2') ME.waveT=2.5; });
 addEventListener('keyup',e=>keys.delete(e.code)); addEventListener('blur',()=>keys.clear());
 $('act').onclick=e=>{ e.stopPropagation(); audioOn(); if(MG&&mgKey('KeyF')) return; if(!bossHit()) act(); };
-$('gl').addEventListener('pointerdown',e=>{ audioOn(); const r=$('gl').getBoundingClientRect(); { const cx=(e.clientX-r.left)/r.width*HW, cy=(e.clientY-r.top)/r.height*HH; for(const o of OT.values()){ const q=scr([o.x,1.3+(o.y||0),o.z]); if(q&&Math.hypot(q[0]-cx,q[1]-cy)<45&&window.RRACCT&&RRACCT.profile){ RRACCT.profile(o.nm); return; } } } if(bossHit()) return; const g=R3.unproject((e.clientX-r.left)/r.width,(e.clientY-r.top)/r.height); if(g&&isFinite(g[0])) ME.target=[clamp(g[0]/K,-HX+.6,HX-.6),clamp(g[1]/K,-HZ+.6,HZ-.6)]; });
+$('gl').addEventListener('pointerdown',e=>{ audioOn(); const r=$('gl').getBoundingClientRect(); { const cx=(e.clientX-r.left)/r.width*HW, cy=(e.clientY-r.top)/r.height*HH; for(const o of OT.values()){ const q=scr([o.x,1.3+(o.y||0),o.z]); if(q&&Math.hypot(q[0]-cx,q[1]-cy)<45&&window.RRACCT&&RRACCT.profile){ RRACCT.profile(o.nm); return; } } } if(bossHit()) return; const g=R3.unproject((e.clientX-r.left)/r.width,(e.clientY-r.top)/r.height); if(g&&isFinite(g[0])) ME.target=ROOM?[clamp(g[0]/K,-RW+.5,RW-.5),clamp(g[1]/K,RZ-RD+.5,RZ+RD-.4)]:[clamp(g[0]/K,-HX+.6,HX-.6),clamp(g[1]/K,-HZ+.6,HZ-.6)]; });
 { const sk=$('stick'), kn=$('knob'); let sid=null; const mv=e=>{ const r=sk.getBoundingClientRect(), dx=clamp((e.clientX-r.left-60)/50,-1,1), dy=clamp((e.clientY-r.top-60)/50,-1,1); stick={x:dx,y:dy}; kn.style.left=(40+dx*40)+'px'; kn.style.top=(40+dy*40)+'px'; };
   sk.addEventListener('pointerdown',e=>{ sid=e.pointerId; sk.setPointerCapture(sid); mv(e); e.stopPropagation(); }); sk.addEventListener('pointermove',e=>{ if(e.pointerId===sid) mv(e); }); sk.addEventListener('pointerup',()=>{ sid=null; stick={x:0,y:0}; kn.style.left='40px'; kn.style.top='40px'; }); }
 $('btnFs').onclick=()=>{ const s=$('stage'); if(document.fullscreenElement) document.exitFullscreen(); else if(s.requestFullscreen) s.requestFullscreen(); };
 let last=performance.now(); function frame(now){ const dt=Math.min(.05,(now-last)/1000); last=now; step(dt); render(dt); requestAnimationFrame(frame); } requestAnimationFrame(frame);
-if(TEST) window.__hub={me:ME,act,nearest};
+/* ---- your own room: buy furniture with coins, place it anywhere, friends can come and visit ---- */
+const RZ=-300, RW=7, RD=5, RH=4;
+const FLOORS=[['Oak','#8b5a2b'],['Marble','#d6d3d1'],['Purple carpet','#6d28d9'],['Night tiles','#1e293b'],['Grass','#3f8f3f'],['Gold','#b8860b'],['Ice','#bae6fd']];
+const WALLS=[['Cream','#efe6d2'],['Sky','#7dd3fc'],['Midnight','#1e1b4b'],['Mint','#86efac'],['Rose','#f9a8d4'],['Brick','#9a3412'],['Arcade black','#0f172a']];
+const FURN={
+  bed:{n:'Bed',ic:'🛏️',p:400,d:(B)=>{ B(0,.25,0,1.6,.5,2.2,'#4b2e1a'); B(0,.56,.1,1.5,.14,1.9,'#f8fafc'); B(0,.66,-.8,1.3,.16,.4,'#e2e8f0'); B(0,.65,.4,1.54,.08,1.2,'#2563eb'); B(0,.85,-1.1,1.6,1.2,.12,'#4b2e1a'); }},
+  couch:{n:'Couch',ic:'🛋️',p:300,d:(B)=>{ B(0,.25,0,2.2,.5,.9,'#7f1d1d'); B(0,.75,-.35,2.2,.6,.2,'#991b1b'); for(const s of [-1,1]) B(s*1.05,.55,0,.15,.4,.9,'#991b1b'); B(-.5,.55,0,.95,.1,.75,'#b91c1c'); B(.5,.55,0,.95,.1,.75,'#b91c1c'); }},
+  chair:{n:'Gaming chair',ic:'🪑',p:150,d:(B,C)=>{ C(0,.15,0,.35,.08,'#111827'); B(0,.3,0,.08,.3,.08,'#374151'); B(0,.5,0,.6,.12,.6,'#111827'); B(0,1,-.28,.55,.9,.1,'#dc2626'); B(0,1.1,-.29,.3,.5,.11,'#111827'); }},
+  table:{n:'Table',ic:'🍽️',p:120,d:(B)=>{ B(0,.75,0,1.4,.08,.9,'#78350f'); for(const a of [-1,1]) for(const b of [-1,1]) B(a*.6,.37,b*.38,.08,.74,.08,'#78350f'); }},
+  desk:{n:'Gamer desk + PC',ic:'🖥️',p:900,glow:1,d:(B,C,S,t)=>{ B(0,.75,0,1.8,.07,.8,'#111827'); for(const a of [-1,1]) B(a*.85,.37,0,.08,.74,.75,'#111827'); B(0,1.15,-.25,.9,.5,.04,'#020617'); B(0,1.15,-.22,.84,.44,.01,[.3+.5*Math.sin(t*2),.9,2.2]); B(.7,1,-.1,.25,.45,.45,'#1f2937'); B(.7,1,.13,.02,.38,.02,[2.4,.3,1.8]); B(0,.8,.15,.6,.02,.2,'#334155'); }},
+  tv:{n:'Big TV',ic:'📺',p:600,glow:1,d:(B,C,S,t)=>{ B(0,.3,0,1.8,.6,.5,'#1f2937'); B(0,1.25,0,2.2,1.25,.08,'#020617'); const k=Math.floor(t*1.5)%4, c=[[.4,1.6,2.4],[2.4,.6,.4],[.4,2.2,.6],[2.2,2,.4]][k]; B(0,1.25,.045,2.08,1.13,.01,c); }},
+  lamp:{n:'Lava lamp',ic:'🪔',p:90,glow:1,d:(B,C,S,t)=>{ C(0,.08,0,.18,.16,'#9ca3af'); C(0,.45,0,.12,.6,[.6,.2,1.2]); S(0,.35+.25*(.5+.5*Math.sin(t*1.3)),0,.08,[2.4,.8,.3]); S(0,.6-.2*(.5+.5*Math.sin(t)),0,.06,[2.4,1.2,.3]); C(0,.8,0,.1,.1,'#9ca3af'); }},
+  plant:{n:'Plant',ic:'🪴',p:60,d:(B,C,S)=>{ C(0,.2,0,.25,.4,'#9a3412'); S(0,.65,0,.3,'#15803d'); S(.15,.85,.05,.2,'#16a34a'); S(-.12,.9,-.08,.22,'#166534'); }},
+  rug:{n:'Round rug',ic:'⭕',p:80,flat:1,d:(B,C)=>{ C(0,.01,0,1.3,.02,'#be123c'); C(0,.02,0,1,.02,'#fbbf24'); C(0,.03,0,.6,.02,'#be123c'); }},
+  shelf:{n:'Bookshelf',ic:'📚',p:200,d:(B)=>{ B(0,1,0,1.4,2,.4,'#5b3a1e'); for(let r=0;r<4;r++){ B(0,.25+r*.47,.02,1.3,.04,.38,'#3f2a1d'); for(let i=0;i<6;i++) B(-.55+i*.2,.42+r*.47,.03,.12,.3,.3,['#dc2626','#2563eb','#16a34a','#ca8a04','#7c3aed','#f8fafc'][(i+r)%6]); } }},
+  fridge:{n:'Snack fridge',ic:'🧊',p:350,d:(B)=>{ B(0,.9,0,.8,1.8,.7,'#e5e7eb'); B(0,1.25,.36,.76,.02,.02,'#9ca3af'); B(.3,1.5,.37,.04,.3,.04,'#6b7280'); B(.3,.8,.37,.04,.3,.04,'#6b7280'); }},
+  fish:{n:'Fish tank',ic:'🐠',p:800,glow:1,d:(B,C,S,t)=>{ B(0,.4,0,1.6,.8,.6,'#1f2937'); B(0,1.15,0,1.6,.7,.6,[.3,.9,1.6]); B(0,.82,0,1.58,.04,.58,'#d6b77a'); for(let i=0;i<4;i++){ const a=t*(.6+i*.2)+i*2; S(Math.sin(a)*.6,1+(i%3)*.15,Math.cos(a*1.3)*.18,.06,[[2.4,1,.2],[2.4,.4,.4],[.4,2,2.4],[2.4,2.2,.4]][i]); } B(0,1.52,0,1.64,.05,.64,'#1f2937'); }},
+  arcade:{n:'Arcade machine',ic:'🕹️',p:1500,glow:1,use:'play',d:(B,C,S,t)=>{ B(0,1.1,0,1,2.2,.8,'#4c1d95'); B(0,1.5,.41,.8,.6,.02,[.4+.4*Math.sin(t*3),1.8,2.2]); B(0,2.3,.38,.9,.3,.08,[2.4,1.8,.3]); B(0,.98,.48,.9,.08,.3,'#1f2937'); S(-.2,1.05,.5,.06,[2.4,.3,.3]); S(.1,1.05,.5,.05,[.3,2.4,.4]); S(.25,1.05,.5,.05,[.3,.6,2.4]); }},
+  bag:{n:'Punching bag',ic:'🥊',p:400,d:(B,C,S,t)=>{ B(0,1.25,0,.08,2.5,.08,'#374151'); B(.35,2.45,0,.8,.08,.08,'#374151'); C(.7,1.4+.02*Math.sin(t*3),0,.25,1,'#b91c1c'); B(0,.05,0,.6,.1,.6,'#111827'); }},
+  bench:{n:'Weight bench',ic:'🏋️',p:450,d:(B,C)=>{ B(0,.45,0,.4,.12,1.4,'#111827'); B(0,.22,.5,.1,.45,.1,'#6b7280'); B(0,.22,-.5,.1,.45,.1,'#6b7280'); for(const s of [-1,1]) B(s*.45,.65,-.55,.06,.9,.06,'#6b7280'); B(0,1.05,-.55,1.6,.05,.05,'#d1d5db'); for(const s of [-1,1]) C(s*.7,1.05,-.55,.25,.08,'#111827'); }},
+  hoop:{n:'Mini hoop',ic:'🏀',p:300,d:(B,C,S)=>{ B(0,1.2,-.3,.08,2.4,.08,'#6b7280'); B(0,2.3,-.25,1,.7,.05,'#f8fafc'); B(0,2.15,-.22,.4,.3,.02,'#ea580c'); C(0,2.05,0,.22,.03,'#ea580c'); S(.5,.15,.4,.15,'#ea580c'); }},
+  disco:{n:'Disco ball',ic:'🪩',p:1000,glow:1,d:(B,C,S,t)=>{ B(0,RH-.4,0,.03,.8,.03,'#9ca3af'); S(0,RH-.95,0,.3,[1.8,1.8,2]); for(let k=0;k<5;k++){ const a=t*1.5+k*1.26; B(Math.cos(a)*1.8,.02,Math.sin(a)*1.8,.5,.01,.5,[[2.4,.3,1.6],[.3,1.6,2.4],[2.4,2,.3],[.3,2.4,.5],[2.4,.6,.3]][k]); } }},
+  neon:{n:'Neon sign',ic:'💡',p:700,glow:1,d:(B,C,S,t)=>{ const f=.75+.25*Math.sin(t*6); B(0,2.2,0,1.8,.12,.05,[2.4*f,.3,1.8*f]); B(0,1.8,0,1.8,.12,.05,[.3,1.8*f,2.4*f]); B(-.85,2,0,.12,.5,.05,[2.4*f,2*f,.3]); B(.85,2,0,.12,.5,.05,[2.4*f,2*f,.3]); }},
+  tree:{n:'Pine tree',ic:'🌲',p:250,glow:1,d:(B,C,S,t)=>{ C(0,.3,0,.12,.6,'#5b3a1e'); for(let i=0;i<3;i++) C(0,.8+i*.5,0,.8-i*.22,.5,'#166534'); for(let i=0;i<8;i++){ const a=i*.8; S(Math.cos(a)*(.6-i*.06),.75+i*.17,Math.sin(a)*(.6-i*.06),.05,[[2.4,.3,.3],[2.4,2,.3],[.3,.8,2.4]][i%3].map(v=>v*(.6+.4*Math.sin(t*3+i)))); } S(0,2.4,0,.1,[2.4,2.2,.4]); }},
+  piano:{n:'Grand piano',ic:'🎹',p:2500,d:(B)=>{ B(0,.9,0,1.5,.3,1.8,'#0a0a0a'); B(0,1.4,-.5,1.4,.8,.05,'#0a0a0a'); for(const [a,b] of [[-.65,.8],[.65,.8],[0,-.8]]) B(a,.4,b,.1,.8,.1,'#0a0a0a'); B(0,.95,.95,1.4,.06,.2,'#f8fafc'); for(let i=0;i<9;i++) B(-.6+i*.15,.99,.92,.06,.04,.12,'#0a0a0a'); }},
+  djdeck:{n:'DJ decks',ic:'🎧',p:3000,glow:1,d:(B,C,S,t)=>{ B(0,.5,0,2,1,.8,'#111827'); for(const s of [-.55,.55]){ C(s,1.02,0,.3,.04,'#374151'); B(s+Math.cos(t*4)*.2,1.05,Math.sin(t*4)*.2,.05,.02,.05,'#f8fafc'); } for(let i=0;i<6;i++) B(-.5+i*.2,.5,.41,.12,.12,.01,[[2.4,.3,1.6],[.3,1.6,2.4]][i%2].map(v=>v*(.4+.6*Math.abs(Math.sin(t*5+i))))); }},
+  car:{n:'Show car',ic:'🏎️',p:25000,d:(B,C,S)=>{ B(0,.4,0,1.5,.4,3,'#dc2626'); B(0,.75,-.2,1.2,.35,1.4,'#111827'); B(0,.62,1.35,1.4,.06,.2,'#dc2626'); for(const a of [-1,1]) for(const b of [-1,1]) B(a*.75,.3,b*1,.2,.6,.6,'#0a0a0a'); B(0,.95,-1.4,1.4,.06,.3,'#111827'); }},
+  throne:{n:'Golden throne',ic:'👑',p:50000,glow:1,d:(B,C,S)=>{ B(0,.25,0,1.6,.5,1.4,'#7f1d1d'); B(0,.65,0,1.1,.3,1,[2,1.5,.3]); B(0,1.6,-.45,1.1,1.9,.15,[2,1.5,.3]); for(const s of [-1,1]){ B(s*.6,.95,0,.15,.6,1,[2,1.5,.3]); S(s*.55,2.6,-.45,.12,[2.4,.4,.4]); } S(0,2.75,-.45,.16,[.4,.8,2.4]); B(0,.82,.05,1,.06,.9,'#b91c1c'); }},
+  statue:{n:'Gold statue',ic:'🗿',p:100000,glow:1,d:(B,C,S)=>{ const g=[2,1.55,.35]; B(0,.4,0,1.2,.8,1.2,'#e5e7eb'); B(0,1.4,0,.7,1,.4,g); S(0,2.15,0,.26,g); for(const s of [-1,1]){ B(s*.5,1.75,0,.18,.6,.18,g); S(s*.55,2.15,0,.12,g); B(s*.18,.95+.0,0,.2,.3,.25,g); } }},
+  poster:{n:'Poster',ic:'🖼️',p:50,d:(B)=>{ B(0,1.6,0,1,1.4,.04,'#111827'); B(0,1.6,.025,.9,1.3,.01,'#7c3aed'); B(0,1.85,.03,.7,.25,.01,[2.4,1.8,.3]); B(0,1.4,.03,.5,.5,.01,[.3,1.6,2.4]); }},
+  bean:{n:'Bean bag',ic:'🫘',p:120,d:(B,C,S)=>{ S(0,.3,0,.55,'#0ea5e9'); S(0,.45,-.2,.4,'#0284c7'); }},
+};
+const FKEYS=Object.keys(FURN);
+let ROOM=null, ROOMSEL=-1, roomUI=null, roomPrev=null;
+const roomLoad=()=>{ try{ const r=JSON.parse(localStorage.getItem('rrRoom')||'null'); if(r&&Array.isArray(r.i)) return r; }catch(e){} return {_lww:1,f:0,w:0,i:[]}; };
+function roomSave(){ if(!ROOM||!ROOM.own) return; ROOM.data._lww=Date.now(); try{ localStorage.setItem('rrRoom',JSON.stringify(ROOM.data)); }catch(e){} }
+function roomEnter(name,data){ if(MG) return; if(!ROOM) roomPrev={x:ME.x,z:ME.z}; const own=!name;
+  ROOM={own,name:name||myName(),data:own?roomLoad():{f:+data.f||0,w:+data.w||0,i:(Array.isArray(data.i)?data.i:[]).slice(0,60).filter(x=>Array.isArray(x)&&FURN[x[0]])}};
+  ME.x=0; ME.z=RZ+RD-1.2; ME.yaw=PI; ME.target=null; camYaw=0; ME.pet.x=1; ME.pet.z=ME.z; ROOMSEL=-1; roomPanel(); }
+function roomLeave(){ if(!ROOM) return; if(ROOM.carry!=null){ ROOM.carry=null; roomSave(); } ROOM=null; ROOMSEL=-1; const p=roomPrev||{x:-9,z:-7}; ME.x=p.x; ME.z=p.z; ME.pet.x=ME.x+1; ME.pet.z=ME.z; ME.target=null; if(roomUI){ roomUI.remove(); roomUI=null; } }
+async function roomVisit(name){ if(!name) return; if(window.RRACCT&&RRACCT.name&&name.toLowerCase()===RRACCT.name.toLowerCase()){ roomEnter(); return; }
+  if(!window.RRACCT||!RRACCT.peek){ djMsg='Make an account to visit rooms'; djMsgT=3; return; } const P=await RRACCT.peek(name); if(!P){ djMsg='No account with that name'; djMsgT=3; return; }
+  if(!P.room||!(P.room.i||[]).length){ djMsg=`${name} hasn’t decorated a room yet`; djMsgT=3; } roomEnter(name,P.room||{}); }
+window.RRVISIT=roomVisit;
+const fdraw=(it,t)=>{ const [k,x,z,r]=it, F=FURN[k]; if(!F) return; const base=R3.mm(R3.T(x*K,0,(RZ+z)*K),R3.RY(r||0));
+  const B=(lx,ly,lz,w,h,d,col)=>R3.part(R3.UB,R3.mm(base,R3.T(lx*K,ly*K,lz*K),R3.S(w*K,h*K,d*K)),col), C=(lx,ly,lz,rr,h,col)=>R3.part(R3.UC,R3.mm(base,R3.T(lx*K,ly*K,lz*K),R3.S(rr*K,h*K,rr*K)),col), S=(lx,ly,lz,rr,col)=>R3.part(R3.US,R3.mm(base,R3.T(lx*K,ly*K,lz*K),R3.S(rr*K,rr*K,rr*K)),col);
+  F.d(B,C,S,t+x); };
+function roomDraw(P3){ if(!ROOM) return; const D=ROOM.data, fc=(FLOORS[D.f]||FLOORS[0])[1], wc=(WALLS[D.w]||WALLS[0])[1];
+  P3(0,-.05,RZ,RW*2,.1,RD*2,fc); if(D.f===0||D.f===3) for(let i=-RW+1;i<RW;i+=1) P3(i,.002,RZ,.02,.004,RD*2,[.06,.05,.05]);
+  P3(0,RH/2,RZ-RD,RW*2,RH,.2,wc); P3(-RW,RH/2,RZ,.2,RH,RD*2,wc); P3(RW,RH/2,RZ,.2,RH,RD*2,wc); P3(-RW/2-1.1,.6,RZ+RD,RW-2.2,1.2,.2,wc); P3(RW/2+1.1,.6,RZ+RD,RW-2.2,1.2,.2,wc);
+  P3(0,.08,RZ-RD+.11,RW*2,.16,.04,'#f8fafc'); for(const s of [-1,1]) P3(s*(RW-.11),.08,RZ,.04,.16,RD*2,'#f8fafc');
+  const SK=skyNow(); for(const s of [-1,1]) P3(s*3.5,2.4,RZ-RD+.12,2.2,1.4,.02,SK.col.map(v=>v*1.5)); P3(0,.03,RZ+RD-.4,1.8,.02,.6,'#7c2d12');
+  /* the doorway back to the Hub */ P3(0,1.2,RZ+RD+.3,2,.05,.05,[2.4,2,.4]); P3(0,-.07,RZ+RD+3.1,RW*2+.4,.1,6,'#1e1b4b'); for(const sx of [-1,1]) P3(sx*2,.02,RZ+RD+1.5,.12,.02,2.6,[.3,1.6,2.4]);
+  for(let i=0;i<D.i.length;i++){ const it=D.i[i]; fdraw(it,T0); if(ROOM.own&&i===ROOMSEL) P3(it[1],.03,RZ+it[2],1.6,.02,1.6,ROOM.carry!=null?[.3,2.4,.5]:[2.4,2,.3]); } }
+function roomStep(){ if(!ROOM) return; ME.x=clamp(ME.x,-RW+.5,RW-.5); ME.z=clamp(ME.z,RZ-RD+.5,RZ+RD-.4);
+  if(ROOM.own&&ROOM.carry!=null){ const it=ROOM.data.i[ROOM.carry]; if(it){ it[1]=+clamp(ME.x+Math.sin(ME.yaw)*1.4,-RW+.6,RW-.6).toFixed(2); it[2]=+clamp(ME.z-RZ+Math.cos(ME.yaw)*1.4,-RD+.6,RD-.6).toFixed(2); } }
+  else if(ROOM.own){ let b=-1, bd=1.8; ROOM.data.i.forEach((it,i)=>{ const d=Math.hypot(it[1]-ME.x,it[2]+RZ-ME.z); if(d<bd){ bd=d; b=i; } }); ROOMSEL=b; } }
+function roomNear(){ if(!ROOM) return null; if(ME.z>RZ+RD-1.3&&Math.abs(ME.x)<1.4) return {t:'door'}; if(ROOM.own&&ROOM.carry!=null) return {t:'drop'};
+  if(ROOMSEL>=0){ const it=ROOM.data.i[ROOMSEL], F=FURN[it[0]]; return {t:'item',it,F}; }
+  if(!ROOM.own){ let b=null, bd=1.8; for(const it of ROOM.data.i){ const F=FURN[it[0]]; if(!F||!F.use) continue; const d=Math.hypot(it[1]-ME.x,it[2]+RZ-ME.z); if(d<bd){ bd=d; b={t:'item',it,F}; } } return b; } return null; }
+function roomLabel(n){ if(n.t==='door') return '🚪 Back to the Hub'; if(n.t==='drop') return '✅ Put it down here'; if(n.t==='item') return n.F.use&&!ROOM.own?`${n.F.ic} Play the featured game`:`${n.F.ic} Move ${n.F.n}`; return ''; }
+function roomAct(n){ if(n.t==='door'){ roomLeave(); return; } if(n.t==='drop'){ ROOM.carry=null; roomSave(); roomPanel(); return; }
+  if(n.t==='item'){ if(n.F.use&&!ROOM.own){ if(featKey()) location.href=featKey(); return; } ROOM.carry=ROOMSEL; roomPanel(); } }
+const priceTxt=p=>isOwnerMe()?'free':p.toLocaleString()+' 🪙';
+function roomBuy(k){ const F=FURN[k], D=ROOM.data; if(!F||!window.RRCOIN) return; if(D.i.length>=60){ djMsg='Your room is full (60 things)'; djMsgT=3; return; }
+  if(!RRCOIN.spend(F.p,`${F.ic} ${F.n} for your room`)){ RRCOIN.toast(`You need ${F.p.toLocaleString()} 🪙`,'#f87171'); return; }
+  D.i.push([k,+clamp(ME.x+Math.sin(ME.yaw)*1.4,-RW+.6,RW-.6).toFixed(2),+clamp(ME.z-RZ+Math.cos(ME.yaw)*1.4,-RD+.6,RD-.6).toFixed(2),0]); ROOM.carry=D.i.length-1; ROOMSEL=ROOM.carry; roomSave(); roomPanel(); RRCOIN.toast(`${F.ic} ${F.n} — walk to where you want it, then put it down`); }
+function roomPanel(){ if(roomUI){ roomUI.remove(); roomUI=null; } if(!ROOM) return; roomUI=document.createElement('div'); roomUI.id='rmUI';
+  roomUI.style.cssText='position:fixed;right:10px;top:70px;z-index:2147482600;width:250px;max-height:calc(100vh - 160px);overflow:auto;background:rgba(5,10,24,.9);border:1px solid #334155;border-radius:14px;padding:10px;color:#e2e8f0;font:600 13px system-ui';
+  if(!ROOM.own){ roomUI.innerHTML=`<b style="font-size:15px">🏠 ${ROOM.name.replace(/[<>&"]/g,'')}’s room</b><p style="margin:6px 0">${ROOM.data.i.length} things inside.</p><button data-rm="leave" style="width:100%">🚪 Back to the Hub</button>`; }
+  else { const D=ROOM.data, open=roomUI.dataset.cat||localStorage.getItem('rrRoomCat')!=='0', sel=ROOMSEL>=0&&D.i[ROOMSEL];
+    roomUI.innerHTML=`<b style="font-size:15px">🏠 My room</b> <span style="color:#94a3b8">${D.i.length}/60</span>
+      ${sel?`<div style="margin:8px 0;padding:8px;background:#1e293b;border-radius:10px">${FURN[sel[0]].ic} <b>${FURN[sel[0]].n}</b><div style="display:flex;gap:4px;margin-top:6px;flex-wrap:wrap"><button data-rm="${ROOM.carry!=null?'drop':'move'}">${ROOM.carry!=null?'✅ Put down':'✋ Move'}</button><button data-rm="rot">↻ Turn</button><button data-rm="sell">💰 Sell (½)</button></div></div>`:'<p style="margin:6px 0;color:#94a3b8">Walk up to something to move, turn or sell it.</p>'}
+      <div style="display:flex;gap:4px;margin:6px 0"><button data-rm="floor" style="flex:1">Floor: ${FLOORS[D.f][0]}</button><button data-rm="wall" style="flex:1">Walls: ${WALLS[D.w][0]}</button></div>
+      <button data-rm="cat" style="width:100%;margin-bottom:4px">${open?'▾':'▸'} Furniture shop</button>
+      ${open?FKEYS.map(k=>`<button data-buy="${k}" style="display:flex;justify-content:space-between;width:100%;margin:2px 0;text-align:left"><span>${FURN[k].ic} ${FURN[k].n}</span><span style="color:#fde68a">${priceTxt(FURN[k].p)}</span></button>`).join(''):''}
+      <button data-rm="leave" style="width:100%;margin-top:8px">🚪 Back to the Hub</button>`; }
+  roomUI.querySelectorAll('button').forEach(b=>b.style.cssText+=';background:#1e293b;color:#e2e8f0;border:1px solid #475569;border-radius:8px;padding:6px 8px;font:700 12px system-ui;cursor:pointer');
+  roomUI.addEventListener('click',e=>{ e.stopPropagation(); const b=e.target.closest('button'); if(!b) return; const a=b.dataset.rm, D=ROOM&&ROOM.data;
+    if(b.dataset.buy){ roomBuy(b.dataset.buy); return; } if(a==='leave'){ roomLeave(); return; }
+    if(a==='cat'){ const o=localStorage.getItem('rrRoomCat')!=='0'; try{ localStorage.setItem('rrRoomCat',o?'0':'1'); }catch(e){} roomPanel(); return; }
+    if(a==='floor'){ D.f=(D.f+1)%FLOORS.length; roomSave(); roomPanel(); return; } if(a==='wall'){ D.w=(D.w+1)%WALLS.length; roomSave(); roomPanel(); return; }
+    if(ROOMSEL<0||!D.i[ROOMSEL]) return; const it=D.i[ROOMSEL];
+    if(a==='rot'){ it[3]=+(((it[3]||0)+PI/4)%(2*PI)).toFixed(3); roomSave(); return; }
+    if(a==='move'){ ROOM.carry=ROOMSEL; roomPanel(); return; } if(a==='drop'){ ROOM.carry=null; roomSave(); roomPanel(); return; }
+    if(a==='sell'){ const F=FURN[it[0]]; D.i.splice(ROOMSEL,1); ROOM.carry=null; ROOMSEL=-1; if(!isOwnerMe()&&window.RRCOIN) RRCOIN.tradeGive([],Math.floor(F.p/2)); roomSave(); roomPanel(); RRCOIN.toast(`Sold ${F.ic} ${F.n}${isOwnerMe()?'':' for '+Math.floor(F.p/2).toLocaleString()+' 🪙'}`); } });
+  document.body.appendChild(roomUI); }
+let roomSelLast=-2; function roomUIStep(){ if(ROOM&&ROOM.own&&ROOMSEL!==roomSelLast){ roomSelLast=ROOMSEL; roomPanel(); } }
+{ const q=new URLSearchParams(location.search).get('room'); if(q) setTimeout(()=>roomVisit(q),1500); }
+
+let camSnap=0; const curRm=()=>ROOM?ROOM.name.toLowerCase():'', sameRm=o=>(o.rm||'')===curRm();
+if(TEST) window.__hub={me:ME,act,nearest,room:()=>ROOM,roomEnter,roomBuy,roomVisit};
 })();
 </script>
 <script src="site.js"></script>

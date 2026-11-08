@@ -14,7 +14,7 @@
   function collect(){ const o={}; try{ for(let i=0;i<localStorage.length;i++){ const k=localStorage.key(i); if(syncable(k)) o[k]=localStorage.getItem(k); } }catch(e){} return o; }
   function applyData(data){ let o={}; try{ o=JSON.parse(data||'{}'); }catch(e){} for(const k in o) if(syncable(k)) ls.set(k,o[k]); }
   /* logging in on a device that already has progress MERGES it with the account: bigger numbers win, lists and items are combined — nothing is lost */
-  function mergeVal(a,b){ if(a==null) return b; if(b==null) return a; let x,y; try{ x=JSON.parse(a); y=JSON.parse(b); }catch(e){ return a.length>=b.length?a:b; } return JSON.stringify(mergeObj(x,y)); }
+  function mergeVal(a,b){ if(a==null) return b; if(b==null) return a; let x,y; try{ x=JSON.parse(a); y=JSON.parse(b); }catch(e){ return a.length>=b.length?a:b; } if(x&&y&&typeof x==='object'&&x._lww&&y._lww) return JSON.stringify(x._lww>=y._lww?x:y); return JSON.stringify(mergeObj(x,y)); }
   function mergeObj(x,y){ if(typeof x==='number'&&typeof y==='number') return Math.max(x,y); if(Array.isArray(x)&&Array.isArray(y)){ const seen=new Set(), out=[]; for(const v of x.concat(y)){ const k=JSON.stringify(v); if(seen.has(k)) continue; seen.add(k); out.push(v); } return out.slice(0,Math.max(x.length,y.length,Math.min(out.length,500))); }
     if(x&&y&&typeof x==='object'&&typeof y==='object'){ const o={...y}; for(const k in x) o[k]=k in y?mergeObj(x[k],y[k]):x[k]; return o; } if(typeof x==='boolean'&&typeof y==='boolean') return x||y; return x!=null?x:y; }
   function mergeIn(remote){ let o={}; try{ o=JSON.parse(remote||'{}'); }catch(e){} for(const k in o){ if(!syncable(k)) continue; const cur=ls.get(k); ls.set(k,cur==null?o[k]:mergeVal(cur,o[k])); } }
@@ -113,8 +113,8 @@
     const ach=Cn&&Cn.achievements?Cn.achievements():[], items=Cn?Cn.tradeable().filter(i=>i.own&&i.rar).sort((a,b)=>b.rar-a.rar).slice(0,8).map(i=>({ic:i.ic,n:i.n,r:i.rar})):[], J2=k=>{ try{ return JSON.parse(ls.get(k)||'{}')||{}; }catch(e){ return {}; } };
     const gym=J2('rinkRivalsGymV2'), pt=J2('rrProTag'), city=J2('rrCity'), rec=[]; if(gym.best){ for(const [k,l] of [['bench','Bench'],['squat','Squat'],['dead','Deadlift']]) if(gym.best[k]) rec.push([`🏋️ ${l}`,`${Math.round(gym.best[k]).toLocaleString()} lb`]); }
     if(pt.wins) rec.push(['🏃 Pro Tag wins',pt.wins]); if(city.money) rec.push(['🏙️ Rival City cash',own?'∞':'$'+Math.round(city.money).toLocaleString()]); if(city.qd) rec.push(['📜 City quests',Object.keys(city.qd).length]);
-    let pet=null; try{ pet=JSON.parse(ls.get('rrPet')||'null'); }catch(e){}
-    return {own:own?1:0,lvl:Cn&&Cn.level!=null?Cn.level:0,life:Math.round(n('rrCoinLife')),str:Math.round(n('rrStrength')),reb:n('rrRebirths'),ach:ach.filter(a=>a.got).length,achN:ach.length,crates:(J('rrCoinStat',{}).crates||0),gear,items,rec,pet:pet&&{ic:pet.ic,n:pet.n,lv:pet.lv||0}}; }
+    let pet=null, room=null; try{ pet=JSON.parse(ls.get('rrPet')||'null'); }catch(e){} try{ const r=JSON.parse(ls.get('rrRoom')||'null'); if(r&&Array.isArray(r.i)) room={f:r.f|0,w:r.w|0,i:r.i.slice(0,60)}; }catch(e){}
+    return {own:own?1:0,lvl:Cn&&Cn.level!=null?Cn.level:0,life:Math.round(n('rrCoinLife')),str:Math.round(n('rrStrength')),reb:n('rrRebirths'),ach:ach.filter(a=>a.got).length,achN:ach.length,crates:(J('rrCoinStat',{}).crates||0),gear,items,rec,pet:pet&&{ic:pet.ic,n:pet.n,lv:pet.lv||0},room}; }
   const FR={friends:[],inc:[],out:[],gifts:[],now:Date.now()};
   async function frPoll(){ if(!A) return; const r=await api('friendList',{token:A.token}); if(!r.ok) return; Object.assign(FR,r); if(box&&tab==='friends') renderBox(); if(pill&&(r.inc.length||r.gifts.length)&&!pill.textContent.includes('🎁')) pill.textContent+=r.gifts.length?' 🎁':' 👥'; }
   if(A){ setTimeout(frPoll,7000); setInterval(()=>{ if(!document.hidden) frPoll(); },120000); }
@@ -146,6 +146,7 @@
   async function profile(name){ css(); if(!A){ open('new'); return; } if(pbox) pbox.remove(); pbox=document.createElement('div'); pbox.id='rrAcct'; pbox.innerHTML='<div class="w"><p>Loading…</p></div>'; document.body.appendChild(pbox);
     pbox.addEventListener('click',async e=>{ if(e.target===pbox||e.target.closest('[data-x]')){ pbox.remove(); pbox=null; return; } const b=e.target.closest('[data-pf]'); if(!b) return; const a=b.dataset.pf;
       if(a==='add'){ const r=await api('friendAdd',{token:A.token,to:name}); b.textContent=r.ok?(r.now==='friends'?'✓ Friends':'✓ Request sent'):'Couldn’t add'; b.disabled=true; }
+      if(a==='room'){ pbox.remove(); pbox=null; if(window.RRVISIT) RRVISIT(name); else location.href='hub?room='+encodeURIComponent(name); return; }
       if(a==='gift'||a==='trade'){ pbox.remove(); pbox=null; if(a==='gift') giftTo=name; open(a==='gift'?'friends':'trade'); if(a==='trade') setTimeout(()=>{ const i=box&&box.querySelector('#tTo'); if(i) i.value=name; },300); } });
     const r=await api('profile',{token:A.token,name}); if(!r.ok){ pbox.querySelector('.w').innerHTML='<button class="g x" data-x>✕</button><p>No account with that name.</p>'; return; }
     const P=pk(r.pub), on=r.now-(r.seen||0)<4*60000, me=A&&r.name.toLowerCase()===A.name.toLowerCase(), RC=['#e2e8f0','#94a3b8','#38bdf8','#c084fc','#fbbf24'];
@@ -155,6 +156,7 @@
       ${(P.items||[]).length?`<h3 style="margin:10px 0 4px">✨ Best items</h3><div>${P.items.map(i=>`<span style="display:inline-block;border:1px solid ${RC[i.r]};color:${RC[i.r]};border-radius:999px;padding:4px 10px;margin:2px;font-size:13px">${esc(i.ic)} ${esc(i.n)}</span>`).join('')}</div>`:''}
       ${(P.rec||[]).length?`<h3 style="margin:10px 0 4px">📊 Records</h3>${P.rec.map(([a,b])=>`<div class="row"><span>${esc(a)}</span><b>${esc(String(b))}</b></div>`).join('')}`:''}
       ${P.pet?`<div class="m" style="margin-top:6px">🐾 Pet: ${esc(P.pet.ic||'')} ${P.pet.lv?'Lv '+P.pet.lv+' ':''}${esc(P.pet.n||'')}</div>`:''}
+      <p style="margin-top:10px"><button data-pf="room">🏠 ${me?'My room':'Visit their room'}${P.room&&P.room.i?` (${P.room.i.length})`:''}</button></p>
       ${me?'':`<p style="margin-top:10px">${r.friend==='ok'?'<button disabled>✓ Friends</button>':`<button data-pf="add">${r.friend==='pending'?'Request pending':'➕ Add friend'}</button>`} <button data-pf="gift">🎁 Send a gift</button> <button class="g" data-pf="trade">🔄 Trade</button></p>`}`;
     drawCardData(pbox.querySelector('#ppc'),{name:r.name,crew:r.crew,own:P.own,lvl:P.lvl,life:P.life,str:P.str,reb:P.reb,ach:P.ach,achN:P.achN,crates:P.crates,best:(P.items||[]).slice(0,4)}); }
   document.addEventListener('click',e=>{ const a=e.target.closest('[data-prof]'); if(!a) return; e.preventDefault(); profile(a.dataset.prof); });
@@ -180,5 +182,5 @@
     if(tab==='crew'&&A) loadCrew(); renderBox(); }
   function mount(){ if(document.getElementById('rrAcctB')) return; css(); pill=document.createElement('button'); pill.id='rrAcctB'; pill.title='Your account — progress on every device'; pill.onclick=()=>open(); document.body.appendChild(pill); render(); }
   if(document.readyState==='loading') addEventListener('DOMContentLoaded',mount); else mount();
-  window.RRACCT={ profile, friends:()=>FR.friends, get name(){ return A&&A.name; }, get crew(){ return A&&A.crew; }, open, push:()=>push(true) };
+  window.RRACCT={ profile, peek:async name=>{ if(!A) return null; const r=await api('profile',{token:A.token,name}); return r&&r.ok?pk(r.pub):null; }, friends:()=>FR.friends, get name(){ return A&&A.name; }, get crew(){ return A&&A.crew; }, open, push:()=>push(true) };
 })();
