@@ -102,9 +102,10 @@ function step(dt){ T0+=dt; let ix=(keys.has('KeyD')||keys.has('ArrowRight')?1:0)
   const n=nearest(), b=$('act'); if(n){ const t=label(n); if(b.textContent!==t) b.textContent=t; b.style.display='block'; } else b.style.display='none';
   bossStep(dt); netStep(dt); }
 /* ---- other people in the Hub ---- */
-const OT=new Map(); let NET=null, netT=0;
+const OT=new Map(); let NET=null, netT=0, lastSig='', hbT=0;
 function netStep(dt){ for(const o of OT.values()){ const k=Math.min(1,dt*10); o.x=lerp(o.x,o.tx,k); o.z=lerp(o.z,o.tz,k); o.y=lerp(o.y||0,o.ty||0,k); o.walk+=dt*(o.spd||0)*2.3; }
-  if(!NET||!NET.on) return; netT-=dt; if(netT>0) return; netT=.12; NET.send({t:'p',x:+ME.x.toFixed(2),z:+ME.z.toFixed(2),y:+ME.y.toFixed(2),yaw:+ME.yaw.toFixed(2),s:+ME.spd.toFixed(1),nm:myName(),cr:myCrew()||'',kit:kitCol(),bf:window.RRSTR?+RRSTR.muscle().toFixed(2):1,fx:ME.flexT>0?1:0,wv:ME.waveT>0?1:0,gear:gearNow(),pet:myPet(),oly:isOwnerMe()?1:0}); }
+  if(!NET||!NET.on) return; netT-=dt; if(netT>0) return; netT=.25;
+  /* save the free-plan request budget: only send when something changed, plus a heartbeat every 4 s */ const sig=[ME.x.toFixed(1),ME.z.toFixed(1),ME.y.toFixed(1),ME.yaw.toFixed(1),ME.flexT>0,ME.waveT>0].join(); hbT=(hbT||0)+.25; if(sig===lastSig&&hbT<4) return; lastSig=sig; hbT=0; NET.send({t:'p',x:+ME.x.toFixed(2),z:+ME.z.toFixed(2),y:+ME.y.toFixed(2),yaw:+ME.yaw.toFixed(2),s:+ME.spd.toFixed(1),nm:myName(),cr:myCrew()||'',kit:kitCol(),bf:window.RRSTR?+RRSTR.muscle().toFixed(2):1,fx:ME.flexT>0?1:0,wv:ME.waveT>0?1:0,gear:gearNow(),pet:myPet(),oly:isOwnerMe()?1:0}); }
 if(window.RRO){ NET=RRO.init({game:'hub',maxPlayers:8,minPlayers:1,dropIn:true,publicRoom:'HUBA',blurb:'Hang out in the Arcade Rivals Hub with everyone online.',
   onStart:()=>{ OT.clear(); }, onMsg:m=>{ if(m.t==='dj'){ djSet(m.st|0,false); return; } if(m.t==='hit'){ BOSS.hits+=clamp(+m.n||1,0,3); return; } if(m.t!=='p') return; let o=OT.get(m.from); if(!o){ o={x:m.x,z:m.z,walk:0}; OT.set(m.from,o); } Object.assign(o,{tx:m.x,tz:m.z,ty:m.y||0,yaw:m.yaw,spd:m.s,nm:String(m.nm||'Player').slice(0,20),cr:String(m.cr||'').slice(0,6),kit:m.kit,bf:clamp(+m.bf||1,1,1.8),fx:m.fx,wv:m.wv,oly:m.oly?1:0,gear:m.gear&&typeof m.gear==='object'?m.gear:null,pet:m.pet&&typeof m.pet==='object'?m.pet:null}); if(o.pet&&!o.petSt) o.petSt={x:o.x+1,z:o.z+1,yaw:0}; },
   onPeers:(api,kind,m)=>{ if(kind==='leave') OT.delete(m.id); }, onEnd:()=>OT.clear() });
