@@ -35,6 +35,33 @@
   const grant=g=>{ const q=J('rrGrant',{}); for(const k in g){ if(typeof g[k]==='number') q[k]=(q[k]||0)+g[k]; else if(Array.isArray(g[k])) q[k]=(q[k]||[]).concat(g[k]); } ls.set('rrGrant',JSON.stringify(q)); };
   const addStr=n=>{ if(window.RRSTR&&!RRSTR.owner&&RRSTR.set){ RRSTR.set(RRSTR.level+n); } else { const v=+ls.get('rrStrength')||0; ls.set('rrStrength',String(Math.round(v+n))); } };
   const ITEMS=[
+    {k:'wcheck',cat:'🎨 Car wraps — every racing game',ic:'🏁',n:'Checkered flag',d:'Black-and-white race checkers all over',p:350,slot:'wrap',val:{t: 'checker', c: ['#f8fafc', '#111827']}},
+    {k:'wcheckgold',cat:'🎨 Car wraps — every racing game',ic:'🏆',n:'Gold checkers',d:'Gold and black checkers',p:600,slot:'wrap',val:{t: 'checker', c: [[2, 1.6, 0.3], '#111827']}},
+    {k:'wflames',cat:'🎨 Car wraps — every racing game',ic:'🔥',n:'Hot rod flames',d:'Classic yellow-to-red flames licking down the sides',p:450,slot:'wrap',val:{t: 'flames', c: ['#facc15', '#f97316', '#dc2626']}},
+    {k:'wblueflames',cat:'🎨 Car wraps — every racing game',ic:'💙',n:'Blue flames',d:'Blue-hot flames',p:500,slot:'wrap',val:{t: 'flames', c: ['#e0f2fe', '#38bdf8', '#1d4ed8']}},
+    {k:'wcamo',cat:'🎨 Car wraps — every racing game',ic:'🌲',n:'Woodland camo',d:'Army greens and browns',p:350,slot:'wrap',val:{t: 'camo', c: ['#4d5d2a', '#2f3a1a', '#6b5b3a', '#1c1f12']}},
+    {k:'warctic',cat:'🎨 Car wraps — every racing game',ic:'❄️',n:'Arctic camo',d:'Snow whites and greys',p:350,slot:'wrap',val:{t: 'camo', c: ['#e5e7eb', '#9ca3af', '#f8fafc', '#6b7280']}},
+    {k:'wdesert',cat:'🎨 Car wraps — every racing game',ic:'🏜️',n:'Desert camo',d:'Sand and tan',p:350,slot:'wrap',val:{t: 'camo', c: ['#d6b98c', '#a68a5b', '#e7d3b0', '#7c6544']}},
+    {k:'wdigital',cat:'🎨 Car wraps — every racing game',ic:'👾',n:'Digital camo',d:'Pixel camo in blues',p:400,slot:'wrap',val:{t: 'digital', c: ['#1e3a8a', '#3b82f6', '#93c5fd', '#0f172a']}},
+    {k:'wtiger',cat:'🎨 Car wraps — every racing game',ic:'🐯',n:'Tiger stripes',d:'Orange with black tiger stripes',p:450,slot:'wrap',val:{t: 'tiger', c: ['#f97316', '#111827']}},
+    {k:'wzebra',cat:'🎨 Car wraps — every racing game',ic:'🦓',n:'Zebra',d:'Black and white zebra stripes',p:400,slot:'wrap',val:{t: 'zebra', c: ['#f8fafc', '#111827']}},
+    {k:'wleopard',cat:'🎨 Car wraps — every racing game',ic:'🐆',n:'Leopard',d:'Golden with dark spots',p:450,slot:'wrap',val:{t: 'leopard', c: ['#d4a24c', '#3b2a12']}},
+    {k:'wlightning',cat:'🎨 Car wraps — every racing game',ic:'⚡',n:'Lightning bolts',d:'Yellow bolts down both sides',p:400,slot:'wrap',val:{t: 'lightning', c: [[2.4, 2.2, 0.3]]}},
+    {k:'wretro',cat:'🎨 Car wraps — every racing game',ic:'📼',n:'Retro stripes',d:'Seventies orange, red and yellow bands',p:350,slot:'wrap',val:{t: 'bands3', c: ['#f59e0b', '#ea580c', '#b91c1c']}},
+    {k:'wsunset',cat:'🎨 Car wraps — every racing game',ic:'🌅',n:'Sunset fade',d:'Yellow to orange to purple',p:400,slot:'wrap',val:{t: 'bands', c: ['#fde047', '#fb923c', '#f43f5e', '#a21caf', '#4c1d95']}},
+    {k:'wrainbow',cat:'🎨 Car wraps — every racing game',ic:'🌈',n:'Rainbow',d:'Every colour of the rainbow',p:450,slot:'wrap',val:{t: 'bands', c: ['#ef4444', '#f97316', '#facc15', '#22c55e', '#3b82f6', '#8b5cf6']}},
+    {k:'wwaves',cat:'🎨 Car wraps — every racing game',ic:'🌊',n:'Ocean waves',d:'Rolling blue waves',p:450,slot:'wrap',val:{t: 'waves', c: ['#0ea5e9', '#0369a1', '#e0f2fe']}},
+    {k:'wdots',cat:'🎨 Car wraps — every racing game',ic:'🔴',n:'Polka dots',d:'White with red polka dots',p:300,slot:'wrap',val:{t: 'dots', c: ['#f8fafc', '#dc2626']}},
+    {k:'whearts',cat:'🎨 Car wraps — every racing game',ic:'💖',n:'Hearts',d:'Pink with little hearts',p:350,slot:'wrap',val:{t: 'hearts', c: ['#f9a8d4', '#be123c']}},
+    {k:'wstars',cat:'🎨 Car wraps — every racing game',ic:'⭐',n:'Starfield',d:'Navy with white stars',p:400,slot:'wrap',val:{t: 'stars', c: ['#1e3a8a', '#f8fafc']}},
+    {k:'wsnow',cat:'🎨 Car wraps — every racing game',ic:'☃️',n:'Snowflakes',d:'Ice blue with snowflakes',p:350,slot:'wrap',val:{t: 'stars', c: ['#7dd3fc', '#ffffff']}},
+    {k:'wcarbon',cat:'🎨 Car wraps — every racing game',ic:'⬛',n:'Carbon fibre',d:'Woven black carbon',p:500,slot:'wrap',val:{t: 'carbon', c: ['#111827', '#27272a']}},
+    {k:'wcircuit',cat:'🎨 Car wraps — every racing game',ic:'🔌',n:'Circuit board',d:'Green board with gold traces',p:550,slot:'wrap',val:{t: 'circuit', c: ['#14532d', [2, 1.6, 0.3]]}},
+    {k:'wgraffiti',cat:'🎨 Car wraps — every racing game',ic:'🎨',n:'Graffiti',d:'Spray-paint splats in every colour',p:500,slot:'wrap',val:{t: 'graffiti', c: ['#f8fafc']}},
+    {k:'whazard',cat:'🎨 Car wraps — every racing game',ic:'⚠️',n:'Hazard stripes',d:'Black and yellow warning stripes',p:400,slot:'wrap',val:{t: 'hazard', c: ['#facc15', '#111827']}},
+    {k:'wpolice',cat:'🎨 Car wraps — every racing game',ic:'🚓',n:'Interceptor',d:'Black and white with a blue stripe',p:450,slot:'wrap',val:{t: 'police', c: ['#f8fafc', '#111827', '#1d4ed8']}},
+    {k:'wpixel',cat:'🎨 Car wraps — every racing game',ic:'🕹️',n:'Arcade pixels',d:'Retro arcade colours',p:450,slot:'wrap',val:{t: 'digital', c: ['#111827', '#f43f5e', '#22d3ee', '#facc15']}},
+    {k:'wgoldleaf',cat:'🎨 Car wraps — every racing game',ic:'🪙',n:'Gold leaf',d:'Patches of real gold',p:800,slot:'wrap',val:{t: 'goldleaf', c: [[2, 1.6, 0.35], [2.4, 2, 0.6]]}},
     {k:'pgold',cat:'🏎️ Cars — every racing game',ic:'🥇',n:'Gold chrome paint',d:'Your car in shining gold (NASCAR, Drift, Kart, Rival City)',p:500,slot:'paint',val:['#d4a017','#111827']},
     {k:'pblack',cat:'🏎️ Cars — every racing game',ic:'🖤',n:'Midnight black paint',d:'Murdered-out black with red trim',p:300,slot:'paint',val:['#0b0b0f','#ef4444']},
     {k:'pred',cat:'🏎️ Cars — every racing game',ic:'❤️',n:'Candy red paint',d:'Deep candy red with white trim',p:300,slot:'paint',val:['#dc2626','#f8fafc']},
@@ -89,6 +116,9 @@
     {k:'xdragon',ic:'🐉',n:'Dragon wings',rar:4,slot:'back',val:{t:'wings',c:[.2,1.6,.3],big:1}},
     {k:'pcape',ic:'🎖️',n:'Season cape',rar:3,pass:1,slot:'back',val:{c:'#0ea5e9',c2:[2.4,2,.4]}},{k:'pwings',ic:'🎖️',n:'Season wings',rar:3,pass:1,slot:'back',val:{t:'wings',c:[2.4,2,.4],big:1}},{k:'pcrown',ic:'🎖️',n:'Season crown',rar:4,pass:1,slot:'head',val:{t:'crown',c:[.5,2.2,2.4]}}];
   const EXCC=[
+    {k:'cxholo',ic:'🪩',n:'Holographic wrap',rar:3,car:1,slot:'wrap',val:{t:'holo'}},{k:'cxgalaxy',ic:'🌌',n:'Galaxy wrap',rar:3,car:1,slot:'wrap',val:{t:'galaxy',c:['#0b0b2b','#ffffff','#a855f7','#ec4899']}},
+    {k:'cxlavawrap',ic:'🌋',n:'Lava cracks wrap',rar:2,car:1,slot:'wrap',val:{t:'lava',c:['#1c1917',[2.4,.6,.08]]}},{k:'cxneon',ic:'💜',n:'Neon pulse wrap',rar:3,car:1,slot:'wrap',val:{t:'neon',c:[[2.2,.3,1.8],[.3,1.6,2.4]]}},
+    {k:'cxmatrix',ic:'🟩',n:'Matrix rain wrap',rar:4,car:1,slot:'wrap',val:{t:'matrix',c:['#020617',[.3,2.4,.5]]}},{k:'cxcamopink',ic:'🩷',n:'Pink camo wrap',rar:1,car:1,slot:'wrap',val:{t:'camo',c:['#f9a8d4','#ec4899','#fbcfe8','#9d174d']}},
     {k:'cxorange',ic:'🟧',n:'Orange stripes',rar:1,car:1,slot:'stripe',val:'#f97316'},{k:'cxred',ic:'🔴',n:'Red underglow',rar:1,car:1,slot:'glow',val:[2.4,.3,.3]},
     {k:'cxchrome',ic:'🪞',n:'Chrome wing',rar:2,car:1,slot:'wing',val:{c:'#e5e7eb',e:[1.6,2,2.4],tall:1}},{k:'cxblue',ic:'🔵',n:'Blue flames',rar:2,car:1,slot:'exhaust',val:{c:[.4,1.2,2.4]}},
     {k:'cxlava',ic:'🌋',n:'Lava paint',rar:3,car:1,slot:'paint',val:['#7c2d12',[2.4,.7,.1]]},{k:'cxgreenfl',ic:'💚',n:'Toxic flames',rar:3,car:1,slot:'exhaust',val:{c:[.5,2.4,.4]}},
@@ -130,9 +160,54 @@
 
 
   /* ---- your car's look in every racing game: paint, underglow, wing, exhaust flames, stripes ---- */
-  function carPaint(){ return equipped('paint'); }
-  function carDeco(P,L,W,H,spd,ax){ const g=equipped('glow'), w=equipped('wing'), x=equipped('exhaust'), st=equipped('stripe'); if(!g&&!w&&!x&&!st) return;
+
+  /* ---- car wraps: patterns printed on the sides and hood of your car (built once per car shape, some animated) ---- */
+  const WRC={};
+  function wrapRects(w,L,W,H){ const key=w.t+'|'+(w.c||[]).join()+'|'+L+'|'+W+'|'+H; if(WRC[key]) return WRC[key]; const out=[], u0=-L*.47, u1=L*.47, v0=Math.min(.3,H*.4), v1=H-.02, hv=Math.max(.1,v1-v0), uL=u1-u0, r=seedR(key), c=w.c||[];
+    const S=(u,v,su,sv,col,ly,a)=>out.push(['s',u,v,su,sv,col,ly||1,a]), Tp=(u,z,su,sz,col,ly,a)=>out.push(['t',u,z,su,sz,col,ly||1,a]);
+    const base=(col,a)=>{ S((u0+u1)/2,(v0+v1)/2,uL,hv,col,0,a); Tp((u0+u1)/2,0,uL,W*.9,col,0,a); };
+    const rs=(n,f)=>{ for(let i=0;i<n;i++) f(u0+r()*uL,v0+r()*hv,(r()-.5)*W*.85,i); };
+    switch(w.t){
+      case 'checker': { const cs=Math.max(.18,hv/3); for(let u=u0;u<u1-1e-3;u+=cs) for(let v=v0,j=0;v<v1-1e-3;v+=cs,j++){ const iu=Math.round((u-u0)/cs); S(u+cs/2,v+Math.min(cs,v1-v)/2,cs,Math.min(cs,v1-v),c[(iu+j)%2],0); }
+        for(let u=u0;u<u1-1e-3;u+=cs) for(let z=-W*.45,j=0;z<W*.45-1e-3;z+=cs,j++){ const iu=Math.round((u-u0)/cs); Tp(u+cs/2,z+cs/2,cs,cs,c[(iu+j)%2],0); } break; }
+      case 'flames': for(let k=0;k<5;k++){ const vc=v0+hv*(k+.5)/5, len=uL*(.32+.3*r()); for(let i=0;i<7;i++){ const sl=len/7, h=hv/5*1.25*(1-i/8); S(u1-(i+.5)*sl,vc,sl*1.05,h,c[Math.min(2,Math.floor(i/2.4))]); } }
+        for(let k=0;k<4;k++){ const zc=-W*.36+W*.72*(k+.5)/4, len=uL*(.25+.2*r()); for(let i=0;i<6;i++){ const sl=len/6; Tp(u1-(i+.5)*sl,zc,sl*1.05,W*.18*(1-i/7),c[Math.min(2,Math.floor(i/2))]); } } break;
+      case 'camo': base(c[0]); rs(30,(u,v,z,i)=>{ const col=c[1+i%3], a=.25+r()*.5, b=.15+r()*.3; S(u,v,a,Math.min(b,hv*.6),col); S(u+a*.3,v+b*.2,a*.7,Math.min(b*1.2,hv*.6),col); if(i<18){ Tp(u,z,a,b*1.6,col); Tp(u+a*.3,z+b*.4,a*.7,b,col); } }); break;
+      case 'digital': base(c[0]); rs(120,(u,v,z,i)=>{ const q=.11, col=c[1+i%(c.length-1)]; S(Math.round(u/q)*q,Math.min(v1-q/2,Math.round(v/q)*q),q,q,col); if(i%2) Tp(Math.round(u/q)*q,Math.round(z/q)*q,q,q,col); }); break;
+      case 'tiger': case 'zebra': case 'hazard': { if(w.t!=='hazard') base(c[0]); else base(c[0]); const n=w.t==='hazard'?Math.round(uL/.35):w.t==='zebra'?14:11; for(let k=0;k<n;k++){ const us=u0+uL*(k+.3+(w.t==='hazard'?0:r()*.4))/n, wd=w.t==='hazard'?.17:w.t==='zebra'?.12:.07+r()*.06; for(let i=0;i<6;i++){ const v=v0+hv*(i+.5)/6; const uu=us+(i-3)*(w.t==='hazard'?.06:.04)*(w.t==='tiger'&&k%2?-1:1); if(uu>u0&&uu<u1) S(uu,v,wd*(w.t==='tiger'?1-Math.abs(i-2.5)/4:1),hv/6+.005,c[1]); }
+          for(let i=0;i<5;i++){ const z=-W*.4+W*.8*(i+.5)/5, uu=us+(i-2)*.05; if(uu>u0&&uu<u1) Tp(uu,z,wd,W*.8/5+.005,c[1]); } } break; }
+      case 'leopard': base(c[0]); rs(36,(u,v,z,i)=>{ const s2=.09+r()*.07; S(u,Math.min(v1-s2/2,v),s2,s2,c[1]); S(u,Math.min(v1-s2/2,v),s2*.45,s2*.45,c[0],2); if(i<20){ Tp(u,z,s2,s2,c[1]); Tp(u,z,s2*.45,s2*.45,c[0],2); } }); break;
+      case 'lightning': for(let k=0;k<3;k++){ let u=u1-uL*(.1+k*.3), v=v1-.02; for(let i=0;i<5;i++){ const du=-(.25+r()*.2), dv=-hv/5; S(u+du/2,v+dv*.5,Math.abs(du),.06,c[0]); u+=du; v+=dv; S(u,v+dv*.5+.02,.06,hv/5,c[0]); } } for(let k=0;k<2;k++) Tp((u0+u1)/2,(k?-1:1)*W*.2,uL*.9,.05,c[0]); break;
+      case 'bands3': for(let i=0;i<3;i++){ S((u0+u1)/2,v0+hv*(.45+i*.13),uL,hv*.1,c[i]); Tp((u0+u1)/2,(i-1)*W*.14,uL,W*.1,c[i]); } break;
+      case 'bands': for(let i=0;i<c.length;i++){ S((u0+u1)/2,v0+hv*(i+.5)/c.length,uL,hv/c.length+.003,c[i]); Tp((u0+u1)/2,-W*.45+W*.9*(i+.5)/c.length,uL,W*.9/c.length+.003,c[i]); } break;
+      case 'waves': base(c[1]); for(let b=0;b<3;b++) for(let i=0;i<14;i++){ const u=u0+uL*(i+.5)/14, v=v0+hv*(.2+b*.3)+Math.sin(i*.9+b)*hv*.08; S(u,v,uL/14+.01,hv*.12,b===1?c[2]:c[0]); Tp(u,-W*.3+b*W*.3+Math.sin(i*.9+b)*.08,uL/14+.01,W*.1,b===1?c[2]:c[0]); } break;
+      case 'dots': case 'hearts': base(c[0]); for(let iu=0;iu<Math.floor(uL/.32);iu++) for(let iv=0;iv<Math.max(1,Math.floor(hv/.24));iv++){ const u=u0+.16+iu*.32, v=v0+.12+iv*.24+(iu%2?.06:0); if(v>v1-.06) continue; if(w.t==='dots') S(u,v,.12,.12,c[1]); else { S(u-.03,v+.02,.06,.06,c[1]); S(u+.03,v+.02,.06,.06,c[1]); S(u,v-.025,.07,.06,c[1]); } }
+        for(let iu=0;iu<Math.floor(uL/.32);iu++) for(let iz=0;iz<4;iz++) Tp(u0+.16+iu*.32,-W*.33+iz*W*.22,.12,.12,c[1]); break;
+      case 'stars': base(c[0]); rs(34,(u,v,z,i)=>{ const q=.035+r()*.03; S(u,Math.min(v1-q*1.5,v),q*3,q,c[1]); S(u,Math.min(v1-q*1.5,v),q,q*3,c[1]); if(i<20){ Tp(u,z,q*3,q,c[1]); Tp(u,z,q,q*3,c[1]); } }); break;
+      case 'carbon': base(c[0]); for(let u=u0;u<u1;u+=.09) for(let v=v0;v<v1-.04;v+=.09){ if(Math.round((u-u0)/.09+(v-v0)/.09)%2) S(u+.045,v+.045,.09,.045,c[1]); } for(let u=u0;u<u1;u+=.12) for(let z=-W*.44;z<W*.44;z+=.12) if(Math.round((u-u0)/.12+(z+W)/.12)%2) Tp(u+.06,z+.06,.12,.06,c[1]); break;
+      case 'circuit': base(c[0]); rs(26,(u,v,z,i)=>{ const h=r()<.5, len=.2+r()*.6; S(u,v,h?len:.025,h?.025:Math.min(len,hv),c[1]); S(u+(h?len/2:0),v+(h?0:Math.min(len,hv)/2),.06,.06,c[1]); if(i<16) Tp(u,z,h?len:.025,h?.025:len*.5,c[1]); }); break;
+      case 'graffiti': base(c[0]); { const P=['#ef4444','#f97316','#facc15','#22c55e','#06b6d4','#3b82f6','#a855f7','#ec4899','#111827']; rs(30,(u,v,z,i)=>{ const col=P[i%P.length], a=.15+r()*.4, b=.1+r()*.22; S(u,v,a,Math.min(b,hv*.7),col); S(u+a*.4,v-b*.2,a*.4,Math.min(b*.6,hv*.5),col,2); if(i<18) Tp(u,z,a,b*1.4,col); }); } break;
+      case 'police': S(u0+uL*.15,(v0+v1)/2,uL*.3,hv,c[1],0); S(u1-uL*.15,(v0+v1)/2,uL*.3,hv,c[1],0); S((u0+u1)/2,(v0+v1)/2,uL*.4,hv,c[0],0); S((u0+u1)/2,v0+hv*.35,uL,hv*.12,c[2]); Tp((u0+u1)/2,0,uL,W*.9,c[1],0); Tp((u0+u1)/2,0,uL,W*.2,c[0]); break;
+      case 'goldleaf': rs(34,(u,v,z,i)=>{ const a=.12+r()*.3, b=.08+r()*.2; S(u,v,a,Math.min(b,hv*.5),c[i%2]); if(i<18) Tp(u,z,a,b*1.5,c[i%2]); }); break;
+      case 'galaxy': base(c[0]); rs(14,(u,v,z,i)=>{ const col=c[2+i%2], a=.4+r()*.6, b=.12+r()*.2; S(u,v,a,Math.min(b,hv*.6),col.map?col:col,2); if(i<8) Tp(u,z,a,b*2,col,2); }); rs(50,(u,v,z,i)=>{ S(u,Math.min(v1-.02,v),.03,.03,[2.4,2.4,2.4],3); if(i<26) Tp(u,z,.03,.03,[2.4,2.4,2.4],3); }); break;
+      case 'lava': base(c[0]); rs(30,(u,v,z,i)=>{ const h=r()<.5, len=.12+r()*.35; S(u,v,h?len:.03,h?.03:Math.min(len,hv),c[1],2,'pulse'); if(i<16) Tp(u,z,h?len:.03,h?.03:len,c[1],2,'pulse'); }); break;
+      case 'holo': base('#ffffff','holo'); break;
+      case 'neon': base('#0b0b18'); for(let i=0;i<4;i++){ S((u0+u1)/2,v0+hv*(i+.5)/4,uL,.03,c[i%2],2,'pulse'); } for(let i=0;i<5;i++) Tp((u0+u1)/2,-W*.4+W*.8*i/4,uL,.03,c[i%2],2,'pulse'); break;
+      case 'matrix': base(c[0]); for(let k=0;k<Math.floor(uL/.16);k++) for(let j=0;j<Math.max(2,Math.floor(hv/.1));j++) S(u0+.08+k*.16,v0+.05+j*.1,.04,.06,c[1],2,'m'+((k*7)%10)+'_'+j); for(let k=0;k<Math.floor(uL/.16);k++) for(let j=0;j<6;j++) Tp(u0+.08+k*.16,-W*.4+j*W*.16,.04,.06,c[1],2,'m'+((k*3)%10)+'_'+j); break; }
+    WRC[key]=out; return out; }
+  function drawWrap(Q,w,L,W,H){ const t=performance.now()/1000, bv0=Math.min(.3,H*.4), bh=Math.max(.1,H-.02-bv0);
+    for(const [f,u,v,su,sv,col,ly,a] of wrapRects(w,L,W,H)){ let c=col;
+      if(a==='holo') c=[.9+.6*Math.sin(t*2+u*1.3),.9+.6*Math.sin(t*2+u*1.3+2.1),.9+.6*Math.sin(t*2+u*1.3+4.2)];
+      else if(a==='pulse'){ const k=.55+.45*Math.sin(t*4+u*2); c=Array.isArray(col)?col.map(x=>x*k):col; }
+      else if(a&&a[0]==='m'){ const [ph,j]=a.slice(1).split('_').map(Number), k=((t*3+ph)%6)-j*.6; c=col.map(x=>x*Math.max(.08,1-Math.abs(k)*.5)); }
+      const e=.011+(ly||0)*.004; if(f==='s'){ Q(u,v,W/2+e,su,sv,.006,c); Q(u,v,-(W/2+e),su,sv,.006,c); } else { Q(u,H+e,v,su,.006,sv,c);
+        /* the same pattern on the back and the front of the car: the strip of the roof pattern nearest each end, folded down */ for(const [w0,face] of [[-L*.47,-1],[L*.47-bh,1]]){ const a0=Math.max(u-su/2,w0), a1=Math.min(u+su/2,w0+bh); if(a1<=a0) continue; const vv=face<0?bv0+((a0+a1)/2-w0):bv0+(w0+bh-(a0+a1)/2); Q(face*(L/2+e),vv,v,.006,a1-a0,sv,c); } } } }
+  /* a wrap with a background colours the whole car (unless you've picked a paint) */
+  const WRAPBODY={checker:0,camo:0,digital:0,tiger:0,zebra:0,leopard:0,stars:0,carbon:0,circuit:0,graffiti:0,galaxy:0,lava:0,matrix:0,dots:0,hearts:0,waves:1,police:1};
+  function carPaint(){ const pt=equipped('paint'); if(pt) return pt; const w=equipped('wrap'); if(!w) return null; if(w.t==='holo') return ['#e5e7eb','#f8fafc']; if(w.t==='neon') return ['#0b0b18','#111827']; const i=WRAPBODY[w.t]; if(i==null||!w.c) return null; const c0=w.c[i]; return typeof c0==='string'?[c0,typeof w.c[1]==='string'?w.c[1]:'#111827']:null; }
+  function carDeco(P,L,W,H,spd,ax){ const g=equipped('glow'), w=equipped('wing'), x=equipped('exhaust'), st=equipped('stripe'), wr=equipped('wrap'); if(!g&&!w&&!x&&!st&&!wr) return;
     const Q=ax==='z'?(f,y,s,sf,sy,ss,col)=>P(s,y,f,ss,sy,sf,col):P, t=performance.now()/1000;
+    if(wr) try{ drawWrap(Q,wr,L,W,H); }catch(e){}
     if(g){ const c=g==='rainbow'?[1.2+1.2*Math.sin(t*3),1.2+1.2*Math.sin(t*3+2.1),1.2+1.2*Math.sin(t*3+4.2)]:g; Q(0,.05,0,L*.92,.03,W*1.04,c); Q(0,.04,0,L*1.1,.01,W*1.4,c.map?c.map(v=>v*.35):c); }
     if(st) for(const s of [-1,1]) Q(0,H+.012,s*W*.11,L*.96,.02,W*.08,st);
     if(w){ const hh=w.tall?.55:.35; Q(-L*.46,H+hh,0,.4,.05,W*.98,w.c); for(const s of [-1,1]){ Q(-L*.46,H+hh/2,s*W*.3,.1,hh,.05,'#111827'); Q(-L*.46,H+hh,s*W*.49,.5,.22,.03,w.e||w.c); } }
