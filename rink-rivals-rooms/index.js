@@ -757,6 +757,9 @@ export class Acct {
     this.sql.exec('CREATE TABLE IF NOT EXISTS tok(th TEXT PRIMARY KEY, nm TEXT, ts INTEGER)');
     this.sql.exec('CREATE TABLE IF NOT EXISTS crew(tag TEXT PRIMARY KEY, name TEXT, owner TEXT, code TEXT, ts INTEGER)');
     this.sql.exec('CREATE TABLE IF NOT EXISTS trade(id INTEGER PRIMARY KEY AUTOINCREMENT, frm TEXT, too TEXT, give TEXT, want TEXT, msg TEXT, st TEXT, claimed INTEGER, ts INTEGER)');
+    for(const col of ['pub TEXT','seen INTEGER','pg TEXT']){ try{ this.sql.exec('ALTER TABLE acct ADD COLUMN '+col); }catch(e){} }
+    this.sql.exec('CREATE TABLE IF NOT EXISTS fr(a TEXT, b TEXT, st TEXT, ts INTEGER, PRIMARY KEY(a,b))'); this.sql.exec('CREATE INDEX IF NOT EXISTS ix_fr_b ON fr(b)');
+    this.sql.exec('CREATE TABLE IF NOT EXISTS gift(id INTEGER PRIMARY KEY AUTOINCREMENT, frm TEXT, too TEXT, what TEXT, msg TEXT, st TEXT, ts INTEGER)'); this.sql.exec('CREATE INDEX IF NOT EXISTS ix_gift_too ON gift(too,st)');
     this.sql.exec('CREATE INDEX IF NOT EXISTS ix_trade_too ON trade(too,st)'); this.sql.exec('CREATE INDEX IF NOT EXISTS ix_trade_frm ON trade(frm,claimed)');
     this.sql.exec('CREATE INDEX IF NOT EXISTS ix_acct_crew ON acct(crew)'); this.sql.exec('CREATE INDEX IF NOT EXISTS ix_tok_nm ON tok(nm)'); }
   async who(token){ if(!token) return null; const th=await sha('rr-acct:'+String(token).slice(0,80)); const r=this.sql.exec('SELECT nm FROM tok WHERE th=?',th).toArray()[0]; return r?r.nm:null; }
@@ -785,7 +788,8 @@ export class Acct {
     const nm=await this.who(m.token); if(!nm) return J({err:'auth'},401);
     if(m.op==='pull'){ const r=this.sql.exec('SELECT disp,data,ver,crew FROM acct WHERE nm=?',nm).toArray()[0]; if(!r) return J({err:'auth'},401); const ow=OWNER_ACCTS.has(nm); return J(m.since!=null&&+m.since>=r.ver?{ok:true,ver:r.ver,same:true,crew:r.crew,name:r.disp,owner:ow}:{ok:true,ver:r.ver,data:r.data,crew:r.crew,name:r.disp,owner:ow}); }
     if(m.op==='push'){ const data=String(m.data||''); if(data.length>600000) return J({err:'big'},413); const r=this.sql.exec('SELECT ver FROM acct WHERE nm=?',nm).toArray()[0]; const ver=(r?r.ver:0)+1;
-      this.sql.exec('UPDATE acct SET data=?, ver=?, ts=?, life=?, str=? WHERE nm=?',data,ver,now,Math.max(0,+m.life||0),Math.max(0,+m.str||0),nm); return J({ok:true,ver}); }
+      this.sql.exec('UPDATE acct SET data=?, ver=?, ts=?, life=?, str=?, pub=?, seen=?, pg=? WHERE nm=?',data,ver,now,Math.max(0,+m.life||0),Math.max(0,+m.str||0),String(m.pub||'').slice(0,6000),now,String(m.pg||'').replace(/[^a-z0-9-]/g,'').slice(0,24),nm); return J({ok:true,ver}); }
+    if(m.op==='ping'){ this.sql.exec('UPDATE acct SET seen=?, pg=? WHERE nm=?',now,String(m.pg||'').replace(/[^a-z0-9-]/g,'').slice(0,24),nm); return J({ok:true}); }
     if(m.op==='logout'){ this.sql.exec('DELETE FROM tok WHERE th=?',await sha('rr-acct:'+String(m.token||'').slice(0,80))); return J({ok:true}); }
     if(m.op==='setpin'){ if(!pinOk(m.pin)) return J({err:'pin'},400); const salt=[...crypto.getRandomValues(new Uint8Array(16))].map(v=>v.toString(16).padStart(2,'0')).join(''); this.sql.exec('UPDATE acct SET salt=?, ph=? WHERE nm=?',salt,await pbkdf(String(m.pin),salt),nm); return J({ok:true}); }
     /* crews */
@@ -809,5 +813,25 @@ export class Acct {
     if(m.op==='tradeRespond'){ const r=this.sql.exec("SELECT id FROM trade WHERE id=? AND too=? AND st='open'",+m.id,nm).toArray()[0]; if(!r) return J({err:'gone'},404); this.sql.exec('UPDATE trade SET st=? WHERE id=?',m.accept?'accepted':'declined',+m.id); return J({ok:true}); }
     if(m.op==='tradeCancel'){ this.sql.exec("UPDATE trade SET st='cancelled' WHERE id=? AND frm=? AND st='open'",+m.id,nm); return J({ok:true}); }
     if(m.op==='tradeClaim'){ this.sql.exec("UPDATE trade SET claimed=1 WHERE id=? AND frm=? AND st<>'open'",+m.id,nm); return J({ok:true}); }
+    /* friends: a request becomes a friendship when the other person accepts (or asks back) */
+    const disp=n=>{ const r=this.sql.exec('SELECT disp,crew,seen,pg FROM acct WHERE nm=?',n).toArray()[0]; return r?{name:r.disp,crew:r.crew,seen:r.seen||0,pg:r.pg||''}:null; };
+    if(m.op==='friendAdd'){ const to=key(m.to); if(!to||to===nm) return J({err:'who'},400); if(!this.sql.exec('SELECT 1 FROM acct WHERE nm=?',to).toArray()[0]) return J({err:'nouser'},404);
+      const back=this.sql.exec('SELECT st FROM fr WHERE a=? AND b=?',to,nm).toArray()[0]; if(back){ this.sql.exec("UPDATE fr SET st='ok' WHERE a=? AND b=?",to,nm); return J({ok:true,now:'friends'}); }
+      this.sql.exec("INSERT OR IGNORE INTO fr(a,b,st,ts) VALUES(?,?,'pending',?)",nm,to,now); return J({ok:true,now:'sent'}); }
+    if(m.op==='friendAccept'){ this.sql.exec("UPDATE fr SET st='ok' WHERE a=? AND b=?",key(m.name),nm); return J({ok:true}); }
+    if(m.op==='friendRemove'){ const o=key(m.name); this.sql.exec('DELETE FROM fr WHERE (a=? AND b=?) OR (a=? AND b=?)',nm,o,o,nm); return J({ok:true}); }
+    if(m.op==='friendList'){ const ok=this.sql.exec("SELECT a,b FROM fr WHERE (a=? OR b=?) AND st='ok' LIMIT 200",nm,nm).toArray().map(r=>disp(r.a===nm?r.b:r.a)).filter(Boolean);
+      const inc=this.sql.exec("SELECT a FROM fr WHERE b=? AND st='pending' LIMIT 50",nm).toArray().map(r=>disp(r.a)).filter(Boolean), out=this.sql.exec("SELECT b FROM fr WHERE a=? AND st='pending' LIMIT 50",nm).toArray().map(r=>disp(r.b)).filter(Boolean);
+      const gifts=this.sql.exec("SELECT id,frm,what,msg,ts FROM gift WHERE too=? AND st='open' ORDER BY id DESC LIMIT 30",nm).toArray().map(g=>({...g,frm:(disp(g.frm)||{name:g.frm}).name}));
+      return J({ok:true,friends:ok,inc,out,gifts,now}); }
+    /* gifts: coins, items or a crate — the sender's device takes them away first */
+    if(m.op==='giftSend'){ const to=key(m.to); if(!to||to===nm) return J({err:'who'},400); if(!this.sql.exec('SELECT 1 FROM acct WHERE nm=?',to).toArray()[0]) return J({err:'nouser'},404);
+      const w=m.what||{}, what=JSON.stringify({items:(Array.isArray(w.items)?w.items:[]).map(x=>String(x).replace(/[^\w]/g,'').slice(0,24)).slice(0,10),coins:Math.max(0,Math.min(1e7,Math.floor(+w.coins||0))),crate:String(w.crate||'').replace(/[^a-z]/g,'').slice(0,12)});
+      const n=this.sql.exec("SELECT COUNT(*) AS c FROM gift WHERE frm=? AND ts>?",nm,now-864e5).toArray()[0].c; if(n>=20) return J({err:'many'},429);
+      this.sql.exec("INSERT INTO gift(frm,too,what,msg,st,ts) VALUES(?,?,?,?,'open',?)",nm,to,what,String(m.msg||'').replace(/[<>]/g,'').slice(0,80),now); return J({ok:true}); }
+    if(m.op==='giftOpen'){ const g=this.sql.exec("SELECT what FROM gift WHERE id=? AND too=? AND st='open'",+m.id,nm).toArray()[0]; if(!g) return J({err:'gone'},404); this.sql.exec("UPDATE gift SET st='opened' WHERE id=?",+m.id); return J({ok:true,what:g.what}); }
+    /* public profile: card, gear, records */
+    if(m.op==='profile'){ const o=key(m.name), r=this.sql.exec('SELECT disp,crew,pub,seen,pg FROM acct WHERE nm=?',o).toArray()[0]; if(!r) return J({err:'nouser'},404);
+      const fr=this.sql.exec("SELECT st FROM fr WHERE (a=? AND b=?) OR (a=? AND b=?)",nm,o,o,nm).toArray()[0]; return J({ok:true,name:r.disp,crew:r.crew,pub:r.pub||'{}',seen:r.seen||0,pg:r.pg||'',friend:fr?fr.st:'',now}); }
     if(m.op==='crewTop'){ const rows=this.sql.exec('SELECT c.tag AS tag, c.name AS name, COUNT(a.nm) AS n, SUM(a.life) AS total FROM crew c JOIN acct a ON a.crew=c.tag GROUP BY c.tag ORDER BY total DESC LIMIT 25').toArray(); return J({ok:true,rows}); }
     return J({err:'op'},400); } }
