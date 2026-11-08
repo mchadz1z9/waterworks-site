@@ -50,7 +50,8 @@ kbd{ font:inherit; font-size:13px; background:var(--ledbg); color:#fff; border-r
     <div id="menuIn">
       <h1>🧗 Neon Obby</h1>
       <div class="muted">Run, jump and climb your way through 12 stages of floating platforms high above the lava: moving blocks, spinning bars, tiles that vanish under your feet, jump pads, conveyor belts and a final tower. Checkpoints save your progress. Race the clock — or race your friends online.</div>
-      <div class="pills" style="margin-top:8px"><span class="lbl">Mode</span><button data-mode="0">🙂 Normal</button><button data-mode="1">🔥 Hard (smaller platforms, faster traps)</button></div>
+      <div class="pills" style="margin-top:8px"><span class="lbl">Mode</span><button data-mode="0">🙂 Normal</button><button data-mode="1">🔥 Hard (smaller platforms, faster traps)</button><button data-mode="2">🛠️ Creator — build &amp; share your own</button></div>
+      <div id="edP" style="display:none"></div>
       <div class="row" style="margin-top:6px"><button class="btn gold" id="goBtn" style="font-size:22px;padding:8px 26px">Start run ▶</button><button class="btn" id="resetBtn">Restart from the beginning</button></div>
     </div>
     <div class="statrow" id="stats"></div>
@@ -138,7 +139,7 @@ const saveSV=()=>{ try{ localStorage.setItem('rrObby',JSON.stringify(SV)); }catc
 let msg='', msgT=0, msgCol='#fde047'; const say=(t,c,d)=>{ msg=t; msgCol=c||'#fde047'; msgT=d||1.6; };
 function spawn(){ const c=CPS[CP]; P.x=c.x; P.y=c.y; P.z=c.z; P.vx=P.vy=P.vz=0; P.on=null; P.air=0; for(const b of B) if(b.t==='v'){ b.gone=0; b.step=0; } }
 function die(){ deaths++; if(RUN) RUN.deaths++; sfx.die(); say('OOF!','#f87171',.9); spawn(); }
-function startRun(){ buildCourse(MODE===1); CP=0; deaths=0; RUN={t:0,deaths:0,done:false,mode:MODE}; spawn(); P.yaw=PI; camYaw=0; SV.runs++; saveSV(); built=false; say('GO!','#4ade80',1.2); audio(); renderStats(); }
+function startRun(){ if(MODE===2) buildCustom(); else buildCourse(MODE===1); CP=0; deaths=0; RUN={t:0,deaths:0,done:false,mode:MODE}; spawn(); P.yaw=PI; camYaw=0; SV.runs++; saveSV(); built=false; say('GO!','#4ade80',1.2); audio(); renderStats(); }
 function boxAt(b,t){ if(b.t==='m'){ const s=Math.sin(t*b.sp+b.ph); return [b.x0+b.ax*s,b.y0+b.ay*s,b.z0+b.az*s]; } return [b.x,b.y,b.z]; }
 const keys=new Set(); let stick={x:0,y:0}, T=0;
 function physics(dt){ const t=T;
@@ -161,29 +162,30 @@ function physics(dt){ const t=T;
   /* jump (with a little forgiveness: coyote time + buffered presses) */
   P.coyote=P.on?.11:Math.max(0,P.coyote-dt); P.buf=Math.max(0,P.buf-dt);
   if(P.buf>0&&P.coyote>0){ P.vy=9.6; P.on=null; P.coyote=0; P.buf=0; sfx.jump(); }
-  P.vy-=26*dt; if(P.vy<-30) P.vy=-30;
+  P.vy-=26*dt; if(P.vy<-30) P.vy=-30; if(editing()&&ED.fly) P.vy=(keys.has('Space')?7:0)-(keys.has('ShiftLeft')||keys.has('ShiftRight')?7:0);
   const was=P.on; P.on=null; const N=3;
   for(let k=0;k<N;k++){ P.x+=P.vx*dt/N; P.y+=P.vy*dt/N; P.z+=P.vz*dt/N; collide(); }
   if(P.on&&!was){ sfx.land(); }
   P.air=P.on?0:P.air+dt;
   if(P.on){ const b=P.on; if(b.t==='p'){ P.vy=17.5; P.on=null; sfx.pad(); say('BOING!','#4ade80',.6); }
     else if(b.t==='v'&&!b.step&&!(b.gone>0)) b.step=.001;
-    else if(b.t==='cp'&&b.idx>CP){ CP=b.idx; sfx.cp(); say(`CHECKPOINT ${CP} · ${CPS[CP].name.toUpperCase()}`,'#4ade80',1.6); if(NET&&NET.on) NET.send({t:'cp',cp:CP}); }
-    else if(b.t==='f') finish(); }
+    else if(b.t==='cp'&&b.idx>CP&&!editing()){ CP=b.idx; sfx.cp(); say(`CHECKPOINT ${CP} · ${CPS[CP].name.toUpperCase()}`,'#4ade80',1.6); if(NET&&NET.on) NET.send({t:'cp',cp:CP}); }
+    else if(b.t==='f'&&!editing()) finish(); }
   /* spinning bars */
-  for(const s of SPIN){ if(Math.abs(P.y+.5-s.y)>.6) continue; const ex=Math.sin(s.a)*s.len, ez=Math.cos(s.a)*s.len;
+  if(!editing()) for(const s of SPIN){ if(Math.abs(P.y+.5-s.y)>.6) continue; const ex=Math.sin(s.a)*s.len, ez=Math.cos(s.a)*s.len;
     const dx=P.x-s.x, dz=P.z-s.z, L=s.len*s.len*4, tt=clamp((dx*ex*2+dz*ez*2+ s.len*s.len*2)/(L),0,1), qx=s.x-ex+2*ex*tt, qz=s.z-ez+2*ez*tt; if(Math.hypot(P.x-qx,P.z-qz)<.45){ die(); return; } }
-  if(P.y<lowest-6) die();
+  if(P.y<lowest-6){ if(editing()) spawn(); else die(); }
   P.spd=Math.hypot(P.vx,P.vz); P.walk+=dt*P.spd*2.2; }
 const HX=.3, HY=.9;
 function collide(){ for(const b of B){ if(b.t==='v'&&b.gone>0) continue;
     const dx=P.x-b.x, dy=(P.y+HY)-b.y, dz=P.z-b.z, ox=HX+b.w/2-Math.abs(dx), oy=HY+b.h/2-Math.abs(dy), oz=HX+b.d/2-Math.abs(dz);
     if(ox<=0||oy<=0||oz<=0) continue;
-    if(b.t==='k'){ lastKill={x:b.x,y:b.y,z:b.z,w:b.w,h:b.h,d:b.d,px:P.x,py:P.y,pz:P.z}; die(); return; }
+    if(b.t==='k'&&!editing()){ lastKill={x:b.x,y:b.y,z:b.z,w:b.w,h:b.h,d:b.d,px:P.x,py:P.y,pz:P.z}; die(); return; }
     if(oy<ox&&oy<oz||(dy>0&&oy<.35&&P.vy<=0)){ if(dy>0){ P.y+=oy; if(P.vy<0) P.vy=0; P.on=b; } else { P.y-=oy; if(P.vy>0) P.vy=0; } }
     else if(ox<oz){ P.x+=dx>0?ox:-ox; P.vx=0; } else { P.z+=dz>0?oz:-oz; P.vz=0; } } }
 let lowest=0, lastKill=null;
 function finish(){ if(RUN.done) return; RUN.done=true; sfx.win(); const t=RUN.t, m=RUN.mode;
+  if(m===2){ say(`🏁 FINISHED! ${fmt(t)} · ${RUN.deaths} falls`,'#fbbf24',5); if(window.RRSTR) RRSTR.add(1); renderStats(); return; }
   const pb=!SV.best[m]||t<SV.best[m]; if(pb) SV.best[m]=Math.round(t*100)/100; SV.clears++; saveSV();
   say(pb?`NEW BEST! ${fmt(t)}`:`FINISHED! ${fmt(t)}`,'#fbbf24',5);
   try{ window.RRL&&RRL.post(m?'hard':'normal',-Math.round(t*100)/100,`${fmt(t)} · ${RUN.deaths} falls`); }catch(e){}
@@ -216,7 +218,7 @@ function render(dt){ if(!R3.ok) return; build(); T+=0;
     for(const s of SPIN){ R3.part(R3.UC,R3.mm(R3.T(s.x*K,(s.y-.4)*K,s.z*K),R3.S(.25*K,.8*K,.25*K)),'#334155');
       R3.part(R3.UB,R3.mm(R3.T(s.x*K,s.y*K,s.z*K),R3.RY(s.a),R3.S(.3*K,.3*K,s.len*2*K)),'#ef4444'); }
     for(const o of OT.values()) drawPerson(o.x,o.y,o.z,o.yaw,o.spd,o.walk,o.air,o.look);
-    drawPerson(P.x,P.y,P.z,P.yaw,P.spd,P.walk,P.air,{...myLook(),me:true});
+    drawPerson(P.x,P.y,P.z,P.yaw,P.spd,P.walk,P.air,{...myLook(),me:true}); edDraw();
   },dt);
   drawHUD(); }
 function myLook(){ if(owner()) return {olympia:true,skin:'#caa078',hi:'#dcb68f',shade:'#a37b55',top:'#1d4ed8',topHi:'#2b62f0',topDk:'#1a3a9e',shorts:'#0f1726',shoe:'#121a2a',hair:'#2a1f16'};
@@ -236,7 +238,7 @@ function drawHUD(){ ctx.clearRect(0,0,HW,HH);
   if(NET&&NET.on){ const all=[{name:'You',cp:CP,done:RUN.done,t:RUN.t}].concat([...OT.values()].map(o=>({name:o.name,cp:o.cp||0,done:o.done,t:o.ft}))).sort((a,b)=>(b.done?100:0)+b.cp-((a.done?100:0)+a.cp)||(a.t||0)-(b.t||0));
     all.forEach((p,i)=>txt(`${i+1}. ${p.name}${p.done?' 🏁 '+fmt(p.t):' · CP '+p.cp}`,HW-18,60+i*22,17,p.name==='You'?'#fde047':'#a5f3fc','right')); }
   if(msgT>0){ ctx.globalAlpha=clamp(msgT,0,1); txt(msg,HW/2,HH/2-60,44,msgCol); ctx.globalAlpha=1; }
-  if(RUN.done) txt('Press Start run for another go',HW/2,HH-30,22,'#e2e8f0'); }
+  edHUD(); if(RUN.done) txt('Press Start run for another go',HW/2,HH-30,22,'#e2e8f0'); }
 
 /* ---------- input ---------- */
 addEventListener('keydown',e=>{ const t=document.activeElement; if(t&&(t.tagName==='INPUT'||t.tagName==='TEXTAREA')) return;
@@ -261,8 +263,8 @@ $('jumpBtn').addEventListener('pointerdown',e=>{ e.stopPropagation(); P.buf=.13;
 /* ---------- panel ---------- */
 function renderStats(){ $('stats').innerHTML=[['Best (normal)',SV.best[0]?fmt(SV.best[0]):'—'],['Best (hard)',SV.best[1]?fmt(SV.best[1]):'—'],['Runs',SV.runs],['Clears',SV.clears]].map(([n,v])=>`<div class="stat"><b>${v}</b><span>${n}</span></div>`).join('');
   document.querySelectorAll('[data-mode]').forEach(b=>b.classList.toggle('on',+b.dataset.mode===MODE)); }
-document.querySelectorAll('[data-mode]').forEach(b=>b.onclick=()=>{ MODE=+b.dataset.mode; renderStats(); });
-$('goBtn').onclick=()=>{ $('goBtn').blur(); startRun(); };
+document.querySelectorAll('[data-mode]').forEach(b=>b.onclick=()=>{ b.blur(); MODE=+b.dataset.mode; if(MODE===2){ if(ED.shared){ ED.shared=null; CUST=edLoad(); history.replaceState(null,'',location.pathname); } edStart(false); } else { ED.on=false; edPanel(); } renderStats(); });
+$('goBtn').onclick=()=>{ $('goBtn').blur(); if(MODE===2) edStart(true); else startRun(); };
 $('resetBtn').onclick=()=>{ if(RUN){ CP=0; spawn(); RUN.t=0; RUN.deaths=0; RUN.done=false; } };
 $('btnSnd').onclick=()=>{ muted=!muted; $('btnSnd').textContent=muted?'Sound off':'Sound on'; };
 $('btnFs').onclick=()=>{ try{ document.fullscreenElement?document.exitFullscreen():st.requestFullscreen(); }catch(e){} };
@@ -290,7 +292,68 @@ function frame(now){ const dt=Math.min(.05,(now-last)/1000)*SPEED; last=now; T+=
   if(msgT>0) msgT-=dt; if(keys.has('KeyQ')) camYaw+=dt*2.2; if(keys.has('KeyE')) camYaw-=dt*2.2;
   render(dt); requestAnimationFrame(frame); }
 buildCourse(false); spawn(); renderStats(); requestAnimationFrame(frame);
-if(TEST) window.__ob={ st:()=>({x:P.x,y:P.y,z:P.z,on:P.on&&P.on.t,cp:CP,run:RUN&&{t:RUN.t,deaths:RUN.deaths,done:RUN.done},n:B.length,cps:CPS.map(c=>[c.x,c.y,c.z])}), tp:(i)=>{ CP=i; spawn(); }, cam:(y)=>{ camYaw=y; }, bot:(from,to)=>{ const L=B.filter(b=>b.t!=='k'&&b.t!=='p'); BOT={list:L.slice(from,to).map(b=>b),i:0,d:RUN?RUN.deaths:0}; }, botI:()=>BOT&&BOT.i, kill:()=>lastKill, cps:()=>CPS, boxes:()=>B.map(b=>({t:b.t,x:b.x,y:b.y,z:b.z,w:b.w,d:b.d})) };
+/* ---------- CREATOR MODE: build your own obby, test it, share it with a link ---------- */
+const ETYPES=[{t:'n',ic:'⬜',n:'Platform'},{t:'k',ic:'🔥',n:'Lava'},{t:'p',ic:'🟢',n:'Jump pad'},{t:'v',ic:'🟨',n:'Vanishing tile'},{t:'m',ic:'↔️',n:'Slider'},{t:'l',ic:'↕️',n:'Lift'},{t:'c',ic:'⏩',n:'Conveyor'},{t:'s',ic:'🌀',n:'Spinner arena'},{t:'cp',ic:'🚩',n:'Checkpoint'},{t:'f',ic:'🏁',n:'Finish'}];
+const ESIZES=[[2,2],[4,4],[1,5],[5,1],[8,8],[1,1]], ECOLS=['#f472b6','#60a5fa','#a78bfa','#facc15','#34d399','#fb923c','#e2e8f0','#1e293b'];
+const ED={on:false,ti:0,si:0,ci:0,yo:0,fly:false,shared:null,by:''};
+let CUST={b:[]};
+const editing=()=>MODE===2&&ED.on&&RUN&&!RUN.done;
+const enc=b=>b.map(a=>a.join(',')).join(';');
+const dec=s=>String(s||'').split(';').map(r=>r.split(',')).filter(a=>a.length>=7&&ETYPES.some(e=>e.t===a[0])).slice(0,400).map(a=>[a[0],...a.slice(1,7).map(v=>+v||0)]);
+function edLoad(){ try{ const r=JSON.parse(localStorage.getItem('rrObbyMine')||'null'); if(r&&typeof r.b==='string') return {b:dec(r.b)}; }catch(e){} return {b:[]}; }
+function edSave(){ if(ED.shared) return; try{ localStorage.setItem('rrObbyMine',JSON.stringify({_lww:Date.now(),b:enc(CUST.b)})); }catch(e){} }
+function buildCustom(){ B=[]; SPIN=[]; CPS=[]; STAGES=[]; let fin=null;
+  const plat=(x,y,z,w,d,t,col,extra)=>{ const b=Object.assign({x,y:y-.25,z,w,h:.5,d,t,col},extra||{}); B.push(b); return b; };
+  const cp=(x,y,z,name)=>{ const b=plat(x,y,z,4,4,'cp','#22c55e'); b.idx=CPS.length; CPS.push({x,y:y+.1,z,name}); STAGES.push(name); return b; };
+  cp(0,0,0,'Start');
+  for(const [t,x,y,z,w,d,ci] of CUST.b){ const col=ECOLS[ci%ECOLS.length]||ECOLS[0];
+    if(t==='cp') cp(x,y,z,'Checkpoint '+CPS.length);
+    else if(t==='f') fin=plat(x,y,z,4,4,'f','#fbbf24');
+    else if(t==='s'){ plat(x,y,z,7,7,'n','#1e293b'); SPIN.push({x,y:y+.45,z,len:3.4,sp:1.4*((Math.round(x+z)&1)?-1:1),a:0}); }
+    else if(t==='m') plat(x,y,z,w,d,'m',col,{ax:2.6,ay:0,az:0,sp:1.2,ph:x*.7+z*.3});
+    else if(t==='l') plat(x,y,z,w,d,'m',col,{ax:0,ay:1.6,az:0,sp:1.2,ph:x*.7+z*.3});
+    else if(t==='c') plat(x,y,z,w,d,'c','#2563eb',{cx:0,cz:2.6});
+    else plat(x,y,z,w,d,t,t==='k'?'#ef4444':t==='p'?'#4ade80':t==='v'?'#fde047':col); }
+  STAGES.push('Finish'); for(const b of B){ b.x0=b.x; b.y0=b.y; b.z0=b.z; } return fin; }
+function edCursor(){ const gx=Math.round(P.x+Math.sin(P.yaw)*3), gz=Math.round(P.z+Math.cos(P.yaw)*3), gy=Math.round((P.y+ED.yo)*2)/2; const T=ETYPES[ED.ti].t, sz=T==='s'?[7,7]:(T==='cp'||T==='f')?[4,4]:ESIZES[ED.si]; return {x:gx,y:gy,z:gz,w:sz[0],d:sz[1],t:T}; }
+function edRebuild(){ const keep={x:P.x,y:P.y,z:P.z}; buildCustom(); built=false; Object.assign(P,keep); edSave(); edPanel(); }
+function edPlace(){ if(!editing()) return; if(CUST.b.length>=400){ say('Course is full (400 blocks)','#f87171'); return; } const c=edCursor();
+  if(c.t==='f') CUST.b=CUST.b.filter(a=>a[0]!=='f'); CUST.b.push([c.t,c.x,c.y,c.z,c.w,c.d,ED.ci]); sfx.land(); edRebuild(); }
+function edDelete(){ if(!editing()) return; const c=edCursor(); let bi=-1, bd=2.2; CUST.b.forEach((a,i)=>{ const d=Math.hypot(a[1]-c.x,a[3]-c.z)+Math.abs(a[2]-c.y); if(d<bd){ bd=d; bi=i; } });
+  if(bi<0){ say('Nothing there to delete','#fca5a5',.8); return; } CUST.b.splice(bi,1); sfx.die(); edRebuild(); }
+function edStart(play){ MODE=2; ED.on=!play; startRun(); if(!play) say('🛠️ BUILD! F places a block','#fde047',2); edPanel(); }
+function shareLink(){ return location.origin+location.pathname+'?c='+encodeURIComponent(enc(CUST.b)).replace(/%2C/g,',').replace(/%3B/g,';')+'&by='+encodeURIComponent((window.RRACCT&&RRACCT.name)||localStorage.getItem('rrName')||'Someone'); }
+function edPanel(){ const el=$('edP'); if(!el) return; el.style.display=MODE===2?'block':'none'; if(MODE!==2) return;
+  const T=ETYPES[ED.ti], fixed=T.t==='s'||T.t==='cp'||T.t==='f', fin=CUST.b.some(a=>a[0]==='f');
+  el.innerHTML=ED.shared?`<div class="muted" style="margin:6px 0">🧗 Playing <b>${ED.by.replace(/[<>&"]/g,'')}</b>’s course · ${CUST.b.length} blocks${fin?'':' · (it has no finish yet)'}</div><div class="row"><button class="btn gold" data-ed="play">▶ Play it</button><button class="btn" data-ed="copy">🛠️ Copy it into my creator</button></div>`
+    :`<div class="muted" style="margin:6px 0">🛠️ <b>Creator mode</b> — walk around and build. ${CUST.b.length}/400 blocks${fin?' · 🏁 has a finish':' · add a 🏁 Finish so people can win'}</div>
+    <div class="pills"><span class="lbl">Block</span>${ETYPES.map((e,i)=>`<button data-et="${i}" class="${i===ED.ti?'on':''}">${e.ic} ${e.n}</button>`).join('')}</div>
+    ${fixed?'':`<div class="pills"><span class="lbl">Size</span>${ESIZES.map((s,i)=>`<button data-es="${i}" class="${i===ED.si?'on':''}">${s[0]}×${s[1]}</button>`).join('')}</div>
+    <div class="pills"><span class="lbl">Colour</span>${ECOLS.map((c,i)=>`<button data-ec="${i}" class="${i===ED.ci?'on':''}" style="background:${c};width:34px;height:30px"></button>`).join('')}</div>`}
+    <div class="row"><button class="btn gold" data-ed="place">➕ Place (F)</button><button class="btn" data-ed="del">🗑️ Delete (X)</button><button class="btn" data-ed="dn">⬇ Lower (Z)</button><button class="btn" data-ed="up">⬆ Raise (C)</button><button class="btn" data-ed="fly">${ED.fly?'🕊️ Flying (G)':'🚶 Walking (G)'}</button></div>
+    <div class="row"><button class="btn gold" data-ed="${ED.on?'test':'build'}">${ED.on?'▶ Test run':'🛠️ Back to building'}</button><button class="btn" data-ed="share">🔗 Share link</button><button class="btn" data-ed="clear">🧹 Clear all</button></div>
+    <input id="edLink" readonly style="display:none;width:100%;margin-top:6px;padding:8px;border-radius:10px;border:1px solid #475569;background:#0f172a;color:#e2e8f0">`; }
+document.addEventListener('click',e=>{ const b=e.target.closest('[data-et],[data-es],[data-ec],[data-ed]'); if(!b||!b.closest('#edP')) return; b.blur();
+  if(b.dataset.et) ED.ti=+b.dataset.et; else if(b.dataset.es) ED.si=+b.dataset.es; else if(b.dataset.ec) ED.ci=+b.dataset.ec;
+  else { const a=b.dataset.ed;
+    if(a==='place') edPlace(); else if(a==='del') edDelete(); else if(a==='up') ED.yo+=.5; else if(a==='dn') ED.yo-=.5; else if(a==='fly') ED.fly=!ED.fly;
+    else if(a==='test'){ if(!CUST.b.some(x=>x[0]==='f')) say('Tip: add a 🏁 Finish block','#fde047',2); edStart(true); return; } else if(a==='build'||a==='copy'){ if(a==='copy'){ ED.shared=null; edSave(); history.replaceState(null,'',location.pathname); } edStart(false); return; }
+    else if(a==='play'){ edStart(true); return; }
+    else if(a==='clear'){ if(confirm('Delete every block in your course?')){ CUST.b=[]; edRebuild(); } return; }
+    else if(a==='share'){ const L=shareLink(), i=$('edLink'); i.style.display='block'; i.value=L; i.select(); try{ navigator.clipboard.writeText(L); say('🔗 Link copied — send it to friends!','#4ade80',2); }catch(err){} return; } }
+  edPanel(); });
+addEventListener('keydown',e=>{ if(!editing()) return; const t=document.activeElement; if(t&&(t.tagName==='INPUT'||t.tagName==='TEXTAREA')) return; if(e.repeat) return;
+  if(e.code==='KeyF') edPlace(); else if(e.code==='KeyX') edDelete(); else if(e.code==='KeyC'){ ED.yo+=.5; } else if(e.code==='KeyZ'){ ED.yo-=.5; } else if(e.code==='KeyG'){ ED.fly=!ED.fly; edPanel(); }
+  else if(/^Digit[0-9]$/.test(e.code)){ const n=(+e.code.slice(5)+9)%10; if(ETYPES[n]){ ED.ti=n; edPanel(); } } });
+function edDraw(){ if(!editing()) return; const c=edCursor(), fl=.6+.4*Math.sin(T*8), y=c.y-.25, col=[2.4*fl,2*fl,.3];
+  for(const [dx,dz,w,d] of [[0,-c.d/2,c.w,.06],[0,c.d/2,c.w,.06],[-c.w/2,0,.06,c.d],[c.w/2,0,.06,c.d]]) R3.part(R3.UB,R3.mm(R3.T((c.x+dx)*K,(y+.3)*K,(c.z+dz)*K),R3.S(w*K,.06*K,d*K)),col);
+  R3.part(R3.UB,R3.mm(R3.T(c.x*K,(y+.02)*K,c.z*K),R3.S(c.w*K,.04*K,c.d*K)),ETYPES[ED.ti].t==='k'?'#ef4444':ECOLS[ED.ci]);
+  R3.part(R3.UB,R3.mm(R3.T(c.x*K,(y-2)*K,c.z*K),R3.S(.04*K,4*K,.04*K)),[.6,.6,.7]); }
+function edHUD(){ if(!editing()) return; const c=edCursor(); txt(`🛠️ ${ETYPES[ED.ti].ic} ${ETYPES[ED.ti].n} · height ${c.y}${ED.fly?' · FLYING (Space up, Shift down)':''}`,HW/2,HH-58,22,'#fde047');
+  txt('F place · X delete · Z/C lower/raise · 1–0 pick block · G fly',HW/2,HH-30,17,'#e2e8f0'); }
+{ const q=new URLSearchParams(location.search); if(q.get('c')){ CUST={b:dec(q.get('c'))}; ED.shared=true; ED.by=String(q.get('by')||'Someone').slice(0,24); MODE=2; setTimeout(()=>{ edStart(true); say(`🧗 ${ED.by}’s course!`,'#a5f3fc',2.5); },300); } else CUST=edLoad(); }
+
+if(TEST) window.__ob={ ed:ED, cust:()=>CUST, edPlace, edDelete, edStart, shareLink, P, st:()=>({x:P.x,y:P.y,z:P.z,on:P.on&&P.on.t,cp:CP,run:RUN&&{t:RUN.t,deaths:RUN.deaths,done:RUN.done},n:B.length,cps:CPS.map(c=>[c.x,c.y,c.z])}), tp:(i)=>{ CP=i; spawn(); }, cam:(y)=>{ camYaw=y; }, bot:(from,to)=>{ const L=B.filter(b=>b.t!=='k'&&b.t!=='p'); BOT={list:L.slice(from,to).map(b=>b),i:0,d:RUN?RUN.deaths:0}; }, botI:()=>BOT&&BOT.i, kill:()=>lastKill, cps:()=>CPS, boxes:()=>B.map(b=>({t:b.t,x:b.x,y:b.y,z:b.z,w:b.w,d:b.d})) };
 })();
 </script>
 <script src="site.js"></script>
