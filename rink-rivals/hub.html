@@ -104,9 +104,9 @@ function step(dt){ T0+=dt; let ix=(keys.has('KeyD')||keys.has('ArrowRight')?1:0)
 /* ---- other people in the Hub ---- */
 const OT=new Map(); let NET=null, netT=0;
 function netStep(dt){ for(const o of OT.values()){ const k=Math.min(1,dt*10); o.x=lerp(o.x,o.tx,k); o.z=lerp(o.z,o.tz,k); o.y=lerp(o.y||0,o.ty||0,k); o.walk+=dt*(o.spd||0)*2.3; }
-  if(!NET||!NET.on) return; netT-=dt; if(netT>0) return; netT=.12; NET.send({t:'p',x:+ME.x.toFixed(2),z:+ME.z.toFixed(2),y:+ME.y.toFixed(2),yaw:+ME.yaw.toFixed(2),s:+ME.spd.toFixed(1),nm:myName(),cr:myCrew()||'',kit:kitCol(),bf:window.RRSTR?+RRSTR.muscle().toFixed(2):1,fx:ME.flexT>0?1:0,wv:ME.waveT>0?1:0,gear:gearNow(),pet:myPet()}); }
+  if(!NET||!NET.on) return; netT-=dt; if(netT>0) return; netT=.12; NET.send({t:'p',x:+ME.x.toFixed(2),z:+ME.z.toFixed(2),y:+ME.y.toFixed(2),yaw:+ME.yaw.toFixed(2),s:+ME.spd.toFixed(1),nm:myName(),cr:myCrew()||'',kit:kitCol(),bf:window.RRSTR?+RRSTR.muscle().toFixed(2):1,fx:ME.flexT>0?1:0,wv:ME.waveT>0?1:0,gear:gearNow(),pet:myPet(),oly:isOwnerMe()?1:0}); }
 if(window.RRO){ NET=RRO.init({game:'hub',maxPlayers:8,minPlayers:1,dropIn:true,publicRoom:'HUBA',blurb:'Hang out in the Arcade Rivals Hub with everyone online.',
-  onStart:()=>{ OT.clear(); }, onMsg:m=>{ if(m.t==='dj'){ djSet(m.st|0,false); return; } if(m.t==='hit'){ BOSS.hits+=clamp(+m.n||1,0,3); return; } if(m.t!=='p') return; let o=OT.get(m.from); if(!o){ o={x:m.x,z:m.z,walk:0}; OT.set(m.from,o); } Object.assign(o,{tx:m.x,tz:m.z,ty:m.y||0,yaw:m.yaw,spd:m.s,nm:String(m.nm||'Player').slice(0,20),cr:String(m.cr||'').slice(0,6),kit:m.kit,bf:clamp(+m.bf||1,1,1.8),fx:m.fx,wv:m.wv,gear:m.gear&&typeof m.gear==='object'?m.gear:null,pet:m.pet&&typeof m.pet==='object'?m.pet:null}); if(o.pet&&!o.petSt) o.petSt={x:o.x+1,z:o.z+1,yaw:0}; },
+  onStart:()=>{ OT.clear(); }, onMsg:m=>{ if(m.t==='dj'){ djSet(m.st|0,false); return; } if(m.t==='hit'){ BOSS.hits+=clamp(+m.n||1,0,3); return; } if(m.t!=='p') return; let o=OT.get(m.from); if(!o){ o={x:m.x,z:m.z,walk:0}; OT.set(m.from,o); } Object.assign(o,{tx:m.x,tz:m.z,ty:m.y||0,yaw:m.yaw,spd:m.s,nm:String(m.nm||'Player').slice(0,20),cr:String(m.cr||'').slice(0,6),kit:m.kit,bf:clamp(+m.bf||1,1,1.8),fx:m.fx,wv:m.wv,oly:m.oly?1:0,gear:m.gear&&typeof m.gear==='object'?m.gear:null,pet:m.pet&&typeof m.pet==='object'?m.pet:null}); if(o.pet&&!o.petSt) o.petSt={x:o.x+1,z:o.z+1,yaw:0}; },
   onPeers:(api,kind,m)=>{ if(kind==='leave') OT.delete(m.id); }, onEnd:()=>OT.clear() });
   if(!TEST) setTimeout(()=>{ try{ if(!NET.on) NET.quick(); }catch(e){} },1800); }
 
@@ -154,8 +154,10 @@ function drawBoss(){ if(!BOSS.on) return; const P3=(x,y,z,w,h,d,col)=>R3.part(R3
   if(BOSS.wave>=0) for(let k=0;k<28;k++){ const a=k/28*PI*2; P3(X+Math.cos(a)*BOSS.wave,.15,Z+Math.sin(a)*BOSS.wave,.5,.15,.5,[2.4,.6,.2]); } }
 /* ---- drawing ---- */
 const camE=[0,9,22], camC=[0,0,12];
-function look(o,me){ const top=me?kitCol():(o.kit||'#dc2626'); const lk={top,legs:'#0f1726',skin:me?'#caa078':'#c68642',shoe:'#111827',hair:'#2a1f16',buff:me?(window.RRSTR?RRSTR.muscle():1):(o.bf||1),flex:(me?ME.flexT>0:o.fx)?1:0}; if(me) lk.me=true; else if(o.gear) lk.gear=o.gear; return lk; }
-function drawPerson(o,me){ const lk=look(o,me), w=.17*(1+((lk.buff||1)-1)*.6), wave=me?ME.waveT>0:o.wv; const J=PHY.pose(o.spd>.3?(o.spd>4?'run':'walk'):'stand',0,o.walk,w);
+const OLY=top=>({olympia:true,skin:'#caa078',hi:'#dcb68f',shade:'#a37b55',top,topHi:top,topDk:top,shorts:'#0f1726',shoe:'#121a2a',hair:'#2a1f16',buff:1.7});
+const isOwnerMe=()=>!!(window.RRSTR&&RRSTR.owner);
+function look(o,me){ const top=me?kitCol():(o.kit||'#dc2626'); if(me?isOwnerMe():o.oly){ const lk=OLY(top); lk.flex=(me?ME.flexT>0:o.fx)?1:0; if(me) lk.me=true; else if(o.gear) lk.gear=o.gear; return lk; } const lk={top,legs:'#0f1726',skin:me?'#caa078':'#c68642',shoe:'#111827',hair:'#2a1f16',buff:me?(window.RRSTR?RRSTR.muscle():1):(o.bf||1),flex:(me?ME.flexT>0:o.fx)?1:0}; if(me) lk.me=true; else if(o.gear) lk.gear=o.gear; return lk; }
+function drawPerson(o,me){ const lk=look(o,me), w=lk.olympia?.27:.17*(1+((lk.buff||1)-1)*.6), wave=me?ME.waveT>0:o.wv; const J=PHY.pose(o.spd>.3?(o.spd>4?'run':'walk'):'stand',0,o.walk,w);
   if(wave){ J.hand1=[.32,1.85+Math.sin(T0*14)*.08,.1]; J.elb1=[.3,1.45,.05]; }
   PHY.drawBody(J,{x:o.x,z:o.z,yaw:o.yaw,y:o.y||0},lk); R3.shadow(o.x*K,o.z*K,.5*K); }
 function render(dt){ if(!R3.ok) return; build();

@@ -752,7 +752,7 @@ export class Party {
    One object for the whole site. A device logs in once with name + PIN and keeps a token, so it never asks again. */
 const OWNER_ACCTS=new Set(['aiden']);   /* accounts that are the site owner on every device they log in on */
 export class Acct {
-  constructor(state){ this.state=state; this.sql=state.storage.sql;
+  constructor(state,env){ this.state=state; this.env=env; this.sql=state.storage.sql;
     this.sql.exec('CREATE TABLE IF NOT EXISTS acct(nm TEXT PRIMARY KEY, disp TEXT, salt TEXT, ph TEXT, data TEXT, ver INTEGER, ts INTEGER, crew TEXT, life INTEGER, str INTEGER, fails INTEGER, lockt INTEGER)');
     this.sql.exec('CREATE TABLE IF NOT EXISTS tok(th TEXT PRIMARY KEY, nm TEXT, ts INTEGER)');
     this.sql.exec('CREATE TABLE IF NOT EXISTS crew(tag TEXT PRIMARY KEY, name TEXT, owner TEXT, code TEXT, ts INTEGER)');
@@ -767,6 +767,11 @@ export class Acct {
     if(req.method==='OPTIONS') return new Response(null,{headers:CORS});
     let m={}; try{ m=JSON.parse(await req.text()); }catch(e){ return J({err:'bad'},400); }
     const now=Date.now(), clean=s=>String(s||'').trim().replace(/[^\w .\-]/g,'').slice(0,20), key=s=>clean(s).toLowerCase(), pinOk=p=>/^\d{4,8}$/.test(String(p||''));
+    /* owner devices (marked full admin on the server when you sign into the admin page) sign straight into the owner account — no PIN */
+    if(m.op==='ownerAuto'){ const pid=String(m.pid||'').replace(/[^a-z0-9]/gi,'').slice(0,24); if(pid.length<8) return J({err:'no'},403);
+      let lvl=null; try{ const r=await this.env.CHAT.get(this.env.CHAT.idFromName('SITE')).fetch('https://do/authpid',{method:'POST',body:JSON.stringify({pid})}); lvl=(await r.json()).lvl; }catch(e){}
+      if(lvl!=='full') return J({err:'no'},403); const onm=[...OWNER_ACCTS][0], r=this.sql.exec('SELECT disp,data,ver,crew FROM acct WHERE nm=?',onm).toArray()[0]; if(!r) return J({err:'nouser'},404);
+      return J({ok:true,name:r.disp,token:await this.newTok(onm),data:r.data,ver:r.ver,crew:r.crew,owner:true}); }
     if(m.op==='check'){ const nm=key(m.name); return J({taken:!!this.sql.exec('SELECT 1 FROM acct WHERE nm=?',nm).toArray()[0]}); }
     if(m.op==='create'){ const disp=clean(m.name), nm=disp.toLowerCase(); if(nm.length<2) return J({err:'name'},400); if(!pinOk(m.pin)) return J({err:'pin'},400);
       if(this.sql.exec('SELECT 1 FROM acct WHERE nm=?',nm).toArray()[0]) return J({err:'taken'},409);

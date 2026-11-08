@@ -32,6 +32,9 @@
     if(!r.same&&r.ver>(A.ver||0)){ applyData(r.data); A.ver=r.ver; A.h=hash(JSON.stringify(collect())); saveA(); lastSync=Date.now();
       try{ if(!sessionStorage.getItem('rrAcctRl')){ sessionStorage.setItem('rrAcctRl','1'); toast('☁️ Synced your progress from your other device…'); setTimeout(()=>location.reload(),900); return; } }catch(e){} }
     lastSync=Date.now(); saveA(); }
+  /* an owner device that isn't signed in yet signs itself into the owner account (the server checks the device really is an owner device) */
+  const ownerDevice=()=>{ if(ls.get('rrOwner')==='1'||/\bowner\b/i.test(String(ls.get('rrMyTag')||''))) return true; try{ return sessionStorage.getItem('rrRole')==='full'; }catch(e){ return false; } };
+  if(!A&&ownerDevice()&&ls.get('rrPid')) setTimeout(async()=>{ if(A) return; const r=await api('ownerAuto',{pid:ls.get('rrPid')}); if(!r.ok) return; mergeIn(r.data); ls.set('rrOwner','1'); A={name:r.name,token:r.token,ver:r.ver,crew:r.crew,h:''}; saveA(); await push(true); toast(`👑 Signed in as ${r.name} automatically`); try{ if(!sessionStorage.getItem('rrOwnRl')){ sessionStorage.setItem('rrOwnRl','1'); setTimeout(()=>location.reload(),900); } }catch(e){} },1200);
   if(A){ setTimeout(()=>pull().then(()=>push()),1500); setInterval(()=>push(),90000); addEventListener('visibilitychange',()=>{ if(document.hidden) push(false,true); }); addEventListener('pagehide',()=>push(false,true)); }
   /* ---- the account window ---- */
   let pill=null, box=null, tab='acct', msg='', crewCache=null, topCache=null;
