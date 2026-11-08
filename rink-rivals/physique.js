@@ -71,7 +71,8 @@ function drawGear(J,f,lk){ if(!lk||(!lk.me&&!lk.gear)) return; const G=lk.gear||
       OB(mid,dir,nrm3(crs3(Fv,dir)),Fv,L,(.12-k*.02)*sz,.025,G.back.c); } } }
   else   if(G.back){ const top=add3(ch,mul3(Fv,-.14*bch)), bot=add3(add3(pel,mul3(Fv,-.22*bch)),mul3(A,-.45)), sw=Math.sin(Date.now()/300)*.04, mid=mix3(top,bot,.5), len=Math.hypot(...sub3(top,bot)), ax=nrm3(sub3(top,bot)), fz=nrm3(crs3(Wd,ax));
     OB(add3(mid,mul3(fz,sw)),Wd,ax,fz,.4*bch,len,.025,G.back.c); OB(top,Wd,ax,fz,.42*bch,.05,.04,G.back.c2||G.back.c); } }
-function drawBody(J,f,lk){ if(lk.olympia){ const r=drawOlympia(J,f,lk); drawGear(J,f,lk); return r; } try{ drawGear(J,f,lk); }catch(e){} const m=(lk.buff||1)*(1+(lk.flex||0)*.08), bk=lk.bulk||1, bsh=1+(m-1)*.6, barm=(1+(m-1)*.8)*Math.sqrt(bk), bch=(1+(m-1)*.2)*bk, bleg=(1+(m-1)*.35)*bk, W=p=>wp(f,p), D=v=>nrm3(wd(f,v));
+function drawBody(J,f,lk){ { const em=lk&&(lk.me&&window.RREMOTE?window.RREMOTE:lk.emote); if(em&&window.RREMOTES){ const t=(performance.now()-em.t0)/1000; if(t>=0&&t<3.5){ try{ J=JSON.parse(JSON.stringify(J)); const r=RREMOTES.apply(J,f,em.k,t); J=r[0]; f=r[1]; if(em.k==='flex') lk={...lk,flex:1}; }catch(e){} } } }
+  if(lk.olympia){ const r=drawOlympia(J,f,lk); drawGear(J,f,lk); return r; } try{ drawGear(J,f,lk); }catch(e){} const m=(lk.buff||1)*(1+(lk.flex||0)*.08), bk=lk.bulk||1, bsh=1+(m-1)*.6, barm=(1+(m-1)*.8)*Math.sqrt(bk), bch=(1+(m-1)*.2)*bk, bleg=(1+(m-1)*.35)*bk, W=p=>wp(f,p), D=v=>nrm3(wd(f,v));
   for(const sx of [-1,1]){ const h=W(J['hip'+sx]), k=W(J['knee'+sx]), a=W(J['ank'+sx]); LB(h,k,.085*bleg,.1*bleg,lk.legs); LB(k,a,.06*bleg,.07*bleg,lk.skin);
     const toe=D(J.toe), up=[0,1,0], sd=nrm3(crs3(Math.abs(toe[1])>.9?[1,0,0]:up,toe)), u2=crs3(toe,sd); OB(add3(a,mul3(toe,.06)),sd,u2,toe,.11,.07,.22,lk.shoe); }
   const pel=W(J.pelvis), ch=W(J.chest), A=nrm3(sub3(ch,pel)); let Fv=D(J.F); Fv=nrm3(sub3(Fv,mul3(A,dot3(Fv,A)))); const Wd=nrm3(crs3(A,Fv)), len=Math.hypot(...sub3(ch,pel));

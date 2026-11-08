@@ -42,6 +42,9 @@
   const grant=g=>{ const q=J('rrGrant',{}); for(const k in g){ if(typeof g[k]==='number') q[k]=(q[k]||0)+g[k]; else if(Array.isArray(g[k])) q[k]=(q[k]||[]).concat(g[k]); } ls.set('rrGrant',JSON.stringify(q)); };
   const addStr=n=>{ if(window.RRSTR&&!RRSTR.owner&&RRSTR.set){ RRSTR.set(RRSTR.level+n); } else { const v=+ls.get('rrStrength')||0; ls.set('rrStrength',String(Math.round(v+n))); } };
   const ITEMS=[
+    {k:'em_robot',cat:'💃 Emotes — press T in any game',ic:'🤖',n:'Robot',d:'Do the robot',p:300},{k:'em_spin',cat:'💃 Emotes — press T in any game',ic:'🌀',n:'Spin',d:'Spin like a top, arms out',p:300},
+    {k:'em_salute',cat:'💃 Emotes — press T in any game',ic:'🫡',n:'Salute',d:'A sharp salute',p:200},{k:'em_jacks',cat:'💃 Emotes — press T in any game',ic:'🤸',n:'Jumping jacks',d:'Warm up anywhere',p:400},
+    {k:'em_swing',cat:'💃 Emotes — press T in any game',ic:'🕺',n:'Arm swing',d:'Swing those arms side to side',p:500},{k:'em_laugh',cat:'💃 Emotes — press T in any game',ic:'😂',n:'Laugh',d:'Crack up laughing',p:250},
     {k:'wcheck',cat:'🎨 Car wraps — every racing game',ic:'🏁',n:'Checkered flag',d:'Black-and-white race checkers all over',p:350,slot:'wrap',val:{t: 'checker', c: ['#f8fafc', '#111827']}},
     {k:'wcheckgold',cat:'🎨 Car wraps — every racing game',ic:'🏆',n:'Gold checkers',d:'Gold and black checkers',p:600,slot:'wrap',val:{t: 'checker', c: [[2, 1.6, 0.3], '#111827']}},
     {k:'wflames',cat:'🎨 Car wraps — every racing game',ic:'🔥',n:'Hot rod flames',d:'Classic yellow-to-red flames licking down the sides',p:450,slot:'wrap',val:{t: 'flames', c: ['#facc15', '#f97316', '#dc2626']}},
