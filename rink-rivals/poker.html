@@ -320,7 +320,8 @@ const delayAI=()=>[.95,.4,1.6][speedSel]+Math.random()*.5;
 const MODE=()=>T?T.mode2:MODES[modeSel].k;
 
 function seatPros(n,avoid){ const pool=PROS.map((p,i)=>i).filter(i=>!avoid.includes(i)); for(let i=pool.length-1;i>0;i--){ const j=Math.floor(Math.random()*(i+1)); [pool[i],pool[j]]=[pool[j],pool[i]]; } return pool.slice(0,n).map(i=>({name:PROS[i][0],nat:PROS[i][1],style:PROS[i][2],ai:true,pro:i})); }
-function newGame(o){ o=o||{}; const m=o.mode||MODES[modeSel].k; let players;
+function newGame(o){ o=o||{}; const m=o.mode||MODES[modeSel].k; let players; if(stake) cashOut();
+  if(m==='cash'&&!o.online&&curSel!=='chips'){ stake={c:curSel,in:0}; if(!buyIn(2000)){ stake=null; return; } }
   if(o.online){ players=o.players; myId=o.me; }
   else { myId=0; const opp=m==='hu'?[{name:PROS[proSel][0],nat:PROS[proSel][1],style:PROS[proSel][2],ai:true,pro:proSel}]:seatPros(oppSel,[]); players=[{name:myName(),ai:false},...opp]; }
   const stack=m==='cash'?2000:(o.stack||STACKS[stackSel]);
@@ -330,10 +331,26 @@ function newGame(o){ o=o||{}; const m=o.mode||MODES[modeSel].k; let players;
   updateBoard(); renderKeysHelp(); }
 function myName(){ try{ const n=(localStorage.getItem('rrOnlineName')||'').trim(); if(n) return n; }catch(e){} return 'You'; }
 const me=()=>T&&T.pl[myId];
+
+/* ---- real stakes at the cash table: play for practice chips, Arcade Coins or Rival City cash.
+   Your buy-in leaves your wallet as chips and comes back (win or lose) when you leave. The owner plays with house money. ---- */
+const CUR={chips:{n:'Practice chips',ic:'🎲',rate:0},coins:{n:'Arcade Coins',ic:'🪙',rate:.1},cash:{n:'Rival City cash',ic:'💵',rate:10}};
+let curSel=(()=>{ try{ return localStorage.getItem('rrPokerCur')||'chips'; }catch(e){ return 'chips'; } })(), stake=null;
+const ownerP=()=>!!(window.RRSTR&&RRSTR.owner);
+const wal={ get(c){ if(ownerP()) return Infinity; if(c==='coins') return window.RRCOIN?RRCOIN.bal:0; try{ return +(JSON.parse(localStorage.getItem('rrCity')||'{}').money)||0; }catch(e){ return 0; } },
+  add(c,n){ if(ownerP()||!n) return; if(c==='coins'){ if(!window.RRCOIN) return; n>0?RRCOIN.tradeGive([],Math.round(n)):RRCOIN.tradeTake([],Math.round(-n)); return; } try{ const sv=JSON.parse(localStorage.getItem('rrCity')||'{}'); sv.money=Math.max(0,(+sv.money||0)+Math.round(n)); localStorage.setItem('rrCity',JSON.stringify(sv)); }catch(e){} } };
+const fmtCur=(c,n)=>c==='coins'?`${Math.round(n).toLocaleString()} 🪙`:`$${Math.round(n).toLocaleString()}`;
+function stakeSave(){ try{ if(stake&&T&&me()) localStorage.setItem('rrPokerSess',JSON.stringify({c:stake.c,chips:me().chips})); else localStorage.removeItem('rrPokerSess'); }catch(e){} }
+function buyIn(chips){ if(!stake) return true; const cost=chips*CUR[stake.c].rate; if(wal.get(stake.c)<cost){ toast(`You need ${fmtCur(stake.c,cost)} to buy ${chips} chips`,'#f87171'); return false; } wal.add(stake.c,-cost); stake.in+=cost; return true; }
+function cashOut(){ if(!stake) return; const m=me(), chips=m?Math.max(0,m.chips):0, back=chips*CUR[stake.c].rate; wal.add(stake.c,back); const net=back-stake.in; toast(`Cashed out ${fmtCur(stake.c,back)} — ${net>=0?'up':'down'} ${fmtCur(stake.c,Math.abs(net))}`,net>=0?'#4ade80':'#f87171'); stake=null; try{ localStorage.removeItem('rrPokerSess'); }catch(e){} }
+/* a session that ended without cashing out (tab closed) pays out now */
+try{ const ps=JSON.parse(localStorage.getItem('rrPokerSess')||'null'); if(ps&&CUR[ps.c]&&ps.chips>0){ setTimeout(()=>{ wal.add(ps.c,ps.chips*CUR[ps.c].rate); toast(`Cashed out your last poker session: ${fmtCur(ps.c,ps.chips*CUR[ps.c].rate)}`,'#4ade80'); },2500); } localStorage.removeItem('rrPokerSess'); }catch(e){}
+addEventListener('pagehide',stakeSave);
+
 const myTurn=()=>T&&T.toAct===myId&&!me().ai&&phase==='play';
 
 /* between hands: cash tables keep you in (a rebuy) and swap a busted pro for a fresh one */
-function nextHand(){ if(!T) return; if(T.mode2==='cash'){ const m=me(); if(m&&m.chips<=0&&!online()){ m.chips=2000; buyins+=2000; tlog(T,`${m.name} rebuys for 2000`); toast('Rebuy: 2000 chips','#fbbf24'); }
+function nextHand(){ if(!T) return; stakeSave(); if(T.mode2==='cash'){ const m=me(); if(m&&m.chips<=0&&!online()){ if(stake&&!buyIn(2000)){ toast('Out of money — cashing out','#f87171'); cashOut(); toMenu(); return; } m.chips=2000; buyins+=2000; tlog(T,`${m.name} rebuys for 2000`); toast('Rebuy: 2000 chips','#fbbf24'); }
     T.pl.forEach((p,i)=>{ if(p.ai&&(p.out||p.chips<=0)){ const used=T.pl.map(q=>q.pro).filter(x=>x!=null), np=seatPros(1,used)[0]; if(np){ Object.assign(p,{name:np.name,nat:np.nat,style:np.style,pro:np.pro,chips:2000,out:false}); tlog(T,`${np.name} sits down with 2000`); } } });
     for(const p of T.pl) if(!p.ai&&p.chips<=0&&online()) p.out=true; }
   if(!newHand(T)){ return finish(); } sessHands++; SV.hands++; doneT=0; runT=0; aiT=-.3; actT=0; sfx.card(); broadcast(); }
@@ -457,16 +474,17 @@ function renderMenu(){ const m=MODES[modeSel].k; $('menuIn').innerHTML=`<h1>Arca
   <div class="pills"><span class="lbl">Game</span>${MODES.map((x,i)=>pill('mode',i,modeSel===i,x.n)).join('')}</div>
   <p style="margin:2px 0 8px;font-size:15px">${MODES[modeSel].d}</p>
   ${m==='hu'?`<div class="pills"><span class="lbl">Opponent</span>${PROS.map((p,i)=>pill('pro',i,proSel===i,`${p[0]} <small>(${p[2]})</small>`)).join('')}</div>`:`<div class="pills"><span class="lbl">Opponents</span>${[1,2,3,4,5].map(k=>pill('opp',k,oppSel===k,k)).join('')}</div>`}
+  ${m==='cash'?`<div class="pills"><span class="lbl">Play for</span>${Object.entries(CUR).map(([k,c])=>pill('cur',k,curSel===k,`${c.ic} ${c.n}`)).join('')}</div><p style="margin:2px 0 8px;font-size:14px">${curSel==='chips'?'Free practice chips.':`Buy-in: 2,000 chips = ${fmtCur(curSel,2000*CUR[curSel].rate)}. Your chips turn back into ${CUR[curSel].n} when you leave the table. You have ${ownerP()?'∞ (house money)':fmtCur(curSel,wal.get(curSel))}.`}</p>`:''}
   ${m!=='cash'?`<div class="pills"><span class="lbl">Stack</span>${STACKS.map((s,i)=>pill('stack',i,stackSel===i,s)).join('')}</div>`:''}
   <div class="pills"><span class="lbl">Speed</span>${SPEEDS.map((s,i)=>pill('speed',i,speedSel===i,s)).join('')}</div>
   <div class="pills"><button class="gold" data-act="start" tabindex="-1">Take a seat <kbd>Enter</kbd></button><a href="./" tabindex="-1">Home</a><a href="landlord" tabindex="-1">Landlord</a><a href="chess" tabindex="-1">Chess</a></div>
   <div id="hint">Sit & Gos ${SV.sng} · won ${SV.sngW} · in the money ${SV.itm} · heads-up ${SV.huW}/${SV.hu}${SV.cashBest?` · best cash session +${SV.cashBest}`:''}${SV.bigPot?` · biggest pot ${SV.bigPot}`:''}</div>`; updateBoard(); renderKeysHelp(); }
 $('menuIn').addEventListener('mousedown',e=>{ if(e.target.closest('button')) e.preventDefault(); });
 $('menuIn').addEventListener('click',e=>{ const b=e.target.closest('button'); if(!b) return; const d=b.dataset; audio(); sfx.click();
-  if(d.mode!==undefined) modeSel=+d.mode; else if(d.pro!==undefined) proSel=+d.pro; else if(d.opp!==undefined) oppSel=+d.opp; else if(d.stack!==undefined) stackSel=+d.stack; else if(d.speed!==undefined) speedSel=+d.speed; else if(d.act==='start'){ startGame(); return; } savePrefs(); renderMenu(); });
+  if(d.mode!==undefined) modeSel=+d.mode; else if(d.pro!==undefined) proSel=+d.pro; else if(d.opp!==undefined) oppSel=+d.opp; else if(d.stack!==undefined) stackSel=+d.stack; else if(d.speed!==undefined) speedSel=+d.speed; else if(d.cur!==undefined){ curSel=d.cur; try{ localStorage.setItem('rrPokerCur',curSel); }catch(e){} } else if(d.act==='start'){ startGame(); return; } savePrefs(); renderMenu(); });
 function startGame(){ audio(); savePrefs(); newGame(); }
 function renderKeysHelp(){ $('keysHelp').innerHTML='<div><b>Fold</b> F</div><div><b>Check / call</b> Space</div><div><b>Bet / raise</b> R</div><div><b>Size</b> ↑ ↓ wheel · 1 2 3 · A all in</div><div><b>Camera</b> C</div><div><b>View</b> V</div><div><b>Leave</b> Esc</div>'; }
-function toMenu(){ phase='menu'; T=null; $('result').classList.add('hidden'); $('menu').classList.remove('hidden'); if(online()) try{ net.leave(); }catch(e){} renderMenu(); }
+function toMenu(){ if(stake) cashOut(); phase='menu'; T=null; $('result').classList.add('hidden'); $('menu').classList.remove('hidden'); if(online()) try{ net.leave(); }catch(e){} renderMenu(); }
 
 /* ---------- online: the host deals and runs the table. Everyone's hole cards are encrypted for them alone
    (an ECDH key shared with the host), so nobody can read another player's cards off the wire. ---------- */
