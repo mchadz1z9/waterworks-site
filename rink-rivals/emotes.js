@@ -5,7 +5,7 @@
   if(PAGE==='hq-owa9rwwt9kplpdbu'||window.RR_ADMIN) return;
   const EM=[{k:'wave',ic:'👋',n:'Wave'},{k:'cheer',ic:'🙌',n:'Cheer'},{k:'dance',ic:'💃',n:'Dance'},{k:'flex',ic:'💪',n:'Flex'},{k:'robot',ic:'🤖',n:'Robot',item:'em_robot'},{k:'spin',ic:'🌀',n:'Spin',item:'em_spin'},
     {k:'salute',ic:'🫡',n:'Salute',item:'em_salute'},{k:'jacks',ic:'🤸',n:'Jumping jacks',item:'em_jacks'},{k:'swing',ic:'🕺',n:'Arm swing',item:'em_swing'},{k:'laugh',ic:'😂',n:'Laugh',item:'em_laugh'},
-    {k:'bow',ic:'🙇',n:'Bow'},{k:'heart',ic:'🫶',n:'Heart'},{k:'crew',ic:'✊',n:'Crew salute',crew:1},{k:'facepalm',ic:'🤦',n:'Facepalm',item:'em_facepalm'},{k:'shrug',ic:'🤷',n:'Shrug',item:'em_shrug'},{k:'champ',ic:'🏆',n:'Champion',item:'em_champ'},{k:'clap',ic:'👏',n:'Clap',item:'em_clap'}];
+    {k:'bow',ic:'🙇',n:'Bow'},{k:'heart',ic:'🫶',n:'Heart'},{k:'crew',ic:'✊',n:'Crew salute',crew:1},{k:'facepalm',ic:'🤦',n:'Facepalm',item:'em_facepalm'},{k:'shrug',ic:'🤷',n:'Shrug',item:'em_shrug'},{k:'champ',ic:'🏆',n:'Champion',item:'em_champ'},{k:'clap',ic:'👏',n:'Clap',item:'em_clap'},{k:'moon',ic:'🌙',n:'Moonwalk',item:'em_moon',pass:1},{k:'flip',ic:'🤸',n:'Backflip',item:'em_flip',pass:1}];
   const owned=e=>e.crew?!!(window.RRACCT&&RRACCT.crew):(!e.item||(window.RRCOIN&&RRCOIN.has(e.item)));
   window.RREMOTE=null;
   function play(k){ window.RREMOTE={k,t0:performance.now()}; try{ dispatchEvent(new CustomEvent('rr-emote',{detail:k})); }catch(e){} close(); }
@@ -14,7 +14,7 @@
   function open(){ if(wh){ close(); return; } wh=document.createElement('div'); wh.id='rrEmo'; wh.style.cssText='position:fixed;inset:0;z-index:2147482650;display:flex;align-items:center;justify-content:center;background:rgba(2,6,23,.35)';
     const R=158; let h='<div style="position:relative;width:390px;height:390px;max-width:96vw;border-radius:50%;background:radial-gradient(circle,rgba(15,23,42,.92) 55%,rgba(30,41,59,.85));border:2px solid #475569">';
     EM.forEach((e,i)=>{ const a=i/EM.length*Math.PI*2-Math.PI/2, x=195+Math.cos(a)*R-29, y=195+Math.sin(a)*R-29, ok=owned(e);
-      h+=`<button data-em="${e.k}" title="${e.n}${ok?'':e.crew?' — join a crew to use it':' — buy in the 🪙 shop'}" style="position:absolute;left:${x}px;top:${y}px;width:58px;height:58px;border-radius:50%;border:2px solid ${ok?'#facc15':'#334155'};background:#1e293b;color:#fff;font:700 24px system-ui;padding:0;cursor:pointer;opacity:${ok?1:.5}">${ok?e.ic:'🔒'}<div style="font-size:9px;margin-top:-4px">${e.n}</div></button>`; });
+      h+=`<button data-em="${e.k}" title="${e.n}${ok?'':e.crew?' — join a crew to use it':e.pass?' — Season Pass reward':' — buy in the 🪙 shop'}" style="position:absolute;left:${x}px;top:${y}px;width:58px;height:58px;border-radius:50%;border:2px solid ${ok?'#facc15':'#334155'};background:#1e293b;color:#fff;font:700 24px system-ui;padding:0;cursor:pointer;opacity:${ok?1:.5}">${ok?e.ic:'🔒'}<div style="font-size:9px;margin-top:-4px">${e.n}</div></button>`; });
     h+='<div style="position:absolute;left:0;right:0;top:172px;text-align:center;color:#e2e8f0;font:800 16px system-ui">EMOTES<br><span style="font-size:11px;color:#94a3b8">T to close</span></div></div>';
     wh.innerHTML=h; document.body.appendChild(wh);
     wh.addEventListener('click',ev=>{ const b=ev.target.closest('[data-em]'); if(!b){ close(); return; } const e=EM.find(x=>x.k===b.dataset.em); if(owned(e)) play(e.k); else { close(); if(e.crew){ if(window.RRACCT) RRACCT.open(); } else if(window.RRCOIN) RRCOIN.open('shop'); } }); }
@@ -78,5 +78,7 @@
       else if(k==='shrug'){ const q=(s(t*5)+1)/2; for(const sx of [-1,1]){ P('elb'+sx,[sx*.32,1.18,.1]); P('hand'+sx,[sx*.45,1.3+q*.06,.2]); } }
       else if(k==='champ'){ const q=Math.abs(s(t*6)); for(const sx of [-1,1]){ P('elb'+sx,[sx*.32,1.7,0]); P('hand'+sx,[sx*.16,2.05,.02]); } f.y=(f.y||0)+q*.22; f.yaw=(f.yaw||0)+(t>.8?Math.sin(t*2)*.4:0); }
       else if(k==='clap'){ const q=Math.abs(s(t*12)); for(const sx of [-1,1]){ P('elb'+sx,[sx*.28,1.25,.2]); P('hand'+sx,[sx*(.03+q*.12),1.42,.38]); } }
+      else if(k==='moon'){ const q=s(t*7); sh(0,0); f.z=(f.z||0); for(const sx of [-1,1]){ const ph=q*sx; if(J['knee'+sx]) J['knee'+sx]=[J['knee'+sx][0],J['knee'+sx][1]+Math.max(0,ph)*.12,J['knee'+sx][2]+ph*.12]; if(J['ank'+sx]) J['ank'+sx]=[J['ank'+sx][0],J['ank'+sx][1]+Math.max(0,ph)*.08,J['ank'+sx][2]-ph*.18]; P('elb'+sx,[sx*.26,1.18,-.05]); P('hand'+sx,[sx*.3,.98,-sx*q*.1]); } }
+      else if(k==='flip'){ const c=(t%1.4)/1.4, up=Math.sin(Math.min(1,c/.7)*Math.PI); f.y=(f.y||0)+up*1.1; for(const sx of [-1,1]){ P('elb'+sx,[sx*.3,1.5+up*.2,.1]); P('hand'+sx,[sx*.25,1.6+up*.4,.15]); } if(up>.3) for(const sx of [-1,1]){ if(J['knee'+sx]) J['knee'+sx]=[J['knee'+sx][0],J['knee'+sx][1]+.25*up,J['knee'+sx][2]+.25*up]; } f.yaw=(f.yaw||0)+(c<.7?c/.7*Math.PI*2:0); }
       return [J,f]; } };
 })();
