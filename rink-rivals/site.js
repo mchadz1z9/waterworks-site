@@ -58,12 +58,17 @@
   function joinedIds(){ try{ return JSON.parse(ls.get('rrTourJoined')||'[]'); }catch(e){ return []; } }
   function setJoined(ids){ ls.set('rrTourJoined',JSON.stringify(ids.slice(-50))); }
   function fmtTime(s){ if(!s) return ''; const d=new Date(s); if(isNaN(d.getTime())) return s; try{ return d.toLocaleString(undefined,{weekday:'short',month:'short',day:'numeric',hour:'numeric',minute:'2-digit'}); }catch(e){ return s; } }
-  function pickTourney(list){ if(!list.length) return null; const now=Date.now();
+  /* repeating tournaments (daily, weekdays, weekends, weekly): show the next edition, each with its own sign-up list */
+  function edition(t){ if(!t||!t.rep) return t; const base=new Date(t.time); if(isNaN(base.getTime())) return t; const now=new Date(); for(let k=-1;k<9;k++){ const d=new Date(now.getFullYear(),now.getMonth(),now.getDate()+k,base.getHours(),base.getMinutes()); if(d.getTime()<now.getTime()-2*3600000) continue; const wd=d.getDay();
+      if(t.rep==='weekdays'&&(wd===0||wd===6)) continue; if(t.rep==='weekends'&&wd>0&&wd<6) continue; if(t.rep==='weekly'&&wd!==base.getDay()) continue; if(d.getTime()<base.getTime()-60000) continue;
+      const occ=`${d.getFullYear()}${String(d.getMonth()+1).padStart(2,'0')}${String(d.getDate()).padStart(2,'0')}`; return {...t,id:t.id+'_'+occ,baseId:t.id,occ,time:d.toISOString(),joins:(t.joins||[]).filter(j=>j.occ===occ)}; } return t; }
+  const REPN={daily:'every day',weekdays:'every weekday',weekends:'weekends',weekly:'every week'};
+  function pickTourney(list){ list=list.map(edition); if(!list.length) return null; const now=Date.now();
     const up=list.filter(t=>{ const d=Date.parse(t.time); return isFinite(d)&&d>now-3*3600000; }).sort((a,b)=>Date.parse(a.time)-Date.parse(b.time));
     return up[0]||list.slice().sort((a,b)=>b.ts-a.ts)[0]; }
-  let curTour=null;
+  let curTour=null, tourList=[];
   function showTourney(list){ if(PAGE==='admin') return; list=Array.isArray(list)?list:[];
-    const t=pickTourney(list); curTour=t; const ex=document.getElementById('rrTourBtn');
+    tourList=list.map(edition).filter(t=>{ const d=Date.parse(t.time); return !isFinite(d)||d>Date.now()-3*3600000; }).sort((a,b)=>(Date.parse(a.time)||9e15)-(Date.parse(b.time)||9e15)); const t=pickTourney(list); curTour=t; const ex=document.getElementById('rrTourBtn');
     if(!t){ if(ex) ex.remove(); const p=document.getElementById('rrTour'); if(p) p.remove(); return; }
     let b=ex; if(!b){ b=document.createElement('button'); b.id='rrTourBtn'; b.type='button'; b.onclick=()=>openTour(curTour); (document.body||document.documentElement).appendChild(b); }
     b.innerHTML=`🏆 Tournament${joinedIds().includes(t.id)?' ✓':''}`;
@@ -74,18 +79,18 @@
     d.innerHTML=`<div class="rra-card"><button class="rra-x" aria-label="Close">×</button>
       <div class="rra-cover" style="background:linear-gradient(135deg,#78350f,#fbbf24)"><span class="rra-ico">🏆</span><span class="rra-tag">Arcade Rivals tournament</span></div>
       <h2>${esc(t.name)}</h2>
-      <div class="rra-meta">${t.game?`<span>🎮 ${esc(t.game)}</span>`:''}${when?`<span>🗓️ ${esc(when)}</span>`:''}<span class="rra-cnt">👥 ${n} joined</span></div>
+      <div class="rra-meta">${t.game?`<span>🎮 ${esc(t.game)}</span>`:''}${when?`<span>🗓️ ${esc(when)}</span>`:''}${t.rep?`<span>🔁 ${REPN[t.rep]}</span>`:''}<span class="rra-cnt">👥 ${n} joined</span></div>
       ${t.desc?`<div class="rra-body">${esc(t.desc).replace(/\n/g,'<br>')}</div>`:''}
-      <div class="rra-btns"><button class="rra-join${joined?' on':''}">${joined?"✓ You're in — tap to leave":'Join tournament'}</button>${t.page?`<a class="rra-go2" href="${esc(t.page)}">Go to game ▸</a>`:''}</div></div>`;
+      <div class="rra-btns"><button class="rra-join${joined?' on':''}">${joined?"✓ You're in — tap to leave":'Join tournament'}</button>${t.page?`<a class="rra-go2" href="${esc(t.page)}">Go to game ▸</a>`:''}</div>${tourList.length>1?`<div style="margin-top:12px;font-size:13px;opacity:.85">More tournaments:</div><div style="display:flex;flex-wrap:wrap;gap:6px;margin-top:6px">${tourList.filter(x=>x.id!==t.id).slice(0,8).map(x=>`<button class="rra-oth" data-tid="${esc(x.id)}" style="background:#1e293b;color:#e2e8f0;border:1px solid #334155;border-radius:999px;padding:6px 12px;cursor:pointer;font-weight:700">🏆 ${esc(x.name)} · ${esc(fmtTime(x.time))}</button>`).join('')}</div>`:''}</div>`;
     const close=()=>d.remove(); d.querySelector('.rra-x').onclick=close; d.addEventListener('click',e=>{ if(e.target===d) close(); });
-    const jb=d.querySelector('.rra-join'); jb.onclick=()=>{ joinedIds().includes(t.id)?leaveTour(t,jb,d):joinTour(t,jb,d); };
+    d.querySelectorAll('.rra-oth').forEach(b=>b.onclick=()=>openTour(tourList.find(x=>x.id===b.dataset.tid))); const jb=d.querySelector('.rra-join'); jb.onclick=()=>{ joinedIds().includes(t.id)?leaveTour(t,jb,d):joinTour(t,jb,d); };
     (document.body||document.documentElement).appendChild(d); }
   function joinTour(t,btn,d){ let name=ls.get('rrOnlineName'); if(!name){ name=prompt('Your name for the tournament:',''); if(name==null) return; name=String(name).replace(/[<>]/g,'').trim().slice(0,20); if(!name) return; ls.set('rrOnlineName',name); }
     btn.disabled=true; btn.textContent='Joining…';
-    fetch(SERVER+'/tourney',{method:'POST',headers:{'content-type':'application/json'},body:JSON.stringify({op:'join',id:t.id,name,pid:pid()})}).then(r=>r.json()).then(r=>{ const ids=joinedIds(); if(!ids.includes(t.id)) ids.push(t.id); setJoined(ids);
+    fetch(SERVER+'/tourney',{method:'POST',headers:{'content-type':'application/json'},body:JSON.stringify({op:'join',id:t.baseId||t.id,occ:t.occ||'',name,pid:pid()})}).then(r=>r.json()).then(r=>{ const ids=joinedIds(); if(!ids.includes(t.id)){ ids.push(t.id); if(window.RRCOIN) RRCOIN.add(50,'joined a tournament 🏆',false,true); } setJoined(ids);
       btn.disabled=false; btn.classList.add('on'); btn.textContent="✓ You're in — tap to leave"; if(r&&r.joined!=null){ const c=d.querySelector('.rra-cnt'); if(c) c.textContent=`👥 ${r.joined} joined`; } const bb=document.getElementById('rrTourBtn'); if(bb) bb.innerHTML='🏆 Tournament ✓'; }).catch(()=>{ btn.disabled=false; btn.textContent='Join tournament'; }); }
   function leaveTour(t,btn,d){ btn.disabled=true; btn.textContent='Leaving…';
-    fetch(SERVER+'/tourney',{method:'POST',headers:{'content-type':'application/json'},body:JSON.stringify({op:'leave',id:t.id,pid:pid()})}).then(()=>{ setJoined(joinedIds().filter(x=>x!==t.id)); btn.disabled=false; btn.classList.remove('on'); btn.textContent='Join tournament'; const bb=document.getElementById('rrTourBtn'); if(bb) bb.innerHTML='🏆 Tournament'; }).catch(()=>{ btn.disabled=false; btn.textContent="✓ You're in — tap to leave"; }); }
+    fetch(SERVER+'/tourney',{method:'POST',headers:{'content-type':'application/json'},body:JSON.stringify({op:'leave',id:t.baseId||t.id,occ:t.occ||'',pid:pid()})}).then(()=>{ setJoined(joinedIds().filter(x=>x!==t.id)); btn.disabled=false; btn.classList.remove('on'); btn.textContent='Join tournament'; const bb=document.getElementById('rrTourBtn'); if(bb) bb.innerHTML='🏆 Tournament'; }).catch(()=>{ btn.disabled=false; btn.textContent="✓ You're in — tap to leave"; }); }
 
   /* ---------- graphics: a colour grade and vignette over every 3D game, with a High / Low switch ---------- */
   const GFX=()=>{ const g=ls.get('rrGfx'); return g==='low'||g==='ultra'?g:'high'; };
