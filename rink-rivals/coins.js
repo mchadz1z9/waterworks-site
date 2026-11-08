@@ -243,7 +243,7 @@
   let pill=null, box=null, tab='shop';
   function css(){ if(document.getElementById('rrCoinCss')) return; const s=document.createElement('style'); s.id='rrCoinCss'; s.textContent=`
 #rrCoin{position:fixed;left:10px;bottom:72px;z-index:2147482500;background:linear-gradient(135deg,#78350f,#ca8a04);color:#fffbeb;border:1px solid #fde68a;border-radius:999px;padding:7px 13px;font:800 14px system-ui,sans-serif;cursor:pointer;box-shadow:0 4px 14px rgba(0,0,0,.35)}
-#rrCoin:hover{filter:brightness(1.12)}#rrCoinT{position:fixed;left:12px;bottom:112px;z-index:2147482501;font:800 14px system-ui,sans-serif;color:#fde68a;background:rgba(15,23,42,.92);border-radius:10px;padding:6px 10px;pointer-events:none;transition:opacity .4s}
+#rrCoin:hover{filter:brightness(1.12)}#rrCoinT{position:fixed;left:12px;bottom:152px;z-index:2147482501;font:800 14px system-ui,sans-serif;color:#fde68a;background:rgba(15,23,42,.92);border-radius:10px;padding:6px 10px;pointer-events:none;transition:opacity .4s}
 #rrShop{position:fixed;inset:0;z-index:2147482600;background:rgba(2,6,23,.72);display:flex;align-items:center;justify-content:center;font-family:system-ui,sans-serif}
 #rrShop .w{width:min(860px,94vw);max-height:88vh;overflow:auto;background:#0f172a;color:#e2e8f0;border:1px solid #334155;border-radius:18px;padding:18px 20px;box-shadow:0 20px 60px rgba(0,0,0,.5)}
 #rrShop h2{margin:0 0 4px;font-size:24px}#rrShop .bal{font-size:20px;font-weight:800;color:#fde68a}#rrShop .tabs{display:flex;gap:8px;margin:12px 0}

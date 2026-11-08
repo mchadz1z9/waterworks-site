@@ -40,6 +40,7 @@ export default {
           if(vid&&/"isLiveNow":true|"isLive":true/.test(lh)){ const tt=(lh.match(/<meta name="title" content="([^"]{0,140})"/)||[])[1]||'NHL live'; yt={id:vid,title:tt.replace(/&amp;/g,'&').replace(/&#39;/g,"'").replace(/&quot;/g,'"')}; } }catch(e){}
         r=new Response(JSON.stringify({date:d.currentDate,games,yt}),{headers:{'content-type':'application/json','cache-control':'max-age=30'}}); await c.put(key,r.clone()); }
       const h=new Headers(r.headers); for(const k in CORS) h.set(k,CORS[k]); return new Response(r.body,{headers:h}); }
+    if(url.pathname==='/acct'){ if(req.method==='OPTIONS') return new Response(null,{headers:CORS}); return env.ACCT.get(env.ACCT.idFromName('ACCT')).fetch(req); }
     if(url.pathname==='/site'){ if(req.method==='OPTIONS') return new Response(null,{headers:CORS}); return env.SITE.get(env.SITE.idFromName('SITE')).fetch(req); }
     if(url.pathname==='/tourney'||url.pathname==='/play'||url.pathname==='/daily'||url.pathname==='/like'||url.pathname==='/vote'||url.pathname==='/namecheck'||url.pathname.startsWith('/feed/')){ if(req.method==='OPTIONS') return new Response(null,{headers:CORS}); const cf=RCF||req.cf||{}, h=new Headers(req.headers); h.set('x-rr-asn',String(cf.asn||'')); h.set('x-rr-aso',String(cf.asOrganization||'').slice(0,80)); h.set('x-rr-cc',String(cf.country||'')); return env.SITE.get(env.SITE.idFromName('SITE')).fetch(new Request(req,{headers:h})); }
     const lb=url.pathname.match(/^\/lb\/([a-z0-9]{2,16})$/);
@@ -746,3 +747,48 @@ export class Party {
     if(a){ const p=await this.st(); if(p.members[a.pid]) p.members[a.pid].seen=Date.now(); await this.push(p); } }
   async webSocketError(ws){ return this.webSocketClose(ws); }
 }
+
+/* ---------- player accounts: your progress on every device, plus crews ----------
+   One object for the whole site. A device logs in once with name + PIN and keeps a token, so it never asks again. */
+export class Acct {
+  constructor(state){ this.state=state; this.sql=state.storage.sql;
+    this.sql.exec('CREATE TABLE IF NOT EXISTS acct(nm TEXT PRIMARY KEY, disp TEXT, salt TEXT, ph TEXT, data TEXT, ver INTEGER, ts INTEGER, crew TEXT, life INTEGER, str INTEGER, fails INTEGER, lockt INTEGER)');
+    this.sql.exec('CREATE TABLE IF NOT EXISTS tok(th TEXT PRIMARY KEY, nm TEXT, ts INTEGER)');
+    this.sql.exec('CREATE TABLE IF NOT EXISTS crew(tag TEXT PRIMARY KEY, name TEXT, owner TEXT, code TEXT, ts INTEGER)');
+    this.sql.exec('CREATE INDEX IF NOT EXISTS ix_acct_crew ON acct(crew)'); this.sql.exec('CREATE INDEX IF NOT EXISTS ix_tok_nm ON tok(nm)'); }
+  async who(token){ if(!token) return null; const th=await sha('rr-acct:'+String(token).slice(0,80)); const r=this.sql.exec('SELECT nm FROM tok WHERE th=?',th).toArray()[0]; return r?r.nm:null; }
+  async newTok(nm){ const raw=crypto.getRandomValues(new Uint8Array(32)), token=[...raw].map(v=>v.toString(16).padStart(2,'0')).join(''); this.sql.exec('INSERT INTO tok(th,nm,ts) VALUES(?,?,?)',await sha('rr-acct:'+token),nm,Date.now()); return token; }
+  crewOf(tag){ if(!tag) return null; const c=this.sql.exec('SELECT tag,name,owner,code FROM crew WHERE tag=?',tag).toArray()[0]; if(!c) return null;
+    const mem=this.sql.exec('SELECT disp,life,str FROM acct WHERE crew=? ORDER BY life DESC LIMIT 50',tag).toArray(); return {...c,members:mem,total:mem.reduce((a,m)=>a+(m.life||0),0)}; }
+  async fetch(req){
+    if(req.method==='OPTIONS') return new Response(null,{headers:CORS});
+    let m={}; try{ m=JSON.parse(await req.text()); }catch(e){ return J({err:'bad'},400); }
+    const now=Date.now(), clean=s=>String(s||'').trim().replace(/[^\w .\-]/g,'').slice(0,20), key=s=>clean(s).toLowerCase(), pinOk=p=>/^\d{4,8}$/.test(String(p||''));
+    if(m.op==='check'){ const nm=key(m.name); return J({taken:!!this.sql.exec('SELECT 1 FROM acct WHERE nm=?',nm).toArray()[0]}); }
+    if(m.op==='create'){ const disp=clean(m.name), nm=disp.toLowerCase(); if(nm.length<2) return J({err:'name'},400); if(!pinOk(m.pin)) return J({err:'pin'},400);
+      if(this.sql.exec('SELECT 1 FROM acct WHERE nm=?',nm).toArray()[0]) return J({err:'taken'},409);
+      const salt=[...crypto.getRandomValues(new Uint8Array(16))].map(v=>v.toString(16).padStart(2,'0')).join(''), ph=await pbkdf(String(m.pin),salt), data=String(m.data||'{}').slice(0,600000);
+      this.sql.exec('INSERT INTO acct(nm,disp,salt,ph,data,ver,ts,crew,life,str,fails,lockt) VALUES(?,?,?,?,?,1,?,NULL,?,?,0,0)',nm,disp,salt,ph,data,now,+m.life||0,+m.str||0);
+      return J({ok:true,name:disp,token:await this.newTok(nm),ver:1}); }
+    if(m.op==='login'){ const nm=key(m.name), r=this.sql.exec('SELECT * FROM acct WHERE nm=?',nm).toArray()[0]; if(!r) return J({err:'nouser'},404);
+      if(r.lockt>now) return J({err:'locked',mins:Math.ceil((r.lockt-now)/60000)},429);
+      if(!pinOk(m.pin)||(await pbkdf(String(m.pin),r.salt))!==r.ph){ const f=(r.fails||0)+1; this.sql.exec('UPDATE acct SET fails=?, lockt=? WHERE nm=?',f>=5?0:f,f>=5?now+10*60000:0,nm); return J({err:'pin',left:Math.max(0,5-f)},403); }
+      this.sql.exec('UPDATE acct SET fails=0 WHERE nm=?',nm); return J({ok:true,name:r.disp,token:await this.newTok(nm),data:r.data,ver:r.ver,crew:r.crew}); }
+    const nm=await this.who(m.token); if(!nm) return J({err:'auth'},401);
+    if(m.op==='pull'){ const r=this.sql.exec('SELECT disp,data,ver,crew FROM acct WHERE nm=?',nm).toArray()[0]; if(!r) return J({err:'auth'},401); return J(m.since!=null&&+m.since>=r.ver?{ok:true,ver:r.ver,same:true,crew:r.crew,name:r.disp}:{ok:true,ver:r.ver,data:r.data,crew:r.crew,name:r.disp}); }
+    if(m.op==='push'){ const data=String(m.data||''); if(data.length>600000) return J({err:'big'},413); const r=this.sql.exec('SELECT ver FROM acct WHERE nm=?',nm).toArray()[0]; const ver=(r?r.ver:0)+1;
+      this.sql.exec('UPDATE acct SET data=?, ver=?, ts=?, life=?, str=? WHERE nm=?',data,ver,now,Math.max(0,+m.life||0),Math.max(0,+m.str||0),nm); return J({ok:true,ver}); }
+    if(m.op==='logout'){ this.sql.exec('DELETE FROM tok WHERE th=?',await sha('rr-acct:'+String(m.token||'').slice(0,80))); return J({ok:true}); }
+    if(m.op==='setpin'){ if(!pinOk(m.pin)) return J({err:'pin'},400); const salt=[...crypto.getRandomValues(new Uint8Array(16))].map(v=>v.toString(16).padStart(2,'0')).join(''); this.sql.exec('UPDATE acct SET salt=?, ph=? WHERE nm=?',salt,await pbkdf(String(m.pin),salt),nm); return J({ok:true}); }
+    /* crews */
+    const me=this.sql.exec('SELECT disp,crew FROM acct WHERE nm=?',nm).toArray()[0];
+    if(m.op==='crewCreate'){ if(me.crew) return J({err:'increw'},409); const tag=String(m.tag||'').toUpperCase().replace(/[^A-Z0-9]/g,'').slice(0,5), name=clean(m.name); if(tag.length<2||name.length<2) return J({err:'bad'},400);
+      if(this.sql.exec('SELECT 1 FROM crew WHERE tag=?',tag).toArray()[0]) return J({err:'taken'},409); const code=[...crypto.getRandomValues(new Uint8Array(6))].map(v=>'ABCDEFGHJKLMNPQRSTUVWXYZ23456789'[v%32]).join('');
+      this.sql.exec('INSERT INTO crew(tag,name,owner,code,ts) VALUES(?,?,?,?,?)',tag,name,nm,code,now); this.sql.exec('UPDATE acct SET crew=? WHERE nm=?',tag,nm); return J({ok:true,crew:this.crewOf(tag)}); }
+    if(m.op==='crewJoin'){ if(me.crew) return J({err:'increw'},409); const c=this.sql.exec('SELECT tag FROM crew WHERE code=?',String(m.code||'').toUpperCase().replace(/[^A-Z0-9]/g,'')).toArray()[0]; if(!c) return J({err:'nocrew'},404);
+      const n=this.sql.exec('SELECT COUNT(*) AS c FROM acct WHERE crew=?',c.tag).toArray()[0].c; if(n>=30) return J({err:'full'},409); this.sql.exec('UPDATE acct SET crew=? WHERE nm=?',c.tag,nm); return J({ok:true,crew:this.crewOf(c.tag)}); }
+    if(m.op==='crewLeave'){ const tag=me.crew; if(!tag) return J({ok:true}); this.sql.exec('UPDATE acct SET crew=NULL WHERE nm=?',nm); const c=this.sql.exec('SELECT owner FROM crew WHERE tag=?',tag).toArray()[0];
+      const left=this.sql.exec('SELECT nm FROM acct WHERE crew=? ORDER BY life DESC LIMIT 1',tag).toArray()[0]; if(!left) this.sql.exec('DELETE FROM crew WHERE tag=?',tag); else if(c&&c.owner===nm) this.sql.exec('UPDATE crew SET owner=? WHERE tag=?',left.nm,tag); return J({ok:true}); }
+    if(m.op==='crewInfo'){ const c=this.crewOf(me.crew); if(!c) return J({ok:true,crew:null}); if(c.owner!==nm) delete c.code; c.mine=true; return J({ok:true,crew:c}); }
+    if(m.op==='crewTop'){ const rows=this.sql.exec('SELECT c.tag AS tag, c.name AS name, COUNT(a.nm) AS n, SUM(a.life) AS total FROM crew c JOIN acct a ON a.crew=c.tag GROUP BY c.tag ORDER BY total DESC LIMIT 25').toArray(); return J({ok:true,rows}); }
+    return J({err:'op'},400); } }

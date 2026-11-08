@@ -1,5 +1,6 @@
 /* Arcade Coins: the site-wide currency and shop (coins.js) */
 (function(){ if(window.RRCOIN||document.getElementById('rrCoinJs')) return; const s=document.createElement('script'); s.id='rrCoinJs'; s.src='coins.js'; (document.head||document.documentElement).appendChild(s); })();
+(function(){ if(window.RRACCT||document.getElementById('rrAcctJs')) return; const s=document.createElement('script'); s.id='rrAcctJs'; s.src='acct.js'; (document.head||document.documentElement).appendChild(s); })();
 /* Arcade Rivals: if a network (a school filter, say) blocks the game server's own address, switch every page to the site's
    backup route (/rr on this site). Switches back on its own once the direct address works again. */
 (function(){ if(!/^https?:$/.test(location.protocol)) return; const D='https://rink-rivals-rooms.mitchellchad2026.workers.dev';
