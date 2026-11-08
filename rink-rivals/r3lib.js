@@ -362,6 +362,7 @@ void main(){vec4 t=texture2D(uTex,vUV*uUVR.zw+uUVR.xy);if(t.a<0.04)discard;gl_Fr
     gl.disable(gl.BLEND);
     for(const k of ['aPos','aUV']) gl.disableVertexAttribArray(PT.a[k]);
     if(pp) ppEnd();
+    if(window.RRSNAPREQ){ const cb=window.RRSNAPREQ; window.RRSNAPREQ=null; try{ cb(glc); }catch(e){} }   /* photo mode grabs the picture right after it's drawn */
   }
   function proj(x,y,z){ const m=VP, X=m[0]*x+m[4]*y+m[8]*z+m[12], Y=m[1]*x+m[5]*y+m[9]*z+m[13], Wc=m[3]*x+m[7]*y+m[11]*z+m[15]; if(Wc<=1) return null; return [(X/Wc*.5+.5),(1-(Y/Wc*.5+.5)),Wc]; }
   function inv(m){ const a=m, o=new Float32Array(16);

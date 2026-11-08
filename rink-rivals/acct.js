@@ -9,7 +9,7 @@
   const PAGE=(location.pathname.split('/').pop()||'').replace(/\.html$/,'');
   if(PAGE==='hq-owa9rwwt9kplpdbu'||window.RR_ADMIN) return;
   /* what follows you between devices: every game save. What doesn't: device settings and anything to do with admin or security */
-  const DENY=new Set(['rrSrv','rrSw','rrGfx','rrAcct','rrOwner','rrOwnerStr','rrMyTag','rrAdmUrl','rrAdmG','rrPid','rrKicked','rrBanned','rrSiteGate','rrSiteCfgCache','rrServerOv','rrSiteEvents','rrSiteAt','rrMute','rrPin','rrParty','rrLast']);
+  const DENY=new Set(['rrSrv','rrSw','rrGfx','rrAcct','rrOwner','rrOwnerStr','rrMyTag','rrAdmUrl','rrAdmG','rrPid','rrKicked','rrBanned','rrSiteGate','rrSiteCfgCache','rrServerOv','rrSiteEvents','rrSiteAt','rrMute','rrPin','rrParty','rrLast','rrStreakPend']);
   const syncable=k=>!!k&&!DENY.has(k)&&/^(rr|rinkRivals|sa[A-Z]|pk1$)/.test(k);
   function collect(){ const o={}; try{ for(let i=0;i<localStorage.length;i++){ const k=localStorage.key(i); if(syncable(k)) o[k]=localStorage.getItem(k); } }catch(e){} return o; }
   function applyData(data){ let o={}; try{ o=JSON.parse(data||'{}'); }catch(e){} for(const k in o) if(syncable(k)) ls.set(k,o[k]); }
