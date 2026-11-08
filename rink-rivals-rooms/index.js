@@ -760,6 +760,7 @@ export class Acct {
     for(const col of ['pub TEXT','seen INTEGER','pg TEXT']){ try{ this.sql.exec('ALTER TABLE acct ADD COLUMN '+col); }catch(e){} }
     this.sql.exec('CREATE TABLE IF NOT EXISTS fr(a TEXT, b TEXT, st TEXT, ts INTEGER, PRIMARY KEY(a,b))'); this.sql.exec('CREATE INDEX IF NOT EXISTS ix_fr_b ON fr(b)');
     this.sql.exec('CREATE TABLE IF NOT EXISTS gift(id INTEGER PRIMARY KEY AUTOINCREMENT, frm TEXT, too TEXT, what TEXT, msg TEXT, st TEXT, ts INTEGER)'); this.sql.exec('CREATE INDEX IF NOT EXISTS ix_gift_too ON gift(too,st)');
+    this.sql.exec('CREATE TABLE IF NOT EXISTS cwpts(wk INTEGER, nm TEXT, crew TEXT, pts INTEGER, PRIMARY KEY(wk,nm))'); this.sql.exec('CREATE INDEX IF NOT EXISTS ix_cw ON cwpts(wk,crew)');
     this.sql.exec('CREATE INDEX IF NOT EXISTS ix_trade_too ON trade(too,st)'); this.sql.exec('CREATE INDEX IF NOT EXISTS ix_trade_frm ON trade(frm,claimed)');
     this.sql.exec('CREATE INDEX IF NOT EXISTS ix_acct_crew ON acct(crew)'); this.sql.exec('CREATE INDEX IF NOT EXISTS ix_tok_nm ON tok(nm)'); }
   async who(token){ if(!token) return null; const th=await sha('rr-acct:'+String(token).slice(0,80)); const r=this.sql.exec('SELECT nm FROM tok WHERE th=?',th).toArray()[0]; return r?r.nm:null; }
@@ -785,10 +786,16 @@ export class Acct {
       if(r.lockt>now) return J({err:'locked',mins:Math.ceil((r.lockt-now)/60000)},429);
       if(!pinOk(m.pin)||(await pbkdf(String(m.pin),r.salt))!==r.ph){ const f=(r.fails||0)+1; this.sql.exec('UPDATE acct SET fails=?, lockt=? WHERE nm=?',f>=5?0:f,f>=5?now+10*60000:0,nm); return J({err:'pin',left:Math.max(0,5-f)},403); }
       this.sql.exec('UPDATE acct SET fails=0 WHERE nm=?',nm); return J({ok:true,name:r.disp,token:await this.newTok(nm),data:r.data,ver:r.ver,crew:r.crew,owner:OWNER_ACCTS.has(nm)}); }
+    /* crew wars: points this week per crew (public, so the Hub can show the champions) */
+    if(m.op==='crewWar'){ const wk=Math.floor((now/864e5+3)/7), q=w=>this.sql.exec('SELECT p.crew AS tag, c.name AS name, SUM(p.pts) AS pts, COUNT(*) AS n FROM cwpts p LEFT JOIN crew c ON c.tag=p.crew WHERE p.wk=? GROUP BY p.crew ORDER BY pts DESC LIMIT 20',w).toArray();
+      let mine=0; if(m.token){ const me=await this.who(m.token); if(me){ const r=this.sql.exec('SELECT pts FROM cwpts WHERE wk=? AND nm=?',wk,me).toArray()[0]; mine=r?r.pts:0; } }
+      const last=q(wk-1)[0]||null; return J({ok:true,wk,rows:q(wk),last,mine,ends:((wk+1)*7-3)*864e5,now}); }
     const nm=await this.who(m.token); if(!nm) return J({err:'auth'},401);
     if(m.op==='pull'){ const r=this.sql.exec('SELECT disp,data,ver,crew FROM acct WHERE nm=?',nm).toArray()[0]; if(!r) return J({err:'auth'},401); const ow=OWNER_ACCTS.has(nm); return J(m.since!=null&&+m.since>=r.ver?{ok:true,ver:r.ver,same:true,crew:r.crew,name:r.disp,owner:ow}:{ok:true,ver:r.ver,data:r.data,crew:r.crew,name:r.disp,owner:ow}); }
     if(m.op==='push'){ const data=String(m.data||''); if(data.length>600000) return J({err:'big'},413); const r=this.sql.exec('SELECT ver FROM acct WHERE nm=?',nm).toArray()[0]; const ver=(r?r.ver:0)+1;
-      this.sql.exec('UPDATE acct SET data=?, ver=?, ts=?, life=?, str=?, pub=?, seen=?, pg=? WHERE nm=?',data,ver,now,Math.max(0,+m.life||0),Math.max(0,+m.str||0),String(m.pub||'').slice(0,6000),now,String(m.pg||'').replace(/[^a-z0-9-]/g,'').slice(0,24),nm); return J({ok:true,ver}); }
+      this.sql.exec('UPDATE acct SET data=?, ver=?, ts=?, life=?, str=?, pub=?, seen=?, pg=? WHERE nm=?',data,ver,now,Math.max(0,+m.life||0),Math.max(0,+m.str||0),String(m.pub||'').slice(0,6000),now,String(m.pg||'').replace(/[^a-z0-9-]/g,'').slice(0,24),nm);
+      { const wk=Math.floor((now/864e5+3)/7); if(+m.cwk===wk&&+m.cw>0){ const c=this.sql.exec('SELECT crew FROM acct WHERE nm=?',nm).toArray()[0]; if(c&&c.crew) this.sql.exec('INSERT OR REPLACE INTO cwpts(wk,nm,crew,pts) VALUES(?,?,?,?)',wk,nm,c.crew,Math.max(0,Math.min(500000,Math.floor(+m.cw)))); } }
+      return J({ok:true,ver}); }
     if(m.op==='ping'){ this.sql.exec('UPDATE acct SET seen=?, pg=? WHERE nm=?',now,String(m.pg||'').replace(/[^a-z0-9-]/g,'').slice(0,24),nm); return J({ok:true}); }
     if(m.op==='logout'){ this.sql.exec('DELETE FROM tok WHERE th=?',await sha('rr-acct:'+String(m.token||'').slice(0,80))); return J({ok:true}); }
     if(m.op==='setpin'){ if(!pinOk(m.pin)) return J({err:'pin'},400); const salt=[...crypto.getRandomValues(new Uint8Array(16))].map(v=>v.toString(16).padStart(2,'0')).join(''); this.sql.exec('UPDATE acct SET salt=?, ph=? WHERE nm=?',salt,await pbkdf(String(m.pin),salt),nm); return J({ok:true}); }

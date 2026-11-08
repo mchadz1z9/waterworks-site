@@ -21,7 +21,8 @@
   const hash=s=>{ let h=2166136261; for(let i=0;i<s.length;i++){ h^=s.charCodeAt(i); h=Math.imul(h,16777619); } return (h>>>0).toString(36); };
   let A=J('rrAcct',null); const saveA=()=>{ if(A) ls.set('rrAcct',JSON.stringify(A)); else ls.del('rrAcct'); render(); };
   const api=(op,body,keep)=>fetch(SERVER+'/acct',{method:'POST',body:JSON.stringify({op,...(body||{})}),keepalive:!!keep}).then(r=>r.json()).catch(()=>({err:'net'}));
-  const meta=()=>({life:Math.round(+ls.get('rrCoinLife')||0),str:Math.round(+ls.get('rrStrength')||0)});
+  const cwWk=()=>Math.floor((Date.now()/864e5+3)/7), cwMine=()=>{ try{ const o=JSON.parse(ls.get('rrCrewWar')||'{}'); return o.w===cwWk()?Math.floor(o.p||0):0; }catch(e){ return 0; } };
+  const meta=()=>({life:Math.round(+ls.get('rrCoinLife')||0),str:Math.round(+ls.get('rrStrength')||0),cw:cwMine(),cwk:cwWk()});
   /* the owner's account makes every device it logs in on the owner (infinite coins, strength, everything unlocked) */
   function ownerOn(){ if(ls.get('rrOwner')==='1') return; ls.set('rrOwner','1'); try{ if(!sessionStorage.getItem('rrOwnRl')){ sessionStorage.setItem('rrOwnRl','1'); setTimeout(()=>location.reload(),600); } }catch(e){} }
   let busy=false, lastSync=0;
@@ -38,7 +39,7 @@
   if(A) setTimeout(()=>api('ping',{token:A.token,pg:PAGE||'index'}),4000);
   if(A){ setTimeout(()=>pull().then(()=>push()),1500); setInterval(()=>push(),90000); addEventListener('visibilitychange',()=>{ if(document.hidden) push(false,true); }); addEventListener('pagehide',()=>push(false,true)); }
   /* ---- the account window ---- */
-  let pill=null, box=null, tab='acct', msg='', crewCache=null, topCache=null;
+  let pill=null, box=null, tab='acct', msg='', crewCache=null, topCache=null, warCache=null;
   function css(){ if(document.getElementById('rrAcctCss')) return; const s=document.createElement('style'); s.id='rrAcctCss'; s.textContent=`
 #rrAcctB{position:fixed;left:10px;bottom:112px;z-index:2147482500;background:linear-gradient(135deg,#1e3a8a,#2563eb);color:#eff6ff;border:1px solid #93c5fd;border-radius:999px;padding:6px 12px;font:800 13px system-ui,sans-serif;cursor:pointer;box-shadow:0 4px 14px rgba(0,0,0,.35)}
 #rrAcct{position:fixed;inset:0;z-index:2147482700;background:rgba(2,6,23,.72);display:flex;align-items:center;justify-content:center;font-family:system-ui,sans-serif}
@@ -60,13 +61,20 @@
         <p>On another device: open 👤, choose “I already have one”, and enter <b>${esc(A.name)}</b> and your PIN.</p><button data-go="sync">☁️ Save now</button> <button class="g" data-go="pin">Change PIN</button> <button class="g" data-go="out">Log out</button>`;
       else h+=crewHTML(); }
     h+=`<div style="margin-top:8px">${msg}</div></div>`; box.innerHTML=h; if(tab==='card') setTimeout(drawCard,0); }
+  /* last week's winning crew: everyone in it gets a Legendary crate + 2,000 coins once */
+  function cwClaim(){ const w=warCache, C=window.RRCOIN; if(!w||!w.last||!A||!A.crew||A.crew!==w.last.tag||!C) return; const k='rrCwClaim'; if(+ls.get(k)===w.wk-1) return; ls.set(k,String(w.wk-1)); C.giveCrate('legend'); C.tradeGive([],2000); C.toast(`⚔️ Your crew [${w.last.tag}] WON the crew war! +2,000 🪙 and a Legendary crate`,'#fbbf24'); }
+  function warHTML(){ const w=warCache; if(!w) return ''; const left=Math.max(0,w.ends-w.now), d=Math.floor(left/864e5), hh=Math.floor(left%864e5/36e5);
+    return `<h3 style="margin:14px 0 4px">⚔️ Crew war — ends in ${d}d ${hh}h</h3><div class="m" style="margin-bottom:4px">Every game you finish = 10 points · every 10 coins you earn = 1 point. The top crew on Monday wins a 🏆 Legendary crate + 2,000 🪙 for every member.</div>`+
+      (w.last?`<div class="row" style="color:#fde68a"><span>👑 Last week's champions</span><b>[${esc(w.last.tag)}] ${esc(w.last.name||'')} · ${(w.last.pts||0).toLocaleString()} pts</b></div>`:'')+
+      (w.rows.length?w.rows.map((r,i)=>`<div class="row" style="${A&&A.crew===r.tag?'color:#86efac':''}"><span>${['🥇','🥈','🥉'][i]||(i+1)+'.'} [${esc(r.tag)}] ${esc(r.name||'')} · ${r.n} fighting</span><b>${(r.pts||0).toLocaleString()} pts</b></div>`).join(''):'<p>No points yet this week — go play!</p>')+
+      `<div class="m" style="margin-top:4px">Your points this week: <b>${Math.max(w.mine||0,cwMine()).toLocaleString()}</b>${A&&A.crew?'':' — join a crew so they count!'} (they reach the board within a couple of minutes)</div>`; }
   function crewHTML(){ const c=crewCache; let h='';
     if(c===undefined||c==='loading') return '<p>Loading…</p>';
     if(c){ h+=`<h3 style="margin:6px 0">🏴 [${esc(c.tag)}] ${esc(c.name)}</h3><div class="m">${c.members.length} member${c.members.length>1?'s':''} · crew total ${(c.total||0).toLocaleString()} lifetime coins</div>${c.code?`<p>Invite code: <b style="font-size:20px;color:#fde68a;letter-spacing:.1em">${esc(c.code)}</b> — friends enter it in 👤 → Crew → Join.</p>`:''}`+
         c.members.map((m,i)=>`<div class="row"><span>${i+1}. <a href="#" data-prof="${esc(m.disp)}" style="color:#93c5fd">${esc(m.disp)}</a></span><b>${(m.life||0).toLocaleString()} 🪙 · 💪 ${(m.str||0).toLocaleString()}</b></div>`).join('')+`<p><button class="g" data-go="leave">Leave crew</button></p>`; }
     else h+=`<p>Team up! Crews add up every member's lifetime coins on the crew leaderboard.</p><div class="m">Crew name</div><input id="cN" maxlength="20"><div class="m">Tag (2–6 letters, shows next to your name)</div><input id="cT" maxlength="6" style="text-transform:uppercase"><button data-go="ccreate">Create crew</button>
       <h3 style="margin:14px 0 4px">Join with an invite code</h3><input id="cC" maxlength="6" style="text-transform:uppercase" placeholder="ABC123"><button data-go="cjoin">Join crew</button>`;
-    h+=`<h3 style="margin:14px 0 4px">🏆 Top crews</h3>`+(topCache?topCache.map((r,i)=>`<div class="row"><span>${i+1}. [${esc(r.tag)}] ${esc(r.name)} · ${r.n} member${r.n>1?'s':''}</span><b>${(r.total||0).toLocaleString()} 🪙</b></div>`).join('')||'<p>No crews yet — be the first!</p>':'<p>Loading…</p>'); return h; }
+    h+=warHTML()+`<h3 style="margin:14px 0 4px">🏆 Top crews</h3>`+(topCache?topCache.map((r,i)=>`<div class="row"><span>${i+1}. [${esc(r.tag)}] ${esc(r.name)} · ${r.n} member${r.n>1?'s':''}</span><b>${(r.total||0).toLocaleString()} 🪙</b></div>`).join('')||'<p>No crews yet — be the first!</p>':'<p>Loading…</p>'); return h; }
 
   /* ---- trading ---- */
   const TR={inc:[],out:[]}; const DONE=()=>J('rrTradeDone',[]);
@@ -160,7 +168,7 @@
       ${me?'':`<p style="margin-top:10px">${r.friend==='ok'?'<button disabled>✓ Friends</button>':`<button data-pf="add">${r.friend==='pending'?'Request pending':'➕ Add friend'}</button>`} <button data-pf="gift">🎁 Send a gift</button> <button class="g" data-pf="trade">🔄 Trade</button></p>`}`;
     drawCardData(pbox.querySelector('#ppc'),{name:r.name,crew:r.crew,own:P.own,lvl:P.lvl,life:P.life,str:P.str,reb:P.reb,ach:P.ach,achN:P.achN,crates:P.crates,best:(P.items||[]).slice(0,4)}); }
   document.addEventListener('click',e=>{ const a=e.target.closest('[data-prof]'); if(!a) return; e.preventDefault(); profile(a.dataset.prof); });
-  async function loadCrew(){ crewCache='loading'; renderBox(); const [a,b]=await Promise.all([api('crewInfo',{token:A.token}),api('crewTop',{token:A.token})]); crewCache=a.ok?a.crew:null; topCache=b.ok?b.rows:[]; if(A){ A.crew=crewCache?crewCache.tag:null; saveA(); } }
+  async function loadCrew(){ crewCache='loading'; renderBox(); const [a,b,w]=await Promise.all([api('crewInfo',{token:A.token}),api('crewTop',{token:A.token}),api('crewWar',{token:A.token})]); crewCache=a.ok?a.crew:null; topCache=b.ok?b.rows:[]; warCache=w&&w.ok?w:null; cwClaim(); if(A){ A.crew=crewCache?crewCache.tag:null; saveA(); } }
   const say=(t,ok)=>{ const keep={}; box.querySelectorAll('input[id],select[id]').forEach(i=>keep[i.id]=i.value); msg=`<span class="${ok?'ok':'err'}">${t}</span>`; renderBox(); for(const id in keep){ const i=box.querySelector('#'+id); if(i) i.value=keep[id]; } };
   async function go(k){ const v=id=>{ const e=box.querySelector('#'+id); return e?e.value.trim():''; };
     if(k==='create'){ const n=v('aN'), p=v('aP'); if(n.length<2) return say('Pick a name (2+ letters)'); if(!/^\d{4,8}$/.test(p)) return say('PIN must be 4–8 numbers'); if(p!==v('aP2')) return say('The PINs don’t match');
@@ -182,5 +190,5 @@
     if(tab==='crew'&&A) loadCrew(); renderBox(); }
   function mount(){ if(document.getElementById('rrAcctB')) return; css(); pill=document.createElement('button'); pill.id='rrAcctB'; pill.title='Your account — progress on every device'; pill.onclick=()=>open(); document.body.appendChild(pill); render(); }
   if(document.readyState==='loading') addEventListener('DOMContentLoaded',mount); else mount();
-  window.RRACCT={ profile, peek:async name=>{ if(!A) return null; const r=await api('profile',{token:A.token,name}); return r&&r.ok?pk(r.pub):null; }, friends:()=>FR.friends, get name(){ return A&&A.name; }, get crew(){ return A&&A.crew; }, open, push:()=>push(true) };
+  window.RRACCT={ crewWar:async()=>{ const r=await api('crewWar',{token:A?A.token:''}); return r&&r.ok?r:null; }, profile, peek:async name=>{ if(!A) return null; const r=await api('profile',{token:A.token,name}); return r&&r.ok?pk(r.pub):null; }, friends:()=>FR.friends, get name(){ return A&&A.name; }, get crew(){ return A&&A.crew; }, open, push:()=>push(true) };
 })();

@@ -32,7 +32,9 @@
   const save=()=>{ ls.set('rrCoins',String(Math.round(bal))); ls.set('rrInv',JSON.stringify(inv)); ls.set('rrEquip',JSON.stringify(eq)); ls.set('rrCoinDay',JSON.stringify(D)); render(); try{ dispatchEvent(new CustomEvent('rrcoin-change')); }catch(e){} };
   const fmt=n=>isOwner()?'∞':Math.round(n).toLocaleString(), clamp01=v=>Math.max(0,Math.min(1,v||0));
   const dbl=()=>(+ls.get('rrCoin2x')||0)>Date.now();
-  function add(n,why,quiet,noCap){ n=Math.round(+n||0); if(n<=0) return 0; if(isOwner()){ if(!quiet) toast(`+${n} 🪙 ${why||''}`); track('earn',n); return n; } if(dbl()) n*=2; n=Math.round(n*evMul()*(1+lvlBonus())); if(!noCap){ n=Math.min(n,Math.max(0,CAP-D.earned)); D.earned+=n; } if(n<=0) return 0;
+  /* crew wars: every game you finish = 10 points, every 10 coins you earn = 1 point (counts for your crew this week) */
+  function cwAdd(n){ try{ const w=Math.floor((Date.now()/864e5+3)/7), o=J('rrCrewWar',{w:0,p:0}); if(o.w!==w){ o.w=w; o.p=0; } o.p=Math.round((o.p+n)*10)/10; ls.set('rrCrewWar',JSON.stringify(o)); }catch(e){} }
+  function add(n,why,quiet,noCap){ n=Math.round(+n||0); if(n<=0) return 0; cwAdd(Math.min(n,500)/10); if(isOwner()){ if(!quiet) toast(`+${n} 🪙 ${why||''}`); track('earn',n); return n; } if(dbl()) n*=2; n=Math.round(n*evMul()*(1+lvlBonus())); if(!noCap){ n=Math.min(n,Math.max(0,CAP-D.earned)); D.earned+=n; } if(n<=0) return 0;
     passXP(n); const l0=lvlOf(LIFE); bal+=n; LIFE+=n; ls.set('rrCoinLife',String(LIFE)); logIt(n,why||'earned'); track('earn',n); save(); if(!quiet) toast(`+${n.toLocaleString()} 🪙 ${why||''}`);
     const l1=lvlOf(LIFE); if(l1>l0){ const rw=l1*25; bal+=rw; logIt(rw,`Arcade Level ${l1} reward`); save(); setTimeout(()=>toast(`⬆️ ARCADE LEVEL ${l1}! +${rw} 🪙 · coins now +${Math.round(lvlBonus()*100)}%`,'#c084fc'),900); }
     for(const [m,rw] of [[1000,100],[5000,400],[25000,1500],[100000,5000]]) if(LIFE>=m&&LIFE-n<m){ bal+=rw; logIt(rw,`Milestone: ${m.toLocaleString()} coins earned`); save(); setTimeout(()=>toast(`🏅 Milestone: ${m.toLocaleString()} coins earned! +${rw}`,'#facc15'),1800); }
@@ -183,7 +185,7 @@
       if(day===7){ inv.crateEpic=(inv.crateEpic||0)+1; save(); toast('📅 Day 7! A free EPIC crate — open it in the shop','#c084fc'); add(150,'day 7 login',true,true); } else add(CAL[day-1],`login day ${day}/7 · ${n} day streak 🔥`,false,true); },2600); }
   if(!NOGAME.includes(PAGE)) setInterval(()=>{ if(document.hidden) return; if(D.d!==today()) D={d:today(),earned:0,play:0,res:0}; if(D.play>=240) return; D.play+=4; add(4,'for playing',true); track('mins',1); gcTrack('mins',1); },60000);
   if(!NOGAME.includes(PAGE)&&D.pages&&!D.pages.includes(PAGE)){ D.pages.push(PAGE); setTimeout(()=>track('pages',1),3000); }
-  const lastRes={}; addEventListener('rr-result',()=>{ const now=Date.now(); if(lastRes[PAGE]&&now-lastRes[PAGE]<45000) return; lastRes[PAGE]=now; if(D.res>=900) return; D.res+=25; add(25,'game finished'); track('games',1); gcTrack('games',1); });
+  const lastRes={}; addEventListener('rr-result',()=>{ const now=Date.now(); if(lastRes[PAGE]&&now-lastRes[PAGE]<45000) return; lastRes[PAGE]=now; cwAdd(10); if(D.res>=900) return; D.res+=25; add(25,'game finished'); track('games',1); gcTrack('games',1); });
   /* ---- the Lucky Wheel: one free spin a day, more for 100 coins ---- */
   const WHEEL=[{t:'25 🪙',c:25,w:24,col:'#334155'},{t:'50 🪙',c:50,w:20,col:'#1d4ed8'},{t:'100 🪙',c:100,w:16,col:'#15803d'},{t:'⚡ ×2 30 min',x2:1,w:10,col:'#7c3aed'},{t:'200 🪙',c:200,w:10,col:'#b45309'},{t:'🎁 Mystery',mys:1,w:10,col:'#db2777'},{t:'500 🪙',c:500,w:6,col:'#dc2626'},{t:'💎 2,500 🪙',c:2500,w:1.5,col:'#0891b2'}];
   let spinning=false, wheelRot=0, wheelMsg='';
