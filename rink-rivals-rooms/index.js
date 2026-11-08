@@ -782,7 +782,7 @@ export class Acct {
     if(m.op==='setpin'){ if(!pinOk(m.pin)) return J({err:'pin'},400); const salt=[...crypto.getRandomValues(new Uint8Array(16))].map(v=>v.toString(16).padStart(2,'0')).join(''); this.sql.exec('UPDATE acct SET salt=?, ph=? WHERE nm=?',salt,await pbkdf(String(m.pin),salt),nm); return J({ok:true}); }
     /* crews */
     const me=this.sql.exec('SELECT disp,crew FROM acct WHERE nm=?',nm).toArray()[0];
-    if(m.op==='crewCreate'){ if(me.crew) return J({err:'increw'},409); const tag=String(m.tag||'').toUpperCase().replace(/[^A-Z0-9]/g,'').slice(0,5), name=clean(m.name); if(tag.length<2||name.length<2) return J({err:'bad'},400);
+    if(m.op==='crewCreate'){ if(me.crew) return J({err:'increw'},409); const tag=String(m.tag||'').toUpperCase().replace(/[^A-Z0-9]/g,'').slice(0,6), name=clean(m.name); if(tag.length<2||name.length<2) return J({err:'bad'},400);
       if(this.sql.exec('SELECT 1 FROM crew WHERE tag=?',tag).toArray()[0]) return J({err:'taken'},409); const code=[...crypto.getRandomValues(new Uint8Array(6))].map(v=>'ABCDEFGHJKLMNPQRSTUVWXYZ23456789'[v%32]).join('');
       this.sql.exec('INSERT INTO crew(tag,name,owner,code,ts) VALUES(?,?,?,?,?)',tag,name,nm,code,now); this.sql.exec('UPDATE acct SET crew=? WHERE nm=?',tag,nm); return J({ok:true,crew:this.crewOf(tag)}); }
     if(m.op==='crewJoin'){ if(me.crew) return J({err:'increw'},409); const c=this.sql.exec('SELECT tag FROM crew WHERE code=?',String(m.code||'').toUpperCase().replace(/[^A-Z0-9]/g,'')).toArray()[0]; if(!c) return J({err:'nocrew'},404);
