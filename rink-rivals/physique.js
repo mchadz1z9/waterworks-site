@@ -53,7 +53,7 @@ const SP=(p,r,col)=>R3.part(R3.US,R3.mm(R3.T(p[0]*K,p[1]*K,p[2]*K),R3.S(r*K,r*K,
 
 /* Arcade Shop gear (armbands, wristbands, headbands, caps, crowns, sunglasses, chains, capes) on YOUR character in every game */
 let GEARC=null, GEART=0; function gearNow(){ const t=Date.now(); if(t-GEART>800){ GEART=t; GEARC={}; try{ if(window.RRCOIN) for(const sl of ['arm','wrist','head','face','neck','back']) GEARC[sl]=RRCOIN.equipped(sl); }catch(e){} } return GEARC; }
-function drawGear(J,f,lk){ if(!lk||!lk.me) return; const G=gearNow(); if(!G||!Object.values(G).some(Boolean)) return;
+function drawGear(J,f,lk){ if(!lk||(!lk.me&&!lk.gear)) return; const G=lk.gear||gearNow(); if(!G||!Object.values(G).some(Boolean)) return;
   const W=p=>wp(f,p), D=v=>nrm3(wd(f,v)), m=(lk.buff||1), barm=lk.olympia?1.6:(1+(m-1)*.8)*Math.sqrt(lk.bulk||1), bch=lk.olympia?1.5:(1+(m-1)*.2)*(lk.bulk||1);
   const pel=W(J.pelvis), ch=W(J.chest), A=nrm3(sub3(ch,pel)); let Fv=D(J.F); Fv=nrm3(sub3(Fv,mul3(A,dot3(Fv,A)))); const Wd=nrm3(crs3(A,Fv)), hd=W(J.head), HU=nrm3(sub3(hd,ch)), HF=nrm3(crs3(Wd,HU));
   if(G.arm){ for(const sx of (G.arm.both?[-1,1]:[-1])){ const s=W(J['sho'+sx]), e=W(J['elb'+sx]); LB(mix3(s,e,.42),mix3(s,e,.56),.083*barm,.083*barm,G.arm.c); if(G.arm.c2) SP(add3(mix3(s,e,.49),mul3(Wd,sx*.075*barm)),.03,G.arm.c2); } }

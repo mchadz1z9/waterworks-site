@@ -13,6 +13,11 @@
   const syncable=k=>!!k&&!DENY.has(k)&&/^(rr|rinkRivals|sa[A-Z]|pk1$)/.test(k);
   function collect(){ const o={}; try{ for(let i=0;i<localStorage.length;i++){ const k=localStorage.key(i); if(syncable(k)) o[k]=localStorage.getItem(k); } }catch(e){} return o; }
   function applyData(data){ let o={}; try{ o=JSON.parse(data||'{}'); }catch(e){} for(const k in o) if(syncable(k)) ls.set(k,o[k]); }
+  /* logging in on a device that already has progress MERGES it with the account: bigger numbers win, lists and items are combined — nothing is lost */
+  function mergeVal(a,b){ if(a==null) return b; if(b==null) return a; let x,y; try{ x=JSON.parse(a); y=JSON.parse(b); }catch(e){ return a.length>=b.length?a:b; } return JSON.stringify(mergeObj(x,y)); }
+  function mergeObj(x,y){ if(typeof x==='number'&&typeof y==='number') return Math.max(x,y); if(Array.isArray(x)&&Array.isArray(y)){ const seen=new Set(), out=[]; for(const v of x.concat(y)){ const k=JSON.stringify(v); if(seen.has(k)) continue; seen.add(k); out.push(v); } return out.slice(0,Math.max(x.length,y.length,Math.min(out.length,500))); }
+    if(x&&y&&typeof x==='object'&&typeof y==='object'){ const o={...y}; for(const k in x) o[k]=k in y?mergeObj(x[k],y[k]):x[k]; return o; } if(typeof x==='boolean'&&typeof y==='boolean') return x||y; return x!=null?x:y; }
+  function mergeIn(remote){ let o={}; try{ o=JSON.parse(remote||'{}'); }catch(e){} for(const k in o){ if(!syncable(k)) continue; const cur=ls.get(k); ls.set(k,cur==null?o[k]:mergeVal(cur,o[k])); } }
   const hash=s=>{ let h=2166136261; for(let i=0;i<s.length;i++){ h^=s.charCodeAt(i); h=Math.imul(h,16777619); } return (h>>>0).toString(36); };
   let A=J('rrAcct',null); const saveA=()=>{ if(A) ls.set('rrAcct',JSON.stringify(A)); else ls.del('rrAcct'); render(); };
   const api=(op,body,keep)=>fetch(SERVER+'/acct',{method:'POST',body:JSON.stringify({op,...(body||{})}),keepalive:!!keep}).then(r=>r.json()).catch(()=>({err:'net'}));
@@ -43,7 +48,7 @@
     if(!A){ h+=`<p>Make an account and your coins, strength, gear, Rival City and every game's progress follow you to any computer, tablet or phone. On this device you'll stay logged in — the PIN is only for logging in somewhere new.</p>
       <div class="tabs"><button data-t="new" class="${tab!=='login'?'on':''}">Create account</button><button data-t="login" class="${tab==='login'?'on':''}">I already have one</button></div>`;
       if(tab!=='login') h+=`<div class="m">Name</div><input id="aN" maxlength="20" value="${esc(ls.get('rrName')||'')}"><div class="m">PIN (4–8 numbers — remember it!)</div><input id="aP" type="password" inputmode="numeric" maxlength="8"><div class="m">PIN again</div><input id="aP2" type="password" inputmode="numeric" maxlength="8"><button data-go="create">Create account &amp; save my progress</button>`;
-      else h+=`<div class="m">Account name</div><input id="aN" maxlength="20"><div class="m">PIN</div><input id="aP" type="password" inputmode="numeric" maxlength="8"><button data-go="login">Log in on this device</button><p>Logging in replaces the progress on this device with your account's.</p>`; }
+      else h+=`<div class="m">Account name</div><input id="aN" maxlength="20"><div class="m">PIN</div><input id="aP" type="password" inputmode="numeric" maxlength="8"><button data-go="login">Log in on this device</button><p>Logging in combines this device's progress with your account — nothing gets reset.</p>`; }
     else { h+=`<div class="tabs"><button data-t="acct" class="${tab!=='crew'?'on':''}">☁️ Account</button><button data-t="crew" class="${tab==='crew'?'on':''}">🏴 Crew</button></div>`;
       if(tab!=='crew') h+=`<p class="ok">✓ Logged in on this device — your progress saves by itself.</p><div class="row"><span>Last synced</span><b>${lastSync?new Date(lastSync).toLocaleTimeString():'—'}</b></div><div class="row"><span>Crew</span><b>${A.crew?'['+esc(A.crew)+']':'none'}</b></div>
         <p>On another device: open 👤, choose “I already have one”, and enter <b>${esc(A.name)}</b> and your PIN.</p><button data-go="sync">☁️ Save now</button> <button class="g" data-go="pin">Change PIN</button> <button class="g" data-go="out">Log out</button>`;
@@ -64,7 +69,7 @@
       A={name:r.name,token:r.token,ver:r.ver,h:hash(snap)}; ls.set('rrName',r.name); saveA(); tab='acct'; lastSync=Date.now(); say('✓ Account made — your progress is saved!',true); toast('☁️ Account created'); }
     if(k==='login'){ const n=v('aN'), p=v('aP'); if(!n||!p) return say('Enter your name and PIN'); say('Logging in…',true); const r=await api('login',{name:n,pin:p});
       if(r.err==='nouser') return say('No account with that name'); if(r.err==='locked') return say(`Too many wrong PINs — try again in ${r.mins} min`); if(r.err==='pin') return say(`Wrong PIN (${r.left} tries left)`); if(!r.ok) return say('Couldn’t reach the server — try again');
-      applyData(r.data); A={name:r.name,token:r.token,ver:r.ver,crew:r.crew,h:''}; A.h=hash(JSON.stringify(collect())); ls.set('rrName',r.name); saveA(); say('✓ Logged in — loading your progress…',true); setTimeout(()=>location.reload(),900); }
+      mergeIn(r.data); A={name:r.name,token:r.token,ver:r.ver,crew:r.crew,h:''}; ls.set('rrName',r.name); saveA(); say('✓ Logged in — combining this device with your account…',true); await push(true); setTimeout(()=>location.reload(),900); }
     if(k==='sync'){ await push(true); say('✓ Saved to your account',true); }
     if(k==='out'){ if(!confirm('Log out on this device? Your progress stays saved in your account.')) return; await push(true); api('logout',{token:A.token}); A=null; saveA(); msg=''; tab='new'; renderBox(); }
     if(k==='pin'){ const p=prompt('New PIN (4–8 numbers):'); if(!p) return; if(!/^\d{4,8}$/.test(p)) return say('PIN must be 4–8 numbers'); const r=await api('setpin',{token:A.token,pin:p}); say(r.ok?'✓ PIN changed':'Couldn’t change it',r.ok); }
