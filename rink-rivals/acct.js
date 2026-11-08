@@ -9,7 +9,7 @@
   const PAGE=(location.pathname.split('/').pop()||'').replace(/\.html$/,'');
   if(PAGE==='hq-owa9rwwt9kplpdbu'||window.RR_ADMIN) return;
   /* what follows you between devices: every game save. What doesn't: device settings and anything to do with admin or security */
-  const DENY=new Set(['rrSrv','rrSw','rrGfx','rrAcct','rrOwner','rrOwnerStr','rrMyTag','rrAdmUrl','rrAdmG','rrPid','rrKicked','rrBanned','rrSiteGate','rrSiteCfgCache','rrServerOv','rrSiteEvents','rrSiteAt','rrMute','rrPin','rrParty','rrLast','rrStreakPend']);
+  const DENY=new Set(['rrSrv','rrSw','rrGfx','rrAcct','rrOwner','rrOwnerStr','rrMyTag','rrAdmUrl','rrAdmG','rrPid','rrKicked','rrBanned','rrSiteGate','rrSiteCfgCache','rrServerOv','rrSiteEvents','rrSiteAt','rrMute','rrPin','rrParty','rrLast','rrStreakPend','rrMT']);
   const syncable=k=>!!k&&!DENY.has(k)&&/^(rr|rinkRivals|sa[A-Z]|pk1$)/.test(k);
   function collect(){ const o={}; try{ for(let i=0;i<localStorage.length;i++){ const k=localStorage.key(i); if(syncable(k)) o[k]=localStorage.getItem(k); } }catch(e){} return o; }
   function applyData(data){ let o={}; try{ o=JSON.parse(data||'{}'); }catch(e){} for(const k in o) if(syncable(k)) ls.set(k,o[k]); }
@@ -190,5 +190,39 @@
     if(tab==='crew'&&A) loadCrew(); renderBox(); }
   function mount(){ if(document.getElementById('rrAcctB')) return; css(); pill=document.createElement('button'); pill.id='rrAcctB'; pill.title='Your account — progress on every device'; pill.onclick=()=>open(); document.body.appendChild(pill); render(); }
   if(document.readyState==='loading') addEventListener('DOMContentLoaded',mount); else mount();
+  /* ---------- mini-tournaments: start one in any game with a leaderboard; best score before the clock runs out takes the pot ---------- */
+  let mtBox=null, mtList=null, mtTimer=null; const MTJ=()=>{ try{ return JSON.parse(ls.get('rrMT')||'[]'); }catch(e){ return []; } }, MTS=a=>ls.set('rrMT',JSON.stringify(a.slice(-12)));
+  const mtGame=()=>window.RRL&&RRL.game&&RRL.defs&&RRL.defs.length?RRL.game:null, fmtLeft=ms=>ms<=0?'ended':ms<60000?Math.ceil(ms/1000)+'s':Math.floor(ms/60000)+'m '+String(Math.floor(ms%60000/1000)).padStart(2,'0')+'s';
+  function mtMount(){ if(document.getElementById('rrMtB')||!mtGame()) return; const b=document.createElement('button'); b.id='rrMtB'; b.textContent='🏆'; b.title='Mini-tournament — challenge people to a score battle for a coin pot';
+    b.style.cssText='position:fixed;left:10px;bottom:328px;z-index:2147482500;width:40px;height:40px;border-radius:50%;border:1px solid #fde68a;background:#1e293b;font-size:20px;cursor:pointer;box-shadow:0 4px 14px rgba(0,0,0,.35)'; b.onclick=mtOpen; document.body.appendChild(b); mtCheckEnded(); }
+  async function mtLoad(){ if(!A) return; const r=await api('mtList',{token:A.token,game:mtGame()}); mtList=r&&r.ok?r:{list:[],now:Date.now()}; mtList.at=Date.now(); const mine=MTJ(); let ch=false; for(const t of mtList.list){ const me=t.pl.find(p=>p.me); if(me&&!mine.some(x=>x.id===t.id)){ mine.push({id:t.id,game:t.game,b:t.b,ends:t.ends}); ch=true; } } if(ch) MTS(mine); mtRender(); }
+  function mtOpen(){ css(); if(!A){ open('new'); return; } if(mtBox) return; mtBox=document.createElement('div'); mtBox.id='rrAcct'; mtBox.innerHTML='<div class="w"><p>Loading…</p></div>'; document.body.appendChild(mtBox);
+    mtBox.addEventListener('click',mtClick); mtLoad(); mtTimer=setInterval(()=>{ if(!mtBox){ clearInterval(mtTimer); return; } if(Date.now()-(mtList&&mtList.at||0)>20000) mtLoad(); else mtRender(); },1000); }
+  function mtRender(){ if(!mtBox||!mtList) return; const now=mtList.now+(Date.now()-mtList.at), defs=RRL.defs, sel=mtBox.querySelector('#mtB'), keep={b:sel&&sel.value,f:(mtBox.querySelector('#mtF')||{}).value,m:(mtBox.querySelector('#mtM')||{}).value};
+    const card=t=>{ const left=t.ends-now, me=t.pl.find(p=>p.me), win=t.pl[0]&&t.pl[0].score!=null?t.pl[0]:null;
+      return `<div style="background:#111c33;border:1px solid ${me?'#facc15':'#273449'};border-radius:12px;padding:10px;margin:6px 0"><b>🏆 ${esc(t.bn)}</b> · entry ${t.fee.toLocaleString()} 🪙 · pot <b style="color:#fde68a">${t.pot.toLocaleString()} 🪙</b> · ${t.pl.length}/8 · <span style="color:${left>0?'#86efac':'#fca5a5'}">${left>0?'⏱ '+fmtLeft(left):'finished'}</span>
+        ${t.pl.map((p,i)=>`<div class="row"><span>${i+1}. ${esc(p.name)}${p.me?' (you)':''}</span><b>${p.score==null?'—':esc(p.txt||String(p.score))}</b></div>`).join('')}
+        ${left>0?(me?'<div class="m">You\'re in! Play and your best result counts automatically.</div>':t.pl.length<8?`<button data-mt="join" data-id="${t.id}" data-fee="${t.fee}">Join for ${t.fee.toLocaleString()} 🪙</button>`:'<div class="m">Full</div>')
+          :me?(win?(win.me&&!t.claimed?`<button data-mt="claim" data-id="${t.id}">🏆 Claim ${t.pot.toLocaleString()} 🪙</button>`:`<div class="m">${win.me?'✓ Pot claimed':'Winner: '+esc(win.name)}</div>`):(!me.rf?`<button data-mt="claim" data-id="${t.id}">No scores — get your ${t.fee} 🪙 back</button>`:'<div class="m">Refunded</div>')):''}</div>`; };
+    const hosting=mtList.list.some(t=>t.ends>now&&t.pl.some(p=>p.me)&&t.host&&A&&t.host===A.name.toLowerCase());
+    mtBox.querySelector('.w').innerHTML=`<button class="g x" data-x>✕</button><h2>🏆 Mini-tournaments</h2><div class="m">Up to 8 players put in the entry fee. Whoever has the best result on the chosen board when the clock runs out wins the whole pot.</div>
+      ${mtList.list.length?mtList.list.map(card).join(''):'<p>No tournaments running in this game. Start one and share the page with friends!</p>'}
+      ${hosting?'':`<h3 style="margin:12px 0 4px">Start one</h3><div style="display:flex;gap:6px;flex-wrap:wrap"><select id="mtB">${defs.map(d=>`<option value="${esc(d.id)}" ${keep.b===d.id?'selected':''}>${esc(d.name)}</option>`).join('')}</select>
+        <select id="mtF">${[0,10,50,100,250,500,1000,5000].map(f=>`<option value="${f}" ${(keep.f||'100')==String(f)?'selected':''}>${f?f.toLocaleString()+' 🪙 entry':'Free (no pot)'}</option>`).join('')}</select>
+        <select id="mtM">${[5,10,15,30,60].map(n=>`<option value="${n}" ${(keep.m||'15')==String(n)?'selected':''}>${n} minutes</option>`).join('')}</select><button data-mt="new">Start 🏁</button></div>`}
+      ${msg?`<p style="color:#fca5a5">${esc(msg)}</p>`:''}`; }
+  async function mtClick(e){ if(e.target===mtBox||e.target.closest('[data-x]')){ mtBox.remove(); mtBox=null; msg=''; return; } const b=e.target.closest('[data-mt]'); if(!b) return; const a=b.dataset.mt, C=window.RRCOIN; msg=''; b.disabled=true;
+    if(a==='new'){ const d=RRL.defs.find(x=>x.id===mtBox.querySelector('#mtB').value)||RRL.defs[0], fee=+mtBox.querySelector('#mtF').value, mins=+mtBox.querySelector('#mtM').value;
+      if(fee&&(!C||!C.spend(fee,'🏆 Mini-tournament entry'))){ msg=`You need ${fee.toLocaleString()} 🪙`; mtRender(); return; }
+      const r=await api('mtCreate',{token:A.token,game:mtGame(),b:d.id,bn:d.name,mode:d.mode,fee,mins}); if(!r.ok){ if(fee&&C) C.tradeGive([],fee); msg=r.err==='busy'?'You are already hosting one':'Could not start it'; } else { const j=MTJ(); j.push({id:r.t.id,game:r.t.game,b:r.t.b,ends:r.t.ends}); MTS(j); if(C) C.toast('🏆 Tournament started — your best result counts!'); } }
+    if(a==='join'){ const fee=+b.dataset.fee; if(fee&&(!C||!C.spend(fee,'🏆 Mini-tournament entry'))){ msg=`You need ${fee.toLocaleString()} 🪙`; mtRender(); return; }
+      const r=await api('mtJoin',{token:A.token,id:+b.dataset.id}); if(!r.ok){ if(fee&&C) C.tradeGive([],fee); msg=r.err==='full'?'That one is full':'Could not join'; } else { const j=MTJ(); j.push({id:r.t.id,game:r.t.game,b:r.t.b,ends:r.t.ends}); MTS(j); } }
+    if(a==='claim'){ const r=await api('mtClaim',{token:A.token,id:+b.dataset.id}); if(r.ok&&C){ const n=r.pot||r.refund||0; if(n) C.tradeGive([],n); C.toast(r.pot?`🏆 You won the tournament! +${n.toLocaleString()} 🪙`:`Refunded ${n} 🪙`,'#fbbf24'); } else msg='Already claimed'; }
+    mtLoad(); }
+  addEventListener('rr-result',e=>{ if(!A) return; const d=e.detail||{}, now=Date.now(); for(const t of MTJ()) if(t.game===mtGame()&&t.b===d.id&&t.ends+20000>now) api('mtScore',{token:A.token,id:t.id,score:d.score,txt:d.txt||''}).then(()=>{ if(mtBox) mtLoad(); }); });
+  function mtCheckEnded(){ const now=Date.now(), j=MTJ(), soon=j.filter(t=>t.game===mtGame()&&t.ends>now).sort((a,b)=>a.ends-b.ends)[0], done=j.filter(t=>t.ends<=now&&!t.told);
+    if(done.length&&A){ for(const t of done) t.told=1; MTS(j); const C=window.RRCOIN; if(C) C.toast('🏆 A mini-tournament you were in has finished — tap 🏆 to see who won','#fbbf24'); const b=document.getElementById('rrMtB'); if(b) b.style.boxShadow='0 0 0 3px #facc15'; }
+    if(soon) setTimeout(mtCheckEnded,Math.min(2**31-1,soon.ends-now+1500)); }
+  setTimeout(mtMount,3500);
   window.RRACCT={ crewWar:async()=>{ const r=await api('crewWar',{token:A?A.token:''}); return r&&r.ok?r:null; }, profile, peek:async name=>{ if(!A) return null; const r=await api('profile',{token:A.token,name}); return r&&r.ok?pk(r.pub):null; }, friends:()=>FR.friends, get name(){ return A&&A.name; }, get crew(){ return A&&A.crew; }, open, push:()=>push(true) };
 })();

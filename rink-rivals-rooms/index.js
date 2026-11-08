@@ -760,6 +760,8 @@ export class Acct {
     for(const col of ['pub TEXT','seen INTEGER','pg TEXT']){ try{ this.sql.exec('ALTER TABLE acct ADD COLUMN '+col); }catch(e){} }
     this.sql.exec('CREATE TABLE IF NOT EXISTS fr(a TEXT, b TEXT, st TEXT, ts INTEGER, PRIMARY KEY(a,b))'); this.sql.exec('CREATE INDEX IF NOT EXISTS ix_fr_b ON fr(b)');
     this.sql.exec('CREATE TABLE IF NOT EXISTS gift(id INTEGER PRIMARY KEY AUTOINCREMENT, frm TEXT, too TEXT, what TEXT, msg TEXT, st TEXT, ts INTEGER)'); this.sql.exec('CREATE INDEX IF NOT EXISTS ix_gift_too ON gift(too,st)');
+    this.sql.exec('CREATE TABLE IF NOT EXISTS mt(id INTEGER PRIMARY KEY AUTOINCREMENT, game TEXT, b TEXT, bn TEXT, mode TEXT, host TEXT, fee INTEGER, ends INTEGER, claimed INTEGER DEFAULT 0, ts INTEGER)'); this.sql.exec('CREATE INDEX IF NOT EXISTS ix_mt ON mt(game,ends)');
+    this.sql.exec('CREATE TABLE IF NOT EXISTS mtp(id INTEGER, nm TEXT, score REAL, txt TEXT, rf INTEGER DEFAULT 0, PRIMARY KEY(id,nm))');
     this.sql.exec('CREATE TABLE IF NOT EXISTS cwpts(wk INTEGER, nm TEXT, crew TEXT, pts INTEGER, PRIMARY KEY(wk,nm))'); this.sql.exec('CREATE INDEX IF NOT EXISTS ix_cw ON cwpts(wk,crew)');
     this.sql.exec('CREATE INDEX IF NOT EXISTS ix_trade_too ON trade(too,st)'); this.sql.exec('CREATE INDEX IF NOT EXISTS ix_trade_frm ON trade(frm,claimed)');
     this.sql.exec('CREATE INDEX IF NOT EXISTS ix_acct_crew ON acct(crew)'); this.sql.exec('CREATE INDEX IF NOT EXISTS ix_tok_nm ON tok(nm)'); }
@@ -840,5 +842,25 @@ export class Acct {
     /* public profile: card, gear, records */
     if(m.op==='profile'){ const o=key(m.name), r=this.sql.exec('SELECT disp,crew,pub,seen,pg FROM acct WHERE nm=?',o).toArray()[0]; if(!r) return J({err:'nouser'},404);
       const fr=this.sql.exec("SELECT st FROM fr WHERE (a=? AND b=?) OR (a=? AND b=?)",nm,o,o,nm).toArray()[0]; return J({ok:true,name:r.disp,crew:r.crew,pub:r.pub||'{}',seen:r.seen||0,pg:r.pg||'',friend:fr?fr.st:'',now}); }
+    /* mini-tournaments: up to 8 players, best score on one leaderboard before the clock runs out takes the whole pot */
+    const mtRow=id=>this.sql.exec('SELECT * FROM mt WHERE id=?',+id).toArray()[0];
+    const mtPl=t=>this.sql.exec('SELECT p.nm AS nm, a.disp AS name, p.score AS score, p.txt AS txt, p.rf AS rf FROM mtp p LEFT JOIN acct a ON a.nm=p.nm WHERE p.id=?',t.id).toArray().sort((x,y)=>(y.score==null?-Infinity:y.score)-(x.score==null?-Infinity:x.score));
+    const mtOut=t=>{ const pl=mtPl(t); return {id:t.id,game:t.game,b:t.b,bn:t.bn,mode:t.mode,host:t.host,fee:t.fee,ends:t.ends,claimed:t.claimed,pot:t.fee*pl.length,pl:pl.map(p=>({name:p.name||p.nm,me:p.nm===nm,score:p.score,txt:p.txt,rf:p.rf})),open:t.ends>now}; };
+    if(m.op==='mtCreate'){ const game=String(m.game||'').replace(/[^a-z0-9-]/g,'').slice(0,24), b=String(m.b||'').replace(/[^\w-]/g,'').slice(0,24); if(!game||!b) return J({err:'bad'},400);
+      if(this.sql.exec('SELECT 1 FROM mt WHERE host=? AND ends>?',nm,now).toArray()[0]) return J({err:'busy'},409);
+      const fee=[0,10,50,100,250,500,1000,5000].includes(+m.fee)?+m.fee:100, mins=Math.max(5,Math.min(60,Math.round(+m.mins||15)));
+      this.sql.exec('INSERT INTO mt(game,b,bn,mode,host,fee,ends,ts) VALUES(?,?,?,?,?,?,?,?)',game,b,String(m.bn||b).replace(/[<>]/g,'').slice(0,40),m.mode==='sum'?'sum':'max',nm,fee,now+mins*60000,now);
+      const id=this.sql.exec('SELECT last_insert_rowid() AS id').toArray()[0].id; this.sql.exec('INSERT INTO mtp(id,nm) VALUES(?,?)',id,nm); return J({ok:true,t:mtOut(mtRow(id))}); }
+    if(m.op==='mtList'){ const game=String(m.game||'').replace(/[^a-z0-9-]/g,'').slice(0,24);
+      const open=this.sql.exec('SELECT * FROM mt WHERE game=? AND ends>? ORDER BY ends LIMIT 10',game,now).toArray(), mine=this.sql.exec('SELECT t.* FROM mt t JOIN mtp p ON p.id=t.id WHERE p.nm=? AND t.ends>? ORDER BY t.ends DESC LIMIT 6',nm,now-6*36e5).toArray();
+      const seen=new Set(), all=[]; for(const t of mine.concat(open)){ if(seen.has(t.id)) continue; seen.add(t.id); all.push(mtOut(t)); } return J({ok:true,list:all,now}); }
+    if(m.op==='mtJoin'){ const t=mtRow(m.id); if(!t||t.ends<=now) return J({err:'closed'},409); const n=this.sql.exec('SELECT COUNT(*) AS c FROM mtp WHERE id=?',t.id).toArray()[0].c; if(n>=8) return J({err:'full'},409);
+      if(this.sql.exec('SELECT 1 FROM mtp WHERE id=? AND nm=?',t.id,nm).toArray()[0]) return J({err:'in'},409); this.sql.exec('INSERT INTO mtp(id,nm) VALUES(?,?)',t.id,nm); return J({ok:true,t:mtOut(t)}); }
+    if(m.op==='mtScore'){ const t=mtRow(m.id); if(!t||t.ends+30000<=now) return J({err:'closed'},409); const p=this.sql.exec('SELECT score FROM mtp WHERE id=? AND nm=?',t.id,nm).toArray()[0]; if(!p) return J({err:'notin'},403);
+      const sc=+m.score; if(!isFinite(sc)) return J({err:'bad'},400); const nv=t.mode==='sum'?(p.score||0)+sc:(p.score==null||sc>p.score?sc:p.score);
+      if(nv!==p.score) this.sql.exec('UPDATE mtp SET score=?, txt=? WHERE id=? AND nm=?',nv,t.mode==='sum'?String(Math.round(nv*100)/100):String(m.txt||sc).slice(0,30),t.id,nm); return J({ok:true,score:nv}); }
+    if(m.op==='mtClaim'){ const t=mtRow(m.id); if(!t) return J({err:'gone'},404); if(t.ends>now) return J({err:'open'},409); const pl=mtPl(t), me=pl.find(p=>p.nm===nm); if(!me) return J({err:'notin'},403);
+      if(pl[0].score==null){ if(me.rf) return J({err:'done'},409); this.sql.exec('UPDATE mtp SET rf=1 WHERE id=? AND nm=?',t.id,nm); return J({ok:true,refund:t.fee}); }
+      if(pl[0].nm!==nm) return J({err:'notwinner'},403); if(t.claimed) return J({err:'done'},409); this.sql.exec('UPDATE mt SET claimed=1 WHERE id=?',t.id); return J({ok:true,pot:t.fee*pl.length}); }
     if(m.op==='crewTop'){ const rows=this.sql.exec('SELECT c.tag AS tag, c.name AS name, COUNT(a.nm) AS n, SUM(a.life) AS total FROM crew c JOIN acct a ON a.crew=c.tag GROUP BY c.tag ORDER BY total DESC LIMIT 25').toArray(); return J({ok:true,rows}); }
     return J({err:'op'},400); } }

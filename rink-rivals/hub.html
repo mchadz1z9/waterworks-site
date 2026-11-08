@@ -56,7 +56,7 @@ const HX=30, HZ=20, CAB=[];
   left.forEach((g,i)=>CAB.push({g,x:-HX+1.3,z:-11+i*4.2,yaw:PI/2}));
   right.forEach((g,i)=>CAB.push({g,x:HX-1.3,z:-11+i*4.2,yaw:-PI/2})); }
 const KIOSK=[{k:'shop',x:-9,z:7,ic:'🪙',n:'Arcade Shop',col:'#ca8a04'},{k:'acct',x:9,z:7,ic:'👤',n:'Account & Crews',col:'#2563eb'},{k:'feat',x:0,z:-3,ic:'⭐',n:'Game of the day',col:'#facc15'},{k:'arcade',x:0,z:17.5,ic:'🏟️',n:'Sports Arcade',col:'#7c3aed'},{k:'dj',x:-18,z:13,ic:'🎧',n:'DJ booth — change the music',col:'#db2777'},{k:'trophy',x:18,z:13,ic:'🏆',n:'Trophy cabinet',col:'#ca8a04'},
-  {k:'casino',x:-17,z:3,ic:'🎰',n:'Casino — slots & roulette',col:'#dc2626'},{k:'hoop',x:-17,z:-7,ic:'🏀',n:'Free throws',col:'#ea580c',mg:1},{k:'bag',x:17,z:-7,ic:'🥊',n:'Punching bag',col:'#b91c1c',mg:1},{k:'dance',x:17,z:3,ic:'🕺',n:'Dance floor',col:'#a855f7',mg:1},{k:'race',x:0,z:9.5,ic:'🏁',n:'Hub sprint (time trial)',col:'#16a34a',mg:1},{k:'room',x:-9,z:-9,ic:'🏠',n:'My room — decorate it',col:'#0d9488'},{k:'jobs',x:9,z:-9,ic:'💼',n:'Rival City jobs — earn city cash',col:'#16a34a'}];
+  {k:'casino',x:-17,z:3,ic:'🎰',n:'Casino — slots & roulette',col:'#dc2626'},{k:'hoop',x:-17,z:-7,ic:'🏀',n:'Free throws',col:'#ea580c',mg:1},{k:'bag',x:17,z:-7,ic:'🥊',n:'Punching bag',col:'#b91c1c',mg:1},{k:'dance',x:17,z:3,ic:'🕺',n:'Dance floor',col:'#a855f7',mg:1},{k:'race',x:0,z:9.5,ic:'🏁',n:'Hub sprint (time trial)',col:'#16a34a',mg:1},{k:'room',x:-9,z:-9,ic:'🏠',n:'My room — decorate it',col:'#0d9488'},{k:'jobs',x:9,z:-9,ic:'💼',n:'Rival City jobs — earn city cash',col:'#16a34a'},{k:'stage',x:0,z:-14.5,ic:'🎤',n:'Event stage',col:'#db2777'}];
 const SOLID=[]; for(const c of CAB) SOLID.push({x:c.x,z:c.z,r:1.05}); for(const k of KIOSK) if(!k.mg) SOLID.push({x:k.x,z:k.z,r:k.k==='feat'?2.2:1.1});
 let built=false;
 function build(){ if(built||!R3.ok) return; built=true;
@@ -93,7 +93,7 @@ const kitCol=()=>(window.RRCOIN&&RRCOIN.equipped('kit'))||'#1d4ed8';
 function nearest(){ if(BOSS.on&&Math.hypot(ME.x-BOSS.x,ME.z-BOSS.z)<5.5) return {t:'boss'}; let best=null, bd=2.6; for(const C of CAB){ const fx=C.x+Math.sin(C.yaw)*1.2, fz=C.z+Math.cos(C.yaw)*1.2, d=Math.hypot(fx-ME.x,fz-ME.z); if(d<bd){ bd=d; best={t:'cab',C}; } }
   for(const k of KIOSK){ const d=Math.hypot(k.x-ME.x,k.z-ME.z); if(d<(k.k==='feat'?3.6:k.k==='dj'?3.4:2.6)&&d<bd+1){ bd=d; best={t:'kiosk',k}; } } return best; }
 function act(){ if(JOB&&jobHit()) return; if(ME.sit){ ME.sit=null; return; } { const sn=seatNear(); if(sn&&!(ROOM&&ROOM.carry!=null)){ ME.sit=sn; ME.target=null; ME.vy=0; ME.y=0; return; } } if(ROOM){ const rn=roomNear(); if(rn) roomAct(rn); return; } const n=nearest(); if(!n) return; if(n.t==='boss'){ bossHit(); return; } if(n.t==='cab'){ location.href=n.C.g[0]; return; } const k=n.k.k;
-  if(k==='casino'){ casinoOpen(); return; } if(k==='room'){ if(JOB) return; roomEnter(); camSnap=1; return; } if(k==='jobs'){ jobOpen(); return; } if(n.k.mg){ mgStart(k); return; }
+  if(k==='casino'){ casinoOpen(); return; } if(k==='room'){ if(JOB) return; roomEnter(); camSnap=1; return; } if(k==='jobs'){ jobOpen(); return; } if(k==='stage'){ evOpen(); return; } if(n.k.mg){ mgStart(k); return; }
   if(k==='dj'){ djNext(); return; } if(k==='trophy'&&window.RRCOIN){ RRCOIN.open('trophies'); return; }
   if(k==='shop'&&window.RRCOIN) RRCOIN.open('shop'); else if(k==='acct'&&window.RRACCT) RRACCT.open(); else if(k==='arcade') location.href='sports-arcade'; else if(k==='feat'&&featKey()) location.href=featKey(); }
 function label(n){ if(!n) return '';
@@ -110,14 +110,14 @@ function step(dt){ T0+=dt; let ix=(keys.has('KeyD')||keys.has('ArrowRight')?1:0)
   ME.flexT=Math.max(0,ME.flexT-dt); ME.waveT=Math.max(0,ME.waveT-dt);
   const sn=!MG&&!ME.sit&&!(ROOM&&ROOM.carry!=null)&&seatNear(), n=MG?null:ME.sit?{t:'stand'}:sn?{t:'sit'}:ROOM?roomNear():nearest(), b=$('act'); roomUIStep(); if(MG&&(MG.k==='hoop'||MG.k==='bag')){ const t=MG.k==='hoop'?'🏀 SHOOT':'🥊 PUNCH'; if(b.textContent!==t) b.textContent=t; b.style.display='block'; } else if(n){ const t=n.t==='stand'?'🧍 Stand up':n.t==='sit'?'🪑 Sit down':ROOM?roomLabel(n):label(n); if(b.textContent!==t) b.textContent=t; b.style.display='block'; } else b.style.display='none';
   if(JOB&&JOB.k==='dj'){ if(b.textContent!=='🎧 HIT') b.textContent='🎧 HIT'; b.style.display='block'; }
-  bossStep(dt); mgStep(dt); jobStep(dt); netStep(dt); }
+  bossStep(dt); mgStep(dt); jobStep(dt); evStep(dt); netStep(dt); }
 /* ---- other people in the Hub ---- */
 const OT=new Map(); let NET=null, netT=0, lastSig='', hbT=0;
 function netStep(dt){ for(const o of OT.values()){ const k=Math.min(1,dt*10); o.x=lerp(o.x,o.tx,k); o.z=lerp(o.z,o.tz,k); o.y=lerp(o.y||0,o.ty||0,k); o.walk+=dt*(o.spd||0)*2.3; }
   if(!NET||!NET.on) return; netT-=dt; if(netT>0) return; netT=.25;
   /* save the free-plan request budget: only send when something changed, plus a heartbeat every 4 s */ const sig=[curRm(),ME.sit?1:0,ME.x.toFixed(1),ME.z.toFixed(1),ME.y.toFixed(1),ME.yaw.toFixed(1),ME.flexT>0,ME.waveT>0,window.RREMOTE?RREMOTE.t0:0].join(); hbT=(hbT||0)+.25; if(sig===lastSig&&hbT<4) return; lastSig=sig; hbT=0; NET.send({t:'p',rm:curRm(),st:ME.sit?ME.sit.y:0,x:+ME.x.toFixed(2),z:+ME.z.toFixed(2),y:+ME.y.toFixed(2),yaw:+ME.yaw.toFixed(2),s:+ME.spd.toFixed(1),nm:myName(),cr:myCrew()||'',kit:kitCol(),bf:window.RRSTR?+RRSTR.muscle().toFixed(2):1,fx:ME.flexT>0?1:0,wv:ME.waveT>0?1:0,gear:gearNow(),pet:myPet(),oly:isOwnerMe()?1:0,em:window.RREMOTE&&performance.now()-RREMOTE.t0<3500?RREMOTE.k:''}); }
 if(window.RRO){ NET=RRO.init({game:'hub',maxPlayers:8,minPlayers:1,dropIn:true,publicRoom:'HUBA',blurb:'Hang out in the Arcade Rivals Hub with everyone online.',
-  onStart:()=>{ OT.clear(); }, onMsg:m=>{ if(m.t==='dj'){ djSet(m.st|0,false); return; } if(m.t==='hit'){ BOSS.hits+=clamp(+m.n||1,0,3); return; } if(m.t!=='p') return; let o=OT.get(m.from); if(!o){ o={x:m.x,z:m.z,walk:0}; OT.set(m.from,o); } if((o.rm||'')!==String(m.rm||'')){ o.x=m.x; o.z=m.z; } Object.assign(o,{rm:String(m.rm||'').slice(0,24),sit:clamp(+m.st||0,0,1),tx:m.x,tz:m.z,ty:m.y||0,yaw:m.yaw,spd:m.s,nm:String(m.nm||'Player').slice(0,20),cr:String(m.cr||'').slice(0,6),kit:m.kit,bf:clamp(+m.bf||1,1,1.8),fx:m.fx,wv:m.wv,em:m.em&&m.em!==o.emk?{k:String(m.em).slice(0,12),t0:performance.now()}:(m.em?o.emote:null),emk:m.em||'',oly:m.oly?1:0,gear:m.gear&&typeof m.gear==='object'?m.gear:null,pet:m.pet&&typeof m.pet==='object'?m.pet:null}); if(o.pet&&!o.petSt) o.petSt={x:o.x+1,z:o.z+1,yaw:0}; },
+  onStart:()=>{ OT.clear(); }, onMsg:m=>{ if(m.t==='ev'){ const o=OT.get(m.from); if(o&&o.oly) evStart(String(m.k),+m.id||Date.now(),m.from); return; } if(m.t==='dj'){ djSet(m.st|0,false); return; } if(m.t==='hit'){ BOSS.hits+=clamp(+m.n||1,0,3); return; } if(m.t!=='p') return; let o=OT.get(m.from); if(!o){ o={x:m.x,z:m.z,walk:0}; OT.set(m.from,o); } if((o.rm||'')!==String(m.rm||'')){ o.x=m.x; o.z=m.z; } Object.assign(o,{rm:String(m.rm||'').slice(0,24),sit:clamp(+m.st||0,0,1),tx:m.x,tz:m.z,ty:m.y||0,yaw:m.yaw,spd:m.s,nm:String(m.nm||'Player').slice(0,20),cr:String(m.cr||'').slice(0,6),kit:m.kit,bf:clamp(+m.bf||1,1,1.8),fx:m.fx,wv:m.wv,em:m.em&&m.em!==o.emk?{k:String(m.em).slice(0,12),t0:performance.now()}:(m.em?o.emote:null),emk:m.em||'',oly:m.oly?1:0,gear:m.gear&&typeof m.gear==='object'?m.gear:null,pet:m.pet&&typeof m.pet==='object'?m.pet:null}); if(o.pet&&!o.petSt) o.petSt={x:o.x+1,z:o.z+1,yaw:0}; },
   onPeers:(api,kind,m)=>{ if(kind==='leave') OT.delete(m.id); }, onEnd:()=>OT.clear() });
   if(!TEST) setTimeout(()=>{ try{ if(!NET.on) NET.quick(); }catch(e){} },1800); }
 
@@ -151,7 +151,7 @@ setInterval(()=>{ if(!AC||!dj||muted||document.hidden){ if(AC) djNextT=AC.curren
     djStep++; djNextT+=st; } },80);
 /* ---- boss events: a giant robot invades the Hub on the hour and half hour — everyone online hits it together ---- */
 const BOSS={on:false,x:0,z:-9,max:0,hits:0,mine:0,cd:0,wave:-1,waveT:0,won:false,id:''};
-function bossStep(dt){ const now=new Date(), forced=/[?&]boss\b/.test(location.search), slot=now.getMinutes()<5||(now.getMinutes()>=30&&now.getMinutes()<35)||forced, id=now.toDateString()+now.getHours()+(now.getMinutes()>=30?'b':'a');
+function bossStep(dt){ const now=new Date(), evB=!!(EV&&EV.k==='boss'&&Date.now()<EV.end), forced=/[?&]boss\b/.test(location.search)||evB, slot=now.getMinutes()<5||(now.getMinutes()>=30&&now.getMinutes()<35)||forced, id=evB?'ev'+EV.id:now.toDateString()+now.getHours()+(now.getMinutes()>=30?'b':'a');
   if(slot&&!BOSS.on&&BOSS.id!==id&&!BOSS.won){ Object.assign(BOSS,{on:true,id,max:150*(1+OT.size),hits:0,mine:0,won:false,waveT:3}); djMsg='🤖 BOSS INVASION! Everyone hit it (F near it)!'; djMsgT=5; }
   if(BOSS.on&&!slot&&!forced){ BOSS.on=false; djMsg='🤖 The boss escaped…'; djMsgT=4; }
   if(!BOSS.on) return; BOSS.cd-=dt; BOSS.waveT-=dt; if(BOSS.waveT<=0){ BOSS.wave=0; BOSS.waveT=4; }
@@ -245,7 +245,7 @@ function render(dt){ if(!R3.ok) return; build();
     /* windows: today's sky outside, stars at night */ for(let x=-24;x<=24;x+=8){ P3(x,6.4,HZ-.12,4.8,2,.02,SK.col.map(v=>v*1.6)); if(SK.night) for(let k=0;k<5;k++) P3(x-2+((k*37+x)%40)/10,5.6+((k*13)%15)/10,HZ-.14,.05,.05,.01,[2.4,2.4,2.4]); }
     /* DJ lights: they dance when music is on */ for(let k=0;k<6;k++){ const on=dj>0, a=T0*2+k, c=[[2.4,.3,1.6],[.3,1.6,2.4],[2.4,2,.3]][k%3]; P3(-18+Math.cos(a)*3.5,.03,12+Math.sin(a*1.3)*2,1.4,.02,1.4,on?c:[.15,.15,.2]); if(on) P3(-21+k*1.2,3,15.9,.25,.25,.25,c.map(v=>v*(.5+.5*Math.sin(T0*8+k)))); }
     /* trophies: one gold cup for every achievement you've unlocked */ { const n=window.RRCOIN&&RRCOIN.achievements?RRCOIN.achievements().filter(a=>a.got).length:0; for(let i=0;i<Math.min(n,24);i++){ const r=Math.floor(i/8), c=i%8; R3.part(R3.UC,R3.mm(R3.T((15.4+c*.72)*K,(.85+r*1)*K,15.2*K),R3.S(.14*K,.3*K,.14*K)),[2,1.6,.35]); R3.part(R3.UC,R3.mm(R3.T((15.4+c*.72)*K,(1.05+r*1)*K,15.2*K),R3.S(.2*K,.08*K,.2*K)),[2.2,1.8,.4]); } }
-    mgDraw(P3); jobDraw(P3); drawBoss(); for(const f of FLO){ f.t+=dt; P3(f.x,f.y+f.t*1.5,f.z,.2,.2,.2,[2.4,2.2,.4]); } for(let i=FLO.length-1;i>=0;i--) if(FLO[i].t>1) FLO.splice(i,1);
+    mgDraw(P3); jobDraw(P3); evDraw(P3); drawBoss(); for(const f of FLO){ f.t+=dt; P3(f.x,f.y+f.t*1.5,f.z,.2,.2,.2,[2.4,2.2,.4]); } for(let i=FLO.length-1;i>=0;i--) if(FLO[i].t>1) FLO.splice(i,1);
   },dt);
   drawHUD(); }
 const cv=$('cv'), ctx=cv.getContext('2d'), HW=1000, HH=562;
@@ -262,7 +262,7 @@ function drawHUD(){ ctx.clearRect(0,0,HW,HH);
   if(BOSS.on){ const f=clamp(1-BOSS.hits/BOSS.max,0,1); ctx.fillStyle='rgba(5,10,24,.8)'; ctx.beginPath(); ctx.roundRect(HW/2-220,60,440,44,12); ctx.fill(); ctx.fillStyle='#7f1d1d'; ctx.fillRect(HW/2-200,84,400,12); ctx.fillStyle='#ef4444'; ctx.fillRect(HW/2-200,84,400*f,12); txt(`🤖 MEGA BOT · ${Math.max(0,BOSS.max-BOSS.hits)} HP · your hits ${BOSS.mine}`,HW/2,80,17,'#fecaca');
     if(Math.hypot(ME.x-BOSS.x,ME.z-BOSS.z)<5.5) txt('Press F (or tap) to HIT IT! Jump over the shockwaves',HW/2,HH-110,22,'#fca5a5'); }
   if(CW&&!ROOM){ const q=scr([0,7.55,-HZ+.4]); if(q){ const top=CW.rows&&CW.rows[0]; txt(`${CW.last?`👑 Crew war champs: [${CW.last.tag}]`:'⚔️ CREW WAR'}${top?` · leading now: [${top.tag}] ${top.pts.toLocaleString()} pts`:''}`,q[0],q[1],20,'#fde68a'); } }
-  pkHUD(); mgHUD(); jobHUD(); if(djMsgT>0){ djMsgT-=1/60; txt(djMsg,HW/2,140,28,'#f0abfc'); } }
+  pkHUD(); mgHUD(); jobHUD(); evHUD(); if(djMsgT>0){ djMsgT-=1/60; txt(djMsg,HW/2,140,28,'#f0abfc'); } }
 /* ---- input ---- */
 addEventListener('keydown',e=>{ const t=document.activeElement; if(t&&(t.tagName==='INPUT'||t.tagName==='TEXTAREA')) return; if(document.getElementById('rrShop')||document.getElementById('rrAcct')) return; if(['Space','ArrowUp','ArrowDown','ArrowLeft','ArrowRight'].includes(e.code)) e.preventDefault(); keys.add(e.code);
   if(MG&&!e.repeat&&mgKey(e.code)){ e.preventDefault(); return; }
@@ -444,8 +444,40 @@ function jobHUD(){ if(!JOB) return; const J=JOB, JJ=JOBS[J.k], Y0=HH-(J.k==='dj'
     txt('Press F / tap when the note hits the yellow line',HW/2,Y0-60,15,'#cbd5e1'); } }
 
 let CW=null; const cwLoad=async()=>{ try{ if(window.RRACCT&&RRACCT.crewWar) CW=await RRACCT.crewWar(); }catch(e){} }; setTimeout(cwLoad,3500); setInterval(cwLoad,10*60000);
+/* ================= the event stage: the owner starts a live event for everyone in the Hub ================= */
+const EVDEF={rain:{ic:'🪙',n:'Coin rain',d:'Coins pour from the ceiling for 35 s — grab as many as you can',len:35},boss:{ic:'🤖',n:'Boss now',d:'The Mega Bot attacks right now',len:300},
+  dance:{ic:'🕺',n:'Dance-off',d:'Everyone on the dance floor doing an emote earns coins for 40 s',len:40},party:{ic:'🎉',n:'Party time',d:'Confetti everywhere and +50 coins for everyone here',len:20}};
+let EV=null, evUI=null;
+const srand=s=>()=>{ s=(s*16807)%2147483647; return (s-1)/2147483646; };
+function evStart(k,id,from){ const D=EVDEF[k]; if(!D) return; if(EV&&Date.now()<EV.end) return; EV={k,id,t0:Date.now(),end:Date.now()+D.len*1000,got:0,from};
+  if(k==='rain'){ const r=srand(id%2147483646+1); EV.coins=[]; for(let i=0;i<60;i++) EV.coins.push({x:-HX+3+r()*(HX*2-6),z:-HZ+3+r()*(HZ*2-6),t:r()*28,y:7.5,on:1}); }
+  if(k==='party'){ if(window.RRCOIN) RRCOIN.add(50,'🎉 Hub party',false,true); EV.conf=[]; const r=srand(id%2147483646+7); for(let i=0;i<160;i++) EV.conf.push({x:-HX+r()*HX*2,z:-HZ+r()*HZ*2,y:8+r()*6,v:.8+r()*1.4,c:[[2.4,.3,1.6],[.3,1.6,2.4],[2.4,2,.3],[.3,2.4,.5]][i%4]}); }
+  if(k==='dance') EV.acc=0;
+  djMsg=`${D.ic} ${D.n.toUpperCase()}! ${D.d}`; djMsgT=5; sfxStage(); }
+function sfxStage(){ try{ audioOn(); }catch(e){} }
+function evOpen(){ if(evUI) return; if(!isOwnerMe()){ djMsg='🎤 Only the owner can start events here — stick around, they happen!'; djMsgT=3; return; }
+  evUI=document.createElement('div'); evUI.style.cssText='position:fixed;inset:0;z-index:2147482700;background:rgba(2,6,23,.75);display:flex;align-items:center;justify-content:center;font-family:system-ui,sans-serif';
+  evUI.innerHTML=`<div style="background:#0f172a;border:2px solid #db2777;border-radius:18px;padding:18px;width:min(440px,94vw);color:#e2e8f0"><b style="font-size:20px">🎤 Event stage</b><div style="color:#f9a8d4;font-size:13px;margin:4px 0 10px">Starts for everyone in the Hub right now (${1+OT.size} here).</div>
+    ${Object.entries(EVDEF).map(([k,d])=>`<button data-ev="${k}" style="display:block;width:100%;text-align:left;background:#1e293b;color:#e2e8f0;border:1px solid #334155;border-radius:12px;padding:10px;margin:6px 0;cursor:pointer"><b>${d.ic} ${d.n}</b><div style="font-size:13px;color:#94a3b8">${d.d}</div></button>`).join('')}
+    <button data-ev="x" style="background:#334155;color:#fff;border:0;border-radius:8px;padding:8px 14px;cursor:pointer">Close</button></div>`;
+  evUI.onclick=e=>{ const b=e.target.closest('[data-ev]'); if(e.target===evUI||(b&&b.dataset.ev==='x')){ evUI.remove(); evUI=null; return; } if(!b) return; const k=b.dataset.ev, id=Date.now(); evUI.remove(); evUI=null;
+    if(EV&&Date.now()<EV.end){ djMsg='An event is already running'; djMsgT=2; return; } evStart(k,id,'me'); if(NET&&NET.on) NET.send({t:'ev',k,id}); };
+  document.body.appendChild(evUI); }
+function evStep(dt){ if(!EV) return; const now=Date.now(), el=(now-EV.t0)/1000; if(now>EV.end){ if(EV.k==='dance'&&EV.acc>0){ djMsg=`🕺 Dance-off over! You earned ${Math.round(EV.acc)} 🪙`; djMsgT=3; } if(EV.k==='rain'){ djMsg=`🪙 Coin rain over — you grabbed ${EV.got}!`; djMsgT=3; } EV=null; return; }
+  if(EV.k==='rain') for(const c of EV.coins){ if(!c.on||el<c.t) continue; c.y=Math.max(.3,7.5-(el-c.t)*6); if(c.y<1.6&&Math.hypot(ME.x-c.x,ME.z-c.z)<1.2){ c.on=0; EV.got++; if(window.RRCOIN&&EV.got<=60) RRCOIN.add(10,'🪙 coin rain',true,true); FLO.push({x:c.x,y:1,z:c.z,t:0}); } }
+  if(EV.k==='dance'){ const onFloor=Math.abs(ME.x-17)<2.8&&Math.abs(ME.z-3)<2.8, moving=(window.RREMOTE&&performance.now()-RREMOTE.t0<4000)||ME.flexT>0||ME.waveT>0;
+    if(onFloor&&moving&&EV.acc<160){ const before=Math.floor(EV.acc/10); EV.acc+=dt*4; if(Math.floor(EV.acc/10)>before&&window.RRCOIN) RRCOIN.add(10,'🕺 dance-off',true,true); } }
+  if(EV.k==='party') for(const p of EV.conf){ p.y-=dt*p.v; if(p.y<0) p.y+=12; } }
+function evDraw(P3){ /* the stage itself glows when an event runs */ const on=EV&&Date.now()<EV.end; for(let i=0;i<5;i++) P3(-4+i*2,.03,-14.5+1.6,1.6,.02,.6,on?[[2.4,.3,1.6],[.3,1.6,2.4],[2.4,2,.3]][(i+Math.floor(T0*4))%3]:[.5,.15,.35]);
+  if(!on) return;
+  if(EV.k==='rain'){ const el=(Date.now()-EV.t0)/1000; for(const c of EV.coins) if(c.on&&el>=c.t) R3.part(R3.UC,R3.mm(R3.T(c.x*K,c.y*K,c.z*K),R3.RY(T0*4+c.x),R3.S(.32*K,.07*K,.32*K)),[2.4,1.9,.35]); }
+  if(EV.k==='dance') for(let i=-2;i<=2;i++) for(let j=-2;j<=2;j++) P3(17+i*1.1,.045,3+j*1.1,1,.01,1,[[2.4,.3,1.6],[.3,1.6,2.4],[2.4,2,.3],[.3,2.4,.5]][(i+j+Math.floor(T0*6)+8)%4]);
+  if(EV.k==='party') for(const p of EV.conf) P3(p.x+Math.sin(T0*3+p.z)*.3,p.y,p.z,.12,.02,.12,p.c); }
+function evHUD(){ if(!EV||Date.now()>EV.end) return; const D=EVDEF[EV.k], left=Math.ceil((EV.end-Date.now())/1000);
+  if(EV.k==='boss') return; txt(`${D.ic} ${D.n.toUpperCase()} · ${left}s${EV.k==='rain'?` · grabbed ${EV.got}`:EV.k==='dance'?` · earned ${Math.floor(EV.acc)} 🪙${Math.abs(ME.x-17)<2.8&&Math.abs(ME.z-3)<2.8?'':' — get on the dance floor and emote (T)!'}`:''}`,HW/2,118,22,'#f9a8d4'); }
+
 let camSnap=0; const curRm=()=>ROOM?ROOM.name.toLowerCase():'', sameRm=o=>(o.rm||'')===curRm();
-if(TEST) window.__hub={job:()=>JOB,jobStart,jobHit,pk:PK,pkr:()=>PKR,seatNear,me:ME,act,nearest,room:()=>ROOM,roomEnter,roomBuy,roomVisit};
+if(TEST) window.__hub={ev:()=>EV,evStart,job:()=>JOB,jobStart,jobHit,pk:PK,pkr:()=>PKR,seatNear,me:ME,act,nearest,room:()=>ROOM,roomEnter,roomBuy,roomVisit};
 })();
 </script>
 <script src="site.js"></script>
