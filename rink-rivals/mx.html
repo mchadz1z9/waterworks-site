@@ -229,8 +229,11 @@ const BIKEV={bmx:BIKES.bmx,
 const MXV={m250:{name:'250cc motocross bike',m:168,I:56,wb:1.47,r:.34,hc:.91,P:20000,F0:950,vmax:21.5,s0:.09,T:.30,zeta:.38,mu:.95,lean:180,gyro:58,cda:.53,head:1.04,cc:250},
  mx:Object.assign(BIKES.mx,{cc:450}),
  m750:{name:'750cc motocross bike',m:196,I:68,wb:1.52,r:.345,hc:.93,P:78000,F0:2050,vmax:37.5,s0:.095,T:.31,zeta:.39,mu:.96,lean:160,gyro:82,cda:.57,head:1.06,cc:750,col:['#111827','#ef4444']},
+ e250:{name:'250cc two-stroke enduro',m:104,I:40,wb:1.48,r:.36,hc:.95,P:15500,F0:1150,vmax:24,s0:.11,T:.32,zeta:.46,mu:1.08,lean:185,gyro:50,cda:.52,head:1.06,cc:250,en:1,col:['#fde047','#1e3a8a']},
+ e400:{name:'KTM 400 EXC',m:112,I:44,wb:1.48,r:.36,hc:.95,P:27000,F0:1650,vmax:30,s0:.11,T:.32,zeta:.46,mu:1.1,lean:180,gyro:58,cda:.53,head:1.06,cc:400,en:1,col:['#f97316','#111827']},
+ e500:{name:'500cc enduro',m:120,I:48,wb:1.5,r:.36,hc:.96,P:36000,F0:1900,vmax:34,s0:.11,T:.33,zeta:.47,mu:1.1,lean:172,gyro:64,cda:.55,head:1.07,cc:500,en:1,col:['#e5e7eb','#b91c1c']},
  m1000:{name:'1000cc Suzuki',m:212,I:74,wb:1.55,r:.35,hc:.94,P:125000,F0:2700,vmax:47,s0:.1,T:.32,zeta:.4,mu:.97,lean:150,gyro:95,cda:.6,head:1.08,cc:1000,col:['#facc15','#1d4ed8']}};
-let bikeSel='bmx', mxSel='mx';
+let bikeSel='bmx', mxSel='mx', enduro=false; const mxName=(k,b)=>k==='m1000'?'1000cc Suzuki':k==='e400'?'KTM 400':b.en?b.cc+'cc enduro':b.cc+'cc';
 const bikeOf=veh=>veh==='bmx'?(BIKEV[bikeSel]||BIKES.bmx):veh==='mx'?(MXV[mxSel]||BIKES.mx):BIKES[veh];
 
 /* ---------- tracks ----------
@@ -290,7 +293,42 @@ const TRACKS={
    look:{grass:[.22,.34,.15],dirt:[.36,.25,.16],sky:[.6,.72,.8],tree:'leafy',nT:760,clr:4,noBoards:1},
    pts:[[-70,-40],[0,-50],[70,-44],[96,-10],[60,10],[90,40],[30,56],[-20,30],[-80,44],[-100,0]],
    clear:[0,24],feat:[{t:'dj',h1:1.8,gap:6.2,h2:2,prop:'logs'},{t:'stepup',h1:1.2,gap:4.5,h2:2,top:4},{t:'dj',h1:1.9,gap:6.6,h2:2.1,prop:'logs'},{t:'dj',h1:1.8,gap:6.2,h2:2},{t:'dj',h1:2,gap:7,h2:2.2,prop:'logs'}]}};
-const VEH_TRACKS={mx:['valley','desert','mudbog','sx','snow','coast','fmx','fmxnight','fmxcanyon','fmxsnow'],bmx:['olympic','dirt','djsunset','djbeach','djpro']};
+/* ---------- enduro: long rough loops off the beaten path — log crossings, rock gardens, big hill climbs, water ---------- */
+function eloop(seed,rx,rz,n,wob){ const P=[]; for(let i=0;i<n;i++){ const a=-Math.PI+i/n*Math.PI*2, w=1+wob*Math.sin(a*3+seed)+wob*.6*Math.sin(a*5+seed*2.3); P.push([Math.round(Math.cos(a)*rx*w),Math.round(Math.sin(a)*rz*w)]); } return P; }
+const LOG=(n,h)=>({t:'logs',n,h:h||.42,p:4.2}), ROCK=(len,h)=>({t:'rocks',len,h:h||.38}), HILL=(h,top)=>({t:'hill',h,top:top||6});
+const EN={
+ enForest:{name:'Black Forest Enduro',base:'gentle',W:7,laps:2,sub:'Tight singletrack through dark pine forest: roots, log crossings, a muddy rock garden and a steep climb out of the valley. 2 laps.',
+   look:{grass:[.2,.32,.14],dirt:[.3,.21,.13],sky:[.6,.68,.72],tree:'leafy',nT:900,noBoards:1},pts:eloop(1,210,150,14,.12),
+   feat:[LOG(4),ROCK(30),{t:'whoops',n:8,h:.35,p:2.6},HILL(7,8),LOG(5),{t:'double',h1:1.4,gap:9,h2:1.6,prop:'logs'},ROCK(24),LOG(3)]},
+ enMountain:{name:'Mountain Pass',base:'mountain',W:7,laps:2,sub:'High in the mountains: long climbs, switchback descents, loose rock gardens and views for miles. 2 laps.',
+   look:{grass:[.36,.46,.24],dirt:[.46,.38,.3],sky:[.55,.72,.92],tree:'snowpine',nT:420,mtn:[.8,.84,.9],noBoards:1},pts:eloop(2,240,170,14,.14),
+   feat:[HILL(10,10),ROCK(34,.45),HILL(8,6),{t:'stepup',h1:1.4,gap:6,h2:2.4,top:6},ROCK(28),LOG(3),HILL(9,8)]},
+ enDesert:{name:'Baja Desert Run',base:'dunes',W:9,laps:2,sub:'Flat-out across the desert: miles of whoops, rocky washes, sand dunes and cactus fields. The fastest enduro on the site. 2 laps.',
+   look:{grass:[.8,.64,.44],dirt:[.74,.55,.36],sky:[.9,.78,.6],tree:'cactus',nT:260,mtn:[.66,.4,.26],noBoards:1},pts:eloop(3,300,200,12,.1),
+   feat:[{t:'whoops',n:14,h:.5,p:3.8},ROCK(40),{t:'double',h1:1.8,gap:16,h2:2,prop:'cactus'},{t:'whoops',n:12,h:.55,p:3.6},HILL(6,10),ROCK(30),{t:'table',h:2,top:10}]},
+ enCanyon:{name:'Red Canyon',base:'mountain',W:7,laps:2,sub:'Down in a red-rock canyon: rock steps, boulder gardens and a climb up the canyon wall. 2 laps.',
+   look:{grass:[.62,.36,.24],dirt:[.66,.4,.26],sky:[.88,.7,.52],tree:'cactus',nT:140,mtn:[.6,.28,.18],noBoards:1},pts:eloop(4,220,160,13,.15),
+   feat:[ROCK(30,.5),{t:'stepup',h1:1.5,gap:5,h2:2.6,top:5},{t:'double',h1:2,gap:14,h2:2.2,prop:'rocks'},HILL(11,8),ROCK(36,.5),{t:'stepup',h1:1.4,gap:5,h2:2.4,top:5}]},
+ enSwamp:{name:'Swamp Crossing',base:'gentle',W:8,laps:2,sub:'Thick black mud, flooded ruts, river crossings and fallen trees through a misty swamp. Slow, slippery, brutal. 2 laps.',
+   look:{grass:[.22,.3,.16],dirt:[.2,.15,.1],sky:[.5,.55,.55],tree:'leafy',nT:600,noBoards:1},pts:eloop(5,200,150,12,.12),
+   feat:[{t:'double',h1:1.2,gap:10,h2:1.3,prop:'water'},LOG(5,.5),{t:'whoops',n:10,h:.5,p:2.8},{t:'double',h1:1.3,gap:12,h2:1.4,prop:'water'},LOG(4,.5),ROCK(20),{t:'double',h1:1.2,gap:10,h2:1.3,prop:'water'}]},
+ enSnow:{name:'Glacier Enduro',base:'mountain',W:8,laps:2,sub:'A frozen enduro across glacier country: icy climbs, snow-buried logs, rock bands and a frozen-lake gap. 2 laps.',
+   look:{grass:[.9,.92,.96],dirt:[.55,.52,.5],sky:[.74,.81,.9],tree:'snowpine',nT:500,mtn:[.92,.94,.98],noBoards:1},pts:eloop(6,230,170,13,.13),
+   feat:[HILL(8,8),LOG(4),{t:'double',h1:1.6,gap:14,h2:1.8,prop:'pond'},ROCK(30),HILL(9,6),{t:'double',h1:1.5,gap:10,h2:1.7,prop:'snowmen'},LOG(3)]},
+ enBeach:{name:'Coastal Cliffs Trail',base:'dunes',W:8,laps:2,sub:'A sandy trail along the coast: deep sand whoops, driftwood logs, rock pools and dune climbs with the ocean beside you. 2 laps.',
+   look:{grass:[.84,.76,.56],dirt:[.76,.64,.44],sky:[.52,.74,.96],tree:'palm',nT:180,sea:1,noBoards:1},pts:eloop(7,260,150,12,.1),
+   feat:[{t:'whoops',n:12,h:.5,p:3.4},LOG(3),HILL(6,8),{t:'double',h1:1.4,gap:10,h2:1.6,prop:'water'},ROCK(26),{t:'whoops',n:10,h:.45,p:3.2},HILL(5,6)]},
+ enQuarry:{name:'Rock Quarry',base:'mountain',W:8,laps:2,sub:'An old stone quarry: giant boulder gardens, rock ledges to step up, a steep quarry-wall climb and gravel straights. 2 laps.',
+   look:{grass:[.5,.5,.48],dirt:[.56,.54,.5],sky:[.66,.72,.8],tree:'none',nT:0,mtn:[.58,.56,.54],noBoards:1},pts:eloop(8,200,150,12,.12),
+   feat:[ROCK(36,.55),{t:'stepup',h1:1.6,gap:5,h2:2.8,top:6},HILL(12,8),ROCK(30,.55),{t:'double',h1:1.8,gap:12,h2:2,prop:'rocks'},{t:'stepup',h1:1.5,gap:5,h2:2.6,top:6}]},
+ enJungle:{name:'Jungle Trail',base:'hills',W:7,laps:2,sub:'Deep in the jungle: slick roots, fallen trunks, river gaps and steep muddy banks under a thick green canopy. 2 laps.',
+   look:{grass:[.14,.36,.12],dirt:[.3,.2,.12],sky:[.5,.68,.56],tree:'leafy',nT:1000,noBoards:1},pts:eloop(9,210,160,13,.14),
+   feat:[LOG(5),{t:'double',h1:1.4,gap:11,h2:1.6,prop:'water'},{t:'whoops',n:8,h:.4,p:2.6},HILL(8,6),LOG(4,.5),{t:'double',h1:1.3,gap:9,h2:1.5,prop:'logs'},ROCK(22)]},
+ enIron:{name:'Iron Mountain Hard Enduro',base:'mountain',W:6,laps:1,sub:'The hardest ride on the site: one huge lap of monster climbs, boulder fields, log stacks and rock steps. Just finishing is a win.',
+   look:{grass:[.42,.4,.36],dirt:[.48,.36,.28],sky:[.6,.66,.74],tree:'snowpine',nT:300,mtn:[.5,.46,.44],noBoards:1},pts:eloop(10,320,230,16,.15),
+   feat:[HILL(12,6),ROCK(40,.6),LOG(6,.55),{t:'stepup',h1:1.8,gap:5,h2:3,top:5},HILL(14,6),ROCK(44,.6),{t:'double',h1:2,gap:12,h2:2.2,prop:'rocks'},LOG(6,.55),HILL(13,8),ROCK(36,.6)]}};
+for(const [k,t] of Object.entries(EN)) TRACKS[k]=Object.assign({kind:'race',veh:'mx',closed:true,clear:[0,90],enduro:1},t);
+const VEH_TRACKS={mx:['valley','desert','mudbog','sx','snow','coast','fmx','fmxnight','fmxcanyon','fmxsnow'],bmx:['olympic','dirt','djsunset','djbeach','djpro'],en:Object.keys(EN)};
 
 const deg=Math.PI/180;
 /* jump profiles along the track: u = metres from the start of the feature */
@@ -299,6 +337,9 @@ function featLen(f){ switch(f.t){
   case 'double': case 'triple': case 'dj': case 'fmx': { const ang=f.t==='fmx'?40:f.t==='dj'?38:28; f.ang=ang*deg; f.a=f.t==='fmx'?f.h1*1.7/Math.tan(f.ang):f.h1/Math.tan(f.ang)*(f.t==='dj'?1.25:1); f.d=f.h2/Math.tan((f.t==='fmx'?17:19)*deg); return f.a+f.gap+f.d; }
   case 'stepup': f.a=f.h1/Math.tan(30*deg); f.d=f.h2/Math.tan(22*deg); return f.a+f.gap+f.top+f.d;
   case 'whoops': return f.n*f.p;
+  case 'logs': return f.n*f.p;
+  case 'rocks': return f.len;
+  case 'hill': f.a=f.h/Math.tan(19*deg); f.d=f.h/Math.tan(17*deg); return f.a+f.top+f.d;
   case 'rhythm': f.a=f.h/Math.tan(30*deg); return f.n*(f.gap+f.a)+f.a;
   case 'start': return 26; }
   return 0; }
@@ -314,10 +355,13 @@ function featH(f,u){ switch(f.t){
     const up=f.t==='fmx'?5:1.6; if(u<L-up) return 0; if(u<L) return f.h2*sstep(L-up,L,u); return f.h2*(1-(u-L)/f.d); }
   case 'stepup': { const L=f.a+f.gap; if(u<f.a) return f.h1*u/f.a; if(u<f.a+1.2) return f.h1*(1-(u-f.a)/1.2); if(u<L-1.2) return 0; if(u<L) return f.h2*(u-(L-1.2))/1.2; if(u<L+f.top) return f.h2; return f.h2*(1-(u-L-f.top)/f.d); }
   case 'whoops': return f.h*(.5-.5*Math.cos(2*Math.PI*u/f.p));
+  case 'logs': { const v=u%f.p; return v>1.2&&v<2?f.h*Math.sin(Math.PI*(v-1.2)/.8):0; }
+  case 'rocks': { const e=Math.min(1,u/3,(f.len-u)/3); return Math.max(0,e)*f.h*(.55+.45*Math.sin(u*2.9)*Math.sin(u*1.27+1.3)+.25*Math.sin(u*5.3)); }
+  case 'hill': if(u<f.a) return f.h*sstep(0,1,u/f.a); if(u<f.a+f.top) return f.h; return f.h*(1-sstep(0,1,(u-f.a-f.top)/f.d));
   case 'rhythm': { const per=f.gap+f.a; const k=Math.floor(u/per), v=u-k*per; if(k>=f.n) return u<f.n*per+f.a?f.h*(1-(u-f.n*per)/f.a):0; if(v<f.a) return f.h*v/f.a; if(v<f.a+1) return f.h; if(v<f.a+1+f.a) return f.h*(1-(v-f.a-1)/f.a); return 0; }
   case 'start': /* the BMX start hill: a gate platform 8 m up, then a 26-degree ramp */ if(u<5) return 8; return 8*(1-sstep(5,26,u)); }
   return 0; }
-function baseH(x,z){ const b=TRK&&TRK.base; if(b==='hills') return 3.2*Math.sin(x/70+.5)*Math.cos(z/55)+1.6*Math.sin((x+z)/37)+.8*Math.sin(x/19)*Math.sin(z/23); if(b==='flat') return .25*Math.sin(x/23)*Math.sin(z/29); if(b==='dunes') return 4.2*Math.sin(x/48+1)*Math.cos(z/62)+2.2*Math.sin((x-z)/29)+.9*Math.sin(x/13)*Math.cos(z/17); if(b==='gentle') return 1.4*Math.sin(x/60)*Math.cos(z/45)+.6*Math.sin((x+z)/25); return 0; }
+function baseH(x,z){ const b=TRK&&TRK.base; if(b==='hills') return 3.2*Math.sin(x/70+.5)*Math.cos(z/55)+1.6*Math.sin((x+z)/37)+.8*Math.sin(x/19)*Math.sin(z/23); if(b==='flat') return .25*Math.sin(x/23)*Math.sin(z/29); if(b==='dunes') return 4.2*Math.sin(x/48+1)*Math.cos(z/62)+2.2*Math.sin((x-z)/29)+.9*Math.sin(x/13)*Math.cos(z/17); if(b==='gentle') return 1.4*Math.sin(x/60)*Math.cos(z/45)+.6*Math.sin((x+z)/25); if(b==='mountain') return 7*Math.sin(x/90+.4)*Math.cos(z/70)+3*Math.sin((x+z)/44)+1.2*Math.sin(x/21)*Math.sin(z/25); return 0; }
 
 let TRK=null;
 function catmull(P,closed,step){ const out=[], n=P.length, get=i=>closed?P[(i+n)%n]:P[clamp(i,0,n-1)];
@@ -457,7 +501,7 @@ const keys=new Set(); const held=a=>a.some(k=>keys.has(k));
 const SKEY='rinkRivalsMotocrossV1'; let SV=(()=>{ try{ return Object.assign({best:{},lap:{},free:{},wins:0,races:0},JSON.parse(localStorage.getItem(SKEY)||'null')||{}); }catch(e){ return {best:{},lap:{},free:{},wins:0,races:0}; } })();
 const saveSV=()=>{ try{ localStorage.setItem(SKEY,JSON.stringify(SV)); }catch(e){} };
 try{ const p=JSON.parse(localStorage.getItem('rinkRivalsMotocrossPrefs')||'null'); if(p){ vehSel=p.vehSel||vehSel; trackSel=TRACKS[p.trackSel]?p.trackSel:trackSel; lvl=p.lvl??lvl; camMode=p.camMode||0; if(p.bikeSel&&BIKEV[p.bikeSel]) bikeSel=p.bikeSel; if(p.mxSel&&MXV[p.mxSel]) mxSel=p.mxSel; } }catch(e){}
-if(!VEH_TRACKS[vehSel].includes(trackSel)) trackSel=VEH_TRACKS[vehSel][0];
+enduro=vehSel==='mx'&&!!(TRACKS[trackSel]||{}).enduro; if(!VEH_TRACKS[enduro?'en':vehSel].includes(trackSel)) trackSel=VEH_TRACKS[enduro?'en':vehSel][0];
 const savePrefs=()=>{ try{ localStorage.setItem('rinkRivalsMotocrossPrefs',JSON.stringify({vehSel,trackSel,lvl,camMode,bikeSel,mxSel})); }catch(e){} };
 const fmtT=s=>`${Math.floor(s/60)}:${(s%60).toFixed(2).padStart(5,'0')}`;
 /* the field: team colours, numbers and names (fictional riders) */
@@ -667,16 +711,16 @@ addEventListener('keyup',e=>keys.delete(e.code)); addEventListener('blur',()=>ke
 /* ---------- menu ---------- */
 const pill=(attr,val,on,label,key)=>`<button data-${attr}="${val}" class="${on?'on':''}" tabindex="-1">${label}${key?` <kbd>${key}</kbd>`:''}</button>`;
 function renderMenu(){ const T=TRACKS[trackSel];
-  let h=`<h1>Arcade Rivals: Motocross & BMX</h1><p>Motocross bikes from 250cc up to a 1000cc Suzuki (the bigger the engine, the faster and heavier), or BMX and mountain bikes. Real suspension, wheelies, the gyro of the rear wheel in the air, whips and crashes when you land it wrong. Gate starts against seven riders, or freestyle on big ramps and dirt jumps.</p>
-  <div class="pills"><span class="lbl">Bike</span>${pill('v','mx',vehSel==='mx','🏍 Motocross','')}${pill('v','bmx',vehSel==='bmx','🚲 BMX & mountain bikes','')}</div>${vehSel==='bmx'?`<div class="pills"><span class="lbl">Bike type</span>${Object.entries(BIKEV).map(([k,b])=>pill('bk',k,bikeSel===k,(k==='bmx'?'🚲 ':'🚵 ')+b.name,'')).join('')}</div>`:''}${vehSel==='mx'?`<div class="pills"><span class="lbl">Engine</span>${Object.entries(MXV).map(([k,b])=>pill('mxe',k,mxSel===k,'🏍 '+(k==='m1000'?'1000cc Suzuki':b.cc+'cc')+' · '+Math.round(b.vmax*3.6)+' km/h','')).join('')}</div>`:''}
-  <div class="pills"><span class="lbl">Track</span>${VEH_TRACKS[vehSel].map(k=>pill('t',k,trackSel===k,(TRACKS[k].kind==='race'?'🏁 ':'🤸 ')+TRACKS[k].name,'')).join('')}</div>
+  let h=`<h1>Arcade Rivals: Motocross & BMX</h1><p>Motocross bikes from 250cc up to a 1000cc Suzuki (the bigger the engine, the faster and heavier), enduro bikes like the KTM 400 on 10 rough enduro trails, or BMX and mountain bikes. Real suspension, wheelies, the gyro of the rear wheel in the air, whips and crashes when you land it wrong. Gate starts against seven riders, or freestyle on big ramps and dirt jumps.</p>
+  <div class="pills"><span class="lbl">Bike</span>${pill('v','mx',vehSel==='mx'&&!enduro,'🏍 Motocross','')}${pill('v','en',vehSel==='mx'&&enduro,'🌲 Enduro','')}${pill('v','bmx',vehSel==='bmx','🚲 BMX & mountain bikes','')}</div>${vehSel==='bmx'?`<div class="pills"><span class="lbl">Bike type</span>${Object.entries(BIKEV).map(([k,b])=>pill('bk',k,bikeSel===k,(k==='bmx'?'🚲 ':'🚵 ')+b.name,'')).join('')}</div>`:''}${vehSel==='mx'?`<div class="pills"><span class="lbl">Engine</span>${Object.entries(MXV).filter(([k,b])=>!!b.en===enduro).map(([k,b])=>pill('mxe',k,mxSel===k,(b.en?'🌲 ':'🏍 ')+mxName(k,b)+' · '+Math.round(b.vmax*3.6)+' km/h','')).join('')}</div>`:''}
+  <div class="pills"><span class="lbl">Track</span>${VEH_TRACKS[vehSel==='mx'&&enduro?'en':vehSel].map(k=>pill('t',k,trackSel===k,(TRACKS[k].kind==='race'?'🏁 ':'🤸 ')+TRACKS[k].name,'')).join('')}</div>
   ${T.kind==='race'?`<div class="pills"><span class="lbl">Riders</span>${LVL.map((l,i)=>pill('l',i,lvl===i,l,String(i+1))).join('')}</div>`:''}
   <div class="pills"><button class="gold" data-act="start" tabindex="-1">${T.kind==='race'?'To the gate':'Drop in'} <kbd>Enter</kbd></button><a href="./" tabindex="-1">Home</a><a href="monster" tabindex="-1">Monster Truck</a><a href="moto" tabindex="-1">MotoGP</a></div>
   <div id="hint">${T.sub}${SV.best[trackSel]?` · your best ${fmtT(SV.best[trackSel])}`:''}${SV.lap[trackSel]?` · best lap ${fmtT(SV.lap[trackSel])}`:''}${SV.free[trackSel]?` · best score ${SV.free[trackSel].toLocaleString()}`:''}</div>`;
   $('menuIn').innerHTML=h; $('logoL').src=badgeB(TEAMS[0].c,TEAMS[0].c2); setText('nameL','You'); setText('tpL',bikeOf(vehSel).name); setText('scoreL',''); $('logoR').src=badgeB('#475569','#fff'); setText('nameR',T.kind==='race'?`${LVL[lvl]} field`:'Freestyle'); setText('tpR',T.name); setText('scoreR','');
-  setText('cntT',vehSel==='mx'?'MX':'BMX'); setText('innT',T.name); setText('outsT',T.kind==='race'?(T.closed?`${T.laps} laps`:'One lap'):'2:00 jam'); setText('basesT',''); renderKeysHelp(); }
+  setText('cntT',vehSel==='mx'?(enduro?'ENDURO':'MX'):'BMX'); setText('innT',T.name); setText('outsT',T.kind==='race'?(T.closed?`${T.laps} laps`:'One lap'):'2:00 jam'); setText('basesT',''); renderKeysHelp(); }
 $('menuIn').addEventListener('mousedown',e=>{ if(e.target.closest('button')) e.preventDefault(); });
-$('menuIn').addEventListener('click',e=>{ const b=e.target.closest('button'); if(!b) return; const d=b.dataset; audio(); sfx.click(); if(d.bk){ bikeSel=d.bk; } else if(d.mxe){ mxSel=d.mxe; } else if(d.v){ vehSel=d.v; trackSel=VEH_TRACKS[vehSel][0]; } else if(d.t) trackSel=d.t; else if(d.l!==undefined) lvl=+d.l; else if(d.act==='start'){ startGame(); return; } savePrefs(); renderMenu(); });
+$('menuIn').addEventListener('click',e=>{ const b=e.target.closest('button'); if(!b) return; const d=b.dataset; audio(); sfx.click(); if(d.bk){ bikeSel=d.bk; } else if(d.mxe){ mxSel=d.mxe; } else if(d.v){ enduro=d.v==='en'; vehSel=enduro?'mx':d.v; trackSel=VEH_TRACKS[d.v][0]; if(vehSel==='mx'&&!!(MXV[mxSel]||{}).en!==enduro) mxSel=enduro?'e400':'mx'; } else if(d.t) trackSel=d.t; else if(d.l!==undefined) lvl=+d.l; else if(d.act==='start'){ startGame(); return; } savePrefs(); renderMenu(); });
 function startGame(){ audio(); savePrefs(); newRun(); }
 function renderKeysHelp(){ $('keysHelp').innerHTML=(vehSel==='mx'?'<div><b>Gas</b> W</div>':'<div><b>Pedal</b> W</div>')+'<div><b>Brake</b> S</div><div><b>Steer</b> A D</div><div><b>Lean fwd / back</b> ↑ ↓</div><div><b>Pre-load / pump</b> Space</div><div><b>Tricks (air)</b> J K L U</div><div><b>Flip</b> hold ↓ in the air</div><div><b>Whip / 360</b> Shift + A D in the air</div><div><b>Camera</b> C</div><div><b>Reset</b> R</div><div><b>Pause</b> Esc</div>'; }
 function toMenu(){ phase='menu'; MX=null; $('result').classList.add('hidden'); $('menu').classList.remove('hidden'); renderMenu(); }
@@ -1009,6 +1053,8 @@ function build3(){ if(built3||!R3.ok||!TRK) return; built3=true; if(builtKey===T
           col=mixC(col,[GRASS[0]+n*.04,GRASS[1]+n*.05,GRASS[2]],gb); G0.quad(prev.row[c],prev.row[c+1],row[c+1],row[c],col,0); } }
       prev={s,row}; }
     /* things to jump over in the gaps: buses, trucks, fire, rocks, cactus, snowmen, ponds, water, a beach hut, logs */
+    for(const f of TK.F){ if(f.t==='logs') for(let i=0;i<f.n;i++){ const sI=f.s0+i*f.p+1.6, sp=sampleAt(sI), y=groundH(sp.x,sp.z)-f.h*.55; G0.add(Cy,mm(T(sp.x*K,(y+f.h*.5)*K,sp.z*K),RY(sp.hd),RZ(Math.PI/2),S(f.h*.55*K,TK.W*1.05*K,f.h*.55*K)),[.4,.27,.16],0); }
+      if(f.t==='rocks'){ const n=Math.round(f.len*1.6); for(let i=0;i<n;i++){ const sI=f.s0+rng()*f.len, w=(rng()-.5)*TK.W*1.05, [x,z]=at(sI,w), y=groundH(x,z), r=.18+rng()*f.h*.9; G0.add(Sph,mm(T(x*K,(y+r*.15)*K,z*K),S(r*1.2*K,r*.7*K,r*K)),[.42+rng()*.12,.4+rng()*.1,.37+rng()*.08],0); } } }
     for(const f of TK.F) if(f.prop&&f.gap){ const g0=f.s0+f.a+(f.t==='fmx'?1:.6), g1=f.s0+f.a+f.gap-(f.t==='fmx'?4:1.4), L=g1-g0, mid=(g0+g1)/2, spM=sampleAt(mid), yM=groundH(spM.x,spM.z);
       if(f.prop==='buses'||f.prop==='trucks'){ const n=Math.max(2,Math.floor(L/2.8)); for(let i=0;i<n;i++){ const sI=g0+L*(i+.5)/n, sp=sampleAt(sI), y=groundH(sp.x,sp.z); const c=f.prop==='buses'?'#facc15':['#dc2626','#1d4ed8','#e5e7eb','#16a34a'][i%4];
           box(sp.x,y+1.25,sp.z,TK.W*.85,2.5,2.3,c,sp.hd); box(sp.x,y+1.8,sp.z,TK.W*.86,.6,2.32,f.prop==='buses'?'#1e293b':'#94a3b8',sp.hd); box(sp.x,y+2.55,sp.z,TK.W*.8,.06,2.1,f.prop==='buses'?'#f8fafc':c,sp.hd); } }
@@ -1227,7 +1273,7 @@ lbBoards([{id:'valley',name:'Pine Valley MX: 3-lap race time',mode:'min'},{id:'v
 /* ---------- online score battle ---------- */
 const NETV=window.RRV?RRV.attach({game:'mx',title:'motocross & BMX battle',blurb:'Motocross & BMX battle: everyone rides the same track at the same time and sees the others as ghost riders. Races: fastest time wins. Freestyle: the biggest trick score wins.',
   get better(){ return TRACKS[trackSel].kind==='race'?'low':'high'; },
-  opts:()=>({vehSel,trackSel,lvl}), start(o){ if(o.vehSel&&BIKES[o.vehSel]) vehSel=o.vehSel; if(o.trackSel&&TRACKS[o.trackSel]) trackSel=o.trackSel; if(o.lvl!=null) lvl=o.lvl; newRun(); },
+  opts:()=>({vehSel,trackSel,lvl}), start(o){ if(o.vehSel&&BIKES[o.vehSel]) vehSel=o.vehSel; if(o.trackSel&&TRACKS[o.trackSel]){ trackSel=o.trackSel; enduro=!!TRACKS[trackSel].enduro; } if(o.lvl!=null) lvl=o.lvl; newRun(); },
   state(){ if(!MX) return null; const b=MX.me, done=!!MX.over; let v=null, txt='';
     if(MX.race){ v=b.done?+b.time.toFixed(3):null; txt=b.done?fmtT(b.time):(MX.state==='run'?`${MX.T.closed?`lap ${Math.min(MX.T.laps,b.lap+1)} · `:''}P${b.pos||'-'} · ${fmtT(MX.t-MX.gateT)}`:'at the gate'); }
     else { v=Math.round(MX.score); txt=`${v.toLocaleString()} pts${done?'':` · ${Math.ceil(Math.max(0,MX.clock))} s left`}`; }
