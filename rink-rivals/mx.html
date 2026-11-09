@@ -233,7 +233,7 @@ const MXV={m250:{name:'250cc motocross bike',m:168,I:56,wb:1.47,r:.34,hc:.91,P:2
  e400:{name:'KTM 400 EXC',m:112,I:44,wb:1.48,r:.36,hc:.95,P:27000,F0:1650,vmax:30,s0:.11,T:.32,zeta:.46,mu:1.1,lean:180,gyro:58,cda:.53,head:1.06,cc:400,en:1,col:['#f97316','#111827']},
  e500:{name:'500cc enduro',m:120,I:48,wb:1.5,r:.36,hc:.96,P:36000,F0:1900,vmax:34,s0:.11,T:.33,zeta:.47,mu:1.1,lean:172,gyro:64,cda:.55,head:1.07,cc:500,en:1,col:['#e5e7eb','#b91c1c']},
  m1000:{name:'1000cc Suzuki',m:212,I:74,wb:1.55,r:.35,hc:.94,P:125000,F0:2700,vmax:47,s0:.1,T:.32,zeta:.4,mu:.97,lean:150,gyro:95,cda:.6,head:1.08,cc:1000,col:['#facc15','#1d4ed8']}};
-let bikeSel='bmx', mxSel='mx', enduro=false; const mxName=(k,b)=>k==='m1000'?'1000cc Suzuki':k==='e400'?'KTM 400':b.en?b.cc+'cc enduro':b.cc+'cc';
+let bikeSel='bmx', mxSel='mx', enduro=false, EASY=(()=>{ try{ return localStorage.getItem('rrMxEasy')!=='0'; }catch(e){ return true; } })(); const ez=b=>EASY&&MX&&b===MX.me; const mxName=(k,b)=>k==='m1000'?'1000cc Suzuki':k==='e400'?'KTM 400':b.en?b.cc+'cc enduro':b.cc+'cc';
 const bikeOf=veh=>veh==='bmx'?(BIKEV[bikeSel]||BIKES.bmx):veh==='mx'?(MXV[mxSel]||BIKES.mx):BIKES[veh];
 
 /* ---------- tracks ----------
@@ -580,15 +580,17 @@ function playerTick(b,dt){ const B=b.B, I=b.in, T=MX.T;
   /* the pop: compress on the face (Space) and release at the lip for extra height */
   if(I.pop&&on) b.pre=Math.min(1,(b.pre||0)+dt*2.5); if(!I.pop&&b.pre>0){ if(on&&groundSlope(b.p[0],b.p[2],b.hd)>.25){ b.v[1]+=b.pre*(b.veh==='mx'?1.6:1.1); b.popT=.3; /* pulling back (or throwing forward) as you pop sets the flip going */ if(I.lean) b.om+=I.lean*b.pre*(b.veh==='mx'?2.2:3); } b.pre=0; }
   if(!on){ if(wasOn){ b.air=0; b.airMax=0; b.rot=0; b.whip=0; b.tricks=[]; b.y0=b.p[1]; MX.jump={t:0,tricks:[],h:0}; } b.air+=dt; b.rot+=b.om*dt; b.airMax=Math.max(b.airMax,b.p[1]-groundH(b.p[0],b.p[2])); if(MX.jump){ MX.jump.t=b.air; MX.jump.h=b.airMax; }
-    trickTick(b,dt); }
+    trickTick(b,dt);
+    /* easy controls: with no lean held the bike levels itself to match the ground below, and whips straighten out */
+    if(ez(b)&&!I.lean&&!b.trick&&b.air>.15){ const sl=Math.atan(groundSlope(b.p[0],b.p[2],b.hd)); b.om=lerp(b.om,(sl-b.th)*2.6,Math.min(1,dt*3.2)); if(!keys.has('ShiftLeft')&&!keys.has('ShiftRight')) b.whip*=1-Math.min(1,dt*3); } }
   else if(!wasOn&&b.air>.28) land(b,vAir);
   if(on){ b.air=0; if(b.pose>0) b.pose=Math.max(0,b.pose-dt*4); }
   /* crashes on the ground: looping out, an endo, the head in the dirt, washing the front in a turn */
     /* gravity decides: once the centre of mass is well past the wheel that is still down and still going, it is over */
-  const tip=Math.atan2(B.wb/2,B.hc-B.r)+.25;
+  const tip=Math.atan2(B.wb/2,B.hc-B.r)+(ez(b)?.45:.25);
   if(b.on[0]&&!b.on[1]&&b.th>tip&&b.om>0) return crash(b,'Looped out!'); if(b.on[1]&&!b.on[0]&&b.th<-tip&&b.om<0) return crash(b,'Over the bars!');
   const head=[b.p[0]+Math.sin(b.hd)*-Math.sin(b.th)*B.head,b.p[1]+Math.cos(b.th)*B.head,b.p[2]+Math.cos(b.hd)*-Math.sin(b.th)*B.head]; if(head[1]<groundH(head[0],head[2])+.1) return crash(b,'Slammed!');
-  if((b.slide||0)>.7&&Math.hypot(b.v[0],b.v[2])>7) return crash(b,'Tucked the front!');
+  if((b.slide||0)>(ez(b)?.95:.7)&&Math.hypot(b.v[0],b.v[2])>7) return crash(b,'Tucked the front!');
   /* the track fences (tape and stakes) and the arena walls */
   const q=nearT(b.p[0],b.p[2]); if(q){ const hw=T.W/2; if(Math.abs(q.w)>hw+1.5){ b.v=mul(b.v,1-dt*1.8); } if(Math.abs(q.w)>hw+9){ const sp=sampleAt(q.s); const n=[-sp.tz*Math.sign(q.w),0,sp.tx*Math.sign(q.w)]; madd(b.p,n,-(Math.abs(q.w)-hw-9)); const vn=dot(b.v,n); if(vn>0) madd(b.v,n,-vn*1.4); } }
   else { b.v=mul(b.v,1-dt*2); }
@@ -610,12 +612,12 @@ function land(b,vy){ const J=MX.jump, sl=(()=>{ let a=0; for(let i=0;i<2;i++){ c
   /* tricks that were not finished, a crossed-up landing, or the wrong angle */
   if(b.trick&&(b.trick.p>.3||b.trick.d.spin)) return crash(b,b.trick.d.spin?`Didn't finish the ${b.trick.d.name}!`:`Still off the bike: crashed the ${b.trick.d.name}!`);
   if(b.pose>.3) return crash(b,'Not back on the pegs!');
-  if(Math.abs(w)>.62) return crash(b,'Landed sideways!');
+  if(Math.abs(w)>(ez(b)?.95:.62)) return crash(b,'Landed sideways!');
   /* short of the landing: the wheels hit the up-face. Hard, slow, and only a crash if it is really big */
   /* short of a gap jump's landing: the wheels hit the up-face (landing on the next whoop or roller is just riding) */
   const qL=nearT(b.p[0],b.p[2]), fL=qL&&MX.T.F.find(f=>qL.s>=f.s0&&qL.s<f.s0+f.len), gapCase=fL&&fL.gap&&qL.s-fL.s0>fL.a&&qL.s-fL.s0<fL.a+fL.gap+.5;
-  let caseUp=false; if(sl>.15&&gapCase){ caseUp=true; if(vy<-9.5||rel<-1.3) return crash(b,'Cased the landing and went over the bars!'); b.v=mul(b.v,.55); b.om*=.3; feed('Cased the landing!','#fb923c'); }
-  else { if(rel>.85) return crash(b,'Landed on the back wheel and looped out!'); if(rel<-.75){ const lim=MX.veh==='mx'?-1.0:-.75; if(rel<lim&&!(MX.veh==='mx'&&rel>-1.4&&Math.random()<.35)) return crash(b,'Nose-dived the landing!'); b.v=mul(b.v,.7); b.om=0; b.th=sl; feed('Saved the nose-dive!','#fb923c'); } }
+  let caseUp=false; if(sl>.15&&gapCase){ caseUp=true; if(vy<(ez(b)?-12.5:-9.5)||rel<(ez(b)?-1.5:-1.3)) return crash(b,'Cased the landing and went over the bars!'); b.v=mul(b.v,.55); b.om*=.3; feed('Cased the landing!','#fb923c'); }
+  else { if(rel>(ez(b)?1.15:.85)) return crash(b,'Landed on the back wheel and looped out!'); if(rel<-.75){ const lim=(MX.veh==='mx'?-1.0:-.75)-(ez(b)?.4:0); if(rel<lim&&!(MX.veh==='mx'&&rel>-1.4&&Math.random()<.35)) return crash(b,'Nose-dived the landing!'); b.v=mul(b.v,.7); b.om=0; b.th=sl; feed('Saved the nose-dive!','#fb923c'); } }
   const flips=Math.round(b.rot/(2*Math.PI)), spins=Math.round(b.whip/(2*Math.PI));
   if(J){ if(flips) J.tricks.push({name:flips>0?(flips>1?'Double Backflip':'Backflip'):(flips<-1?'Double Front Flip':'Front Flip'),pts:Math.abs(flips)>1?1600*Math.abs(flips)-1600:flips>0?650:900});
     if(spins) J.tricks.push({name:Math.abs(spins)>1?'720':'360',pts:Math.abs(spins)>1?1400:520});
@@ -714,13 +716,14 @@ function renderMenu(){ const T=TRACKS[trackSel];
   let h=`<h1>Arcade Rivals: Motocross & BMX</h1><p>Motocross bikes from 250cc up to a 1000cc Suzuki (the bigger the engine, the faster and heavier), enduro bikes like the KTM 400 on 10 rough enduro trails, or BMX and mountain bikes. Real suspension, wheelies, the gyro of the rear wheel in the air, whips and crashes when you land it wrong. Gate starts against seven riders, or freestyle on big ramps and dirt jumps.</p>
   <div class="pills"><span class="lbl">Bike</span>${pill('v','mx',vehSel==='mx'&&!enduro,'🏍 Motocross','')}${pill('v','en',vehSel==='mx'&&enduro,'🌲 Enduro','')}${pill('v','bmx',vehSel==='bmx','🚲 BMX & mountain bikes','')}</div>${vehSel==='bmx'?`<div class="pills"><span class="lbl">Bike type</span>${Object.entries(BIKEV).map(([k,b])=>pill('bk',k,bikeSel===k,(k==='bmx'?'🚲 ':'🚵 ')+b.name,'')).join('')}</div>`:''}${vehSel==='mx'?`<div class="pills"><span class="lbl">Engine</span>${Object.entries(MXV).filter(([k,b])=>!!b.en===enduro).map(([k,b])=>pill('mxe',k,mxSel===k,(b.en?'🌲 ':'🏍 ')+mxName(k,b)+' · '+Math.round(b.vmax*3.6)+' km/h','')).join('')}</div>`:''}
   <div class="pills"><span class="lbl">Track</span>${VEH_TRACKS[vehSel==='mx'&&enduro?'en':vehSel].map(k=>pill('t',k,trackSel===k,(TRACKS[k].kind==='race'?'🏁 ':'🤸 ')+TRACKS[k].name,'')).join('')}</div>
+  <div class="pills"><span class="lbl">Controls</span>${pill('ez','1',EASY,'🎮 Easy (bike levels itself, fewer crashes)','')}${pill('ez','0',!EASY,'🔥 Pro','')}</div>
   ${T.kind==='race'?`<div class="pills"><span class="lbl">Riders</span>${LVL.map((l,i)=>pill('l',i,lvl===i,l,String(i+1))).join('')}</div>`:''}
   <div class="pills"><button class="gold" data-act="start" tabindex="-1">${T.kind==='race'?'To the gate':'Drop in'} <kbd>Enter</kbd></button><a href="./" tabindex="-1">Home</a><a href="monster" tabindex="-1">Monster Truck</a><a href="moto" tabindex="-1">MotoGP</a></div>
   <div id="hint">${T.sub}${SV.best[trackSel]?` · your best ${fmtT(SV.best[trackSel])}`:''}${SV.lap[trackSel]?` · best lap ${fmtT(SV.lap[trackSel])}`:''}${SV.free[trackSel]?` · best score ${SV.free[trackSel].toLocaleString()}`:''}</div>`;
   $('menuIn').innerHTML=h; $('logoL').src=badgeB(TEAMS[0].c,TEAMS[0].c2); setText('nameL','You'); setText('tpL',bikeOf(vehSel).name); setText('scoreL',''); $('logoR').src=badgeB('#475569','#fff'); setText('nameR',T.kind==='race'?`${LVL[lvl]} field`:'Freestyle'); setText('tpR',T.name); setText('scoreR','');
   setText('cntT',vehSel==='mx'?(enduro?'ENDURO':'MX'):'BMX'); setText('innT',T.name); setText('outsT',T.kind==='race'?(T.closed?`${T.laps} laps`:'One lap'):'2:00 jam'); setText('basesT',''); renderKeysHelp(); }
 $('menuIn').addEventListener('mousedown',e=>{ if(e.target.closest('button')) e.preventDefault(); });
-$('menuIn').addEventListener('click',e=>{ const b=e.target.closest('button'); if(!b) return; const d=b.dataset; audio(); sfx.click(); if(d.bk){ bikeSel=d.bk; } else if(d.mxe){ mxSel=d.mxe; } else if(d.v){ enduro=d.v==='en'; vehSel=enduro?'mx':d.v; trackSel=VEH_TRACKS[d.v][0]; if(vehSel==='mx'&&!!(MXV[mxSel]||{}).en!==enduro) mxSel=enduro?'e400':'mx'; } else if(d.t) trackSel=d.t; else if(d.l!==undefined) lvl=+d.l; else if(d.act==='start'){ startGame(); return; } savePrefs(); renderMenu(); });
+$('menuIn').addEventListener('click',e=>{ const b=e.target.closest('button'); if(!b) return; const d=b.dataset; audio(); sfx.click(); if(d.ez!==undefined){ EASY=d.ez==='1'; try{ localStorage.setItem('rrMxEasy',EASY?'1':'0'); }catch(e){} } else if(d.bk){ bikeSel=d.bk; } else if(d.mxe){ mxSel=d.mxe; } else if(d.v){ enduro=d.v==='en'; vehSel=enduro?'mx':d.v; trackSel=VEH_TRACKS[d.v][0]; if(vehSel==='mx'&&!!(MXV[mxSel]||{}).en!==enduro) mxSel=enduro?'e400':'mx'; } else if(d.t) trackSel=d.t; else if(d.l!==undefined) lvl=+d.l; else if(d.act==='start'){ startGame(); return; } savePrefs(); renderMenu(); });
 function startGame(){ audio(); savePrefs(); newRun(); }
 function renderKeysHelp(){ $('keysHelp').innerHTML=(vehSel==='mx'?'<div><b>Gas</b> W</div>':'<div><b>Pedal</b> W</div>')+'<div><b>Brake</b> S</div><div><b>Steer</b> A D</div><div><b>Lean fwd / back</b> ↑ ↓</div><div><b>Pre-load / pump</b> Space</div><div><b>Tricks (air)</b> J K L U</div><div><b>Flip</b> hold ↓ in the air</div><div><b>Whip / 360</b> Shift + A D in the air</div><div><b>Camera</b> C</div><div><b>Reset</b> R</div><div><b>Pause</b> Esc</div>'; }
 function toMenu(){ phase='menu'; MX=null; $('result').classList.add('hidden'); $('menu').classList.remove('hidden'); renderMenu(); }
