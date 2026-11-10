@@ -844,7 +844,7 @@ export class Acct {
     if(m.op==='friendRemove'){ const o=key(m.name); this.sql.exec('DELETE FROM fr WHERE (a=? AND b=?) OR (a=? AND b=?)',nm,o,o,nm); return J({ok:true}); }
     /* who's online right now (seen in the last 5 minutes); asking also marks you as online */
     if(m.op==='online'){ this.sql.exec('UPDATE acct SET seen=?, pg=? WHERE nm=?',now,String(m.pg||'').replace(/[^a-z0-9-]/g,'').slice(0,24),nm);
-      const rows=this.sql.exec('SELECT nm,disp,crew,pg,seen FROM acct WHERE seen>? AND nm<>? ORDER BY seen DESC LIMIT 60',now-5*60000,nm).toArray().map(r=>({name:r.disp,crew:r.crew,pg:r.pg||'',seen:r.seen,bot:BOT_ACCTS.has(r.nm)}));
+      const rows=this.sql.exec('SELECT nm,disp,crew,pg,seen FROM acct WHERE seen>? AND nm<>? ORDER BY seen DESC LIMIT 60',now-3*60000,nm).toArray().map(r=>({name:r.disp,crew:r.crew,pg:r.pg||'',seen:r.seen,bot:BOT_ACCTS.has(r.nm)}));
       for(const b of BOT_ACCTS){ if(b===nm||rows.some(r=>r.name.toLowerCase()===b)) continue; const r=this.sql.exec('SELECT disp,crew FROM acct WHERE nm=?',b).toArray()[0]; if(r) rows.unshift({name:r.disp,crew:r.crew,pg:'hub',seen:now,bot:true}); }
       return J({ok:true,list:rows,now}); }
     /* the group video chat: who's in it (each browser checks in every 10 s; gone after 30 s) */

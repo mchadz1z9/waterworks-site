@@ -44,7 +44,7 @@ async function loadOnline(){ if(!A) return; const r=await api('online',{token:A.
   $('online').innerHTML=L.length?L.map(o=>`<div class="row"><span>🟢</span><span class="nm"><a href="#" data-prof="${esc(o.name)}">${esc(o.name)}</a>${o.bot?' <span class="pill">🤖 test bot</span>':''}<div class="pg">${esc(GAMEN(o.pg))}</div></span>${o.bot?'':`<button class="btn" data-inv="${esc(o.name)}" title="Invite to the group call">✉️ Invite</button>`}<button class="btn go" data-call="${esc(o.name)}" data-bot="${o.bot?1:0}">📹 Call</button></div>`).join(''):'<p class="m">Nobody else is online right now. Check back soon!</p>'; }
 document.addEventListener('click',async e=>{ const iv=e.target.closest('[data-inv]'); if(iv){ if(!window.RRVIDEO) return; const nm=iv.dataset.inv; iv.disabled=true; iv.textContent='Sending…';
     if(!gIn){ await gJoin(); } const err=await RRVIDEO.invite(nm); iv.textContent=err?'✉️ Invite':'✓ Invited'; iv.disabled=!err; if(err) $('gErr').textContent=err; return; } });
-document.addEventListener('click',e=>{ const b=e.target.closest('[data-call]'); if(!b) return; if(window.RRVIDEO) RRVIDEO.callUser(b.dataset.call,{bot:b.dataset.bot==='1'}); else $('gErr').textContent='Video calls are still loading — try again in a second.'; });
+document.addEventListener('click',e=>{ const b=e.target.closest('[data-call]'); if(!b) return; if(gIn&&b.dataset.bot!=='1'){ $('gErr').textContent='Leave the group call first to call someone one-on-one (your camera is in use).'; return; } if(window.RRVIDEO) RRVIDEO.callUser(b.dataset.call,{bot:b.dataset.bot==='1'}); else $('gErr').textContent='Video calls are still loading — try again in a second.'; });
 $('ref').onclick=loadOnline; $('room').onclick=()=>{ if(window.RRVIDEO) RRVIDEO.open(); };
 setInterval(()=>{ if(A&&!document.hidden) loadOnline(); },30000);
 /* ---- the group video chat: everyone calls everyone (works best with up to 8 people) ---- */
@@ -53,19 +53,22 @@ function loadPeer(){ return new Promise((ok,bad)=>{ if(window.Peer) return ok();
 function tile(id,name,stream,me){ let t=document.querySelector(`.tile[data-id="${id}"]`); if(!t){ t=document.createElement('div'); t.className='tile'+(me?' me':''); t.dataset.id=id; t.innerHTML=`<video autoplay playsinline ${me?'muted':''}></video><span class="lbl">${esc(name)}${me?' (you)':''}</span>`; $('vgrid').appendChild(t); }
   const v=t.querySelector('video'); if(v.srcObject!==stream){ v.srcObject=stream; v.play&&v.play().catch(()=>{}); } }
 function untile(id){ const t=document.querySelector(`.tile[data-id="${id}"]`); if(t) t.remove(); }
-function wire(c,name){ gCalls.set(c.peer,c); c.on('stream',s=>tile(c.peer,name,s)); c.on('close',()=>{ gCalls.delete(c.peer); untile(c.peer); count(); }); c.on('error',()=>{ gCalls.delete(c.peer); untile(c.peer); count(); }); count(); }
+function wire(c,name){ gCalls.set(c.peer,c); c.on('stream',s=>{ tile(c.peer,name,s); s.getTracks().forEach(t=>t.addEventListener('ended',()=>{ if(gCalls.get(c.peer)===c&&s.getTracks().every(x=>x.readyState==='ended')){ gCalls.delete(c.peer); untile(c.peer); count(); } })); }); c.on('close',()=>{ gCalls.delete(c.peer); untile(c.peer); count(); }); c.on('error',()=>{ gCalls.delete(c.peer); untile(c.peer); count(); }); count(); }
 function count(){ if(gIn) $('gInfo').textContent=`You're in the group call · ${1+gCalls.size} ${gCalls.size?'people':'person (waiting for others to join)'}`; }
 async function gJoin(){ $('gErr').textContent=''; if(!A) return; $('gJoin').disabled=true;
   try{ await loadPeer(); gLocal=await navigator.mediaDevices.getUserMedia({video:{width:{ideal:320},height:{ideal:240},frameRate:{ideal:15,max:20}},audio:{echoCancellation:true,noiseSuppression:true}}); }
   catch(e){ $('gJoin').disabled=false; $('gErr').textContent=e&&e.message==='peerjs'?'Could not load the video-call library.':'Camera blocked — allow camera and microphone for this site, then try again.'; return; }
   gPeer=new Peer('arcriv-g-'+Math.random().toString(36).slice(2,12)); gPeer.on('error',e=>{ if(e.type==='peer-unavailable') return; if(!gIn) { $('gErr').textContent='Could not reach the call server — check your internet.'; gLeave(); } });
-  gPeer.on('call',c=>{ if(!gIn){ c.close(); return; } c.answer(gLocal); wire(c,String((c.metadata&&c.metadata.from)||'Player').slice(0,20)); });
+  gPeer.on('call',c=>{ if(!gIn||gCalls.has(c.peer)){ c.close(); return; } c.answer(gLocal); wire(c,String((c.metadata&&c.metadata.from)||'Player').slice(0,20)); });
   gPeer.on('open',async id=>{ const r=await api('vgJoin',{token:A.token,pid:id}); if(r.err==='full'){ $('gErr').textContent='The group call is full (15 people). Try again in a bit.'; gLeave(); return; }
     gIn=true; tile('me',A.name,gLocal,true); $('gBtns').innerHTML='<button class="btn" id="gMic">🎙️ Mute</button> <button class="btn" id="gCam">📷 Camera off</button> <button class="btn red" id="gLeave">Leave the group call</button> <button class="btn go" id="gInv">✉️ Invite people</button><div id="invBox"></div>';
     $('gLeave').onclick=gLeave; $('gInv').onclick=invPanel; $('gMic').onclick=e=>{ const t=gLocal.getAudioTracks()[0]; if(t){ t.enabled=!t.enabled; e.target.textContent=t.enabled?'🎙️ Mute':'🔇 Unmute'; } }; $('gCam').onclick=e=>{ const t=gLocal.getVideoTracks()[0]; if(t){ t.enabled=!t.enabled; e.target.textContent=t.enabled?'📷 Camera off':'📷 Camera on'; } };
     /* the newcomer rings everyone already in the call; they answer by themselves */
     for(const m of r.list||[]){ if(gCalls.has(m.pid)) continue; const c=gPeer.call(m.pid,gLocal,{metadata:{from:A.name,group:1}}); if(c) wire(c,m.name); }
-    count(); gT=setInterval(async()=>{ const q=await api('vgJoin',{token:A.token,pid:gPeer.id}); const live=new Set((q.list||[]).map(x=>x.pid)); for(const [pid,c] of gCalls) if(!live.has(pid)){ try{ c.close(); }catch(e){} gCalls.delete(pid); untile(pid); } count(); },10000); }); }
+    count(); gT=setInterval(async()=>{ const q=await api('vgJoin',{token:A.token,pid:gPeer.id}); const live=new Set((q.list||[]).map(x=>x.pid)); for(const [pid,c] of gCalls) if(!live.has(pid)){ try{ c.close(); }catch(e){} gCalls.delete(pid); untile(pid); }
+      /* anyone in the call we aren't connected to (e.g. two people joined at the same moment): the one with the smaller id rings */
+      for(const m of q.list||[]) if(!gCalls.has(m.pid)&&gPeer&&gPeer.id<m.pid){ const c=gPeer.call(m.pid,gLocal,{metadata:{from:A.name,group:1}}); if(c) wire(c,m.name); }
+      count(); },10000); }); }
 function gLeave(){ clearInterval(gT); gIn=false; for(const c of gCalls.values()){ try{ c.close(); }catch(e){} } gCalls.clear(); if(gPeer){ try{ api('vgLeave',{token:A.token,pid:gPeer.id}); gPeer.destroy(); }catch(e){} gPeer=null; }
   if(gLocal){ gLocal.getTracks().forEach(t=>t.stop()); gLocal=null; } $('vgrid').innerHTML=''; $('gBtns').innerHTML='<button class="btn go" id="gJoin">📹 Join the group call</button>'; $('gJoin').onclick=gJoin; $('gInfo').textContent='One big call for everyone on the site — up to 15 people can be in it at once.'; showGroupCount(); }
 async function showGroupCount(){ if(!A||gIn) return; const r=await api('vgList',{token:A.token}); const n=(r.list||[]).length; if(!gIn) $('gInfo').textContent=n?`${n} ${n===1?'person is':'people are'} in the group call right now: ${(r.list||[]).map(x=>x.name).join(', ')}`:'Nobody is in the group call yet — be the first! Up to 15 people can join.'; }
@@ -76,7 +79,7 @@ async function invPanel(){ const box=$('invBox'); if(box.innerHTML){ box.innerHT
   box.innerHTML=`<div style="margin-top:10px;background:#0b1222;border:1px solid #24324f;border-radius:12px;padding:10px"><b>✉️ Invite to the group call</b>${L.length?L.map(o=>`<div class="row"><span>🟢</span><span class="nm">${esc(o.name)}</span><button class="btn go" data-inv="${esc(o.name)}">✉️ Invite</button></div>`).join(''):'<p class="m">Everyone online is already in the call (or nobody else is online).</p>'}
     <div class="row"><span class="nm m">Or send this link: <b style="color:#fff">${esc(link)}</b></span><button class="btn" id="invCopy">🔗 Copy link</button></div></div>`;
   $('invCopy').onclick=e=>{ try{ navigator.clipboard.writeText(link); e.target.textContent='✓ Copied'; }catch(x){ prompt('Copy this link:',link); } }; }
-window.RRGROUP={ join:()=>{ if(!gIn) gJoin(); } };
+window.RRGROUP={ join:()=>{ if(!gIn) gJoin(); }, get inCall(){ return gIn; } };
 if(/^#join/.test(location.hash)) setTimeout(()=>{ if(acct()&&!gIn) gJoin(); },1500);
 $('gJoin').onclick=gJoin; addEventListener('pagehide',()=>{ if(gIn&&gPeer){ try{ fetch(SERVER+'/acct',{method:'POST',keepalive:true,body:JSON.stringify({op:'vgLeave',token:A.token,pid:gPeer.id})}); }catch(e){} } });
 setInterval(()=>{ if(!document.hidden) showGroupCount(); },20000);
