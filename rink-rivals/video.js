@@ -3,6 +3,8 @@
    - Or a room code: one player starts a room and reads out the 5-letter code, the other types it in.
    - The test account "testing online" is a bot: calling it shows a pebble (it never sees your camera). */
 (function(){ if(window.RRVIDEO) return;
+  /* don't run the call line inside an embedded game (same account would clash with the page that embeds it) */
+  try{ if(window.top!==window.self) return; }catch(e){ return; }
   const PAGE=(location.pathname.split('/').pop()||'').replace(/\.html$/,'');
   if(PAGE==='hq-owa9rwwt9kplpdbu'||window.RR_ADMIN) return;
   const ROOM='arcriv-vc-', USER='arcrivu-', ABC='ABCDEFGHJKMNPQRSTUVWXYZ23456789';

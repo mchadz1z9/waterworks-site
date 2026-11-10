@@ -20,6 +20,21 @@ h1{margin:0;font:900 34px/1 system-ui;letter-spacing:.01em}.home{margin-left:aut
 .tile .lbl{position:absolute;left:8px;bottom:8px;background:rgba(0,0,0,.6);border-radius:999px;padding:3px 10px;font:700 12px system-ui}
 .tile.me video{transform:scaleX(-1)}
 .err{color:#fca5a5;margin-top:8px;font-size:14px}.pill{display:inline-block;background:#14532d;color:#bbf7d0;border-radius:999px;padding:3px 10px;font:800 12px system-ui}
+.gpick{display:flex;gap:8px;flex-wrap:wrap;margin-top:10px}
+.gpick button{border:1px solid var(--line);background:#0b1222;color:#fff;border-radius:12px;padding:9px 12px;font:800 14px system-ui;cursor:pointer}
+.gpick button:hover{border-color:#22c55e}
+/* theater: a game fills the screen, your call shrinks to a strip you can still see */
+body.playing{overflow:hidden}
+#playArea{position:fixed;inset:0;z-index:2147482000;background:#05060b;display:none;flex-direction:column}
+body.playing #playArea{display:flex}
+#playBar{display:flex;align-items:center;gap:8px;padding:6px 8px;background:#0b1222;border-bottom:1px solid var(--line)}
+#playBar b{flex:1;font:800 14px system-ui;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+#playFrame{flex:1;width:100%;border:0;background:#000}
+/* during a game: the group tiles become a thin strip across the bottom; the 1:1 window already floats */
+body.playing #vgrid{position:fixed;left:8px;right:8px;bottom:8px;z-index:2147482100;grid-template-columns:none;grid-auto-flow:column;grid-auto-columns:150px;overflow-x:auto;margin:0;gap:6px;padding-bottom:2px;max-height:122px;transition:transform .2s}
+body.playing #vgrid.hid{transform:translateY(130px)}
+body.playing .tile{aspect-ratio:4/3}
+#vToggle{display:none}body.playing #vToggle{display:block;position:fixed;right:10px;bottom:136px;z-index:2147482200;border:0;border-radius:999px;background:#1e293b;color:#fff;font:800 13px system-ui;padding:8px 12px;cursor:pointer}
 </style></head><body><div class="wrap">
 <header><h1>📹 Video call</h1><a class="home" href="./">🏆 Arcade Rivals home</a></header>
 <p class="lede">Call anyone who's online, or jump into the group video chat with everyone. Your camera only turns on when you start or accept a call.</p>
@@ -28,7 +43,11 @@ h1{margin:0;font:900 34px/1 system-ui;letter-spacing:.01em}.home{margin-left:aut
   <div class="card"><h2>🟢 Online now</h2><p class="m">Tap 📹 Call to ring someone, or ✉️ Invite to bring them into the group call. Try <b>testing online</b> first — it's a test bot that shows you a pebble.</p><div id="online"><p class="m">Loading…</p></div><p style="margin-top:10px"><button class="btn" id="ref">🔄 Refresh</button> <button class="btn" id="room">🔑 Room-code call</button></p></div>
   <div class="card"><h2>👥 Group video chat</h2><p class="m" id="gInfo">One big call for everyone on the site — up to 15 people can be in it at once.</p>
     <div id="gBtns" style="margin-top:8px"><button class="btn go" id="gJoin">📹 Join the group call</button></div><div id="gErr" class="err"></div><div class="vgrid" id="vgrid"></div></div>
+  <div class="card" style="grid-column:1/-1"><h2>🎮 Play a game while you talk</h2><p class="m">Pick a game and it opens right here — your call keeps going the whole time, so you can play together and see each other.</p>
+    <div class="gpick" id="gpick"></div></div>
 </div></div>
+<div id="playArea"><div id="playBar"><b id="playTitle">Game</b><button class="btn" id="playFs">⛶ Full screen</button><button class="btn red" id="playClose">✕ Close game</button></div><iframe id="playFrame" title="Game" allow="fullscreen; autoplay; gamepad"></iframe></div>
+<button id="vToggle">🙈 Hide faces</button>
 <script>
 (()=>{
 const $=id=>document.getElementById(id), esc=s=>String(s).replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
@@ -83,6 +102,17 @@ window.RRGROUP={ join:()=>{ if(!gIn) gJoin(); }, get inCall(){ return gIn; } };
 if(/^#join/.test(location.hash)) setTimeout(()=>{ if(acct()&&!gIn) gJoin(); },1500);
 $('gJoin').onclick=gJoin; addEventListener('pagehide',()=>{ if(gIn&&gPeer){ try{ fetch(SERVER+'/acct',{method:'POST',keepalive:true,body:JSON.stringify({op:'vgLeave',token:A.token,pid:gPeer.id})}); }catch(e){} } });
 setInterval(()=>{ if(!document.hidden) showGroupCount(); },20000);
+/* ---- play a game while you stay on the call (games load in an iframe, so the call never drops) ---- */
+function picker(){ const box=$('gpick'); if(!box) return; const items=[['poker','🃏 Poker'],['chess','♟️ Chess'],['landlord','🏢 Landlord'],['blackjack','🃏 Blackjack'],['hub','🌐 Hub'],['city','🏙️ Rival City'],['mx','🏍 Motocross'],['kart','🏎️ Kart'],['bowling','🎳 Bowling'],['pool','🎱 Pool'],['sa-airhockey','🏒 Air Hockey'],['sports-arcade','🏟️ Sports Arcade'],['./','🎮 All games']];
+  box.innerHTML=items.map(([id,lbl])=>`<button data-game="${esc(id)}">${esc(lbl)}</button>`).join(''); }
+function openGame(page,label){ const f=$('playFrame'); f.src=page; $('playTitle').textContent=label||'Game'; document.body.classList.add('playing'); $('vgrid').classList.remove('hid'); $('vToggle').textContent='🙈 Hide faces'; }
+function closeGame(){ document.body.classList.remove('playing'); $('playFrame').src='about:blank'; }
+document.addEventListener('click',e=>{ const g=e.target.closest('[data-game]'); if(g){ const b=g; openGame(b.dataset.game,b.textContent.trim()); return; } });
+$('playClose').onclick=closeGame;
+$('playFs').onclick=()=>{ const el=$('playArea'); try{ (document.fullscreenElement?document.exitFullscreen():(el.requestFullscreen||el.webkitRequestFullscreen).call(el)); }catch(x){} };
+$('vToggle').onclick=()=>{ const v=$('vgrid'); v.classList.toggle('hid'); $('vToggle').textContent=v.classList.contains('hid')?'👀 Show faces':'🙈 Hide faces'; };
+addEventListener('keydown',e=>{ if(e.key==='Escape'&&document.body.classList.contains('playing')&&!document.fullscreenElement) closeGame(); });
+picker();
 show(); showGroupCount(); addEventListener('storage',e=>{ if(e.key==='rrAcct') show(); }); setInterval(()=>{ if(!A&&acct()) show(); },3000);
 })();
 </script>
