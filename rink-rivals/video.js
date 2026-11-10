@@ -8,6 +8,14 @@
   const PAGE=(location.pathname.split('/').pop()||'').replace(/\.html$/,'');
   if(PAGE==='hq-owa9rwwt9kplpdbu'||window.RR_ADMIN) return;
   const ROOM='arcriv-vc-', USER='arcrivu-', ABC='ABCDEFGHJKMNPQRSTUVWXYZ23456789';
+  /* relay servers: STUN finds your address, TURN relays the video when two networks can't connect directly
+     (phone data ↔ home wifi, strict school/office routers). Without these, calls freeze or never connect. */
+  const PCFG={ iceServers:[
+    {urls:'stun:stun.l.google.com:19302'},{urls:'stun:stun1.l.google.com:19302'},
+    {urls:['turn:openrelay.metered.ca:80','turn:openrelay.metered.ca:443','turn:openrelay.metered.ca:443?transport=tcp'],username:'openrelayproject',credential:'openrelayproject'}
+  ], sdpSemantics:'unified-plan' };
+  const POPT=id=>({config:PCFG,debug:0});
+  const NP=id=>id?new Peer(id,POPT()):new Peer(POPT());
   let mePeer=null, roomPeer=null, call=null, local=null, remote=null, box=null, ring=null, code='', who='', state='idle', micOn=true, camOn=true, msg='', bot=null, tmo=null;
   const $=(s,r)=>(r||document).querySelector(s), esc=s=>String(s).replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
   const acct=()=>{ try{ const a=JSON.parse(localStorage.getItem('rrAcct')||'null'); return a&&a.name&&a.token?a:null; }catch(e){ return null; } };
@@ -38,7 +46,7 @@
     else if(state==='connecting') bd=`<div class="m">Connecting to room <b>${code}</b>…</div><div class="row"><button class="b red" data-v="end">Cancel</button></div>`;
     else if(live) bd=`<div class="vids"><video id="vcThem" autoplay playsinline></video><video class="me" id="vcMe" autoplay playsinline muted></video></div><div class="row"><button class="b" data-v="mic">${micOn?'🎙️ Mute':'🔇 Unmute'}</button><button class="b" data-v="cam">${camOn?'📷 Camera off':'📷 Camera on'}</button><button class="b red" data-v="end">Hang up</button></div><div class="m" style="margin-top:6px">${who?'With '+esc(who):'Room '+code} · the call ends if you leave this page</div>`;
     box.innerHTML=`<div class="hd"><b>📹 ${live&&who?esc(who):'Video call'}</b><button class="x" data-v="close" title="Close">✕</button></div><div class="bd">${bd}${msg?`<div class="err">${esc(msg)}</div>`:''}</div>`;
-    const me=$('#vcMe',box); if(me&&local) me.srcObject=local; const th=$('#vcThem',box); if(th&&remote){ th.srcObject=remote; th.play&&th.play().catch(()=>{}); } }
+    const me=$('#vcMe',box); if(me&&local&&me.srcObject!==local) me.srcObject=local; const th=$('#vcThem',box); if(th&&remote&&th.srcObject!==remote){ th.srcObject=remote; th.play&&th.play().catch(()=>{}); } }
   function fail(t){ msg=t; open(); }
   function onClick(e){ const b=e.target.closest('[data-v]'); if(!b) return; const v=b.dataset.v; msg='';
     if(v==='close'){ if(state!=='idle') end(); box.remove(); box=null; return; } if(v==='start') startRoom(); if(v==='join') joinRoom($('#vcIn',box).value); if(v==='end') end();
@@ -46,7 +54,7 @@
   const why=e=>{ const n=e&&(e.type||e.name||''); return n==='NotAllowedError'||n==='SecurityError'?'Camera blocked — allow camera and microphone for this site, then try again.':n==='NotFoundError'?'No camera found on this device.':n==='peer-unavailable'?(who?`${who} isn't online right now.`:'No room with that code — check it with your friend.'):n==='unavailable-id'?'That code is busy — try again.':n==='network'||n==='server-error'||n==='socket-error'?'Could not reach the call server — check your internet.':e&&e.message==='peerjs'?'Could not load the video-call library.':'Something went wrong — try again.'; };
   /* your own line: while you're signed in, people can ring you */
   async function listen(){ const a=acct(); if(!a||mePeer) return; try{ await loadPeer(); }catch(e){ return; }
-    const pr=new Peer(uid(a.name)); mePeer=pr; pr.__mine=1;
+    const pr=NP(uid(a.name)); mePeer=pr; pr.__mine=1;
     pr.on('error',e=>{ if(e.type==='unavailable-id'||e.type==='invalid-id'){ try{ pr.destroy(); }catch(x){} if(mePeer===pr) mePeer=null; listenRetry(); } else if(call&&state!=='live'){ const m=why(e); end(); fail(m); } });
     hook(pr);
     pr.on('disconnected',()=>{ setTimeout(()=>{ try{ if(!pr.destroyed&&pr.disconnected) pr.reconnect(); }catch(e){} },1500); }); }
@@ -72,7 +80,7 @@
       if(!c) return fin(`Couldn't reach ${name}.`); c.on('open',()=>{ c.send({t:'ginvite',from:a.name}); setTimeout(()=>{ try{ c.close(); }catch(e){} },1500); fin(''); });
       c.on('error',()=>fin(`Couldn't reach ${name}.`)); setTimeout(()=>fin(`${name} isn't reachable right now (they may have just left).`),7000); }); }
   async function anyPeer(){ if(mePeer&&mePeer.open) return mePeer; if(mePeer&&!mePeer.destroyed) return new Promise(r=>{ mePeer.once('open',()=>r(mePeer)); setTimeout(()=>r(mePeer),4000); });
-    await loadPeer(); mePeer=new Peer(); mePeer.on('error',e=>{ if(call&&state!=='live'){ const m=why(e); end(); fail(m); } }); hook(mePeer); return new Promise(r=>mePeer.once('open',()=>r(mePeer))); }
+    await loadPeer(); mePeer=NP(); mePeer.on('error',e=>{ if(call&&state!=='live'){ const m=why(e); end(); fail(m); } }); hook(mePeer); return new Promise(r=>mePeer.once('open',()=>r(mePeer))); }
   function incoming(c){ css(); const from=String((c.metadata&&c.metadata.from)||'Someone').slice(0,20); if(ring) ring.remove(); ring=document.createElement('div'); ring.id='rrRing';
     ring.innerHTML=`<div style="font-size:30px">📹</div><b style="font-size:17px">${esc(from)}</b> wants to video call you<div class="row"><button class="b go" data-r="yes">Accept</button><button class="b red" data-r="no">Decline</button></div>`;
     document.body.appendChild(ring); let done=false; const close=()=>{ if(ring){ ring.remove(); ring=null; } ringPeer=null; ringClose=null; };
@@ -90,7 +98,7 @@
     const c=p.call(uid(name),local,{metadata:{from:a.name}}); if(!c){ end(); return fail('Could not start the call.'); } call=c; wire(c);
     tmo=setTimeout(()=>{ if(state==='calling'){ end(); fail(`${who} didn't answer.`); } },32000); }
   async function startRoom(tries){ try{ await loadPeer(); await cam(); }catch(e){ return fail(why(e)); }
-    code=''; for(let i=0;i<5;i++) code+=ABC[Math.floor(Math.random()*ABC.length)]; state='wait'; who=''; render(); roomPeer=new Peer(ROOM+code);
+    code=''; for(let i=0;i<5;i++) code+=ABC[Math.floor(Math.random()*ABC.length)]; state='wait'; who=''; render(); roomPeer=NP(ROOM+code);
     roomPeer.on('error',e=>{ if(e.type==='unavailable-id'&&(tries||0)<3){ roomPeer.destroy(); roomPeer=null; startRoom((tries||0)+1); return; } if(state!=='live'){ const m=why(e); end(); fail(m); } });
     roomPeer.on('call',c=>{ if(call){ c.close(); return; } call=c; c.answer(local); wire(c); }); }
   async function joinRoom(raw){ const c2=String(raw||'').toUpperCase().replace(/[^A-Z0-9]/g,'').slice(0,5); if(c2.length!==5) return fail('Type the 5-letter code your friend sees.');

@@ -68,6 +68,9 @@ $('ref').onclick=loadOnline; $('room').onclick=()=>{ if(window.RRVIDEO) RRVIDEO.
 setInterval(()=>{ if(A&&!document.hidden) loadOnline(); },30000);
 /* ---- the group video chat: everyone calls everyone (works best with up to 8 people) ---- */
 let gPeer=null, gLocal=null, gIn=false, gT=null; const gCalls=new Map();
+/* relay servers so the group call connects and stays smooth across different networks */
+const PCFG={ iceServers:[{urls:'stun:stun.l.google.com:19302'},{urls:'stun:stun1.l.google.com:19302'},
+  {urls:['turn:openrelay.metered.ca:80','turn:openrelay.metered.ca:443','turn:openrelay.metered.ca:443?transport=tcp'],username:'openrelayproject',credential:'openrelayproject'}] };
 function loadPeer(){ return new Promise((ok,bad)=>{ if(window.Peer) return ok(); const s=document.createElement('script'); s.src='https://unpkg.com/peerjs@1.5.4/dist/peerjs.min.js'; s.onload=()=>ok(); s.onerror=()=>bad(new Error('peerjs')); document.head.appendChild(s); }); }
 function tile(id,name,stream,me){ let t=document.querySelector(`.tile[data-id="${id}"]`); if(!t){ t=document.createElement('div'); t.className='tile'+(me?' me':''); t.dataset.id=id; t.innerHTML=`<video autoplay playsinline ${me?'muted':''}></video><span class="lbl">${esc(name)}${me?' (you)':''}</span>`; $('vgrid').appendChild(t); }
   const v=t.querySelector('video'); if(v.srcObject!==stream){ v.srcObject=stream; v.play&&v.play().catch(()=>{}); } }
@@ -77,7 +80,8 @@ function count(){ if(gIn) $('gInfo').textContent=`You're in the group call · ${
 async function gJoin(){ $('gErr').textContent=''; if(!A) return; $('gJoin').disabled=true;
   try{ await loadPeer(); gLocal=await navigator.mediaDevices.getUserMedia({video:{width:{ideal:320},height:{ideal:240},frameRate:{ideal:15,max:20}},audio:{echoCancellation:true,noiseSuppression:true}}); }
   catch(e){ $('gJoin').disabled=false; $('gErr').textContent=e&&e.message==='peerjs'?'Could not load the video-call library.':'Camera blocked — allow camera and microphone for this site, then try again.'; return; }
-  gPeer=new Peer('arcriv-g-'+Math.random().toString(36).slice(2,12)); gPeer.on('error',e=>{ if(e.type==='peer-unavailable') return; if(!gIn) { $('gErr').textContent='Could not reach the call server — check your internet.'; gLeave(); } });
+  gPeer=new Peer('arcriv-g-'+Math.random().toString(36).slice(2,12),{config:PCFG,debug:0}); gPeer.on('error',e=>{ if(e.type==='peer-unavailable'||e.type==='network') return; if(!gIn) { $('gErr').textContent='Could not reach the call server — check your internet.'; gLeave(); } });
+  gPeer.on('disconnected',()=>{ try{ if(gIn&&!gPeer.destroyed) gPeer.reconnect(); }catch(e){} });
   gPeer.on('call',c=>{ if(!gIn||gCalls.has(c.peer)){ c.close(); return; } c.answer(gLocal); wire(c,String((c.metadata&&c.metadata.from)||'Player').slice(0,20)); });
   gPeer.on('open',async id=>{ const r=await api('vgJoin',{token:A.token,pid:id}); if(r.err==='full'){ $('gErr').textContent='The group call is full (15 people). Try again in a bit.'; gLeave(); return; }
     gIn=true; tile('me',A.name,gLocal,true); $('gBtns').innerHTML='<button class="btn" id="gMic">🎙️ Mute</button> <button class="btn" id="gCam">📷 Camera off</button> <button class="btn red" id="gLeave">Leave the group call</button> <button class="btn go" id="gInv">✉️ Invite people</button><div id="invBox"></div>';
