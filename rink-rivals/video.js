@@ -41,17 +41,25 @@
   function onClick(e){ const b=e.target.closest('[data-v]'); if(!b) return; const v=b.dataset.v; msg='';
     if(v==='close'){ if(state!=='idle') end(); box.remove(); box=null; return; } if(v==='start') startRoom(); if(v==='join') joinRoom($('#vcIn',box).value); if(v==='end') end();
     if(v==='mic'&&local){ micOn=!micOn; local.getAudioTracks().forEach(t=>t.enabled=micOn); render(); } if(v==='cam'&&local){ camOn=!camOn; local.getVideoTracks().forEach(t=>t.enabled=camOn); render(); } }
-  const why=e=>{ const n=e&&(e.name||e.type||''); return n==='NotAllowedError'||n==='SecurityError'?'Camera blocked — allow camera and microphone for this site, then try again.':n==='NotFoundError'?'No camera found on this device.':n==='peer-unavailable'?(who?`${who} isn't online right now.`:'No room with that code — check it with your friend.'):n==='unavailable-id'?'That code is busy — try again.':n==='network'||n==='server-error'||n==='socket-error'?'Could not reach the call server — check your internet.':e&&e.message==='peerjs'?'Could not load the video-call library.':'Something went wrong — try again.'; };
+  const why=e=>{ const n=e&&(e.type||e.name||''); return n==='NotAllowedError'||n==='SecurityError'?'Camera blocked — allow camera and microphone for this site, then try again.':n==='NotFoundError'?'No camera found on this device.':n==='peer-unavailable'?(who?`${who} isn't online right now.`:'No room with that code — check it with your friend.'):n==='unavailable-id'?'That code is busy — try again.':n==='network'||n==='server-error'||n==='socket-error'?'Could not reach the call server — check your internet.':e&&e.message==='peerjs'?'Could not load the video-call library.':'Something went wrong — try again.'; };
   /* your own line: while you're signed in, people can ring you */
   async function listen(){ const a=acct(); if(!a||mePeer) return; try{ await loadPeer(); }catch(e){ return; }
     const pr=new Peer(uid(a.name)); mePeer=pr; pr.__mine=1;
     pr.on('error',e=>{ if(e.type==='unavailable-id'||e.type==='invalid-id'){ try{ pr.destroy(); }catch(x){} if(mePeer===pr) mePeer=null; listenRetry(); } else if(call&&state!=='live'){ const m=why(e); end(); fail(m); } });
-    pr.on('call',c=>{ if(busy()){ try{ c.close(); }catch(e){} return; } incoming(c); });
-    pr.on('connection',cn=>{ cn.on('data',d=>{ if(d&&d.t==='ginvite') groupInvite(String(d.from||'Someone').slice(0,20)); setTimeout(()=>{ try{ cn.close(); }catch(e){} },500); }); });
+    hook(pr);
     pr.on('disconnected',()=>{ setTimeout(()=>{ try{ if(!pr.destroyed&&pr.disconnected) pr.reconnect(); }catch(e){} },1500); }); }
   /* the same account open in another tab (or a stale connection) holds your line: try again in a bit */
   let retries=0; function listenRetry(){ if(retries++>20) return; setTimeout(()=>{ if(mePeer&&!mePeer.__mine&&state==='idle'){ try{ mePeer.destroy(); }catch(e){} mePeer=null; } if(!mePeer) listen(); },20000); }
   const busy=()=>!!(call||state!=='idle'||(window.RRGROUP&&RRGROUP.inCall));
+  /* little messages between the two browsers: declined, busy, cancelled, group invites */
+  let ringPeer=null, ringClose=null;
+  function note(peerId,t){ const p=mePeer; if(!p||!p.open||!peerId) return; try{ const cn=p.connect(peerId,{reliable:true}); if(cn) cn.on('open',()=>{ try{ cn.send({t}); }catch(e){} setTimeout(()=>{ try{ cn.close(); }catch(e){} },1500); }); }catch(e){} }
+  function hook(p){ p.on('call',c=>{ if(busy()){ note(c.peer,'busy'); setTimeout(()=>{ try{ c.close(); }catch(e){} },300); return; } incoming(c); });
+    p.on('connection',cn=>{ cn.on('data',d=>{ const t=d&&d.t;
+      if(t==='ginvite') groupInvite(String(d.from||'Someone').slice(0,20));
+      else if((t==='decline'||t==='busy')&&state==='calling'&&call&&cn.peer===call.peer){ const nm=who||'They'; end(); fail(t==='busy'?`${nm} is busy right now — try again in a bit.`:`${nm} declined the call.`); }
+      else if(t==='cancel'&&ringPeer===cn.peer&&ringClose) ringClose();
+      setTimeout(()=>{ try{ cn.close(); }catch(e){} },500); }); }); }
   /* invites to the group video chat arrive straight through the call connection */
   function groupInvite(from){ css(); const el=document.createElement('div'); el.id='rrRing'; el.style.top='90px';
     el.innerHTML=`<div style="font-size:30px">👥</div><b style="font-size:17px">${esc(from)}</b> invited you to the group video call<div class="row"><button class="b go" data-g="yes">Join</button><button class="b" data-g="no">No thanks</button></div>`;
@@ -62,14 +70,15 @@
       if(!c) return fin(`Couldn't reach ${name}.`); c.on('open',()=>{ c.send({t:'ginvite',from:a.name}); setTimeout(()=>{ try{ c.close(); }catch(e){} },1500); fin(''); });
       c.on('error',()=>fin(`Couldn't reach ${name}.`)); setTimeout(()=>fin(`${name} isn't reachable right now (they may have just left).`),7000); }); }
   async function anyPeer(){ if(mePeer&&mePeer.open) return mePeer; if(mePeer&&!mePeer.destroyed) return new Promise(r=>{ mePeer.once('open',()=>r(mePeer)); setTimeout(()=>r(mePeer),4000); });
-    await loadPeer(); mePeer=new Peer(); mePeer.on('error',e=>{ if(call&&state!=='live'){ const m=why(e); end(); fail(m); } }); mePeer.on('call',c=>{ if(busy()){ c.close(); return; } incoming(c); }); return new Promise(r=>mePeer.once('open',()=>r(mePeer))); }
+    await loadPeer(); mePeer=new Peer(); mePeer.on('error',e=>{ if(call&&state!=='live'){ const m=why(e); end(); fail(m); } }); hook(mePeer); return new Promise(r=>mePeer.once('open',()=>r(mePeer))); }
   function incoming(c){ css(); const from=String((c.metadata&&c.metadata.from)||'Someone').slice(0,20); if(ring) ring.remove(); ring=document.createElement('div'); ring.id='rrRing';
     ring.innerHTML=`<div style="font-size:30px">📹</div><b style="font-size:17px">${esc(from)}</b> wants to video call you<div class="row"><button class="b go" data-r="yes">Accept</button><button class="b red" data-r="no">Decline</button></div>`;
-    document.body.appendChild(ring); let done=false; const close=()=>{ if(ring){ ring.remove(); ring=null; } };
+    document.body.appendChild(ring); let done=false; const close=()=>{ if(ring){ ring.remove(); ring=null; } ringPeer=null; ringClose=null; };
+    ringPeer=c.peer; ringClose=()=>{ if(!done){ done=true; clearTimeout(t); close(); try{ c.close(); }catch(e){} } };
     const t=setTimeout(()=>{ if(!done){ done=true; close(); try{ c.close(); }catch(e){} } },30000); c.on('close',()=>{ if(!done){ done=true; clearTimeout(t); close(); } });
     try{ (window.RRCOIN&&RRCOIN.toast)&&RRCOIN.toast(`📹 ${from} is calling you`,'#4ade80'); }catch(e){}
     ring.addEventListener('click',async e=>{ const b=e.target.closest('[data-r]'); if(!b||done) return; done=true; clearTimeout(t); close();
-      if(b.dataset.r==='no'){ try{ c.close(); }catch(x){} return; }
+      if(b.dataset.r==='no'){ note(c.peer,'decline'); setTimeout(()=>{ try{ c.close(); }catch(x){} },300); return; }
       try{ await cam(); }catch(x){ try{ c.close(); }catch(y){} return fail(why(x)); } call=c; who=from; c.answer(local); wire(c); state='live'; open(); }); }
   async function callUser(name,opts){ if(state!=='idle'){ open(); return; } if(window.RRGROUP&&RRGROUP.inCall&&!(opts&&opts.bot)){ fail('Leave the group call first — your camera is in use there.'); return; } const a=acct(); if(!a){ fail('Sign in to your account to video call people.'); return; }
     if(String(name).toLowerCase()===a.name.toLowerCase()) return; who=String(name).slice(0,20); msg='';
@@ -102,7 +111,7 @@
       requestAnimationFrame(draw); };
     bot={cv}; state='calling'; open(); try{ await cam(); }catch(e){ local=null; } if(!bot) return;
     tmo=setTimeout(()=>{ if(!bot) return; remote=cv.captureStream(24); state='live'; draw(); render(); },1600); }
-  function end(){ clearTimeout(tmo); try{ call&&call.close(); }catch(e){} try{ roomPeer&&roomPeer.destroy(); }catch(e){} call=null; roomPeer=null; bot=null; if(remote){ try{ remote.getTracks().forEach(t=>t.stop()); }catch(e){} } remote=null;
+  function end(){ clearTimeout(tmo); if(state==='calling'&&call&&!bot) note(call.peer,'cancel'); try{ call&&call.close(); }catch(e){} try{ roomPeer&&roomPeer.destroy(); }catch(e){} call=null; roomPeer=null; bot=null; if(remote){ try{ remote.getTracks().forEach(t=>t.stop()); }catch(e){} } remote=null;
     if(local){ local.getTracks().forEach(t=>t.stop()); local=null; } state='idle'; code=''; micOn=camOn=true; render(); }
   function drag(el){ let sx=0, sy=0, ox=0, oy=0, on=false; el.addEventListener('pointerdown',e=>{ if(!e.target.closest('.hd')||e.target.closest('button')) return; on=true; const r=el.getBoundingClientRect(); sx=e.clientX; sy=e.clientY; ox=r.left; oy=r.top; el.setPointerCapture(e.pointerId); });
     el.addEventListener('pointermove',e=>{ if(!on) return; el.style.left=Math.max(0,Math.min(innerWidth-60,ox+e.clientX-sx))+'px'; el.style.top=Math.max(0,Math.min(innerHeight-40,oy+e.clientY-sy))+'px'; el.style.right='auto'; });
