@@ -42,7 +42,7 @@ export default {
       const h=new Headers(r.headers); for(const k in CORS) h.set(k,CORS[k]); return new Response(r.body,{headers:h}); }
     if(url.pathname==='/acct'){ if(req.method==='OPTIONS') return new Response(null,{headers:CORS}); return env.ACCT.get(env.ACCT.idFromName('ACCT')).fetch(req); }
     if(url.pathname==='/site'){ if(req.method==='OPTIONS') return new Response(null,{headers:CORS}); return env.SITE.get(env.SITE.idFromName('SITE')).fetch(req); }
-    if(url.pathname==='/tourney'||url.pathname==='/play'||url.pathname==='/daily'||url.pathname==='/like'||url.pathname==='/vote'||url.pathname==='/namecheck'||url.pathname.startsWith('/feed/')){ if(req.method==='OPTIONS') return new Response(null,{headers:CORS}); const cf=RCF||req.cf||{}, h=new Headers(req.headers); h.set('x-rr-asn',String(cf.asn||'')); h.set('x-rr-aso',String(cf.asOrganization||'').slice(0,80)); h.set('x-rr-cc',String(cf.country||'')); return env.SITE.get(env.SITE.idFromName('SITE')).fetch(new Request(req,{headers:h})); }
+    if(url.pathname==='/tourney'||url.pathname==='/play'||url.pathname==='/daily'||url.pathname==='/like'||url.pathname==='/review'||url.pathname==='/vote'||url.pathname==='/namecheck'||url.pathname.startsWith('/feed/')){ if(req.method==='OPTIONS') return new Response(null,{headers:CORS}); const cf=RCF||req.cf||{}, h=new Headers(req.headers); h.set('x-rr-asn',String(cf.asn||'')); h.set('x-rr-aso',String(cf.asOrganization||'').slice(0,80)); h.set('x-rr-cc',String(cf.country||'')); return env.SITE.get(env.SITE.idFromName('SITE')).fetch(new Request(req,{headers:h})); }
     const lb=url.pathname.match(/^\/lb\/([a-z0-9]{2,16})$/);
     if(lb){ if(req.method==='OPTIONS') return new Response(null,{headers:CORS}); return env.BOARDS.get(env.BOARDS.idFromName(lb[1])).fetch(req); }
     const pm=url.pathname.match(/^\/party\/([A-Z0-9]{4,8})$/);
@@ -529,10 +529,21 @@ export class Site {
       this.sql.exec('INSERT OR REPLACE INTO vote(poll,pid,opt) VALUES(?,?,?)',poll.id,pid,o); return J({ok:true}); }
     /* likes: one per player per game; the count is public */
     if(url.pathname==='/like'){ let m={}; try{ m=await req.json(); }catch(e){}
-      const pid=cleanPid(m.pid), game=String(m.game||'').replace(/[^a-z0-9]/g,'').slice(0,16); if(!game) return J({err:'bad'},400);
+      const pid=cleanPid(m.pid);
+      if(m.op==='many'){ const res={}; for(const g0 of (Array.isArray(m.games)?m.games:[]).slice(0,60)){ const g=String(g0||'').replace(/[^a-z0-9]/g,'').slice(0,16); if(!g) continue; const mp=(await this.s.get('lk:'+g))||{}; res[g]={n:Object.keys(mp).length,me:!!(pid&&mp[pid])}; } return J({ok:true,res}); }
+      const game=String(m.game||'').replace(/[^a-z0-9]/g,'').slice(0,16); if(!game) return J({err:'bad'},400);
       const k='lk:'+game, map=(await this.s.get(k))||{};
       if((m.op==='like'||m.op==='unlike')&&pid.length>=8){ if(m.op==='like') map[pid]=1; else delete map[pid]; await this.s.put(k,map); }
       return J({ok:true,n:Object.keys(map).length,me:!!(pid&&map[pid])}); }
+    /* star reviews: one per player per game (posting again replaces yours) */
+    if(url.pathname==='/review'){ let m={}; try{ m=await req.json(); }catch(e){}
+      const pid=cleanPid(m.pid), gid=g=>String(g||'').replace(/[^a-z0-9]/g,'').slice(0,16);
+      if(m.op==='sum'){ const res={}; for(const g0 of (Array.isArray(m.games)?m.games:[]).slice(0,60)){ const g=gid(g0); if(!g) continue; const L=(await this.s.get('rv:'+g))||[]; res[g]={n:L.length,avg:L.length?L.reduce((a,r)=>a+r.stars,0)/L.length:0}; } return J({ok:true,res}); }
+      const game=gid(m.game); if(!game) return J({err:'bad'},400); const k='rv:'+game; let L=(await this.s.get(k))||[];
+      if(m.op==='add'&&pid.length>=8){ const stars=Math.max(1,Math.min(5,Math.round(+m.stars||0))); if(!(+m.stars>=1)) return J({err:'stars'},400);
+        L=L.filter(r=>r.pid!==pid); L.unshift({pid,name:cleanName(m.name)||'Player',stars,text:String(m.text||'').replace(/[<>]/g,'').slice(0,300),at:Date.now()}); L=L.slice(0,200); await this.s.put(k,L); }
+      if(m.op==='del'&&pid.length>=8){ L=L.filter(r=>r.pid!==pid); await this.s.put(k,L); }
+      return J({ok:true,list:L.slice(0,60).map(r=>({name:r.name,stars:r.stars,text:r.text,at:r.at,me:r.pid===pid}))}); }
     if(url.pathname==='/daily'){ let m={}; try{ m=await req.json(); }catch(e){}
       const pid=cleanPid(m.pid), name=cleanName(m.name), d=this.day(); const c=await this.s.get('chal'); const live=c&&c.day===d?c:null;
       if(m.op==='get'){ const b=await this.board(d), i=b.findIndex(x=>x.pid===pid), pd=await this.prevDay(d), yb=pd?await this.board(pd):[];
@@ -750,6 +761,7 @@ export class Party {
 
 /* ---------- player accounts: your progress on every device, plus crews ----------
    One object for the whole site. A device logs in once with name + PIN and keeps a token, so it never asks again. */
+const BOT_ACCTS=new Set(['testing online']);   /* test bots: always shown online (the site shows a pebble when you video call it) */
 const OWNER_ACCTS=new Set(['aiden']);   /* accounts that are the site owner on every device they log in on */
 export class Acct {
   constructor(state,env){ this.state=state; this.env=env; this.sql=state.storage.sql;
@@ -816,7 +828,7 @@ export class Acct {
     if(m.op==='tradeSend'){ const to=key(m.to); if(!to||to===nm) return J({err:'who'},400); const t=this.sql.exec('SELECT disp FROM acct WHERE nm=?',to).toArray()[0]; if(!t) return J({err:'nouser'},404);
       const open=this.sql.exec("SELECT COUNT(*) AS c FROM trade WHERE frm=? AND st='open'",nm).toArray()[0].c; if(open>=10) return J({err:'many'},429);
       this.sql.exec("INSERT INTO trade(frm,too,give,want,msg,st,claimed,ts) VALUES(?,?,?,?,?,'open',0,?)",nm,to,pack(m.give),pack(m.want),String(m.msg||'').replace(/[<>]/g,'').slice(0,80),now); return J({ok:true,to:t.disp}); }
-    if(m.op==='tradeList'){ const name=n=>{ const r=this.sql.exec('SELECT disp FROM acct WHERE nm=?',n).toArray()[0]; return r?r.disp:n; };
+    if(m.op==='tradeList'){ this.sql.exec('UPDATE acct SET seen=? WHERE nm=?',now,nm); const name=n=>{ const r=this.sql.exec('SELECT disp FROM acct WHERE nm=?',n).toArray()[0]; return r?r.disp:n; };
       const inc=this.sql.exec("SELECT id,frm,give,want,msg,ts FROM trade WHERE too=? AND st='open' ORDER BY id DESC LIMIT 20",nm).toArray().map(r=>({...r,frm:name(r.frm)}));
       const out=this.sql.exec('SELECT id,too,give,want,msg,st,ts FROM trade WHERE frm=? AND claimed=0 ORDER BY id DESC LIMIT 20',nm).toArray().map(r=>({...r,too:name(r.too)})); return J({ok:true,inc,out}); }
     if(m.op==='tradeRespond'){ const r=this.sql.exec("SELECT id FROM trade WHERE id=? AND too=? AND st='open'",+m.id,nm).toArray()[0]; if(!r) return J({err:'gone'},404); this.sql.exec('UPDATE trade SET st=? WHERE id=?',m.accept?'accepted':'declined',+m.id); return J({ok:true}); }
@@ -829,7 +841,12 @@ export class Acct {
       this.sql.exec("INSERT OR IGNORE INTO fr(a,b,st,ts) VALUES(?,?,'pending',?)",nm,to,now); return J({ok:true,now:'sent'}); }
     if(m.op==='friendAccept'){ this.sql.exec("UPDATE fr SET st='ok' WHERE a=? AND b=?",key(m.name),nm); return J({ok:true}); }
     if(m.op==='friendRemove'){ const o=key(m.name); this.sql.exec('DELETE FROM fr WHERE (a=? AND b=?) OR (a=? AND b=?)',nm,o,o,nm); return J({ok:true}); }
-    if(m.op==='friendList'){ const ok=this.sql.exec("SELECT a,b FROM fr WHERE (a=? OR b=?) AND st='ok' LIMIT 200",nm,nm).toArray().map(r=>disp(r.a===nm?r.b:r.a)).filter(Boolean);
+    /* who's online right now (seen in the last 5 minutes); asking also marks you as online */
+    if(m.op==='online'){ this.sql.exec('UPDATE acct SET seen=?, pg=? WHERE nm=?',now,String(m.pg||'').replace(/[^a-z0-9-]/g,'').slice(0,24),nm);
+      const rows=this.sql.exec('SELECT nm,disp,crew,pg,seen FROM acct WHERE seen>? AND nm<>? ORDER BY seen DESC LIMIT 60',now-5*60000,nm).toArray().map(r=>({name:r.disp,crew:r.crew,pg:r.pg||'',seen:r.seen,bot:BOT_ACCTS.has(r.nm)}));
+      for(const b of BOT_ACCTS){ if(b===nm||rows.some(r=>r.name.toLowerCase()===b)) continue; const r=this.sql.exec('SELECT disp,crew FROM acct WHERE nm=?',b).toArray()[0]; if(r) rows.unshift({name:r.disp,crew:r.crew,pg:'hub',seen:now,bot:true}); }
+      return J({ok:true,list:rows,now}); }
+    if(m.op==='friendList'){ this.sql.exec('UPDATE acct SET seen=? WHERE nm=?',now,nm); const ok=this.sql.exec("SELECT a,b FROM fr WHERE (a=? OR b=?) AND st='ok' LIMIT 200",nm,nm).toArray().map(r=>disp(r.a===nm?r.b:r.a)).filter(Boolean);
       const inc=this.sql.exec("SELECT a FROM fr WHERE b=? AND st='pending' LIMIT 50",nm).toArray().map(r=>disp(r.a)).filter(Boolean), out=this.sql.exec("SELECT b FROM fr WHERE a=? AND st='pending' LIMIT 50",nm).toArray().map(r=>disp(r.b)).filter(Boolean);
       const gifts=this.sql.exec("SELECT id,frm,what,msg,ts FROM gift WHERE too=? AND st='open' ORDER BY id DESC LIMIT 30",nm).toArray().map(g=>({...g,frm:(disp(g.frm)||{name:g.frm}).name}));
       return J({ok:true,friends:ok,inc,out,gifts,now}); }
@@ -841,7 +858,7 @@ export class Acct {
     if(m.op==='giftOpen'){ const g=this.sql.exec("SELECT what FROM gift WHERE id=? AND too=? AND st='open'",+m.id,nm).toArray()[0]; if(!g) return J({err:'gone'},404); this.sql.exec("UPDATE gift SET st='opened' WHERE id=?",+m.id); return J({ok:true,what:g.what}); }
     /* public profile: card, gear, records */
     if(m.op==='profile'){ const o=key(m.name), r=this.sql.exec('SELECT disp,crew,pub,seen,pg FROM acct WHERE nm=?',o).toArray()[0]; if(!r) return J({err:'nouser'},404);
-      const fr=this.sql.exec("SELECT st FROM fr WHERE (a=? AND b=?) OR (a=? AND b=?)",nm,o,o,nm).toArray()[0]; return J({ok:true,name:r.disp,crew:r.crew,pub:r.pub||'{}',seen:r.seen||0,pg:r.pg||'',friend:fr?fr.st:'',now}); }
+      const fr=this.sql.exec("SELECT st FROM fr WHERE (a=? AND b=?) OR (a=? AND b=?)",nm,o,o,nm).toArray()[0]; return J({ok:true,bot:BOT_ACCTS.has(o),name:r.disp,crew:r.crew,pub:r.pub||'{}',seen:BOT_ACCTS.has(o)?now:(r.seen||0),pg:r.pg||'',friend:fr?fr.st:'',now}); }
     /* mini-tournaments: up to 8 players, best score on one leaderboard before the clock runs out takes the whole pot */
     const mtRow=id=>this.sql.exec('SELECT * FROM mt WHERE id=?',+id).toArray()[0];
     const mtPl=t=>this.sql.exec('SELECT p.nm AS nm, a.disp AS name, p.score AS score, p.txt AS txt, p.rf AS rf FROM mtp p LEFT JOIN acct a ON a.nm=p.nm WHERE p.id=?',t.id).toArray().sort((x,y)=>(y.score==null?-Infinity:y.score)-(x.score==null?-Infinity:x.score));
