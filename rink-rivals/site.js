@@ -231,3 +231,16 @@ body.rrHasBanner #rrTourBtn{top:48px}
   try{ const c=JSON.parse(ls.get('rrSiteCfgCache')||'null'); if(c&&c.ann) showAnn(c.ann); }catch(e){}
   if(!OFF) RRSITE.refresh().then(st=>{ if(st) try{ ls.set('rrSiteCfgCache',JSON.stringify({ann:st.ann})); }catch(e){} });
 })();
+/* Arcade Rivals updater: checks every 3 minutes (and whenever you come back to the tab) whether a newer version of the
+   site has gone live. If it has, a bar offers a one-tap refresh, so nobody gets stuck on an old version. */
+(function(){ if(window.RRUPD||window.RR_ADMIN||location.protocol==='file:') return; if(/[?&]test\b/.test(location.search)&&!/[?&]updtest\b/.test(location.search)) return; window.RRUPD=1;
+  let base=null, shown=false;
+  const get=()=>fetch('version.json?t='+Date.now(),{cache:'no-store'}).then(r=>r.ok?r.json():null).then(j=>j&&j.v).catch(()=>null);
+  function bar(){ if(!document.body){ addEventListener('DOMContentLoaded',bar); return; } const b=document.createElement('div'); b.id='rrUpd';
+    b.style.cssText='position:fixed;left:50%;top:10px;transform:translateX(-50%);z-index:2147483400;display:flex;gap:10px;align-items:center;background:#0f172a;color:#f8fafc;border:2px solid #22c55e;border-radius:999px;padding:8px 10px 8px 16px;font:700 14px system-ui,sans-serif;box-shadow:0 10px 30px rgba(0,0,0,.5);max-width:94vw';
+    b.innerHTML='<span>🔄 A new update is live!</span><button style="border:0;border-radius:999px;padding:7px 14px;font:800 14px system-ui;background:#22c55e;color:#052e16;cursor:pointer">Refresh</button><button style="border:0;background:none;color:#94a3b8;font:700 13px system-ui;cursor:pointer">Later</button>';
+    const [r,l]=b.querySelectorAll('button'); r.onclick=()=>location.reload(); l.onclick=()=>b.remove(); document.body.appendChild(b); }
+  async function check(){ const v=await get(); if(!v) return; if(base==null){ base=v; return; } if(v!==base&&!shown){ shown=true; bar(); } }
+  check(); setInterval(()=>{ if(!document.hidden) check(); },180000); document.addEventListener('visibilitychange',()=>{ if(!document.hidden) check(); });
+  window.RRUPDATE={ check, get base(){ return base; } };
+})();
