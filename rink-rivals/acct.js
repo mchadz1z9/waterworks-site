@@ -236,5 +236,7 @@
     if(done.length&&A){ for(const t of done) t.told=1; MTS(j); const C=window.RRCOIN; if(C) C.toast('🏆 A mini-tournament you were in has finished — tap 🏆 to see who won','#fbbf24'); const b=document.getElementById('rrMtB'); if(b) b.style.boxShadow='0 0 0 3px #facc15'; }
     if(soon) setTimeout(mtCheckEnded,Math.min(2**31-1,soon.ends-now+1500)); }
   setTimeout(mtMount,3500);
+  /* a link straight to the video-call section: any page with #video (or ?video) at the end */
+  if(/^#video/.test(location.hash)||/[?&]video\b/.test(location.search)) setTimeout(()=>{ if(A){ open('video'); onlineLoad(); } else { msg='Make an account (or log in) first — then the 📹 Video call tab appears at the top.'; open('new'); } },2500);
   window.RRACCT={ crewWar:async()=>{ const r=await api('crewWar',{token:A?A.token:''}); return r&&r.ok?r:null; }, profile, peek:async name=>{ if(!A) return null; const r=await api('profile',{token:A.token,name}); return r&&r.ok?pk(r.pub):null; }, friends:()=>FR.friends, get name(){ return A&&A.name; }, get crew(){ return A&&A.crew; }, open, push:()=>push(true) };
 })();
