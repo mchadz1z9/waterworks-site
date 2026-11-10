@@ -25,8 +25,8 @@ h1{margin:0;font:900 34px/1 system-ui;letter-spacing:.01em}.home{margin-left:aut
 <p class="lede">Call anyone who's online, or jump into the group video chat with everyone. Your camera only turns on when you start or accept a call.</p>
 <div id="need" class="card" hidden><h2>Make an account first</h2><p class="m">Video calls need an Arcade Rivals account, so people know who's calling. Tap the 👤 button (bottom left) to make one — it takes 10 seconds.</p><button class="btn go" id="mkAcct">👤 Make an account</button></div>
 <div class="grid" id="main" hidden>
-  <div class="card"><h2>🟢 Online now</h2><p class="m">Tap 📹 Call to ring someone. Try <b>testing online</b> first — it's a test bot that shows you a pebble.</p><div id="online"><p class="m">Loading…</p></div><p style="margin-top:10px"><button class="btn" id="ref">🔄 Refresh</button> <button class="btn" id="room">🔑 Room-code call</button></p></div>
-  <div class="card"><h2>👥 Group video chat</h2><p class="m" id="gInfo">One big call for everyone on the site — up to 8 people can be in it at once.</p>
+  <div class="card"><h2>🟢 Online now</h2><p class="m">Tap 📹 Call to ring someone, or ✉️ Invite to bring them into the group call. Try <b>testing online</b> first — it's a test bot that shows you a pebble.</p><div id="online"><p class="m">Loading…</p></div><p style="margin-top:10px"><button class="btn" id="ref">🔄 Refresh</button> <button class="btn" id="room">🔑 Room-code call</button></p></div>
+  <div class="card"><h2>👥 Group video chat</h2><p class="m" id="gInfo">One big call for everyone on the site — up to 15 people can be in it at once.</p>
     <div id="gBtns" style="margin-top:8px"><button class="btn go" id="gJoin">📹 Join the group call</button></div><div id="gErr" class="err"></div><div class="vgrid" id="vgrid"></div></div>
 </div></div>
 <script>
@@ -41,7 +41,9 @@ function show(){ A=acct(); $('need').hidden=!!A; $('main').hidden=!A; if(A) load
 $('mkAcct').onclick=()=>{ if(window.RRACCT) RRACCT.open('new'); };
 /* ---- one-to-one calls: the list of who's online ---- */
 async function loadOnline(){ if(!A) return; const r=await api('online',{token:A.token,pg:'call'}); const L=r&&r.list||[];
-  $('online').innerHTML=L.length?L.map(o=>`<div class="row"><span>🟢</span><span class="nm"><a href="#" data-prof="${esc(o.name)}">${esc(o.name)}</a>${o.bot?' <span class="pill">🤖 test bot</span>':''}<div class="pg">${esc(GAMEN(o.pg))}</div></span><button class="btn go" data-call="${esc(o.name)}" data-bot="${o.bot?1:0}">📹 Call</button></div>`).join(''):'<p class="m">Nobody else is online right now. Check back soon!</p>'; }
+  $('online').innerHTML=L.length?L.map(o=>`<div class="row"><span>🟢</span><span class="nm"><a href="#" data-prof="${esc(o.name)}">${esc(o.name)}</a>${o.bot?' <span class="pill">🤖 test bot</span>':''}<div class="pg">${esc(GAMEN(o.pg))}</div></span>${o.bot?'':`<button class="btn" data-inv="${esc(o.name)}" title="Invite to the group call">✉️ Invite</button>`}<button class="btn go" data-call="${esc(o.name)}" data-bot="${o.bot?1:0}">📹 Call</button></div>`).join(''):'<p class="m">Nobody else is online right now. Check back soon!</p>'; }
+document.addEventListener('click',async e=>{ const iv=e.target.closest('[data-inv]'); if(iv){ if(!window.RRVIDEO) return; const nm=iv.dataset.inv; iv.disabled=true; iv.textContent='Sending…';
+    if(!gIn){ await gJoin(); } const err=await RRVIDEO.invite(nm); iv.textContent=err?'✉️ Invite':'✓ Invited'; iv.disabled=!err; if(err) $('gErr').textContent=err; return; } });
 document.addEventListener('click',e=>{ const b=e.target.closest('[data-call]'); if(!b) return; if(window.RRVIDEO) RRVIDEO.callUser(b.dataset.call,{bot:b.dataset.bot==='1'}); else $('gErr').textContent='Video calls are still loading — try again in a second.'; });
 $('ref').onclick=loadOnline; $('room').onclick=()=>{ if(window.RRVIDEO) RRVIDEO.open(); };
 setInterval(()=>{ if(A&&!document.hidden) loadOnline(); },30000);
@@ -54,19 +56,21 @@ function untile(id){ const t=document.querySelector(`.tile[data-id="${id}"]`); i
 function wire(c,name){ gCalls.set(c.peer,c); c.on('stream',s=>tile(c.peer,name,s)); c.on('close',()=>{ gCalls.delete(c.peer); untile(c.peer); count(); }); c.on('error',()=>{ gCalls.delete(c.peer); untile(c.peer); count(); }); count(); }
 function count(){ if(gIn) $('gInfo').textContent=`You're in the group call · ${1+gCalls.size} ${gCalls.size?'people':'person (waiting for others to join)'}`; }
 async function gJoin(){ $('gErr').textContent=''; if(!A) return; $('gJoin').disabled=true;
-  try{ await loadPeer(); gLocal=await navigator.mediaDevices.getUserMedia({video:{width:{ideal:480},height:{ideal:360}},audio:{echoCancellation:true,noiseSuppression:true}}); }
+  try{ await loadPeer(); gLocal=await navigator.mediaDevices.getUserMedia({video:{width:{ideal:320},height:{ideal:240},frameRate:{ideal:15,max:20}},audio:{echoCancellation:true,noiseSuppression:true}}); }
   catch(e){ $('gJoin').disabled=false; $('gErr').textContent=e&&e.message==='peerjs'?'Could not load the video-call library.':'Camera blocked — allow camera and microphone for this site, then try again.'; return; }
   gPeer=new Peer('arcriv-g-'+Math.random().toString(36).slice(2,12)); gPeer.on('error',e=>{ if(e.type==='peer-unavailable') return; if(!gIn) { $('gErr').textContent='Could not reach the call server — check your internet.'; gLeave(); } });
   gPeer.on('call',c=>{ if(!gIn){ c.close(); return; } c.answer(gLocal); wire(c,String((c.metadata&&c.metadata.from)||'Player').slice(0,20)); });
-  gPeer.on('open',async id=>{ const r=await api('vgJoin',{token:A.token,pid:id}); if(r.err==='full'){ $('gErr').textContent='The group call is full (8 people). Try again in a bit.'; gLeave(); return; }
+  gPeer.on('open',async id=>{ const r=await api('vgJoin',{token:A.token,pid:id}); if(r.err==='full'){ $('gErr').textContent='The group call is full (15 people). Try again in a bit.'; gLeave(); return; }
     gIn=true; tile('me',A.name,gLocal,true); $('gBtns').innerHTML='<button class="btn" id="gMic">🎙️ Mute</button> <button class="btn" id="gCam">📷 Camera off</button> <button class="btn red" id="gLeave">Leave the group call</button>';
     $('gLeave').onclick=gLeave; $('gMic').onclick=e=>{ const t=gLocal.getAudioTracks()[0]; if(t){ t.enabled=!t.enabled; e.target.textContent=t.enabled?'🎙️ Mute':'🔇 Unmute'; } }; $('gCam').onclick=e=>{ const t=gLocal.getVideoTracks()[0]; if(t){ t.enabled=!t.enabled; e.target.textContent=t.enabled?'📷 Camera off':'📷 Camera on'; } };
     /* the newcomer rings everyone already in the call; they answer by themselves */
     for(const m of r.list||[]){ if(gCalls.has(m.pid)) continue; const c=gPeer.call(m.pid,gLocal,{metadata:{from:A.name,group:1}}); if(c) wire(c,m.name); }
     count(); gT=setInterval(async()=>{ const q=await api('vgJoin',{token:A.token,pid:gPeer.id}); const live=new Set((q.list||[]).map(x=>x.pid)); for(const [pid,c] of gCalls) if(!live.has(pid)){ try{ c.close(); }catch(e){} gCalls.delete(pid); untile(pid); } count(); },10000); }); }
 function gLeave(){ clearInterval(gT); gIn=false; for(const c of gCalls.values()){ try{ c.close(); }catch(e){} } gCalls.clear(); if(gPeer){ try{ api('vgLeave',{token:A.token,pid:gPeer.id}); gPeer.destroy(); }catch(e){} gPeer=null; }
-  if(gLocal){ gLocal.getTracks().forEach(t=>t.stop()); gLocal=null; } $('vgrid').innerHTML=''; $('gBtns').innerHTML='<button class="btn go" id="gJoin">📹 Join the group call</button>'; $('gJoin').onclick=gJoin; $('gInfo').textContent='One big call for everyone on the site — up to 8 people can be in it at once.'; showGroupCount(); }
-async function showGroupCount(){ if(!A||gIn) return; const r=await api('vgList',{token:A.token}); const n=(r.list||[]).length; if(!gIn) $('gInfo').textContent=n?`${n} ${n===1?'person is':'people are'} in the group call right now: ${(r.list||[]).map(x=>x.name).join(', ')}`:'Nobody is in the group call yet — be the first! Up to 8 people can join.'; }
+  if(gLocal){ gLocal.getTracks().forEach(t=>t.stop()); gLocal=null; } $('vgrid').innerHTML=''; $('gBtns').innerHTML='<button class="btn go" id="gJoin">📹 Join the group call</button>'; $('gJoin').onclick=gJoin; $('gInfo').textContent='One big call for everyone on the site — up to 15 people can be in it at once.'; showGroupCount(); }
+async function showGroupCount(){ if(!A||gIn) return; const r=await api('vgList',{token:A.token}); const n=(r.list||[]).length; if(!gIn) $('gInfo').textContent=n?`${n} ${n===1?'person is':'people are'} in the group call right now: ${(r.list||[]).map(x=>x.name).join(', ')}`:'Nobody is in the group call yet — be the first! Up to 15 people can join.'; }
+window.RRGROUP={ join:()=>{ if(!gIn) gJoin(); } };
+if(/^#join/.test(location.hash)) setTimeout(()=>{ if(acct()&&!gIn) gJoin(); },1500);
 $('gJoin').onclick=gJoin; addEventListener('pagehide',()=>{ if(gIn&&gPeer){ try{ fetch(SERVER+'/acct',{method:'POST',keepalive:true,body:JSON.stringify({op:'vgLeave',token:A.token,pid:gPeer.id})}); }catch(e){} } });
 setInterval(()=>{ if(!document.hidden) showGroupCount(); },20000);
 show(); showGroupCount(); addEventListener('storage',e=>{ if(e.key==='rrAcct') show(); }); setInterval(()=>{ if(!A&&acct()) show(); },3000);

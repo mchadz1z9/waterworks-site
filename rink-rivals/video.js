@@ -46,7 +46,17 @@
   async function listen(){ const a=acct(); if(!a||mePeer) return; try{ await loadPeer(); }catch(e){ return; }
     mePeer=new Peer(uid(a.name)); mePeer.on('error',e=>{ if(e.type==='unavailable-id'||e.type==='invalid-id'){ try{ mePeer.destroy(); }catch(x){} mePeer=null; } else if(call&&state!=='live'){ const m=why(e); end(); fail(m); } });
     mePeer.on('call',c=>{ if(call||state!=='idle'){ try{ c.close(); }catch(e){} return; } incoming(c); });
+    mePeer.on('connection',cn=>{ cn.on('data',d=>{ if(d&&d.t==='ginvite') groupInvite(String(d.from||'Someone').slice(0,20)); setTimeout(()=>{ try{ cn.close(); }catch(e){} },500); }); });
     mePeer.on('disconnected',()=>{ try{ mePeer.reconnect(); }catch(e){} }); }
+  /* invites to the group video chat arrive straight through the call connection */
+  function groupInvite(from){ css(); const el=document.createElement('div'); el.id='rrRing'; el.style.top='90px';
+    el.innerHTML=`<div style="font-size:30px">👥</div><b style="font-size:17px">${esc(from)}</b> invited you to the group video call<div class="row"><button class="b go" data-g="yes">Join</button><button class="b" data-g="no">No thanks</button></div>`;
+    document.body.appendChild(el); const t=setTimeout(()=>el.remove(),45000); try{ (window.RRCOIN&&RRCOIN.toast)&&RRCOIN.toast(`👥 ${from} invited you to the group video call`,'#4ade80'); }catch(e){}
+    el.addEventListener('click',e=>{ const b=e.target.closest('[data-g]'); if(!b) return; clearTimeout(t); el.remove(); if(b.dataset.g==='yes'){ if(PAGE==='call'&&window.RRGROUP) RRGROUP.join(); else location.href='call#join'; } }); }
+  async function invite(name){ const a=acct(); if(!a) return 'Sign in first.'; try{ await loadPeer(); }catch(e){ return 'Could not load the video-call library.'; } const p=await anyPeer();
+    return new Promise(res=>{ let done=false; const fin=v=>{ if(!done){ done=true; res(v); } }; const c=p.connect(uid(name),{reliable:true});
+      if(!c) return fin(`Couldn't reach ${name}.`); c.on('open',()=>{ c.send({t:'ginvite',from:a.name}); setTimeout(()=>{ try{ c.close(); }catch(e){} },1500); fin(''); });
+      c.on('error',()=>fin(`Couldn't reach ${name}.`)); setTimeout(()=>fin(`${name} isn't reachable right now (they may have just left).`),7000); }); }
   async function anyPeer(){ if(mePeer&&mePeer.open) return mePeer; if(mePeer&&!mePeer.destroyed) return new Promise(r=>{ mePeer.once('open',()=>r(mePeer)); setTimeout(()=>r(mePeer),4000); });
     await loadPeer(); mePeer=new Peer(); mePeer.on('error',e=>{ if(call&&state!=='live'){ const m=why(e); end(); fail(m); } }); mePeer.on('call',c=>{ if(call||state!=='idle'){ c.close(); return; } incoming(c); }); return new Promise(r=>mePeer.once('open',()=>r(mePeer))); }
   function incoming(c){ css(); const from=String((c.metadata&&c.metadata.from)||'Someone').slice(0,20); if(ring) ring.remove(); ring=document.createElement('div'); ring.id='rrRing';
@@ -96,5 +106,5 @@
   addEventListener('pagehide',()=>{ if(state!=='idle') end(); try{ mePeer&&mePeer.destroy(); }catch(e){} });
   /* start listening a few seconds after the page loads, so games load first */
   setTimeout(()=>{ if(!document.hidden) listen(); else addEventListener('visibilitychange',function v(){ if(!document.hidden){ removeEventListener('visibilitychange',v); listen(); } }); },5000);
-  window.RRVIDEO={ open, callUser, end, listen, get state(){ return state; } };
+  window.RRVIDEO={ open, callUser, end, listen, invite, get state(){ return state; } };
 })();

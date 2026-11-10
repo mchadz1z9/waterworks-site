@@ -851,7 +851,7 @@ export class Acct {
     if(m.op==='vgJoin'||m.op==='vgLeave'){ const pid=String(m.pid||'').replace(/[^\w-]/g,'').slice(0,40); this.sql.exec('DELETE FROM vg WHERE ts<?',now-30000);
       if(m.op==='vgLeave'){ this.sql.exec('DELETE FROM vg WHERE pid=? OR nm=?',pid,nm); return J({ok:true}); }
       const n=this.sql.exec('SELECT COUNT(*) AS c FROM vg WHERE pid<>?',pid).toArray()[0].c; const inIt=this.sql.exec('SELECT 1 FROM vg WHERE pid=?',pid).toArray()[0];
-      if(!inIt&&n>=8) return J({err:'full',list:[]},409);
+      if(!inIt&&n>=15) return J({err:'full',list:[]},409);
       if(pid){ this.sql.exec('DELETE FROM vg WHERE nm=? AND pid<>?',nm,pid); const d=this.sql.exec('SELECT disp FROM acct WHERE nm=?',nm).toArray()[0]; this.sql.exec('INSERT OR REPLACE INTO vg(pid,nm,disp,ts) VALUES(?,?,?,?)',pid,nm,d?d.disp:nm,now); this.sql.exec('UPDATE acct SET seen=? WHERE nm=?',now,nm); }
       return J({ok:true,list:this.sql.exec('SELECT pid,disp AS name FROM vg WHERE pid<>? ORDER BY ts',pid).toArray()}); }
     if(m.op==='vgList'){ this.sql.exec('DELETE FROM vg WHERE ts<?',now-30000); return J({ok:true,list:this.sql.exec('SELECT disp AS name FROM vg ORDER BY ts').toArray()}); }
