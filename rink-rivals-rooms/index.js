@@ -774,6 +774,7 @@ export class Acct {
     this.sql.exec('CREATE TABLE IF NOT EXISTS gift(id INTEGER PRIMARY KEY AUTOINCREMENT, frm TEXT, too TEXT, what TEXT, msg TEXT, st TEXT, ts INTEGER)'); this.sql.exec('CREATE INDEX IF NOT EXISTS ix_gift_too ON gift(too,st)');
     this.sql.exec('CREATE TABLE IF NOT EXISTS mt(id INTEGER PRIMARY KEY AUTOINCREMENT, game TEXT, b TEXT, bn TEXT, mode TEXT, host TEXT, fee INTEGER, ends INTEGER, claimed INTEGER DEFAULT 0, ts INTEGER)'); this.sql.exec('CREATE INDEX IF NOT EXISTS ix_mt ON mt(game,ends)');
     this.sql.exec('CREATE TABLE IF NOT EXISTS mtp(id INTEGER, nm TEXT, score REAL, txt TEXT, rf INTEGER DEFAULT 0, PRIMARY KEY(id,nm))');
+    this.sql.exec('CREATE TABLE IF NOT EXISTS vg(pid TEXT PRIMARY KEY, nm TEXT, disp TEXT, ts INTEGER)');
     this.sql.exec('CREATE TABLE IF NOT EXISTS cwpts(wk INTEGER, nm TEXT, crew TEXT, pts INTEGER, PRIMARY KEY(wk,nm))'); this.sql.exec('CREATE INDEX IF NOT EXISTS ix_cw ON cwpts(wk,crew)');
     this.sql.exec('CREATE INDEX IF NOT EXISTS ix_trade_too ON trade(too,st)'); this.sql.exec('CREATE INDEX IF NOT EXISTS ix_trade_frm ON trade(frm,claimed)');
     this.sql.exec('CREATE INDEX IF NOT EXISTS ix_acct_crew ON acct(crew)'); this.sql.exec('CREATE INDEX IF NOT EXISTS ix_tok_nm ON tok(nm)'); }
@@ -846,6 +847,14 @@ export class Acct {
       const rows=this.sql.exec('SELECT nm,disp,crew,pg,seen FROM acct WHERE seen>? AND nm<>? ORDER BY seen DESC LIMIT 60',now-5*60000,nm).toArray().map(r=>({name:r.disp,crew:r.crew,pg:r.pg||'',seen:r.seen,bot:BOT_ACCTS.has(r.nm)}));
       for(const b of BOT_ACCTS){ if(b===nm||rows.some(r=>r.name.toLowerCase()===b)) continue; const r=this.sql.exec('SELECT disp,crew FROM acct WHERE nm=?',b).toArray()[0]; if(r) rows.unshift({name:r.disp,crew:r.crew,pg:'hub',seen:now,bot:true}); }
       return J({ok:true,list:rows,now}); }
+    /* the group video chat: who's in it (each browser checks in every 10 s; gone after 30 s) */
+    if(m.op==='vgJoin'||m.op==='vgLeave'){ const pid=String(m.pid||'').replace(/[^\w-]/g,'').slice(0,40); this.sql.exec('DELETE FROM vg WHERE ts<?',now-30000);
+      if(m.op==='vgLeave'){ this.sql.exec('DELETE FROM vg WHERE pid=? OR nm=?',pid,nm); return J({ok:true}); }
+      const n=this.sql.exec('SELECT COUNT(*) AS c FROM vg WHERE pid<>?',pid).toArray()[0].c; const inIt=this.sql.exec('SELECT 1 FROM vg WHERE pid=?',pid).toArray()[0];
+      if(!inIt&&n>=8) return J({err:'full',list:[]},409);
+      if(pid){ this.sql.exec('DELETE FROM vg WHERE nm=? AND pid<>?',nm,pid); const d=this.sql.exec('SELECT disp FROM acct WHERE nm=?',nm).toArray()[0]; this.sql.exec('INSERT OR REPLACE INTO vg(pid,nm,disp,ts) VALUES(?,?,?,?)',pid,nm,d?d.disp:nm,now); this.sql.exec('UPDATE acct SET seen=? WHERE nm=?',now,nm); }
+      return J({ok:true,list:this.sql.exec('SELECT pid,disp AS name FROM vg WHERE pid<>? ORDER BY ts',pid).toArray()}); }
+    if(m.op==='vgList'){ this.sql.exec('DELETE FROM vg WHERE ts<?',now-30000); return J({ok:true,list:this.sql.exec('SELECT disp AS name FROM vg ORDER BY ts').toArray()}); }
     if(m.op==='friendList'){ this.sql.exec('UPDATE acct SET seen=? WHERE nm=?',now,nm); const ok=this.sql.exec("SELECT a,b FROM fr WHERE (a=? OR b=?) AND st='ok' LIMIT 200",nm,nm).toArray().map(r=>disp(r.a===nm?r.b:r.a)).filter(Boolean);
       const inc=this.sql.exec("SELECT a FROM fr WHERE b=? AND st='pending' LIMIT 50",nm).toArray().map(r=>disp(r.a)).filter(Boolean), out=this.sql.exec("SELECT b FROM fr WHERE a=? AND st='pending' LIMIT 50",nm).toArray().map(r=>disp(r.b)).filter(Boolean);
       const gifts=this.sql.exec("SELECT id,frm,what,msg,ts FROM gift WHERE too=? AND st='open' ORDER BY id DESC LIMIT 30",nm).toArray().map(g=>({...g,frm:(disp(g.frm)||{name:g.frm}).name}));

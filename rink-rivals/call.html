@@ -1,0 +1,77 @@
+<!doctype html><html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
+<title>Arcade Rivals - Video Call</title>
+<meta name="description" content="Video call anyone who's online on Arcade Rivals, or jump into the group video chat with everyone.">
+<style>
+:root{--bg:#060a16;--card:#0f172a;--line:#24324f;--ink:#eef2fb;--mut:#94a3b8;--go:#22c55e}
+*{box-sizing:border-box}body{margin:0;background:radial-gradient(900px 500px at 0 -10%,#14532d 0,transparent 60%),radial-gradient(900px 600px at 100% 0,#1e3a8a 0,transparent 60%),var(--bg);color:var(--ink);font-family:system-ui,-apple-system,'Segoe UI',sans-serif;min-height:100vh}
+a{color:inherit}.wrap{max-width:1100px;margin:0 auto;padding:18px 16px 90px}
+header{display:flex;align-items:center;gap:12px;flex-wrap:wrap}
+h1{margin:0;font:900 34px/1 system-ui;letter-spacing:.01em}.home{margin-left:auto;text-decoration:none;font:800 14px system-ui;background:#1e293b;border-radius:999px;padding:9px 16px}
+.lede{color:var(--mut);margin:8px 0 16px}
+.grid{display:grid;grid-template-columns:1fr 1.6fr;gap:16px}@media(max-width:820px){.grid{grid-template-columns:1fr}}
+.card{background:var(--card);border:1px solid var(--line);border-radius:18px;padding:16px}
+.card h2{margin:0 0 4px;font:900 22px system-ui}.m{color:var(--mut);font-size:14px}
+.row{display:flex;align-items:center;gap:10px;padding:9px 0;border-top:1px solid #1e293b}.row:first-of-type{border-top:0}
+.row .nm{flex:1;min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;font-weight:700}.row .pg{color:var(--mut);font-size:12px;font-weight:600}
+.btn{border:0;border-radius:12px;padding:10px 14px;font:800 14px system-ui;cursor:pointer;background:#1e293b;color:#fff}
+.btn.go{background:linear-gradient(90deg,#22c55e,#16a34a);color:#052e16}.btn.red{background:#dc2626}.btn:disabled{opacity:.5;cursor:default}
+.vgrid{display:grid;grid-template-columns:repeat(auto-fill,minmax(200px,1fr));gap:8px;margin-top:12px}
+.tile{position:relative;background:#000;border-radius:12px;overflow:hidden;aspect-ratio:4/3}.tile video{width:100%;height:100%;object-fit:cover;display:block}
+.tile .lbl{position:absolute;left:8px;bottom:8px;background:rgba(0,0,0,.6);border-radius:999px;padding:3px 10px;font:700 12px system-ui}
+.tile.me video{transform:scaleX(-1)}
+.err{color:#fca5a5;margin-top:8px;font-size:14px}.pill{display:inline-block;background:#14532d;color:#bbf7d0;border-radius:999px;padding:3px 10px;font:800 12px system-ui}
+</style></head><body><div class="wrap">
+<header><h1>📹 Video call</h1><a class="home" href="./">🏆 Arcade Rivals home</a></header>
+<p class="lede">Call anyone who's online, or jump into the group video chat with everyone. Your camera only turns on when you start or accept a call.</p>
+<div id="need" class="card" hidden><h2>Make an account first</h2><p class="m">Video calls need an Arcade Rivals account, so people know who's calling. Tap the 👤 button (bottom left) to make one — it takes 10 seconds.</p><button class="btn go" id="mkAcct">👤 Make an account</button></div>
+<div class="grid" id="main" hidden>
+  <div class="card"><h2>🟢 Online now</h2><p class="m">Tap 📹 Call to ring someone. Try <b>testing online</b> first — it's a test bot that shows you a pebble.</p><div id="online"><p class="m">Loading…</p></div><p style="margin-top:10px"><button class="btn" id="ref">🔄 Refresh</button> <button class="btn" id="room">🔑 Room-code call</button></p></div>
+  <div class="card"><h2>👥 Group video chat</h2><p class="m" id="gInfo">One big call for everyone on the site — up to 8 people can be in it at once.</p>
+    <div id="gBtns" style="margin-top:8px"><button class="btn go" id="gJoin">📹 Join the group call</button></div><div id="gErr" class="err"></div><div class="vgrid" id="vgrid"></div></div>
+</div></div>
+<script>
+(()=>{
+const $=id=>document.getElementById(id), esc=s=>String(s).replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
+const SERVER=(()=>{ try{ if(localStorage.getItem('rrSrv')==='relay') return location.origin+'/rr'; }catch(e){} return 'https://rink-rivals-rooms.mitchellchad2026.workers.dev'; })();
+const api=(op,b)=>fetch(SERVER+'/acct',{method:'POST',body:JSON.stringify({op,...(b||{})})}).then(r=>r.json()).catch(()=>({err:'net'}));
+const acct=()=>{ try{ const a=JSON.parse(localStorage.getItem('rrAcct')||'null'); return a&&a.token?a:null; }catch(e){ return null; } };
+const GAMEN=id=>({hub:'🌐 Hub',city:'🏙️ Rival City',poker:'🃏 Poker',call:'📹 Video call',index:'🏠 Home','sports-arcade':'🏟️ Arcade',mx:'🏍 Motocross'}[id]||id||'');
+let A=acct();
+function show(){ A=acct(); $('need').hidden=!!A; $('main').hidden=!A; if(A) loadOnline(); }
+$('mkAcct').onclick=()=>{ if(window.RRACCT) RRACCT.open('new'); };
+/* ---- one-to-one calls: the list of who's online ---- */
+async function loadOnline(){ if(!A) return; const r=await api('online',{token:A.token,pg:'call'}); const L=r&&r.list||[];
+  $('online').innerHTML=L.length?L.map(o=>`<div class="row"><span>🟢</span><span class="nm"><a href="#" data-prof="${esc(o.name)}">${esc(o.name)}</a>${o.bot?' <span class="pill">🤖 test bot</span>':''}<div class="pg">${esc(GAMEN(o.pg))}</div></span><button class="btn go" data-call="${esc(o.name)}" data-bot="${o.bot?1:0}">📹 Call</button></div>`).join(''):'<p class="m">Nobody else is online right now. Check back soon!</p>'; }
+document.addEventListener('click',e=>{ const b=e.target.closest('[data-call]'); if(!b) return; if(window.RRVIDEO) RRVIDEO.callUser(b.dataset.call,{bot:b.dataset.bot==='1'}); else $('gErr').textContent='Video calls are still loading — try again in a second.'; });
+$('ref').onclick=loadOnline; $('room').onclick=()=>{ if(window.RRVIDEO) RRVIDEO.open(); };
+setInterval(()=>{ if(A&&!document.hidden) loadOnline(); },30000);
+/* ---- the group video chat: everyone calls everyone (works best with up to 8 people) ---- */
+let gPeer=null, gLocal=null, gIn=false, gT=null; const gCalls=new Map();
+function loadPeer(){ return new Promise((ok,bad)=>{ if(window.Peer) return ok(); const s=document.createElement('script'); s.src='https://unpkg.com/peerjs@1.5.4/dist/peerjs.min.js'; s.onload=()=>ok(); s.onerror=()=>bad(new Error('peerjs')); document.head.appendChild(s); }); }
+function tile(id,name,stream,me){ let t=document.querySelector(`.tile[data-id="${id}"]`); if(!t){ t=document.createElement('div'); t.className='tile'+(me?' me':''); t.dataset.id=id; t.innerHTML=`<video autoplay playsinline ${me?'muted':''}></video><span class="lbl">${esc(name)}${me?' (you)':''}</span>`; $('vgrid').appendChild(t); }
+  const v=t.querySelector('video'); if(v.srcObject!==stream){ v.srcObject=stream; v.play&&v.play().catch(()=>{}); } }
+function untile(id){ const t=document.querySelector(`.tile[data-id="${id}"]`); if(t) t.remove(); }
+function wire(c,name){ gCalls.set(c.peer,c); c.on('stream',s=>tile(c.peer,name,s)); c.on('close',()=>{ gCalls.delete(c.peer); untile(c.peer); count(); }); c.on('error',()=>{ gCalls.delete(c.peer); untile(c.peer); count(); }); count(); }
+function count(){ if(gIn) $('gInfo').textContent=`You're in the group call · ${1+gCalls.size} ${gCalls.size?'people':'person (waiting for others to join)'}`; }
+async function gJoin(){ $('gErr').textContent=''; if(!A) return; $('gJoin').disabled=true;
+  try{ await loadPeer(); gLocal=await navigator.mediaDevices.getUserMedia({video:{width:{ideal:480},height:{ideal:360}},audio:{echoCancellation:true,noiseSuppression:true}}); }
+  catch(e){ $('gJoin').disabled=false; $('gErr').textContent=e&&e.message==='peerjs'?'Could not load the video-call library.':'Camera blocked — allow camera and microphone for this site, then try again.'; return; }
+  gPeer=new Peer('arcriv-g-'+Math.random().toString(36).slice(2,12)); gPeer.on('error',e=>{ if(e.type==='peer-unavailable') return; if(!gIn) { $('gErr').textContent='Could not reach the call server — check your internet.'; gLeave(); } });
+  gPeer.on('call',c=>{ if(!gIn){ c.close(); return; } c.answer(gLocal); wire(c,String((c.metadata&&c.metadata.from)||'Player').slice(0,20)); });
+  gPeer.on('open',async id=>{ const r=await api('vgJoin',{token:A.token,pid:id}); if(r.err==='full'){ $('gErr').textContent='The group call is full (8 people). Try again in a bit.'; gLeave(); return; }
+    gIn=true; tile('me',A.name,gLocal,true); $('gBtns').innerHTML='<button class="btn" id="gMic">🎙️ Mute</button> <button class="btn" id="gCam">📷 Camera off</button> <button class="btn red" id="gLeave">Leave the group call</button>';
+    $('gLeave').onclick=gLeave; $('gMic').onclick=e=>{ const t=gLocal.getAudioTracks()[0]; if(t){ t.enabled=!t.enabled; e.target.textContent=t.enabled?'🎙️ Mute':'🔇 Unmute'; } }; $('gCam').onclick=e=>{ const t=gLocal.getVideoTracks()[0]; if(t){ t.enabled=!t.enabled; e.target.textContent=t.enabled?'📷 Camera off':'📷 Camera on'; } };
+    /* the newcomer rings everyone already in the call; they answer by themselves */
+    for(const m of r.list||[]){ if(gCalls.has(m.pid)) continue; const c=gPeer.call(m.pid,gLocal,{metadata:{from:A.name,group:1}}); if(c) wire(c,m.name); }
+    count(); gT=setInterval(async()=>{ const q=await api('vgJoin',{token:A.token,pid:gPeer.id}); const live=new Set((q.list||[]).map(x=>x.pid)); for(const [pid,c] of gCalls) if(!live.has(pid)){ try{ c.close(); }catch(e){} gCalls.delete(pid); untile(pid); } count(); },10000); }); }
+function gLeave(){ clearInterval(gT); gIn=false; for(const c of gCalls.values()){ try{ c.close(); }catch(e){} } gCalls.clear(); if(gPeer){ try{ api('vgLeave',{token:A.token,pid:gPeer.id}); gPeer.destroy(); }catch(e){} gPeer=null; }
+  if(gLocal){ gLocal.getTracks().forEach(t=>t.stop()); gLocal=null; } $('vgrid').innerHTML=''; $('gBtns').innerHTML='<button class="btn go" id="gJoin">📹 Join the group call</button>'; $('gJoin').onclick=gJoin; $('gInfo').textContent='One big call for everyone on the site — up to 8 people can be in it at once.'; showGroupCount(); }
+async function showGroupCount(){ if(!A||gIn) return; const r=await api('vgList',{token:A.token}); const n=(r.list||[]).length; if(!gIn) $('gInfo').textContent=n?`${n} ${n===1?'person is':'people are'} in the group call right now: ${(r.list||[]).map(x=>x.name).join(', ')}`:'Nobody is in the group call yet — be the first! Up to 8 people can join.'; }
+$('gJoin').onclick=gJoin; addEventListener('pagehide',()=>{ if(gIn&&gPeer){ try{ fetch(SERVER+'/acct',{method:'POST',keepalive:true,body:JSON.stringify({op:'vgLeave',token:A.token,pid:gPeer.id})}); }catch(e){} } });
+setInterval(()=>{ if(!document.hidden) showGroupCount(); },20000);
+show(); showGroupCount(); addEventListener('storage',e=>{ if(e.key==='rrAcct') show(); }); setInterval(()=>{ if(!A&&acct()) show(); },3000);
+})();
+</script>
+<script src="site.js"></script>
+<script src="chat.js"></script>
+</body></html>
