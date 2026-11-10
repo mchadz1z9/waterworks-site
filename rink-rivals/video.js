@@ -111,6 +111,6 @@
   addEventListener('pageshow',e=>{ if(e.persisted) setTimeout(listen,1000); });
   setInterval(()=>{ if(document.hidden||state!=='idle') return; if(!mePeer||mePeer.destroyed) listen(); else if(mePeer.disconnected){ try{ mePeer.reconnect(); }catch(e){} } },60000);
   /* start listening a few seconds after the page loads, so games load first */
-  setTimeout(()=>{ if(!document.hidden) listen(); else addEventListener('visibilitychange',function v(){ if(!document.hidden){ removeEventListener('visibilitychange',v); listen(); } }); },5000);
+  setTimeout(()=>{ if(!document.hidden) listen(); else addEventListener('visibilitychange',function v(){ if(!document.hidden){ removeEventListener('visibilitychange',v); listen(); } }); },2500);
   window.RRVIDEO={ open, callUser, end, listen, invite, get state(){ return state; }, get line(){ return mePeer?{id:mePeer.id,mine:!!mePeer.__mine,open:mePeer.open,disc:mePeer.disconnected,dead:mePeer.destroyed}:null; } };
 })();
