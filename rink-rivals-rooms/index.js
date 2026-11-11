@@ -844,6 +844,11 @@ export class Acct {
     if(m.op==='friendRemove'){ const o=key(m.name); this.sql.exec('DELETE FROM fr WHERE (a=? AND b=?) OR (a=? AND b=?)',nm,o,o,nm); return J({ok:true}); }
     /* who's online right now (seen in the last 5 minutes); asking also marks you as online */
     /* live view (spectate): the owner grants, the watched player checks — the video itself is peer-to-peer (no Cloudflare bandwidth) */
+    /* owner resets a player's PIN to a temporary one (the old PIN can never be read — it's a one-way hash) */
+    if(m.op==='adminSetPin'){ if(!OWNER_ACCTS.has(nm)) return J({err:'no'},403); const t=key(m.name); if(!t) return J({err:'who'},400); if(!pinOk(m.pin)) return J({err:'pin'},400);
+      const r=this.sql.exec('SELECT nm FROM acct WHERE nm=?',t).toArray()[0]; if(!r) return J({err:'nouser'},404);
+      const salt=[...crypto.getRandomValues(new Uint8Array(16))].map(v=>v.toString(16).padStart(2,'0')).join(''), ph=await pbkdf(String(m.pin),salt);
+      this.sql.exec('UPDATE acct SET salt=?, ph=?, fails=0, lockt=0 WHERE nm=?',salt,ph,t); return J({ok:true}); }
     if(m.op==='watchGrant'){ if(!OWNER_ACCTS.has(nm)) return J({err:'no'},403); const t=key(m.name); if(!t) return J({err:'who'},400);
       await this.s.put('wg:'+t,{by:nm,exp:now+2*3600000}); return J({ok:true}); }
     if(m.op==='watchStop'){ if(!OWNER_ACCTS.has(nm)) return J({err:'no'},403); await this.s.delete('wg:'+key(m.name)); return J({ok:true}); }

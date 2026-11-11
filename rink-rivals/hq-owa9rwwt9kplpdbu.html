@@ -390,6 +390,13 @@ body{background:radial-gradient(1200px 600px at 10% -10%,#1e1b4b 0,transparent 6
     <div class="row" style="margin-top:6px"><input id="fxAward" maxlength="240" placeholder="Award, e.g. 🏆 Player of the week!"><button class="go" data-fx="award" style="flex:0 0 auto">🏆 Give award</button></div>
     <div class="msg" id="fxMsg"></div>
   </div>
+  <div class="card" data-grp="players">
+    <h2>🔑 Reset a player's PIN</h2>
+    <p class="mut">For when someone forgets their PIN. Old PINs can never be read (they're scrambled one-way), so this sets a new temporary one you give them — they can change it after logging in. Needs your owner account logged in on this device.</p>
+    <div class="row"><input id="rpName" maxlength="20" placeholder="Account name, e.g. DADDY GAVIN" style="flex:1"><input id="rpPin" maxlength="8" placeholder="New PIN (4–8 digits)" inputmode="numeric" style="flex:0 0 160px"></div>
+    <div class="row" style="margin-top:6px"><button class="ghost" id="rpRnd" style="flex:0 0 auto">🎲 Random PIN</button><button class="go" id="rpGo" style="flex:0 0 auto">Set new PIN</button></div>
+    <div class="msg" id="rpMsg"></div>
+  </div>
   <div class="card" data-grp="fun">
     <h2>👁️ Live view — watch a player's game</h2>
     <p class="mut">See what a player is doing right now. The video comes straight from their device to yours (peer-to-peer), so it barely touches the server. They see a small "👁️ an admin is watching" tag. Needs your owner account logged in on this device.</p>
@@ -982,7 +989,12 @@ async function loadStats(){ try{ const s=await api('/admin/chat','stats');
     $('lvWho').textContent='👁️ '+name; $('lvWho').dataset.n=name; $('lvStage').style.display='block';
     cur=await RRVIDEO.watch(name,{admin:true},s=>{ $('lvVid').srcObject=s; $('lvMsg').textContent=''; },err=>{ if(err){ $('lvMsg').textContent=err; } if(cur){ cur=null; } }); }
   document.addEventListener('click',e=>{ const b=e.target.closest('[data-lv]'); if(b){ startWatch(b.dataset.lv); return; } });
-  function bind(){ const r=$('lvRef'), s=$('lvStop'); if(r) r.onclick=refresh; if(s) s.onclick=stop; }
+  async function resetPin(){ const a=ownAcct(); if(!a){ $('rpMsg').textContent='Log into your owner account (👤, bottom-left) on this device first.'; return; }
+    const name=$('rpName').value.trim(), pin=$('rpPin').value.trim(); if(!name){ $('rpMsg').textContent='Type the account name.'; return; } if(!/^\d{4,8}$/.test(pin)){ $('rpMsg').textContent='PIN must be 4–8 digits.'; return; }
+    $('rpMsg').textContent='Setting…'; const r=await acall('adminSetPin',{token:a.token,name,pin});
+    $('rpMsg').textContent=r&&r.ok?`✅ Done. Tell ${name} their new PIN is ${pin} — they log in with it and can change it in the account menu.`:r&&r.err==='nouser'?'No account with that name.':r&&r.err==='no'?'Only the owner account can do this.':'Could not set it — try again.'; }
+  function bind(){ const r=$('lvRef'), s=$('lvStop'); if(r) r.onclick=refresh; if(s) s.onclick=stop;
+    const rg=$('rpGo'), rr=$('rpRnd'); if(rg) rg.onclick=resetPin; if(rr) rr.onclick=()=>{ $('rpPin').value=String(Math.floor(100000+Math.random()*900000)); }; }
   if(document.readyState==='loading') addEventListener('DOMContentLoaded',bind); else bind();
 })();
 </script>
