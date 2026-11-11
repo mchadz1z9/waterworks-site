@@ -843,6 +843,11 @@ export class Acct {
     if(m.op==='friendAccept'){ this.sql.exec("UPDATE fr SET st='ok' WHERE a=? AND b=?",key(m.name),nm); return J({ok:true}); }
     if(m.op==='friendRemove'){ const o=key(m.name); this.sql.exec('DELETE FROM fr WHERE (a=? AND b=?) OR (a=? AND b=?)',nm,o,o,nm); return J({ok:true}); }
     /* who's online right now (seen in the last 5 minutes); asking also marks you as online */
+    /* live view (spectate): the owner grants, the watched player checks — the video itself is peer-to-peer (no Cloudflare bandwidth) */
+    if(m.op==='watchGrant'){ if(!OWNER_ACCTS.has(nm)) return J({err:'no'},403); const t=key(m.name); if(!t) return J({err:'who'},400);
+      await this.s.put('wg:'+t,{by:nm,exp:now+2*3600000}); return J({ok:true}); }
+    if(m.op==='watchStop'){ if(!OWNER_ACCTS.has(nm)) return J({err:'no'},403); await this.s.delete('wg:'+key(m.name)); return J({ok:true}); }
+    if(m.op==='watchChk'){ const g=await this.s.get('wg:'+nm); const ok=!!(g&&g.exp>now); return J({ok,by:ok?g.by:''}); }
     if(m.op==='online'){ this.sql.exec('UPDATE acct SET seen=?, pg=? WHERE nm=?',now,String(m.pg||'').replace(/[^a-z0-9-]/g,'').slice(0,24),nm);
       const rows=this.sql.exec('SELECT nm,disp,crew,pg,seen FROM acct WHERE seen>? AND nm<>? ORDER BY seen DESC LIMIT 60',now-3*60000,nm).toArray().map(r=>({name:r.disp,crew:r.crew,pg:r.pg||'',seen:r.seen,bot:BOT_ACCTS.has(r.nm)}));
       for(const b of BOT_ACCTS){ if(b===nm||rows.some(r=>r.name.toLowerCase()===b)) continue; const r=this.sql.exec('SELECT disp,crew FROM acct WHERE nm=?',b).toArray()[0]; if(r) rows.unshift({name:r.disp,crew:r.crew,pg:'hub',seen:now,bot:true}); }

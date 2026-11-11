@@ -60,7 +60,14 @@ function show(){ A=acct(); $('need').hidden=!!A; $('main').hidden=!A; if(A) load
 $('mkAcct').onclick=()=>{ if(window.RRACCT) RRACCT.open('new'); };
 /* ---- one-to-one calls: the list of who's online ---- */
 async function loadOnline(){ if(!A) return; const r=await api('online',{token:A.token,pg:'call'}); const L=r&&r.list||[];
-  $('online').innerHTML=L.length?L.map(o=>`<div class="row"><span>🟢</span><span class="nm"><a href="#" data-prof="${esc(o.name)}">${esc(o.name)}</a>${o.bot?' <span class="pill">🤖 test bot</span>':''}<div class="pg">${esc(GAMEN(o.pg))}</div></span>${o.bot?'':`<button class="btn" data-inv="${esc(o.name)}" title="Invite to the group call">✉️ Invite</button>`}<button class="btn go" data-call="${esc(o.name)}" data-bot="${o.bot?1:0}">📹 Call</button></div>`).join(''):'<p class="m">Nobody else is online right now. Check back soon!</p>'; }
+  $('online').innerHTML=L.length?L.map(o=>`<div class="row"><span>🟢</span><span class="nm"><a href="#" data-prof="${esc(o.name)}">${esc(o.name)}</a>${o.bot?' <span class="pill">🤖 test bot</span>':''}<div class="pg">${esc(GAMEN(o.pg))}</div></span>${o.bot?'':`<button class="btn" data-inv="${esc(o.name)}" title="Invite to the group call">✉️ Invite</button><button class="btn" data-watch="${esc(o.name)}" title="Watch their game (they must allow it)">👁️ Watch</button>`}<button class="btn go" data-call="${esc(o.name)}" data-bot="${o.bot?1:0}">📹 Call</button></div>`).join(''):'<p class="m">Nobody else is online right now. Check back soon!</p>'; }
+let spectate=null;
+document.addEventListener('click',e=>{ const w=e.target.closest('[data-watch]'); if(!w) return; if(!window.RRVIDEO||!RRVIDEO.watch){ $('gErr').textContent='Still loading — try again in a second.'; return; } const nm=w.dataset.watch;
+  if(spectate){ try{ spectate.stop(); }catch(x){} spectate=null; }
+  openGame('about:blank','👁️ Watching '+nm); $('playTitle').textContent='👁️ Watching '+nm+'…'; const f=$('playFrame'); f.style.display='none';
+  let vid=document.getElementById('spectVid'); if(!vid){ vid=document.createElement('video'); vid.id='spectVid'; vid.autoplay=true; vid.playsInline=true; vid.style.cssText='flex:1;width:100%;background:#000;object-fit:contain'; $('playArea').appendChild(vid); }
+  vid.style.display='block';
+  RRVIDEO.watch(nm,{},s=>{ vid.srcObject=s; $('playTitle').textContent='👁️ Watching '+nm; },err=>{ if(err){ $('playTitle').textContent=nm+' — '+err; } }).then(h=>{ spectate=h; }); });
 document.addEventListener('click',async e=>{ const iv=e.target.closest('[data-inv]'); if(iv){ if(!window.RRVIDEO) return; const nm=iv.dataset.inv; iv.disabled=true; iv.textContent='Sending…';
     if(!gIn){ await gJoin(); } const err=await RRVIDEO.invite(nm); iv.textContent=err?'✉️ Invite':'✓ Invited'; iv.disabled=!err; if(err) $('gErr').textContent=err; return; } });
 document.addEventListener('click',e=>{ const b=e.target.closest('[data-call]'); if(!b) return; if(gIn&&b.dataset.bot!=='1'){ $('gErr').textContent='Leave the group call first to call someone one-on-one (your camera is in use).'; return; } if(window.RRVIDEO) RRVIDEO.callUser(b.dataset.call,{bot:b.dataset.bot==='1'}); else $('gErr').textContent='Video calls are still loading — try again in a second.'; });
@@ -110,7 +117,7 @@ setInterval(()=>{ if(!document.hidden) showGroupCount(); },20000);
 function picker(){ const box=$('gpick'); if(!box) return; const items=[['poker','🃏 Poker'],['chess','♟️ Chess'],['landlord','🏢 Landlord'],['blackjack','🃏 Blackjack'],['hub','🌐 Hub'],['city','🏙️ Rival City'],['mx','🏍 Motocross'],['kart','🏎️ Kart'],['bowling','🎳 Bowling'],['pool','🎱 Pool'],['sa-airhockey','🏒 Air Hockey'],['sports-arcade','🏟️ Sports Arcade'],['./','🎮 All games']];
   box.innerHTML=items.map(([id,lbl])=>`<button data-game="${esc(id)}">${esc(lbl)}</button>`).join(''); }
 function openGame(page,label){ const f=$('playFrame'); f.src=page; $('playTitle').textContent=label||'Game'; document.body.classList.add('playing'); $('vgrid').classList.remove('hid'); $('vToggle').textContent='🙈 Hide faces'; }
-function closeGame(){ document.body.classList.remove('playing'); $('playFrame').src='about:blank'; }
+function closeGame(){ document.body.classList.remove('playing'); $('playFrame').src='about:blank'; $('playFrame').style.display=''; if(spectate){ try{ spectate.stop(); }catch(e){} spectate=null; } const v=document.getElementById('spectVid'); if(v){ try{ v.srcObject=null; }catch(e){} v.style.display='none'; } }
 document.addEventListener('click',e=>{ const g=e.target.closest('[data-game]'); if(g){ const b=g; openGame(b.dataset.game,b.textContent.trim()); return; } });
 $('playClose').onclick=closeGame;
 $('playFs').onclick=()=>{ const el=$('playArea'); try{ (document.fullscreenElement?document.exitFullscreen():(el.requestFullscreen||el.webkitRequestFullscreen).call(el)); }catch(x){} };

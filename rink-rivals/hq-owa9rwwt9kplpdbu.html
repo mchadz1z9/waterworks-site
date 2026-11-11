@@ -391,6 +391,14 @@ body{background:radial-gradient(1200px 600px at 10% -10%,#1e1b4b 0,transparent 6
     <div class="msg" id="fxMsg"></div>
   </div>
   <div class="card" data-grp="fun">
+    <h2>👁️ Live view — watch a player's game</h2>
+    <p class="mut">See what a player is doing right now. The video comes straight from their device to yours (peer-to-peer), so it barely touches the server. They see a small "👁️ an admin is watching" tag. Needs your owner account logged in on this device.</p>
+    <div class="row" style="margin-top:6px"><button class="ghost" id="lvRef">🔄 Who's online</button><span class="mut" id="lvMsg"></span></div>
+    <div id="lvOn" class="row" style="gap:6px;max-height:150px;overflow:auto;margin-top:6px"><span class="mut">Tap “Who's online”.</span></div>
+    <div id="lvStage" style="display:none;margin-top:10px"><div class="row" style="justify-content:space-between"><b id="lvWho">—</b><button class="del" id="lvStop" style="flex:0 0 auto">✕ Stop watching</button></div>
+      <video id="lvVid" autoplay playsinline muted style="width:100%;max-height:60vh;background:#000;border-radius:12px;margin-top:6px"></video></div>
+  </div>
+  <div class="card" data-grp="fun">
     <h2>❓ Ask a question</h2>
     <p class="mut">Goes to whoever you picked in 🎭 Fun effects (one online player, the ticked players, or everyone). A question pops up on their screen with a box to type an answer — answers show up here.</p>
     <div class="row"><input id="askQ" maxlength="240" placeholder="e.g. What game should I add next?"><button class="go" id="askGo" style="flex:0 0 auto">Ask</button></div>
@@ -957,5 +965,25 @@ async function loadStats(){ try{ const s=await api('/admin/chat','stats');
 /* auto sign-in: stored password, or this device if it was granted access */
 (async()=>{ if(KEY){ try{ const st=await authGet(); if(st){ showApp(st); return; } KEY=''; sessionStorage.removeItem('rrAdminTok'); }catch(e){} }
   if(PID){ try{ const st=await authGet(); if(st){ showApp(st); } }catch(e){} } })();
+</script>
+<script src="video.js"></script>
+<script>
+/* Live view: list online players and watch one. Uses the owner account (rrAcct) on this device; video is peer-to-peer. */
+(function(){ const $=id=>document.getElementById(id), esc=s=>String(s).replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
+  const ownAcct=()=>{ try{ const a=JSON.parse(localStorage.getItem('rrAcct')||'null'); return a&&a.token?a:null; }catch(e){ return null; } };
+  const acall=(op,b)=>fetch(SERVER+'/acct',{method:'POST',body:JSON.stringify({op,...(b||{})})}).then(r=>r.json()).catch(()=>({err:'net'}));
+  let cur=null;
+  async function refresh(){ const a=ownAcct(); if(!a){ $('lvMsg').textContent='Log into your owner account (👤, bottom-left) on this device first.'; return; } $('lvMsg').textContent='';
+    const r=await acall('online',{token:a.token,pg:'admin'}); const L=(r&&r.list||[]).filter(o=>!o.bot);
+    $('lvOn').innerHTML=L.length?L.map(o=>`<button class="ghost" data-lv="${esc(o.name)}" style="flex:0 0 auto">🟢 ${esc(o.name)} <span class="mut">${esc(o.pg||'')}</span></button>`).join(''):'<span class="mut">Nobody else is online right now.</span>'; }
+  function stop(){ const n=$('lvWho').dataset.n, a=ownAcct(); if(cur){ try{ cur.stop&&cur.stop(); }catch(e){} cur=null; } if(a&&n){ acall('watchStop',{token:a.token,name:n}); } $('lvWho').dataset.n=''; $('lvStage').style.display='none'; try{ $('lvVid').srcObject=null; }catch(e){} }
+  async function startWatch(name){ const a=ownAcct(); if(!a){ $('lvMsg').textContent='Log into your owner account first.'; return; } if(!window.RRVIDEO||!RRVIDEO.watch){ $('lvMsg').textContent='Live view is still loading — try again in a second.'; return; }
+    stop(); $('lvMsg').textContent='Connecting to '+name+'…'; const g=await acall('watchGrant',{token:a.token,name}); if(g&&g.err==='no'){ $('lvMsg').textContent='Only the owner account can use live view.'; return; }
+    $('lvWho').textContent='👁️ '+name; $('lvWho').dataset.n=name; $('lvStage').style.display='block';
+    cur=await RRVIDEO.watch(name,{admin:true},s=>{ $('lvVid').srcObject=s; $('lvMsg').textContent=''; },err=>{ if(err){ $('lvMsg').textContent=err; } if(cur){ cur=null; } }); }
+  document.addEventListener('click',e=>{ const b=e.target.closest('[data-lv]'); if(b){ startWatch(b.dataset.lv); return; } });
+  function bind(){ const r=$('lvRef'), s=$('lvStop'); if(r) r.onclick=refresh; if(s) s.onclick=stop; }
+  if(document.readyState==='loading') addEventListener('DOMContentLoaded',bind); else bind();
+})();
 </script>
 </body></html>

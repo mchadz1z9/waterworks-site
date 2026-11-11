@@ -6,7 +6,7 @@
   /* don't run the call line inside an embedded game (same account would clash with the page that embeds it) */
   try{ if(window.top!==window.self) return; }catch(e){ return; }
   const PAGE=(location.pathname.split('/').pop()||'').replace(/\.html$/,'');
-  if(PAGE==='hq-owa9rwwt9kplpdbu'||window.RR_ADMIN) return;
+  const ADMIN=(PAGE==='hq-owa9rwwt9kplpdbu'||!!window.RR_ADMIN);
   const ROOM='arcriv-vc-', USER='arcrivu-', ABC='ABCDEFGHJKMNPQRSTUVWXYZ23456789';
   /* relay servers: STUN finds your address, TURN relays the video when two networks can't connect directly
      (phone data ↔ home wifi, strict school/office routers). Without these, calls freeze or never connect. */
@@ -64,7 +64,7 @@
   /* little messages between the two browsers: declined, busy, cancelled, group invites */
   let ringPeer=null, ringClose=null;
   function note(peerId,t){ const p=mePeer; if(!p||!p.open||!peerId) return; try{ const cn=p.connect(peerId,{reliable:true}); if(cn) cn.on('open',()=>{ try{ cn.send({t}); }catch(e){} setTimeout(()=>{ try{ cn.close(); }catch(e){} },1500); }); }catch(e){} }
-  function hook(p){ p.on('call',c=>{ if(busy()){ note(c.peer,'busy'); setTimeout(()=>{ try{ c.close(); }catch(e){} },300); return; } incoming(c); });
+  function hook(p){ p.on('call',c=>{ const md=c.metadata||{}; if(md.watch){ handleWatch(c,md); return; } if(busy()){ note(c.peer,'busy'); setTimeout(()=>{ try{ c.close(); }catch(e){} },300); return; } incoming(c); });
     p.on('connection',cn=>{ cn.on('data',d=>{ const t=d&&d.t;
       if(t==='ginvite') groupInvite(String(d.from||'Someone').slice(0,20));
       else if((t==='decline'||t==='busy')&&state==='calling'&&call&&cn.peer===call.peer){ const nm=who||'They'; end(); fail(t==='busy'?`${nm} is busy right now — try again in a bit.`:`${nm} declined the call.`); }
@@ -127,9 +127,45 @@
     el.addEventListener('pointermove',e=>{ if(!on) return; el.style.left=Math.max(0,Math.min(innerWidth-60,ox+e.clientX-sx))+'px'; el.style.top=Math.max(0,Math.min(innerHeight-40,oy+e.clientY-sy))+'px'; el.style.right='auto'; });
     el.addEventListener('pointerup',()=>{ on=false; }); }
   addEventListener('pagehide',()=>{ if(state!=='idle') end(); try{ mePeer&&mePeer.destroy(); }catch(e){} mePeer=null; });
-  addEventListener('pageshow',e=>{ if(e.persisted) setTimeout(listen,1000); });
-  setInterval(()=>{ if(document.hidden||state!=='idle') return; if(!mePeer||mePeer.destroyed) listen(); else if(mePeer.disconnected){ try{ mePeer.reconnect(); }catch(e){} } },60000);
+  if(!ADMIN){ addEventListener('pageshow',e=>{ if(e.persisted) setTimeout(listen,1000); });
+  setInterval(()=>{ if(document.hidden||state!=='idle') return; if(!mePeer||mePeer.destroyed) listen(); else if(mePeer.disconnected){ try{ mePeer.reconnect(); }catch(e){} } },60000); }
+  /* ===== live view (spectate): stream this page's game canvas to a watcher, peer-to-peer ===== */
+  const SERVER=(()=>{ try{ if(localStorage.getItem('rrSrv')==='relay') return location.origin+'/rr'; }catch(e){} return 'https://rink-rivals-rooms.mitchellchad2026.workers.dev'; })();
+  const api=(op,b)=>fetch(SERVER+'/acct',{method:'POST',body:JSON.stringify({op,...(b||{})})}).then(r=>r.json()).catch(()=>({err:'net'}));
+  let watchStream=null, watchTimer=null, watchers=0, watchChip=null;
+  function captureGame(){ if(watchStream) return watchStream;
+    const off=document.createElement('canvas'); off.width=960; off.height=540; const x=off.getContext('2d');
+    function pick(){ return [...document.querySelectorAll('canvas')].filter(c=>{ try{ const r=c.getBoundingClientRect(); return c.width>40&&c.height>40&&r.width>40&&r.height>40&&getComputedStyle(c).visibility!=='hidden'&&getComputedStyle(c).display!=='none'; }catch(e){ return false; } }); }
+    function frame(){ const cvs=pick(); x.fillStyle='#0a0f1e'; x.fillRect(0,0,off.width,off.height);
+      if(!cvs.length){ x.fillStyle='#64748b'; x.font='600 26px system-ui'; x.textAlign='center'; x.fillText('On a menu (no game drawing right now)',480,270); return; }
+      /* union box of all game canvases, in page pixels, mapped into the 960×540 frame */
+      let x0=1e9,y0=1e9,x1=-1e9,y1=-1e9; const boxes=cvs.map(c=>{ const r=c.getBoundingClientRect(); x0=Math.min(x0,r.left); y0=Math.min(y0,r.top); x1=Math.max(x1,r.right); y1=Math.max(y1,r.bottom); return [c,r]; });
+      const bw=Math.max(1,x1-x0), bh=Math.max(1,y1-y0), sc=Math.min(off.width/bw,off.height/bh), ox=(off.width-bw*sc)/2, oy=(off.height-bh*sc)/2;
+      for(const [c,r] of boxes){ try{ x.drawImage(c,ox+(r.left-x0)*sc,oy+(r.top-y0)*sc,r.width*sc,r.height*sc); }catch(e){} } }
+    frame(); watchTimer=setInterval(frame,80);   /* ~12 fps — plenty to spectate, light on the device */
+    watchStream=off.captureStream(12); return watchStream; }
+  function stopCaptureIfIdle(){ if(watchers<=0){ clearInterval(watchTimer); watchTimer=null; if(watchStream){ try{ watchStream.getTracks().forEach(t=>t.stop()); }catch(e){} watchStream=null; } if(watchChip){ watchChip.remove(); watchChip=null; } } }
+  function showWatchChip(label){ if(watchChip) return; css(); watchChip=document.createElement('div'); watchChip.id='rrWatchChip';
+    watchChip.style.cssText='position:fixed;left:50%;top:6px;transform:translateX(-50%);z-index:2147482400;background:rgba(220,38,38,.92);color:#fff;border-radius:999px;padding:5px 12px;font:800 12px system-ui;box-shadow:0 4px 14px rgba(0,0,0,.4);pointer-events:none';
+    watchChip.textContent='👁️ '+label; document.body.appendChild(watchChip); }
+  function serveWatch(c,label){ let s; try{ s=captureGame(); }catch(e){ try{ c.close(); }catch(x){} return; } if(!s){ try{ c.close(); }catch(x){} return; }
+    watchers++; showWatchChip(label); try{ c.answer(s); }catch(e){} c.on('close',()=>{ watchers=Math.max(0,watchers-1); stopCaptureIfIdle(); }); c.on('error',()=>{ watchers=Math.max(0,watchers-1); stopCaptureIfIdle(); }); }
+  async function handleWatch(c,md){ const a=acct(); if(!a){ try{ c.close(); }catch(e){} return; }
+    if(md.watch==='admin'){ const r=await api('watchChk',{token:a.token}); if(!r||!r.ok){ try{ c.close(); }catch(e){} return; } serveWatch(c,(md.by||'An admin')+' is watching'); return; }
+    /* a player wants to spectate — ask first */
+    css(); const el=document.createElement('div'); el.id='rrRing'; el.style.top='90px'; const from=String(md.from||'Someone').slice(0,20);
+    el.innerHTML=`<div style="font-size:30px">👁️</div><b style="font-size:17px">${esc(from)}</b> wants to watch your game<div class="row"><button class="b go" data-w="yes">Allow</button><button class="b red" data-w="no">No</button></div>`;
+    document.body.appendChild(el); let done=false; const t=setTimeout(()=>{ if(!done){ done=true; el.remove(); try{ c.close(); }catch(e){} } },25000);
+    el.addEventListener('click',e=>{ const b=e.target.closest('[data-w]'); if(!b||done) return; done=true; clearTimeout(t); el.remove(); if(b.dataset.w==='yes') serveWatch(c,from+' is watching'); else { try{ c.close(); }catch(x){} } }); }
+  /* the watcher side: start watching someone (admin page / call page). returns {stop}. onStream(stream), onEnd() */
+  async function watch(name,opts,onStream,onEnd){ const a=acct(); if(!a) { onEnd&&onEnd('Sign in first.'); return null; } try{ await loadPeer(); }catch(e){ onEnd&&onEnd('Could not load the library.'); return null; }
+    const p=await anyPeer(); let dummy; try{ dummy=new MediaStream(); }catch(e){ dummy=null; }
+    const c=p.call(uid(name),dummy||captureGame(),{metadata:{watch:(opts&&opts.admin)?'admin':'peer',from:a.name,by:a.name}});
+    if(!c){ onEnd&&onEnd(`Couldn't reach ${name}.`); return null; } let ended=false; const stop=()=>{ if(ended) return; ended=true; try{ c.close(); }catch(e){} };
+    const to=setTimeout(()=>{ if(!ended){ stop(); onEnd&&onEnd(`${name} isn't watchable right now (not online, or not in a game).`); } },15000);
+    c.on('stream',s=>{ clearTimeout(to); onStream&&onStream(s); }); c.on('close',()=>{ clearTimeout(to); if(!ended){ ended=true; onEnd&&onEnd(); } }); c.on('error',()=>{ clearTimeout(to); if(!ended){ ended=true; onEnd&&onEnd(`${name} isn't watchable right now.`); } });
+    return {stop}; }
   /* start listening a few seconds after the page loads, so games load first */
-  setTimeout(()=>{ if(!document.hidden) listen(); else addEventListener('visibilitychange',function v(){ if(!document.hidden){ removeEventListener('visibilitychange',v); listen(); } }); },2500);
-  window.RRVIDEO={ open, callUser, end, listen, invite, get state(){ return state; }, get line(){ return mePeer?{id:mePeer.id,mine:!!mePeer.__mine,open:mePeer.open,disc:mePeer.disconnected,dead:mePeer.destroyed}:null; } };
+  if(!ADMIN) setTimeout(()=>{ if(!document.hidden) listen(); else addEventListener('visibilitychange',function v(){ if(!document.hidden){ removeEventListener('visibilitychange',v); listen(); } }); },2500);
+  window.RRVIDEO={ open, callUser, end, listen, invite, watch, get state(){ return state; }, get line(){ return mePeer?{id:mePeer.id,mine:!!mePeer.__mine,open:mePeer.open,disc:mePeer.disconnected,dead:mePeer.destroyed}:null; } };
 })();
