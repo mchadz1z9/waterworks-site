@@ -37,7 +37,7 @@
   const ownerDevice=()=>{ if(ls.get('rrOwner')==='1'||/\bowner\b/i.test(String(ls.get('rrMyTag')||''))) return true; try{ return sessionStorage.getItem('rrRole')==='full'; }catch(e){ return false; } };
   if(!A&&ownerDevice()&&ls.get('rrPid')) setTimeout(async()=>{ if(A) return; const r=await api('ownerAuto',{pid:ls.get('rrPid')}); if(!r.ok) return; mergeIn(r.data); ls.set('rrOwner','1'); A={name:r.name,token:r.token,ver:r.ver,crew:r.crew,h:''}; saveA(); await push(true); toast(`👑 Signed in as ${r.name} automatically`); try{ if(!sessionStorage.getItem('rrOwnRl')){ sessionStorage.setItem('rrOwnRl','1'); setTimeout(()=>location.reload(),900); } }catch(e){} },1200);
   if(A) setTimeout(()=>api('ping',{token:A.token,pg:PAGE||'index'}),4000);
-  if(A){ setTimeout(()=>pull().then(()=>push()),1500); setInterval(()=>push(),90000); addEventListener('visibilitychange',()=>{ if(document.hidden) push(false,true); }); addEventListener('pagehide',()=>push(false,true)); }
+  if(A){ setTimeout(()=>pull().then(()=>push()),1500); setInterval(()=>push(),180000); addEventListener('visibilitychange',()=>{ if(document.hidden) push(false,true); }); addEventListener('pagehide',()=>push(false,true)); }
   /* ---- the account window ---- */
   let pill=null, box=null, tab='acct', msg='', crewCache=null, topCache=null, warCache=null;
   function css(){ if(document.getElementById('rrAcctCss')) return; const s=document.createElement('style'); s.id='rrAcctCss'; s.textContent=`
@@ -85,7 +85,7 @@
       if(t.st==='accepted'){ C().tradeGive(w.items||[],w.coins||0); toast(`🔄 ${t.too} accepted your trade! You got ${listTxt(w)}`); } else { C().tradeGive(g.items||[],g.coins||0); toast(t.st==='declined'?`🔄 ${t.too} said no — your items are back`:'🔄 Trade cancelled — items back'); }
       done.push(t.id); ls.set('rrTradeDone',JSON.stringify(done.slice(-200))); api('tradeClaim',{token:A.token,id:t.id}); }
     TR.out=TR.out.filter(t=>t.st==='open'); if(TR.inc.length&&pill) pill.textContent=`👤 ${A.name}${A.crew?` [${A.crew}]`:''} 🔄${TR.inc.length}`; if(box&&tab==='trade') renderBox(); }
-  if(A){ setTimeout(tradePoll,6000); setInterval(()=>{ if(!document.hidden) tradePoll(); },60000); }
+  if(A){ setTimeout(tradePoll,6000); setInterval(()=>{ if(!document.hidden) tradePoll(); },150000); }
   function tradeHTML(){ if(!C()) return '<p>Loading…</p>'; const T=C().tradeable(), mine=T.filter(i=>i.own), RC=['#e2e8f0','#94a3b8','#38bdf8','#c084fc','#fbbf24'];
     let h=`<h3 style="margin:6px 0">📥 Offers for you</h3>`+(TR.inc.length?TR.inc.map(t=>`<div style="background:#111c33;border:1px solid #273449;border-radius:12px;padding:10px;margin:6px 0"><b>${esc(t.frm)}</b> offers <b style="color:#4ade80">${esc(listTxt(pk(t.give)))}</b><br>and wants <b style="color:#fbbf24">${esc(listTxt(pk(t.want)))}</b>${t.msg?`<div class="m">“${esc(t.msg)}”</div>`:''}<div style="margin-top:6px"><button data-acc="${t.id}">✓ Accept</button> <button class="g" data-dec="${t.id}">✕ Decline</button></div></div>`).join(''):'<p>No offers right now.</p>');
     h+=TR.out.length?`<h3 style="margin:10px 0 4px">📤 Waiting for an answer</h3>`+TR.out.map(t=>`<div class="row"><span>To ${esc(t.too)}: ${esc(listTxt(pk(t.give)))} → ${esc(listTxt(pk(t.want)))}</span><button class="g" data-can="${t.id}">Cancel</button></div>`).join(''):'';
@@ -125,7 +125,7 @@
     return {own:own?1:0,lvl:Cn&&Cn.level!=null?Cn.level:0,life:Math.round(n('rrCoinLife')),str:Math.round(n('rrStrength')),reb:n('rrRebirths'),ach:ach.filter(a=>a.got).length,achN:ach.length,crates:(J('rrCoinStat',{}).crates||0),gear,items,rec,pet:pet&&{ic:pet.ic,n:pet.n,lv:pet.lv||0},room}; }
   const FR={friends:[],inc:[],out:[],gifts:[],now:Date.now()};
   async function frPoll(){ if(!A) return; const r=await api('friendList',{token:A.token}); if(!r.ok) return; Object.assign(FR,r); if(box&&tab==='friends') renderBox(); if(pill&&(r.inc.length||r.gifts.length)&&!pill.textContent.includes('🎁')) pill.textContent+=r.gifts.length?' 🎁':' 👥'; }
-  if(A){ setTimeout(frPoll,7000); setInterval(()=>{ if(!document.hidden) frPoll(); },120000); }
+  if(A){ setTimeout(frPoll,7000); setInterval(()=>{ if(!document.hidden) frPoll(); },300000); }
   const online=f=>FR.now-(f.seen||0)<4*60000;
   function friendsHTML(){ let h='';
     if(FR.gifts.length) h+=`<h3 style="margin:6px 0">🎁 Gifts for you</h3>`+FR.gifts.map(g=>{ const w=pk(g.what); return `<div class="row"><span>From <b>${esc(g.frm)}</b>${g.msg?` — “${esc(g.msg)}”`:''}</span><button data-gopen="${g.id}">🎁 Open</button></div>`; }).join('');

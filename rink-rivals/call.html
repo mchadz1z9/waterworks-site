@@ -46,7 +46,7 @@ body.playing .tile{aspect-ratio:4/3}
   <div class="card" style="grid-column:1/-1"><h2>🎮 Play a game while you talk</h2><p class="m">Pick a game and it opens right here — your call keeps going the whole time, so you can play together and see each other.</p>
     <div class="gpick" id="gpick"></div></div>
 </div></div>
-<div id="playArea"><div id="playBar"><b id="playTitle">Game</b><button class="btn" id="playFs">⛶ Full screen</button><button class="btn red" id="playClose">✕ Close game</button></div><iframe id="playFrame" title="Game" allow="fullscreen; autoplay; gamepad"></iframe></div>
+<div id="playArea"><div id="playBar"><button class="btn go" id="playBack">🏠 Back to games</button><b id="playTitle">Game</b><button class="btn" id="playHome">🎮 All games</button><button class="btn" id="playFs">⛶ Full screen</button><button class="btn red" id="playClose">✕ Close</button></div><iframe id="playFrame" title="Game" allow="fullscreen; autoplay; gamepad"></iframe></div>
 <button id="vToggle">🙈 Hide faces</button>
 <script>
 (()=>{
@@ -72,7 +72,7 @@ document.addEventListener('click',async e=>{ const iv=e.target.closest('[data-in
     if(!gIn){ await gJoin(); } const err=await RRVIDEO.invite(nm); iv.textContent=err?'✉️ Invite':'✓ Invited'; iv.disabled=!err; if(err) $('gErr').textContent=err; return; } });
 document.addEventListener('click',e=>{ const b=e.target.closest('[data-call]'); if(!b) return; if(gIn&&b.dataset.bot!=='1'){ $('gErr').textContent='Leave the group call first to call someone one-on-one (your camera is in use).'; return; } if(window.RRVIDEO) RRVIDEO.callUser(b.dataset.call,{bot:b.dataset.bot==='1'}); else $('gErr').textContent='Video calls are still loading — try again in a second.'; });
 $('ref').onclick=loadOnline; $('room').onclick=()=>{ if(window.RRVIDEO) RRVIDEO.open(); };
-setInterval(()=>{ if(A&&!document.hidden) loadOnline(); },30000);
+setInterval(()=>{ if(A&&!document.hidden) loadOnline(); },60000);
 /* ---- the group video chat: everyone calls everyone (works best with up to 8 people) ---- */
 let gPeer=null, gLocal=null, gIn=false, gT=null; const gCalls=new Map();
 /* relay servers so the group call connects and stays smooth across different networks */
@@ -98,7 +98,7 @@ async function gJoin(){ $('gErr').textContent=''; if(!A) return; $('gJoin').disa
     count(); gT=setInterval(async()=>{ const q=await api('vgJoin',{token:A.token,pid:gPeer.id}); const live=new Set((q.list||[]).map(x=>x.pid)); for(const [pid,c] of gCalls) if(!live.has(pid)){ try{ c.close(); }catch(e){} gCalls.delete(pid); untile(pid); }
       /* anyone in the call we aren't connected to (e.g. two people joined at the same moment): the one with the smaller id rings */
       for(const m of q.list||[]) if(!gCalls.has(m.pid)&&gPeer&&gPeer.id<m.pid){ const c=gPeer.call(m.pid,gLocal,{metadata:{from:A.name,group:1}}); if(c) wire(c,m.name); }
-      count(); },10000); }); }
+      count(); },15000); }); }
 function gLeave(){ clearInterval(gT); gIn=false; for(const c of gCalls.values()){ try{ c.close(); }catch(e){} } gCalls.clear(); if(gPeer){ try{ api('vgLeave',{token:A.token,pid:gPeer.id}); gPeer.destroy(); }catch(e){} gPeer=null; }
   if(gLocal){ gLocal.getTracks().forEach(t=>t.stop()); gLocal=null; } $('vgrid').innerHTML=''; $('gBtns').innerHTML='<button class="btn go" id="gJoin">📹 Join the group call</button>'; $('gJoin').onclick=gJoin; $('gInfo').textContent='One big call for everyone on the site — up to 15 people can be in it at once.'; showGroupCount(); }
 async function showGroupCount(){ if(!A||gIn) return; const r=await api('vgList',{token:A.token}); const n=(r.list||[]).length; if(!gIn) $('gInfo').textContent=n?`${n} ${n===1?'person is':'people are'} in the group call right now: ${(r.list||[]).map(x=>x.name).join(', ')}`:'Nobody is in the group call yet — be the first! Up to 15 people can join.'; }
@@ -112,7 +112,7 @@ async function invPanel(){ const box=$('invBox'); if(box.innerHTML){ box.innerHT
 window.RRGROUP={ join:()=>{ if(!gIn) gJoin(); }, get inCall(){ return gIn; } };
 if(/^#join/.test(location.hash)) setTimeout(()=>{ if(acct()&&!gIn) gJoin(); },1500);
 $('gJoin').onclick=gJoin; addEventListener('pagehide',()=>{ if(gIn&&gPeer){ try{ fetch(SERVER+'/acct',{method:'POST',keepalive:true,body:JSON.stringify({op:'vgLeave',token:A.token,pid:gPeer.id})}); }catch(e){} } });
-setInterval(()=>{ if(!document.hidden) showGroupCount(); },20000);
+setInterval(()=>{ if(!document.hidden) showGroupCount(); },45000);
 /* ---- play a game while you stay on the call (games load in an iframe, so the call never drops) ---- */
 function picker(){ const box=$('gpick'); if(!box) return; const items=[['poker','🃏 Poker'],['chess','♟️ Chess'],['landlord','🏢 Landlord'],['blackjack','🃏 Blackjack'],['hub','🌐 Hub'],['city','🏙️ Rival City'],['mx','🏍 Motocross'],['kart','🏎️ Kart'],['bowling','🎳 Bowling'],['pool','🎱 Pool'],['sa-airhockey','🏒 Air Hockey'],['sports-arcade','🏟️ Sports Arcade'],['./','🎮 All games']];
   box.innerHTML=items.map(([id,lbl])=>`<button data-game="${esc(id)}">${esc(lbl)}</button>`).join(''); }
@@ -120,11 +120,13 @@ function openGame(page,label){ const f=$('playFrame'); f.src=page; $('playTitle'
 function closeGame(){ document.body.classList.remove('playing'); $('playFrame').src='about:blank'; $('playFrame').style.display=''; if(spectate){ try{ spectate.stop(); }catch(e){} spectate=null; } const v=document.getElementById('spectVid'); if(v){ try{ v.srcObject=null; }catch(e){} v.style.display='none'; } }
 document.addEventListener('click',e=>{ const g=e.target.closest('[data-game]'); if(g){ const b=g; openGame(b.dataset.game,b.textContent.trim()); return; } });
 $('playClose').onclick=closeGame;
+$('playBack').onclick=closeGame;   /* back to the games list, call keeps running */
+$('playHome').onclick=()=>openGame('./','🎮 All games');   /* browse the whole home page inside the call */
 $('playFs').onclick=()=>{ const el=$('playArea'); try{ (document.fullscreenElement?document.exitFullscreen():(el.requestFullscreen||el.webkitRequestFullscreen).call(el)); }catch(x){} };
 $('vToggle').onclick=()=>{ const v=$('vgrid'); v.classList.toggle('hid'); $('vToggle').textContent=v.classList.contains('hid')?'👀 Show faces':'🙈 Hide faces'; };
 addEventListener('keydown',e=>{ if(e.key==='Escape'&&document.body.classList.contains('playing')&&!document.fullscreenElement) closeGame(); });
 picker();
-show(); showGroupCount(); addEventListener('storage',e=>{ if(e.key==='rrAcct') show(); }); setInterval(()=>{ if(!A&&acct()) show(); },3000);
+show(); showGroupCount(); addEventListener('storage',e=>{ if(e.key==='rrAcct') show(); }); setInterval(()=>{ if(!A&&acct()) show(); },10000);
 })();
 </script>
 <script src="site.js"></script>

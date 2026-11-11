@@ -241,6 +241,6 @@ body.rrHasBanner #rrTourBtn{top:48px}
     b.innerHTML='<span>🔄 A new update is live!</span><button style="border:0;border-radius:999px;padding:7px 14px;font:800 14px system-ui;background:#22c55e;color:#052e16;cursor:pointer">Refresh</button><button style="border:0;background:none;color:#94a3b8;font:700 13px system-ui;cursor:pointer">Later</button>';
     const [r,l]=b.querySelectorAll('button'); r.onclick=()=>location.reload(); l.onclick=()=>b.remove(); document.body.appendChild(b); }
   async function check(){ const v=await get(); if(!v) return; if(base==null){ base=v; return; } if(v!==base&&!shown){ shown=true; bar(); } }
-  check(); setInterval(()=>{ if(!document.hidden) check(); },180000); document.addEventListener('visibilitychange',()=>{ if(!document.hidden) check(); });
+  check(); setInterval(()=>{ if(!document.hidden) check(); },600000); document.addEventListener('visibilitychange',()=>{ if(!document.hidden) check(); });
   window.RRUPDATE={ check, get base(){ return base; } };
 })();
