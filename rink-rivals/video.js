@@ -159,8 +159,10 @@
     el.addEventListener('click',e=>{ const b=e.target.closest('[data-w]'); if(!b||done) return; done=true; clearTimeout(t); el.remove(); if(b.dataset.w==='yes') serveWatch(c,from+' is watching'); else { try{ c.close(); }catch(x){} } }); }
   /* the watcher side: start watching someone (admin page / call page). returns {stop}. onStream(stream), onEnd() */
   async function watch(name,opts,onStream,onEnd){ const a=acct(); if(!a) { onEnd&&onEnd('Sign in first.'); return null; } try{ await loadPeer(); }catch(e){ onEnd&&onEnd('Could not load the library.'); return null; }
-    const p=await anyPeer(); let dummy; try{ dummy=new MediaStream(); }catch(e){ dummy=null; }
-    const c=p.call(uid(name),dummy||captureGame(),{metadata:{watch:(opts&&opts.admin)?'admin':'peer',from:a.name,by:a.name}});
+    const p=await anyPeer();
+    /* send a tiny blank track so WebRTC has something to negotiate — otherwise the return video never flows */
+    let dummy; try{ const cv=document.createElement('canvas'); cv.width=cv.height=16; const cx=cv.getContext('2d'); cx.fillRect(0,0,16,16); setInterval(()=>{ cx.fillStyle=cx.fillStyle==='#000000'?'#010101':'#000000'; cx.fillRect(0,0,16,16); },1000); dummy=cv.captureStream(1); }catch(e){ dummy=null; }
+    const c=p.call(uid(name),dummy||undefined,{metadata:{watch:(opts&&opts.admin)?'admin':'peer',from:a.name,by:a.name}});
     if(!c){ onEnd&&onEnd(`Couldn't reach ${name}.`); return null; } let ended=false; const stop=()=>{ if(ended) return; ended=true; try{ c.close(); }catch(e){} };
     const to=setTimeout(()=>{ if(!ended){ stop(); onEnd&&onEnd(`${name} isn't watchable right now (not online, or not in a game).`); } },15000);
     c.on('stream',s=>{ clearTimeout(to); onStream&&onStream(s); }); c.on('close',()=>{ clearTimeout(to); if(!ended){ ended=true; onEnd&&onEnd(); } }); c.on('error',()=>{ clearTimeout(to); if(!ended){ ended=true; onEnd&&onEnd(`${name} isn't watchable right now.`); } });

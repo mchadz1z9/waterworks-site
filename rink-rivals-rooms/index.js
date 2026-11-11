@@ -764,7 +764,7 @@ export class Party {
 const BOT_ACCTS=new Set(['testing online']);   /* test bots: always shown online (the site shows a pebble when you video call it) */
 const OWNER_ACCTS=new Set(['aiden']);   /* accounts that are the site owner on every device they log in on */
 export class Acct {
-  constructor(state,env){ this.state=state; this.env=env; this.sql=state.storage.sql;
+  constructor(state,env){ this.state=state; this.env=env; this.s=state.storage; this.sql=state.storage.sql;
     this.sql.exec('CREATE TABLE IF NOT EXISTS acct(nm TEXT PRIMARY KEY, disp TEXT, salt TEXT, ph TEXT, data TEXT, ver INTEGER, ts INTEGER, crew TEXT, life INTEGER, str INTEGER, fails INTEGER, lockt INTEGER)');
     this.sql.exec('CREATE TABLE IF NOT EXISTS tok(th TEXT PRIMARY KEY, nm TEXT, ts INTEGER)');
     this.sql.exec('CREATE TABLE IF NOT EXISTS crew(tag TEXT PRIMARY KEY, name TEXT, owner TEXT, code TEXT, ts INTEGER)');
