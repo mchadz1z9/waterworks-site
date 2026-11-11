@@ -78,7 +78,7 @@
     else { panel=document.createElement('div'); panel.id='rrcP'; panel.appendChild(root); document.body.appendChild(panel);
       fab=document.createElement('button'); fab.id='rrcF'; fab.innerHTML='💬 Chat <i></i>'; fab.title='Chat with everyone on Arcade Rivals'; fab.addEventListener('click',()=>toggle(!open)); fab.addEventListener('keydown',e=>e.stopPropagation());
       document.body.appendChild(fab); } }
-  function toggle(on){ open=on; if(panel) panel.classList.toggle('open',on); if(on){ unread=0; badge(); setTimeout(()=>{ log.scrollTop=log.scrollHeight; if(name) inp.focus(); else askName(); },30); } }
+  function toggle(on){ open=on; if(on&&(idleClosed||!ws||ws.readyState>1)) wantConnect(); if(panel) panel.classList.toggle('open',on); if(on){ unread=0; badge(); setTimeout(()=>{ log.scrollTop=log.scrollHeight; if(name) inp.focus(); else askName(); },30); } }
   function badge(){ if(!fab) return; const i=fab.querySelector('i'); i.textContent=unread>9?'9+':unread; i.classList.toggle('on',unread>0); }
   function askName(){ const n=prompt('Your chat name (shown to everyone; don\'t use your real full name):',name||''); if(n==null) return; const v=n.replace(/[<>]/g,'').trim().slice(0,20); if(!v) return; name=v; ls.set('rrOnlineName',v); inp.placeholder='Message everyone…'; tx({t:'name',name:v}); inp.focus(); }
   const tagHTML=t=>t?`<span class="tg">${esc(t)}</span>`:'';
@@ -111,7 +111,7 @@
   function send(){ const t=inp.value.trim(); if(!t) return; if(!name){ askName(); return; } if(!ws||ws.readyState!==1){ sys('Not connected yet, try again in a second.'); return; } if(dmCur){ tx({t:'dm',to:dmCur.id,toName:dmCur.name,text:t}); } else tx({t:'say',text:t}); inp.value=''; }
   function connect(){ if(banned) return; if(OFF){ cnt.textContent='offline'; sys('Chat is off on test pages.'); return; }
     try{ ws=new WebSocket(URL_WS); }catch(e){ return later(); }
-    ws.onopen=()=>{ retry=0; tx({t:'hello',name:name||'Player',pid,game:GAME}); clearInterval(pingT); pingT=setInterval(()=>tx({t:'ping'}),25000); };
+    ws.onopen=()=>{ retry=0; tx({t:'hello',name:name||'Player',pid,game:GAME}); clearInterval(pingT); pingT=setInterval(()=>tx({t:'ping'}),45000); };
     ws.onmessage=ev=>{ let m; try{ m=JSON.parse(ev.data); }catch(e){ return; }
       if(m.t==='hist'){ for(const x of m.m) add(x,true); if(!roster.length) setN(m.n); log.scrollTop=log.scrollHeight; }
       else if(m.t==='msg') add(m.m);
@@ -127,7 +127,7 @@
       else if(m.t==='role'){ myRole=m.lvl; try{ m.lvl?sessionStorage.setItem('rrRole',m.lvl):sessionStorage.removeItem('rrRole'); if(m.lvl&&m.url) localStorage.setItem('rrAdmUrl',m.url); if(!m.lvl) localStorage.removeItem('rrAdmUrl'); }catch(e){} applyRole(); }
       else if(m.t==='kicked') kicked(m);
       else if(m.t==='sys') sys(m.text); };
-    ws.onclose=()=>{ clearInterval(pingT); cnt.textContent='reconnecting…'; later(); }; ws.onerror=()=>{ try{ ws.close(); }catch(e){} }; }
+    ws.onclose=()=>{ clearInterval(pingT); if(document.hidden||idleClosed){ cnt.textContent='paused'; return; } cnt.textContent='reconnecting…'; later(); }; ws.onerror=()=>{ try{ ws.close(); }catch(e){} }; }
   let banned=false;
   function later(){ if(banned) return; retry=Math.min(retry+1,6); setTimeout(connect,1000*retry*retry); }
   /* an admin removed this person: cover the screen and stop reconnecting for a while */
@@ -161,7 +161,15 @@
     t.msgs.push({mine:!!m.self,text:m.text,ts:m.ts,delivered:m.delivered}); if(t.msgs.length>120) t.msgs=t.msgs.slice(-120);
     if(dmCur&&dmCur.id===key){ renderDM(); } else if(!m.self){ t.unread++; dmBadge(); if(!open) { unread++; badge(); } ping(); notify({name:nm+' (private)',text:m.text,game:''}); } }
   function dmBadge(){ let n=0; for(const t of dms.values()) n+=t.unread; const i=fab&&fab.querySelector('i'); if(i&&n>unread){} if(fab) fab.classList.toggle('dm',n>0); }
-  function start(){ build(); connect(); }
+  /* save server time: hold the live chat connection only while the tab is in front. A backgrounded or
+     left-open tab drops the socket after a short while and reconnects the moment you come back. */
+  let idleClosed=false, hideT=null;
+  function wantConnect(){ if(banned||OFF) return; idleClosed=false; if(!ws||ws.readyState>1) connect(); }
+  function goIdle(){ idleClosed=true; try{ ws&&ws.close(); }catch(e){} clearInterval(pingT); }
+  function start(){ build();
+    if(document.hidden){ idleClosed=true; } else wantConnect();
+    document.addEventListener('visibilitychange',()=>{ if(document.hidden){ clearTimeout(hideT); hideT=setTimeout(goIdle,90000); } else { clearTimeout(hideT); wantConnect(); } });
+    addEventListener('pagehide',()=>{ try{ ws&&ws.close(); }catch(e){} }); }
   if(document.readyState==='loading') document.addEventListener('DOMContentLoaded',start); else start();
   addEventListener('rr-name',e=>{ const v=String(e.detail||'').trim(); if(!v||v===name) return; name=v; if(inp) inp.placeholder='Message everyone…'; tx({t:'name',name:v}); });
   window.RRC={ invite(id,game,room,cb){ invCb=cb||null; tx({t:'invite',to:id,game,room}); }, dm:(id,nm)=>openDM(id,nm), get role(){ return myRole; }, get pid(){ return pid; }, toggle:on=>toggle(on==null?!open:on), showWho, get online(){ return online; }, get roster(){ return roster; } };
