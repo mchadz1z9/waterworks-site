@@ -574,7 +574,7 @@ export class Site {
       if(m.op==='get') return J({...await this.state(),role});
       if(m.op==='usage'&&role==='full'){ const d=new Date(), t=d.toISOString().slice(0,10), y=new Date(d-864e5).toISOString().slice(0,10), mem=this.use&&this.use.d===t?this.use:null, sv=(await this.s.get('use:'+t))||{req:0,beat:0,wr:0}, live=k=>(sv[k]||0)+(mem?(mem[k]||0)-(mem['_'+k]||0):0);
         let on=0; for(const [,tt] of (this.live||new Map())) if(Date.now()-tt<100000) on++;
-        return J({today:{req:live('req'),beat:live('beat'),wr:live('wr')},yesterday:(await this.s.get('use:'+y))||null,online:on,limits:{req:100000,wr:100000},resetIn:Math.round((Date.UTC(d.getUTCFullYear(),d.getUTCMonth(),d.getUTCDate()+1)-d)/60000)}); }
+        return J({today:{req:live('req'),beat:live('beat'),wr:live('wr')},yesterday:(await this.s.get('use:'+y))||null,online:on,limits:{req:333000,wr:1000000,paid:true},resetIn:Math.round((Date.UTC(d.getUTCFullYear(),d.getUTCMonth(),d.getUTCDate()+1)-d)/60000)}); }
       if(role==='arcade'){ const now=Date.now();
         if(m.op==='arcadePlayers') return J({players:this.sql.exec("SELECT pid,name,game,last,dev FROM pl WHERE game LIKE 'sa-%' AND last>? ORDER BY last DESC LIMIT 200",now-90000).toArray()});
         if(m.op==='pcmd'){ const kind=String(m.kind||''); if(!['msg','confetti','emoji','award','sagift'].includes(kind)) return J({err:'forbidden'},403);
