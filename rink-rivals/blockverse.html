@@ -91,6 +91,63 @@ const B=[null,
  {n:'Iron ore',c:'#b9937c'},
 ];
 for(const b of B){ if(!b) continue; b.rgbT=hex(b.top||b.c); b.rgbS=hex(b.side||b.c); b.rgbB=hex(b.bot||b.c); b.icon=b.top||b.c; }
+/* ---- pixel-art block textures: original 16×16 tiles painted in code, packed into one 128×128 atlas ---- */
+const ATLAS=document.createElement('canvas'); ATLAS.width=ATLAS.height=128;
+const TEXMAP={};   /* block id -> [top tile, side tile, bottom tile] */
+(function paintAtlas(){ const A=ATLAS.getContext('2d'); let tileN=0; const avg=[];
+  const rgb=h=>[parseInt(h.slice(1,3),16),parseInt(h.slice(3,5),16),parseInt(h.slice(5,7),16)];
+  function tile(seed,paint){ const T=tileN++, ox=(T%8)*16, oy=Math.floor(T/8)*16, img=A.createImageData(16,16), d=img.data; let s=(seed*2654435761)>>>0||1;
+    const R=()=>((s=(s*1664525+1013904223)>>>0)/4294967296), pick=p=>p[Math.floor(R()*p.length)];
+    const px=Array.from({length:256},()=>'#000000'); const set=(x,y,c)=>{ x=((x%16)+16)%16; y=((y%16)+16)%16; px[y*16+x]=c; }, getc=(x,y)=>px[(((y%16)+16)%16)*16+(((x%16)+16)%16)];
+    paint({set,get:getc,R,pick,fill:p=>{ for(let i=0;i<256;i++) px[i]=pick(p); }});
+    let r=0,g=0,b=0; for(let i=0;i<256;i++){ const c=rgb(px[i]); d[i*4]=c[0]; d[i*4+1]=c[1]; d[i*4+2]=c[2]; d[i*4+3]=255; r+=c[0]; g+=c[1]; b+=c[2]; }
+    A.putImageData(img,ox,oy); avg[T]=[r/256,g/256,b/256]; return T; }
+  const GR=['#6aaa3f','#5c9a33','#78b84a','#4e8c2a','#64a33b','#5fa236'];
+  const DI=['#8b6342','#7a5638','#966e4a','#6b4b30','#85603f','#7f5a3b'];
+  const ST=['#808080','#767676','#8b8b8b','#6e6e6e','#858585','#7b7b7b'];
+  const dirtP=t=>{ t.fill(DI); for(let k=0;k<10;k++) t.set(t.R()*16|0,t.R()*16|0,t.R()<.5?'#5a3f28':'#a37c56'); };
+  const stoneP=t=>{ t.fill(ST); for(let k=0;k<7;k++){ const x=t.R()*16|0,y=t.R()*16|0,L=2+(t.R()*3|0); for(let i=0;i<L;i++) t.set(x+i,y,'#646464'); } };
+  const cobbleP=(t,base)=>{ const pts=Array.from({length:8},()=>[t.R()*16,t.R()*16,t.pick(base||['#8e8e8e','#7a7a7a','#868686','#727272'])]);
+    for(let y=0;y<16;y++) for(let x=0;x<16;x++){ let d1=1e9,d2=1e9,c=null; for(const [px0,py0,col] of pts) for(const ox of [-16,0,16]) for(const oy of [-16,0,16]){ const d=Math.hypot(x+.5-px0-ox,y+.5-py0-oy); if(d<d1){ d2=d1; d1=d; c=col; } else if(d<d2) d2=d; }
+      t.set(x,y,d2-d1<1.15?'#4f4f4f':(t.R()<.18?'#9c9c9c':c)); } };
+  const oreP=(cols)=>t=>{ stoneP(t); for(let k=0;k<4;k++){ const cx=1+t.R()*13|0, cy=1+t.R()*13|0; for(const [dx,dy] of [[0,0],[1,0],[0,1],[1,1],[2,1],[1,2]]) if(t.R()<.8) t.set(cx+dx,cy+dy,t.pick(cols)); } };
+  const id={};
+  id.grassTop=tile(11,t=>{ t.fill(GR); for(let k=0;k<14;k++) t.set(t.R()*16|0,t.R()*16|0,t.R()<.5?'#477f26':'#86c656'); });
+  id.dirt=tile(12,dirtP);
+  id.grassSide=tile(13,t=>{ dirtP(t); for(let x=0;x<16;x++){ const h=2+(t.R()*3|0)+(t.R()<.2?2:0); for(let y=0;y<h;y++) t.set(x,y,t.pick(GR)); if(t.R()<.45) t.set(x,h,'#4e8c2a'); } });
+  id.stone=tile(14,stoneP);
+  id.cobble=tile(15,t=>cobbleP(t));
+  id.sand=tile(16,t=>{ t.fill(['#dbd0a0','#d4c891','#e2d8ac','#cfc28a','#d8cc98']); });
+  id.logSide=tile(17,t=>{ const cols=['#6b5232','#5d4529','#78603b','#66492b']; for(let x=0;x<16;x++){ const c=cols[(x*7+3)%4]; for(let y=0;y<16;y++) t.set(x,y,t.R()<.12?'#4a361f':c); } for(let k=0;k<5;k++){ const x=t.R()*16|0,y=t.R()*12|0; for(let i=0;i<4;i++) t.set(x,y+i,'#4a361f'); } });
+  id.logTop=tile(18,t=>{ for(let y=0;y<16;y++) for(let x=0;x<16;x++){ const d=Math.max(Math.abs(x-7.5),Math.abs(y-7.5)); t.set(x,y,d>6.6?'#5d4529':d<1.2?'#8f7240':(Math.floor(d)%2?'#b5965c':'#a3844c')); } });
+  id.leaves=tile(19,t=>{ t.fill(['#3f8a2c','#357a24','#4a9935','#2d6b1f','#438f30']); for(let i=0;i<46;i++) t.set(t.R()*16|0,t.R()*16|0,t.R()<.7?'#1c4512':'#5fae45'); });
+  id.planks=tile(20,t=>{ const tones=['#a8804b','#9c7543','#b38a52','#a07a46']; for(let y=0;y<16;y++){ const row=y>>2, base=tones[row]; for(let x=0;x<16;x++) t.set(x,y,y%4===3?'#6e5230':(t.R()<.14?'#8a6639':base)); const jx=(row*5+3)%16; for(let yy=row*4;yy<row*4+3;yy++) t.set(jx,yy,'#6e5230'); } });
+  id.glass=tile(21,t=>{ for(let y=0;y<16;y++) for(let x=0;x<16;x++){ const edge=x===0||y===0||x===15||y===15; t.set(x,y,edge?'#f2fbff':(x===1||y===1||x===14||y===14)?'#9fc8d8':'#cfe9f4'); } for(let i=0;i<5;i++){ t.set(4+i,9-i,'#ffffff'); t.set(5+i,9-i,'#ffffff'); } for(let i=0;i<3;i++) t.set(10+i,12-i,'#ffffff'); });
+  id.brick=tile(22,t=>{ const BR=['#9a4a39','#8c4031','#a65543','#94463a']; for(let y=0;y<16;y++){ const row=y>>2, off=row%2?4:0; for(let x=0;x<16;x++){ const mortar=y%4===0||((x+off)%8===0); t.set(x,y,mortar?(t.R()<.3?'#a39a90':'#b7ada3'):(t.R()<.15?'#7a3528':BR[(row*3+((x+off)>>3))%4])); } } });
+  id.snow=tile(23,t=>{ t.fill(['#f5f9ff','#eaf1fa','#ffffff','#e1ebf7','#f0f5fc']); });
+  id.goldOre=tile(24,oreP(['#f7d34a','#d9a92a','#fff08a']));
+  id.gemOre=tile(25,oreP(['#5fe0e8','#38b8c8','#b6faff']));
+  id.stoneBrick=tile(26,t=>{ for(let y=0;y<16;y++){ const row=y>>3; for(let x=0;x<16;x++){ const jx=row?8:0, ly=y%8; const mortar=ly===0||x===jx; t.set(x,y,mortar?'#555555':ly===1?'#a1a1a1':ly===7?'#6a6a6a':t.pick(['#8a8a8a','#7f7f7f','#929292'])); } } });
+  id.pumpSide=tile(27,t=>{ for(let y=0;y<16;y++) for(let x=0;x<16;x++) t.set(x,y,x%4===0?'#b36a1b':t.pick(['#d8862a','#c97a22','#e0922f'])); });
+  id.pumpTop=tile(28,t=>{ for(let y=0;y<16;y++) for(let x=0;x<16;x++){ const d=Math.hypot(x-7.5,y-7.5); t.set(x,y,d<1.6?'#5d7a2a':(Math.floor(Math.atan2(y-7.5,x-7.5)*2.6)%2?'#c97a22':'#dc8a2a')); } });
+  id.lava=tile(29,t=>{ t.fill(['#e05a12','#f07a1a','#ffa42b','#d2480e']); for(let k=0;k<6;k++){ const x=t.R()*16|0,y=t.R()*16|0; for(const [dx,dy] of [[0,0],[1,0],[0,1],[-1,0],[0,-1]]) t.set(x+dx,y+dy,'#ffcb4a'); } });
+  id.obsidian=tile(30,t=>{ t.fill(['#1b1626','#231c33','#140f1d','#2c2140']); for(let k=0;k<9;k++) t.set(t.R()*16|0,t.R()*16|0,'#4d3a72'); });
+  id.moss=tile(31,t=>{ cobbleP(t); for(let k=0;k<5;k++){ const x=t.R()*16|0,y=t.R()*16|0; for(let i=0;i<7;i++) t.set(x+(t.R()*4|0)-1,y+(t.R()*3|0)-1,t.pick(['#5e8a3e','#4f7a33','#6f9a48'])); } });
+  id.clay=tile(32,t=>{ t.fill(['#a0a7b4','#98a0ad','#a9b0bc','#939aa6']); });
+  id.redSand=tile(33,t=>{ t.fill(['#c06a36','#b5602f','#ca7844','#a95629']); });
+  id.ironOre=tile(34,oreP(['#d8a77e','#c48f63','#e8c4a2']));
+  /* average colour of each tile on the bottom row, for faraway blocks */
+  const row=A.createImageData(128,1); for(let i=0;i<avg.length;i++){ row.data[i*4]=avg[i][0]; row.data[i*4+1]=avg[i][1]; row.data[i*4+2]=avg[i][2]; row.data[i*4+3]=255; } for(let i=avg.length;i<128;i++) row.data[i*4+3]=255; A.putImageData(row,0,127);
+  const m=(t,s,b)=>[t,s==null?t:s,b==null?(s==null?t:s):b];
+  Object.assign(TEXMAP,{1:m(id.grassTop,id.grassSide,id.dirt),2:m(id.dirt),3:m(id.stone),4:m(id.cobble),5:m(id.sand),6:m(id.logTop,id.logSide,id.logTop),7:m(id.leaves),8:m(id.planks),10:m(id.glass),11:m(id.brick),12:m(id.snow),13:m(id.goldOre),14:m(id.gemOre),15:m(id.stoneBrick),16:m(id.pumpTop,id.pumpSide,id.pumpSide),17:m(id.lava),18:m(id.obsidian),19:m(id.moss),20:m(id.clay),21:m(id.redSand),22:m(id.ironOre)});
+  /* little 3D cube icons for the hotbar and the block picker */
+  for(const k in TEXMAP){ const [tt,ts]=TEXMAP[k], c=document.createElement('canvas'); c.width=c.height=48; const x=c.getContext('2d'); x.imageSmoothingEnabled=false;
+    const face=(tl,a,b,cc,d,e,f,shade)=>{ x.setTransform(a,b,cc,d,e,f); x.drawImage(ATLAS,(tl%8)*16,Math.floor(tl/8)*16,16,16,0,0,16,16); if(shade){ x.fillStyle='rgba(0,0,0,'+shade+')'; x.fillRect(0,0,16,16); } };
+    face(tt,1.25,.625,-1.25,.625,24,3,0); face(ts,1.25,.625,0,1.25,4,13,.22); face(ts,1.25,-.625,0,1.25,24,23,.4); B[k].img=c.toDataURL(); }
+})();
+const swS=t=>B[t]&&B[t].img?`background:url(${B[t].img}) center/contain no-repeat;image-rendering:pixelated`:`background:${B[t]?B[t].icon:'#000'}`;
+let atlasOn=false;
+
 const transparent=t=>t===0||t===9;   /* faces of opaque blocks are drawn when the neighbour is air or water */
 
 /* ---- value-noise terrain ---- */
@@ -148,10 +205,11 @@ function build(g,cx,cz){ const tf=tint, x0=cx*CS, z0=cz*CS, x1=Math.min(SZ,x0+CS
     else { if(!(nb===0||nb===9)) continue; }                 /* opaque: draw face only against air/water */
     const col=(F[2]==='T'?blk.rgbT:F[2]==='B'?blk.rgbB:blk.rgbS); const f=tf(x,y,z)*(t===9?1:faceAO(x,y,z,o))*em*(y<WL-8&&t!==17?Math.max(.42,1-(WL-8-y)*.016):1), c=[col[0]*f,col[1]*f,col[2]*f];
     const C=F[1], P=i=>[ (x+C[i][0])*BS, (y+C[i][1])*BS - (t===9?BS*.12:0), (z+C[i][2])*BS ];
+    const TX=TEXMAP[t]; if(TX){ const tl=F[2]==='T'?TX[0]:F[2]==='B'?TX[2]:TX[1], k=f/tf(x,y,z); g.quad(P(0),P(1),P(2),P(3),[k,k,k],-(1000+tl)); continue; }
     let mat=MAT[t]||0; if(t===1&&F[2]==='T') mat=6;
     g.quad(P(0),P(1),P(2),P(3),c,mat?-mat:0); } } }
 function meshChunk(k){ const cx=k%NC, cz=(k/NC)|0; if(cx<0||cz<0||cx>=NC||cz>=NC) return; R3.setChunk(k,g=>build(g,cx,cz),(cx+.5)*CS*BS,(cz+.5)*CS*BS,CS*BS*.75); cbuilt.add(k); }
-function doRemesh(){ if(dirty){ dirty=false; R3.clearChunks(); cbuilt.clear(); cdirty.clear(); }
+function doRemesh(){ if(!atlasOn&&R3.setAtlas){ R3.setAtlas(ATLAS); atlasOn=true; } if(dirty){ dirty=false; R3.clearChunks(); cbuilt.clear(); cdirty.clear(); }
   for(const k of cdirty){ if(cbuilt.has(k)) meshChunk(k); } cdirty.clear();
   /* stream in the chunks around you (nearest first, a few ms per frame) and drop far ones */
   const pcx=Math.floor(P.x/CS), pcz=Math.floor(P.z/CS), R=5, t0=performance.now(); let todo=[];
@@ -205,9 +263,9 @@ function groundY(x,z){ x=Math.floor(x); z=Math.floor(z); if(!inB(x,0,z)) return 
 
 /* ---- blocks: hotbar + palette ---- */
 let hotbar=[1,2,3,6,8,7,10,3,5], sel=0;
-function renderHot(){ const el=$('hot'); el.innerHTML=hotbar.map((t,i)=>`<div class="slot${i===sel?' on':''}" data-s="${i}"><span class="k">${i+1}</span><span class="sw" style="background:${B[t].icon}"></span>${MODE==='survival'?`<span class="k" style="top:auto;left:auto;bottom:1px;right:4px;color:#fde047">${inv[t]||0}</span>`:''}</div>`).join(''); }
+function renderHot(){ const el=$('hot'); el.innerHTML=hotbar.map((t,i)=>`<div class="slot${i===sel?' on':''}" data-s="${i}"><span class="k">${i+1}</span><span class="sw" style="${swS(t)}"></span>${MODE==='survival'?`<span class="k" style="top:auto;left:auto;bottom:1px;right:4px;color:#fde047">${inv[t]||0}</span>`:''}</div>`).join(''); }
 $('hot').addEventListener('click',e=>{ const s=e.target.closest('[data-s]'); if(s){ sel=+s.dataset.s; renderHot(); } });
-function renderPal(){ $('palGrid').innerHTML=B.map((b,i)=>i?`<div class="b" data-p="${i}"><div class="sw" style="background:${b.icon}"></div><b>${b.n}${MODE==='survival'?' ×'+(inv[i]||0):''}</b></div>`:'').join(''); }
+function renderPal(){ $('palGrid').innerHTML=B.map((b,i)=>i?`<div class="b" data-p="${i}"><div class="sw" style="${swS(i)}"></div><b>${b.n}${MODE==='survival'?' ×'+(inv[i]||0):''}</b></div>`:'').join(''); }
 $('palGrid').addEventListener('click',e=>{ const b=e.target.closest('[data-p]'); if(b){ hotbar[sel]=+b.dataset.p; renderHot(); $('pal').classList.remove('on'); } });
 $('btnPal').onclick=()=>{ renderPal(); $('pal').classList.add('on'); }; $('palX').onclick=()=>$('pal').classList.remove('on');
 
