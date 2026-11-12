@@ -21,7 +21,8 @@
   const acct=()=>{ try{ const a=JSON.parse(localStorage.getItem('rrAcct')||'null'); return a&&a.name&&a.token?a:null; }catch(e){ return null; } };
   const uid=n=>USER+Array.from(new TextEncoder().encode(String(n).trim().toLowerCase())).map(b=>b.toString(16).padStart(2,'0')).join('');
   function loadPeer(){ return new Promise((ok,bad)=>{ if(window.Peer) return ok(); const s=document.createElement('script'); s.src='https://unpkg.com/peerjs@1.5.4/dist/peerjs.min.js'; s.onload=()=>ok(); s.onerror=()=>bad(new Error('peerjs')); document.head.appendChild(s); }); }
-  async function cam(){ if(local) return local; local=await navigator.mediaDevices.getUserMedia({video:{width:{ideal:480},height:{ideal:360},facingMode:'user'},audio:{echoCancellation:true,noiseSuppression:true}}); return local; }
+  let voice=false;   /* voice call: microphone only, no camera */
+  async function cam(){ if(local) return local; local=await navigator.mediaDevices.getUserMedia({video:voice?false:{width:{ideal:480},height:{ideal:360},facingMode:'user'},audio:{echoCancellation:true,noiseSuppression:true}}); return local; }
   function css(){ if($('#rrVcCss')) return; const st=document.createElement('style'); st.id='rrVcCss'; st.textContent=`
 #rrVc,#rrRing{position:fixed;z-index:2147482950;background:#0f172a;border:1px solid #334155;border-radius:16px;box-shadow:0 18px 50px rgba(0,0,0,.55);color:#e2e8f0;font:600 14px system-ui,sans-serif;overflow:hidden}
 #rrVc{right:14px;top:70px;width:min(340px,92vw);touch-action:none}
@@ -35,6 +36,7 @@
 #rrVc input{flex:1;min-width:0;background:#0b1222;border:1px solid #334155;color:#fff;border-radius:10px;padding:10px;font:800 18px ui-monospace,monospace;letter-spacing:.2em;text-transform:uppercase}
 #rrVc .vids{position:relative;background:#000;aspect-ratio:4/3}#rrVc .vids video{display:block;width:100%;height:100%;object-fit:cover;background:#000}
 #rrVc .vids video.me{position:absolute;right:8px;bottom:8px;width:32%;height:auto;aspect-ratio:4/3;border:2px solid #fff;border-radius:8px;transform:scaleX(-1)}
+#rrVc .vids.voice{aspect-ratio:auto;padding:20px 10px;text-align:center;background:radial-gradient(circle at 50% 30%,#1e3a8a,#0b1222)}#rrVc .vids.voice video{position:absolute;width:1px;height:1px;opacity:0;border:0}#rrVc .vids.voice .av{font-size:54px;animation:rrVoP 1.4s ease-in-out infinite alternate}#rrVc .vids.voice b{display:block;font-size:17px;margin-top:4px}@keyframes rrVoP{from{transform:scale(1)}to{transform:scale(1.12)}}
 #rrVc .code{font:900 30px ui-monospace,monospace;letter-spacing:.25em;color:#fde68a;text-align:center;margin:6px 0}
 #rrVc .m{color:#94a3b8;font-size:13px}#rrVc .err{color:#fca5a5;font-size:13px;margin-top:6px}`; document.head.appendChild(st); }
   function open(){ css(); if(!box){ box=document.createElement('div'); box.id='rrVc'; document.body.appendChild(box); drag(box); box.addEventListener('click',onClick); box.addEventListener('keydown',e=>{ e.stopPropagation(); if(e.key==='Enter'&&e.target.id==='vcIn') joinRoom(e.target.value); }); } render(); }
@@ -42,16 +44,16 @@
     if(state==='idle') bd=`<div class="m">To call a player: Account → 🟢 Online → tap their name → 📹 Video call. Or use a room code:</div>
       <div class="row"><button class="b go" data-v="start">Start a room</button></div><div class="row"><input id="vcIn" maxlength="5" placeholder="CODE" autocomplete="off"><button class="b" data-v="join">Join</button></div>`;
     else if(state==='wait') bd=`<div class="m">Your room code — tell your friend:</div><div class="code">${code}</div><div class="m">Waiting for them to join…</div><div class="row"><button class="b red" data-v="end">Cancel</button></div>`;
-    else if(state==='calling') bd=`<div class="m" style="text-align:center;font-size:16px;margin:8px 0">📞 Calling <b>${esc(who)}</b>…</div><div class="vids"><video class="me" id="vcMe" autoplay playsinline muted style="position:static;width:100%;transform:scaleX(-1)"></video></div><div class="row"><button class="b red" data-v="end">Hang up</button></div>`;
+    else if(state==='calling') bd=`<div class="m" style="text-align:center;font-size:16px;margin:8px 0">📞 Calling <b>${esc(who)}</b>…</div>${voice?'':`<div class="vids"><video class="me" id="vcMe" autoplay playsinline muted style="position:static;width:100%;transform:scaleX(-1)"></video></div>`}<div class="row"><button class="b red" data-v="end">Hang up</button></div>`;
     else if(state==='connecting') bd=`<div class="m">Connecting to room <b>${code}</b>…</div><div class="row"><button class="b red" data-v="end">Cancel</button></div>`;
-    else if(live) bd=`<div class="vids"><video id="vcThem" autoplay playsinline></video><video class="me" id="vcMe" autoplay playsinline muted></video></div><div class="row"><button class="b" data-v="mic">${micOn?'🎙️ Mute':'🔇 Unmute'}</button><button class="b" data-v="cam">${camOn?'📷 Camera off':'📷 Camera on'}</button><button class="b red" data-v="end">Hang up</button></div><div class="m" style="margin-top:6px">${who?'With '+esc(who):'Room '+code} · the call ends if you leave this page</div>`;
-    box.innerHTML=`<div class="hd"><b>📹 ${live&&who?esc(who):'Video call'}</b><button class="x" data-v="close" title="Close">✕</button></div><div class="bd">${bd}${msg?`<div class="err">${esc(msg)}</div>`:''}</div>`;
+    else if(live) bd=`<div class="vids${voice?' voice':''}">${voice?`<div class="av">🎧</div><b>${esc(who||'Voice call')}</b><span class="m">voice call · connected</span>`:''}<video id="vcThem" autoplay playsinline></video><video class="me" id="vcMe" autoplay playsinline muted></video></div><div class="row"><button class="b" data-v="mic">${micOn?'🎙️ Mute':'🔇 Unmute'}</button>${voice?'':`<button class="b" data-v="cam">${camOn?'📷 Camera off':'📷 Camera on'}</button>`}<button class="b red" data-v="end">Hang up</button></div><div class="m" style="margin-top:6px">${who?'With '+esc(who):'Room '+code} · the call ends if you leave this page</div>`;
+    box.innerHTML=`<div class="hd"><b>${voice?'📞':'📹'} ${live&&who?esc(who):voice?'Voice call':'Video call'}</b><button class="x" data-v="close" title="Close">✕</button></div><div class="bd">${bd}${msg?`<div class="err">${esc(msg)}</div>`:''}</div>`;
     const me=$('#vcMe',box); if(me&&local&&me.srcObject!==local) me.srcObject=local; const th=$('#vcThem',box); if(th&&remote&&th.srcObject!==remote){ th.srcObject=remote; th.play&&th.play().catch(()=>{}); } }
   function fail(t){ msg=t; open(); }
   function onClick(e){ const b=e.target.closest('[data-v]'); if(!b) return; const v=b.dataset.v; msg='';
     if(v==='close'){ if(state!=='idle') end(); box.remove(); box=null; return; } if(v==='start') startRoom(); if(v==='join') joinRoom($('#vcIn',box).value); if(v==='end') end();
     if(v==='mic'&&local){ micOn=!micOn; local.getAudioTracks().forEach(t=>t.enabled=micOn); render(); } if(v==='cam'&&local){ camOn=!camOn; local.getVideoTracks().forEach(t=>t.enabled=camOn); render(); } }
-  const why=e=>{ const n=e&&(e.type||e.name||''); return n==='NotAllowedError'||n==='SecurityError'?'Camera blocked — allow camera and microphone for this site, then try again.':n==='NotFoundError'?'No camera found on this device.':n==='peer-unavailable'?(who?`${who} isn't online right now.`:'No room with that code — check it with your friend.'):n==='unavailable-id'?'That code is busy — try again.':n==='network'||n==='server-error'||n==='socket-error'?'Could not reach the call server — check your internet.':e&&e.message==='peerjs'?'Could not load the video-call library.':'Something went wrong — try again.'; };
+  const why=e=>{ const n=e&&(e.type||e.name||''); return n==='NotAllowedError'||n==='SecurityError'?(voice?'Microphone blocked — allow the microphone for this site, then try again.':'Camera blocked — allow camera and microphone for this site, then try again.'):n==='NotFoundError'?(voice?'No microphone found on this device.':'No camera found on this device.'):n==='peer-unavailable'?(who?`${who} isn't online right now.`:'No room with that code — check it with your friend.'):n==='unavailable-id'?'That code is busy — try again.':n==='network'||n==='server-error'||n==='socket-error'?'Could not reach the call server — check your internet.':e&&e.message==='peerjs'?'Could not load the video-call library.':'Something went wrong — try again.'; };
   /* your own line: while you're signed in, people can ring you */
   async function listen(){ const a=acct(); if(!a||mePeer) return; try{ await loadPeer(); }catch(e){ return; }
     const pr=NP(uid(a.name)); mePeer=pr; pr.__mine=1;
@@ -81,21 +83,22 @@
       c.on('error',()=>fin(`Couldn't reach ${name}.`)); setTimeout(()=>fin(`${name} isn't reachable right now (they may have just left).`),7000); }); }
   async function anyPeer(){ if(mePeer&&mePeer.open) return mePeer; if(mePeer&&!mePeer.destroyed) return new Promise(r=>{ mePeer.once('open',()=>r(mePeer)); setTimeout(()=>r(mePeer),4000); });
     await loadPeer(); mePeer=NP(); mePeer.on('error',e=>{ if(call&&state!=='live'){ const m=why(e); end(); fail(m); } }); hook(mePeer); return new Promise(r=>mePeer.once('open',()=>r(mePeer))); }
-  function incoming(c){ css(); const from=String((c.metadata&&c.metadata.from)||'Someone').slice(0,20); if(ring) ring.remove(); ring=document.createElement('div'); ring.id='rrRing';
-    ring.innerHTML=`<div style="font-size:30px">📹</div><b style="font-size:17px">${esc(from)}</b> wants to video call you<div class="row"><button class="b go" data-r="yes">Accept</button><button class="b red" data-r="no">Decline</button></div>`;
+  function incoming(c){ css(); const from=String((c.metadata&&c.metadata.from)||'Someone').slice(0,20), vo=!!(c.metadata&&c.metadata.voice); if(ring) ring.remove(); ring=document.createElement('div'); ring.id='rrRing';
+    ring.innerHTML=`<div style="font-size:30px">${vo?'📞':'📹'}</div><b style="font-size:17px">${esc(from)}</b> wants to ${vo?'voice':'video'} call you<div class="row"><button class="b go" data-r="yes">Accept</button><button class="b red" data-r="no">Decline</button></div>`;
     document.body.appendChild(ring); let done=false; const close=()=>{ if(ring){ ring.remove(); ring=null; } ringPeer=null; ringClose=null; };
     ringPeer=c.peer; ringClose=()=>{ if(!done){ done=true; clearTimeout(t); close(); try{ c.close(); }catch(e){} } };
     const t=setTimeout(()=>{ if(!done){ done=true; close(); try{ c.close(); }catch(e){} } },30000); c.on('close',()=>{ if(!done){ done=true; clearTimeout(t); close(); } });
-    try{ (window.RRCOIN&&RRCOIN.toast)&&RRCOIN.toast(`📹 ${from} is calling you`,'#4ade80'); }catch(e){}
+    try{ (window.RRCOIN&&RRCOIN.toast)&&RRCOIN.toast(`${vo?'📞':'📹'} ${from} is calling you`,'#4ade80'); }catch(e){}
     ring.addEventListener('click',async e=>{ const b=e.target.closest('[data-r]'); if(!b||done) return; done=true; clearTimeout(t); close();
       if(b.dataset.r==='no'){ note(c.peer,'decline'); setTimeout(()=>{ try{ c.close(); }catch(x){} },300); return; }
-      try{ await cam(); }catch(x){ try{ c.close(); }catch(y){} return fail(why(x)); } call=c; who=from; c.answer(local); wire(c); state='live'; open(); }); }
+      if(local&&state==='idle'){ try{ local.getTracks().forEach(t=>t.stop()); }catch(x){} local=null; } voice=vo; try{ await cam(); }catch(x){ try{ c.close(); }catch(y){} return fail(why(x)); } call=c; who=from; c.answer(local); wire(c); state='live'; open(); }); }
   async function callUser(name,opts){ if(state!=='idle'){ open(); return; } if(window.RRGROUP&&RRGROUP.inCall&&!(opts&&opts.bot)){ fail('Leave the group call first — your camera is in use there.'); return; } const a=acct(); if(!a){ fail('Sign in to your account to video call people.'); return; }
     if(String(name).toLowerCase()===a.name.toLowerCase()) return; who=String(name).slice(0,20); msg='';
     if(opts&&opts.bot) return pebbleCall(who);
+    if(local){ try{ local.getTracks().forEach(t=>t.stop()); }catch(x){} local=null; } voice=!!(opts&&opts.voice);
     try{ await loadPeer(); await cam(); }catch(e){ const m=why(e); end(); return fail(m); }
     state='calling'; open(); const p=await anyPeer(); if(state!=='calling') return;
-    const c=p.call(uid(name),local,{metadata:{from:a.name}}); if(!c){ end(); return fail('Could not start the call.'); } call=c; wire(c);
+    const c=p.call(uid(name),local,{metadata:{from:a.name,voice}}); if(!c){ end(); return fail('Could not start the call.'); } call=c; wire(c);
     tmo=setTimeout(()=>{ if(state==='calling'){ end(); fail(`${who} didn't answer.`); } },32000); }
   async function startRoom(tries){ try{ await loadPeer(); await cam(); }catch(e){ return fail(why(e)); }
     code=''; for(let i=0;i<5;i++) code+=ABC[Math.floor(Math.random()*ABC.length)]; state='wait'; who=''; render(); roomPeer=NP(ROOM+code);

@@ -53,14 +53,37 @@
 .rrc .empty{color:#64748b;text-align:center;margin:auto;font-size:14px}
 @media (max-width:600px){ #rrcP{right:8px;left:8px;width:auto;bottom:110px;height:60vh} #rrcF{bottom:58px;right:8px} }`;
   const RRC_EXTRA=`.rrc header .adm{font:800 13px system-ui,sans-serif;color:#fde68a;background:rgba(253,230,138,.12);border:1px solid rgba(253,230,138,.3);border-radius:8px;padding:2px 7px;text-decoration:none;cursor:pointer}\n.rrc .tg{font:800 10px system-ui,sans-serif;background:#7c3aed;color:#fff;border-radius:6px;padding:1px 6px;margin:0 4px;vertical-align:middle;letter-spacing:.02em}\n.rrc .dmb{flex:0 0 auto;background:rgba(255,255,255,.1);border:0;border-radius:8px;color:#fff;cursor:pointer;font-size:14px;padding:3px 8px}\n.rrc .dmb:hover{background:rgba(255,255,255,.22)}\n.rrc .dmv{flex:1;min-height:0;background:#0f172a;flex-direction:column} .rrc:not(.dmopen) .dmv{display:none} .rrc.dmopen .dmv{display:flex} .rrc.dmopen .log,.rrc.dmopen .who,.rrc.dmopen .rules{display:none}\n.rrc .dmh{display:flex;align-items:center;gap:8px;padding:8px 10px;background:linear-gradient(135deg,#4c1d95,#1e3a8a);font:800 16px 'Big Shoulders Display',sans-serif}\n.rrc .dmh .bk{background:rgba(255,255,255,.15);border:0;border-radius:8px;color:#fff;font-size:18px;cursor:pointer;padding:2px 10px}\n.rrc .dml{flex:1;overflow-y:auto;padding:8px 10px;display:flex;flex-direction:column;gap:4px}\n.rrc .dml .undel{font-size:11px;color:#fca5a5}\n#rrcF.dm i{background:#a855f7}\n.rrc{position:relative}`;
-  const st=document.createElement('style'); st.textContent=css+RRC_EXTRA; document.head.appendChild(st);
+  const RRC_LOOK=`
+.rrc{border:1px solid rgba(129,140,248,.38);border-radius:20px;background:linear-gradient(180deg,#0b1024,#0f172a);box-shadow:0 18px 50px rgba(0,0,0,.55),0 0 0 1px rgba(255,255,255,.03) inset}
+.rrc header{background:linear-gradient(120deg,#4f46e5,#7c3aed 55%,#db2777);padding:12px 14px;box-shadow:0 2px 12px rgba(0,0,0,.35)}
+.rrc header .pg{color:#fff;text-decoration:none;background:rgba(255,255,255,.16);border-radius:8px;padding:2px 8px;font:800 14px system-ui,sans-serif} .rrc header .pg:hover{background:rgba(255,255,255,.3)}
+.rrc .log{gap:9px;padding:12px;background:radial-gradient(circle at 15% 0,rgba(99,102,241,.13),transparent 55%),radial-gradient(circle at 90% 100%,rgba(219,39,119,.08),transparent 50%)}
+.rrc .log::-webkit-scrollbar{width:6px} .rrc .log::-webkit-scrollbar-thumb{background:#334155;border-radius:9px}
+.rrc .m.pub{display:flex;gap:9px;align-items:flex-start;background:none;padding:0;animation:rrcIn .22s ease-out}
+@keyframes rrcIn{from{opacity:0;transform:translateY(6px)}to{opacity:1;transform:none}}
+.rrc .m.pub .av{flex:0 0 32px;width:32px;height:32px;border-radius:50%;display:flex;align-items:center;justify-content:center;font:800 14px system-ui,sans-serif;color:#fff;font-style:normal;box-shadow:0 2px 6px rgba(0,0,0,.45);margin-top:2px}
+.rrc .m.pub .bd{flex:0 1 auto;min-width:0;max-width:calc(100% - 46px);background:rgba(255,255,255,.065);border:1px solid rgba(255,255,255,.08);border-radius:4px 15px 15px 15px;padding:6px 11px 7px}
+.rrc .m.pub .tx{margin-top:2px;font-weight:500;color:#e5e7eb;word-wrap:break-word;overflow-wrap:anywhere}
+.rrc .m.pub .t{margin-left:10px}
+.rrc .m.pub.me{flex-direction:row-reverse}
+.rrc .m.pub.me .bd{background:linear-gradient(135deg,rgba(99,102,241,.5),rgba(14,165,233,.32));border-color:rgba(129,140,248,.45);border-radius:15px 4px 15px 15px}
+.rrc .m.pub .x{top:4px;right:auto;left:44px}
+.rrc .sys{text-align:center;background:rgba(251,191,36,.08);border-radius:999px;padding:3px 10px;align-self:center;font-style:normal}
+.rrc .rules{text-align:center;border-top:1px solid rgba(255,255,255,.06)}
+.rrc form{padding:10px;gap:8px;background:#0a0f1f;border-top:1px solid rgba(255,255,255,.06)}
+.rrc input{border-radius:999px;padding:10px 15px;background:#141c33;border-color:#2a3558} .rrc input:focus{border-color:#818cf8;box-shadow:0 0 0 3px rgba(99,102,241,.25)}
+.rrc form button{border-radius:999px;background:linear-gradient(135deg,#6366f1,#db2777);padding:0 18px;box-shadow:0 4px 12px rgba(99,102,241,.4)} .rrc form button:hover{filter:brightness(1.12)}
+.rrc .wr{border:1px solid rgba(255,255,255,.06);border-radius:12px}
+#rrcF{background:linear-gradient(135deg,#6366f1,#db2777);box-shadow:0 8px 22px rgba(99,102,241,.45)}`;
+  GN.chat='💬 Chat'; GN.blockverse='🟩 Blockverse'; GN.call='📹 Call';
+  const st=document.createElement('style'); st.textContent=css+RRC_EXTRA+RRC_LOOK; document.head.appendChild(st);
 
   let ws=null, open=false, unread=0, online=0, retry=0, pingT=null, root, log, inp, cnt, fab, panel, msgs=new Map();
   const dock=()=>{ const d=document.getElementById('chatDock'); return d&&getComputedStyle(d).display!=='none'?d:null; };
   if(GAME!=='home') ls.set('rrLast',GAME);
     function build(){
     root=document.createElement('div'); root.className='rrc';
-    root.innerHTML=`<header><span>💬</span><b>Arcade Rivals Chat</b><small class="cnt" title="See who's online and what they're playing">connecting…</small><button class="bell" title="Message notifications on/off">🔔</button><button class="nm" title="Change your name">✎ Name</button><a class="adm" href="#" title="Admin tools" style="display:none">⚙</a>${dock()?'':'<button class="cl" title="Close">✕</button>'}</header>
+    root.innerHTML=`<header><span>💬</span><b>Arcade Rivals Chat</b><small class="cnt" title="See who's online and what they're playing">connecting…</small><button class="bell" title="Message notifications on/off">🔔</button><button class="nm" title="Change your name">✎ Name</button><a class="adm" href="#" title="Admin tools" style="display:none">⚙</a>${GAME==='chat'?'':'<a class="pg" href="chat" title="Open the full chat page">⤢</a>'}${dock()?'':'<button class="cl" title="Close">✕</button>'}</header>
       <div class="log"><div class="empty">Say hi to everyone on Arcade Rivals 👋</div></div><div class="who"></div><div class="dmv" style="display:none"></div>
       <div class="rules">Be kind · no swearing · never share personal info · no spam · ⚑ reports a message</div>
       <form autocomplete="off"><input maxlength="200" placeholder="${name?'Message everyone…':'Pick a name to chat…'}" aria-label="Chat message"><button>Send</button></form>`;
@@ -82,8 +105,8 @@
   function badge(){ if(!fab) return; const i=fab.querySelector('i'); i.textContent=unread>9?'9+':unread; i.classList.toggle('on',unread>0); }
   function askName(){ const n=prompt('Your chat name (shown to everyone; don\'t use your real full name):',name||''); if(n==null) return; const v=n.replace(/[<>]/g,'').trim().slice(0,20); if(!v) return; name=v; ls.set('rrOnlineName',v); inp.placeholder='Message everyone…'; tx({t:'name',name:v}); inp.focus(); }
   const tagHTML=t=>t?`<span class="tg">${esc(t)}</span>`:'';
-  function line(m){ const el=document.createElement('div'); el.className='m'+(m.name===name?' me':''); el.dataset.id=m.id; const d=new Date(m.ts), hh=d.getHours(), mm=String(d.getMinutes()).padStart(2,'0');
-    el.innerHTML=`<span class="t">${hh}:${mm}</span><span class="n" style="color:hsl(${hue(m.name)},85%,70%)">${esc(m.name)}</span>${tagHTML(m.tag)}<span class="g">${esc(GN[m.game]||m.game)}</span><br>${linkify(m.text)}${m.name===name?'':`<button class="x" data-id="${m.id}" title="Report">⚑</button>`}`; return el; }
+  function line(m){ const el=document.createElement('div'); el.className='m pub'+(m.name===name?' me':''); el.dataset.id=m.id; const d=new Date(m.ts), hh=d.getHours(), mm=String(d.getMinutes()).padStart(2,'0');
+    el.innerHTML=`<i class="av" style="background:linear-gradient(135deg,hsl(${hue(m.name)},70%,52%),hsl(${(hue(m.name)+40)%360},70%,38%))">${esc((String(m.name).trim()[0]||'?').toUpperCase())}</i><div class="bd"><span class="t">${hh}:${mm}</span><span class="n" style="color:hsl(${hue(m.name)},85%,72%)">${esc(m.name)}</span>${tagHTML(m.tag)}<span class="g">${esc(GN[m.game]||m.game)}</span><div class="tx">${linkify(m.text)}</div></div>${m.name===name?'':`<button class="x" data-id="${m.id}" title="Report">⚑</button>`}`; return el; }
   function add(m,quiet){ if(msgs.has(m.id)) return; const e=log.querySelector('.empty'); if(e) e.remove(); const atBottom=log.scrollHeight-log.scrollTop-log.clientHeight<60, el=line(m); msgs.set(m.id,el); log.appendChild(el);
     while(log.children.length>150) log.removeChild(log.firstChild); if(atBottom||m.name===name) log.scrollTop=log.scrollHeight; if(!quiet&&m.name!==name){ if(!open){ unread++; badge(); } notify(m); } }
   let notifOn=ls.get('rrChatNotify')!=='0', pop=null, popT=null, titleT=null, baseTitle=document.title, missed=0, nAC=null;
