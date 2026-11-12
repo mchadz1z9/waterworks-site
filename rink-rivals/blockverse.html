@@ -37,13 +37,14 @@
 </style></head>
 <body>
 <div id="stage"><canvas id="gl"></canvas><canvas id="cv"></canvas></div>
-<div class="tools"><a href="./">← Home</a><button id="btnPal">🎒 Blocks</button><button id="btnFly">✈️ Fly</button><button id="btnSave">💾 Save</button><button id="btnNew">🌱 New world</button><button id="btnFs">⛶ Full</button></div>
+<div class="tools"><a href="./">← Home</a><button id="btnPal">🎒 Blocks</button><button id="btnOnline">👥 Play online</button><button id="btnFly">✈️ Fly</button><button id="btnSave">💾 Save</button><button id="btnNew">🌱 New world</button><button id="btnFs">⛶ Full</button></div>
 <div id="hint"></div>
 <div id="hot"></div>
 <div id="pal"><div class="w"><button class="x" id="palX">✕</button><h2>🎒 Pick a block</h2><div class="muted" style="color:#93a0bd;font-size:13px">Tap a block to put it in your selected slot.</div><div class="grid" id="palGrid"></div></div></div>
 <div id="touch"><div id="stick"><div id="knob"></div></div>
   <div class="tb" id="tJump">⤒</div><div class="tb" id="tUp">▲</div><div class="tb" id="tFly">✈️</div><div class="tb" id="tBreak">⛏️</div><div class="tb" id="tPlace">⧉</div></div>
 <script src="r3lib.js"></script>
+<script src="online.js"></script>
 <script>
 (()=>{
 'use strict';
@@ -188,17 +189,48 @@ $('palGrid').addEventListener('click',e=>{ const b=e.target.closest('[data-p]');
 $('btnPal').onclick=()=>{ $('pal').classList.add('on'); }; $('palX').onclick=()=>$('pal').classList.remove('on');
 
 /* ---- actions ---- */
-function breakBlock(){ const h=pick(); if(!h) return; if(get(h.x,h.y,h.z)===9) return; world[idx(h.x,h.y,h.z)]=0; dirty=true; saveSoon(); }
+function breakBlock(){ const h=pick(); if(!h) return; if(get(h.x,h.y,h.z)===9) return; if(ONLINE&&!worldReady) return; const i=idx(h.x,h.y,h.z); world[i]=0; dirty=true; saveSoon(); netEdit(i,0); }
 function placeBlock(){ const h=pick(); if(!h) return; const x=h.x+h.nx,y=h.y+h.ny,z=h.z+h.nz; if(!inB(x,y,z)) return; if(get(x,y,z)!==0&&get(x,y,z)!==9) return;
   /* don't place inside yourself */ const px0=Math.floor(P.x-WR),px1=Math.floor(P.x+WR),pz0=Math.floor(P.z-WR),pz1=Math.floor(P.z+WR); if(x>=px0&&x<=px1&&z>=pz0&&z<=pz1&&y>=Math.floor(P.y)&&y<=Math.floor(P.y+PH)) return;
-  world[idx(x,y,z)]=hotbar[sel]; dirty=true; saveSoon(); }
+  if(ONLINE&&!worldReady) return; const i=idx(x,y,z); world[i]=hotbar[sel]; dirty=true; saveSoon(); netEdit(i,hotbar[sel]); }
 
 /* ---- save / load (store only edits from the generated world) ---- */
-let saveT=null; function saveSoon(){ clearTimeout(saveT); saveT=setTimeout(save,800); }
-function save(){ try{ const ed=[]; for(let i=0;i<world.length;i++) if(world[i]!==base[i]) ed.push(i,world[i]); localStorage.setItem('rrBlockverse',JSON.stringify({seed,ed})); }catch(e){} flash('💾 Saved'); }
+let saveT=null; function saveSoon(){ if(ONLINE) return; clearTimeout(saveT); saveT=setTimeout(save,800); }
+function save(){ if(ONLINE){ flash('🌍 Shared worlds are live — nothing to save'); return; } try{ const ed=[]; for(let i=0;i<world.length;i++) if(world[i]!==base[i]) ed.push(i,world[i]); localStorage.setItem('rrBlockverse',JSON.stringify({seed,ed})); }catch(e){} flash('💾 Saved'); }
 function load(){ try{ const s=JSON.parse(localStorage.getItem('rrBlockverse')||'null'); if(s&&s.seed!=null){ gen(s.seed); if(Array.isArray(s.ed)) for(let i=0;i<s.ed.length;i+=2) world[s.ed[i]]=s.ed[i+1]; return true; } }catch(e){} return false; }
 $('btnSave').onclick=save;
-$('btnNew').onclick=()=>{ if(!confirm('Start a brand-new random world? Your current one is saved under 💾 unless you overwrite it.')) return; gen((Math.random()*1e9)|0); dirty=true; spawn(); flash('🌱 New world'); };
+$('btnNew').onclick=()=>{ if(ONLINE){ flash('🌍 Leave the online world first (👥) to make a new one'); return; } if(!confirm('Start a brand-new random world? Your current one is saved under 💾 unless you overwrite it.')) return; gen((Math.random()*1e9)|0); dirty=true; spawn(); flash('🌱 New world'); };
+
+/* ===== MULTIPLAYER: one shared drop-in voxel world (host's world is the shared one) ===== */
+let net=null, ONLINE=false, worldReady=true, others=Object.create(null), posT=0, lastPos='';
+function netEdit(i,v){ if(ONLINE&&net) net.send({t:'e',i,v}); }
+function hostSnapshot(){ const ed=[]; for(let i=0;i<world.length;i++) if(world[i]!==base[i]) ed.push(i,world[i]); return {t:'world',seed,ed}; }
+function onNet(m,api){
+  if(m.t==='p'){ const o=others[m.id]||(others[m.id]={x:m.x,y:m.y,z:m.z}); o.name=m.n; o.yaw=m.yaw; o.pitch=m.pitch; o.tx=m.x; o.ty=m.y; o.tz=m.z; o.seen=performance.now(); o.sw=m.sw; }
+  else if(m.t==='e'){ if(m.i>=0&&m.i<world.length){ world[m.i]=m.v; dirty=true; } }
+  else if(m.t==='req'){ if(api.isHost()) net.send(hostSnapshot()); }
+  else if(m.t==='world'){ if(!api.isHost()&&!worldReady){ gen(m.seed); if(Array.isArray(m.ed)) for(let k=0;k<m.ed.length;k+=2) world[m.ed[k]]=m.ed[k+1]; dirty=true; worldReady=true; spawn(); flash('🌍 Joined the shared world — '+api.all().length+' here'); } }
+}
+function onPeersCb(api,kind,m){ ONLINE=true;
+  if(!kind){ if(api.isHost()){ worldReady=true; flash('👑 You are the host — anyone who joins builds in your world'); } else { worldReady=false; net.send({t:'req'}); flash('⏳ Loading the world…'); } }
+  else if(kind==='join'){ if(api.isHost()) net.send(hostSnapshot()); flash('👋 '+((m&&m.name)||'A player')+' joined'); }
+  else if(kind==='leave'){ if(m&&others[m.id]) delete others[m.id]; flash('👋 '+((m&&m.name)||'A player')+' left'); }
+}
+function goOnline(){ if(!window.RRO){ flash('Online play is unavailable right now'); return; }
+  if(!net){ net=RRO.init({game:'blockverse',maxPlayers:12,minPlayers:1,dropIn:true,
+    blurb:'Build together in ONE shared voxel world — up to 12 people. The first person in hosts, and everyone sees their world. Blocks you break or place show up live for everyone.',
+    onMsg:onNet, onPeers:onPeersCb}); }
+  net.open(); }
+$('btnOnline').onclick=goOnline;
+function netTick(dt){ if(!ONLINE||!net||!net.me) return; posT+=dt; if(posT<0.08) return; posT=0;
+  const s=P.x.toFixed(2)+','+P.y.toFixed(2)+','+P.z.toFixed(2)+','+P.yaw.toFixed(2)+','+P.pitch.toFixed(2); if(s===lastPos) return; lastPos=s;
+  net.send({t:'p',x:P.x,y:P.y,z:P.z,yaw:P.yaw,pitch:P.pitch,n:net.me.name,sw:hotbar[sel]}); }
+function pcol(id){ let h=2166136261; for(const c of String(id)){ h^=c.charCodeAt(0); h=Math.imul(h,16777619); } h>>>=0; return [.4+(h&255)/255*.55,.4+((h>>8)&255)/255*.55,.4+((h>>16)&255)/255*.55]; }
+function drawPlayers(){ for(const id in others){ const o=others[id]; if(performance.now()-o.seen>9000){ delete others[id]; continue; }
+    o.x+=(o.tx-o.x)*.3; o.y+=(o.ty-o.y)*.3; o.z+=(o.tz-o.z)*.3; const col=pcol(id), bx=o.x*BS, bz=o.z*BS, by=o.y*BS;
+    const box=(ty,sx,sy,sz,c)=>R3.part(R3.UB,R3.mm(R3.T(bx,by+ty*BS,bz),R3.RY(o.yaw||0),R3.S(sx*BS,sy*BS,sz*BS)),c);
+    box(0.35,.22,.7,.22,[col[0]*.7,col[1]*.7,col[2]*.8]); box(0.95,.62,.62,.34,col); box(1.52,.46,.46,.46,[.96,.84,.7]); }
+}
 
 /* ---- HUD ---- */
 const cv=$('cv'), ctx=cv.getContext('2d'); let HW=0,HH=0;
@@ -209,6 +241,8 @@ function hud(){ ctx.clearRect(0,0,HW,HH); const cx=HW/2,cy=HH/2;
   ctx.strokeStyle='rgba(255,255,255,.85)'; ctx.lineWidth=2; ctx.beginPath(); ctx.moveTo(cx-10,cy);ctx.lineTo(cx+10,cy);ctx.moveTo(cx,cy-10);ctx.lineTo(cx,cy+10); ctx.stroke();
   ctx.fillStyle='rgba(5,10,24,.5)'; ctx.fillRect(8,HH-150,210,30); ctx.fillStyle='#dbeafe'; ctx.font='700 13px system-ui'; ctx.textAlign='left';
   ctx.fillText(`XYZ ${P.x.toFixed(0)} ${P.y.toFixed(0)} ${P.z.toFixed(0)} · ${P.fly?'✈️ Fly':'🚶 Walk'} · ${timeStr()}`,14,HH-130);
+  if(ONLINE){ let n=1; for(const id in others) n++; ctx.fillStyle='rgba(16,185,129,.9)'; ctx.fillRect(8,HH-186,210,30); ctx.fillStyle='#fff'; ctx.textAlign='left'; ctx.fillText(`👥 Online · ${n} building here`,14,HH-166);
+    if(R3.proj) for(const id in others){ const o=others[id]; const p=R3.proj(o.x*BS,(o.y+2.15)*BS,o.z*BS); if(!p) continue; const tx=p[0]*HW, ty=p[1]*HH; const nm=o.name||'Player'; ctx.font='800 13px system-ui'; ctx.textAlign='center'; const w=ctx.measureText(nm).width+14; ctx.fillStyle='rgba(5,10,24,.6)'; ctx.fillRect(tx-w/2,ty-28,w,20); ctx.fillStyle='#fff'; ctx.fillText(nm,tx,ty-14); } ctx.font='700 13px system-ui'; }
 }
 function timeStr(){ const h=Math.floor(TOD*24), m=Math.floor((TOD*24-h)*60); return (h<10?'0':'')+h+':'+(m<10?'0':'')+m; }
 
@@ -241,9 +275,9 @@ function frame(now){ const dt=(now-last)/1000; last=now; fps+=((1/Math.max(1e-3,
     const SK=sky(), eye=[P.x*BS,(P.y+EYE)*BS,P.z*BS], f=forward(), ctr=[eye[0]+f[0]*BS,eye[1]+f[1]*BS,eye[2]+f[2]*BS];
     R3.frame({eye,center:ctr,fov:72,near:BS*.12,far:BS*62,sky:SK.s,bright:SK.bright,light:SK.light,
       fog:[BS*34,BS*24],fogMax:.82,cull:BS*36,unit:BS,tex:true,dome:true,shadow:{r:BS*40}},
-      ()=>{ clouds(dt,SK.day); highlight(); },dt);
+      ()=>{ clouds(dt,SK.day); drawPlayers(); highlight(); },dt);
   }
-  hud(); if(breaking&&now-lastBreak>180){ lastBreak=now; breakBlock(); }
+  netTick(dt); hud(); if(breaking&&now-lastBreak>180){ lastBreak=now; breakBlock(); }
   requestAnimationFrame(frame); }
 
 /* ---- input: desktop ---- */
