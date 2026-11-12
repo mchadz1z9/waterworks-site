@@ -120,6 +120,8 @@ const FACES=[ /* dir, neighbour offset, 4 corner offsets (CCW seen from outside)
  [[0,0,-1],[[1,0,0],[0,0,0],[0,1,0],[1,1,0]],'S'],
 ];
 function tint(x,y,z){ let h=(x*73856093^y*19349663^z*83492791)>>>0; return .93+ (h%100)/100*.12; }
+/* surface texture style per block (shader motif): 1 grain/dirt, 2 wood, 3 stone, 4 brick, 5 leaves, 6 grass-top, 7 water, 0 smooth */
+const MAT=[0,1,1,3,3,1,2,5,2,7,0,4,1,3,3,4,2,1,3,3,1];
 /* ambient occlusion: darken faces tucked into crevices — the single biggest look upgrade for voxels */
 const occ=(x,y,z)=>{ const t=inB(x,y,z)?world[idx(x,y,z)]:0; return (t!==0&&t!==9)?1:0; };
 const AOBR=[.46,.66,.84,1.0];
@@ -133,16 +135,17 @@ function build(g){ const tf=tint; for(let x=0;x<SZ;x++) for(let z=0;z<SZ;z++) fo
     else { if(!(nb===0||nb===9)) continue; }                 /* opaque: draw face only against air/water */
     const col=(F[2]==='T'?blk.rgbT:F[2]==='B'?blk.rgbB:blk.rgbS); const f=tf(x,y,z)*(t===9?1:faceAO(x,y,z,o))*em, c=[col[0]*f,col[1]*f,col[2]*f];
     const C=F[1], P=i=>[ (x+C[i][0])*BS, (y+C[i][1])*BS - (t===9?BS*.12:0), (z+C[i][2])*BS ];
-    g.quad(P(0),P(1),P(2),P(3),c); } } }
+    let mat=MAT[t]||0; if(t===1&&F[2]==='T') mat=6;
+    g.quad(P(0),P(1),P(2),P(3),c,mat?-mat:0); } } }
 function doRemesh(){ dirty=false; R3.setStatic(build,{chunk:BS*8}); builtOnce=true; }
 
 /* ---- player ---- */
 const P={x:SZ/2+.5,y:0,z:SZ/2+.5,vx:0,vy:0,vz:0,yaw:0,pitch:.2,fly:false,ground:false};
 const WR=.3, PH=1.72, EYE=1.62;
 function spawn(){ /* land on the highest open grass/sand hilltop near the middle — a view, never boxed in */
-  let bx=Math.floor(SZ/2), bz=Math.floor(SZ/2), best=-1;
-  for(let x=bx-13;x<=bx+13;x++) for(let z=bz-13;z<=bz+13;z++){ if(x<1||z<1||x>=SZ-1||z>=SZ-1) continue; let y=H-1; while(y>0&&!solidAt(x,y,z)) y--; const t=world[idx(x,y,z)]; if((t===1||t===5)&&y>best){ best=y; bx=x; bz=z; } }
-  if(best<0){ let y=H-1; while(y>0&&!solidAt(bx,y,bz)) y--; best=y; }
+  const cx=Math.floor(SZ/2), cz=Math.floor(SZ/2); let bx=cx, bz=cz, best=-1;
+  for(let x=cx-13;x<=cx+13;x++) for(let z=cz-13;z<=cz+13;z++){ if(x<1||z<1||x>=SZ-1||z>=SZ-1) continue; let y=H-1; while(y>0&&!solidAt(x,y,z)) y--; const t=world[idx(x,y,z)]; if((t===1||t===5)&&y>best){ best=y; bx=x; bz=z; } }
+  if(best<0){ let y=H-1; while(y>0&&!solidAt(cx,y,cz)) y--; best=y; bx=cx; bz=cz; }
   for(let y=best+1;y<=best+3;y++){ const i=idx(bx,y,bz); if(world[i]&&world[i]!==9) world[i]=0; }   /* clear head space */
   P.x=bx+.5; P.z=bz+.5; P.y=best+1; P.vx=P.vy=P.vz=0; P.pitch=.06; dirty=true; }
 function boxHits(x,y,z){ const x0=Math.floor(x-WR),x1=Math.floor(x+WR),z0=Math.floor(z-WR),z1=Math.floor(z+WR),y0=Math.floor(y),y1=Math.floor(y+PH);
