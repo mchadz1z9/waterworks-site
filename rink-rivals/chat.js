@@ -74,13 +74,16 @@
 .rrc input{border-radius:999px;padding:10px 15px;background:#141c33;border-color:#2a3558} .rrc input:focus{border-color:#818cf8;box-shadow:0 0 0 3px rgba(99,102,241,.25)}
 .rrc form button{border-radius:999px;background:linear-gradient(135deg,#6366f1,#db2777);padding:0 18px;box-shadow:0 4px 12px rgba(99,102,241,.4)} .rrc form button:hover{filter:brightness(1.12)}
 .rrc .wr{border:1px solid rgba(255,255,255,.06);border-radius:12px}
-#rrcF{background:linear-gradient(135deg,#6366f1,#db2777);box-shadow:0 8px 22px rgba(99,102,241,.45)}`;
+#rrcF{background:linear-gradient(135deg,#6366f1,#db2777);box-shadow:0 8px 22px rgba(99,102,241,.45)}
+.rrc header{flex-wrap:nowrap} .rrc header b{min-width:0;white-space:nowrap;overflow:hidden;text-overflow:ellipsis} #chatDock .rrc header{font-size:17px;gap:6px;padding:10px 10px} #chatDock .rrc header .nm{font-size:0;padding:3px 7px} #chatDock .rrc header .nm::before{content:'✎';font-size:13px}`;
   GN.chat='💬 Chat'; GN.blockverse='🟩 Blockverse'; GN.call='📹 Call';
   const st=document.createElement('style'); st.textContent=css+RRC_EXTRA+RRC_LOOK; document.head.appendChild(st);
 
   let ws=null, open=false, unread=0, online=0, retry=0, pingT=null, root, log, inp, cnt, fab, panel, msgs=new Map();
   const dock=()=>{ const d=document.getElementById('chatDock'); return d&&getComputedStyle(d).display!=='none'?d:null; };
   if(GAME!=='home') ls.set('rrLast',GAME);
+  /* recently played list for the home page (newest first, no repeats) */
+  try{ const raw=(location.pathname.split('/').pop()||'').replace(/\.html$/,''); if(raw&&!/^(index|chat|call|clips|hub)$/.test(raw)&&!/^hq-/.test(raw)){ let r=JSON.parse(ls.get('rrRecent')||'[]'); if(!Array.isArray(r)) r=[]; r=[raw].concat(r.filter(x=>x!==raw)).slice(0,8); ls.set('rrRecent',JSON.stringify(r)); } }catch(e){}
     function build(){
     root=document.createElement('div'); root.className='rrc';
     root.innerHTML=`<header><span>💬</span><b>Arcade Rivals Chat</b><small class="cnt" title="See who's online and what they're playing">connecting…</small><button class="bell" title="Message notifications on/off">🔔</button><button class="nm" title="Change your name">✎ Name</button><a class="adm" href="#" title="Admin tools" style="display:none">⚙</a>${GAME==='chat'?'':'<a class="pg" href="chat" title="Open the full chat page">⤢</a>'}${dock()?'':'<button class="cl" title="Close">✕</button>'}</header>
