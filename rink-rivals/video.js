@@ -135,19 +135,24 @@
   /* ===== live view (spectate): stream this page's game canvas to a watcher, peer-to-peer ===== */
   const SERVER=(()=>{ try{ if(localStorage.getItem('rrSrv')==='relay') return location.origin+'/rr'; }catch(e){} return 'https://rink-rivals-rooms.mitchellchad2026.workers.dev'; })();
   const api=(op,b)=>fetch(SERVER+'/acct',{method:'POST',body:JSON.stringify({op,...(b||{})})}).then(r=>r.json()).catch(()=>({err:'net'}));
-  let watchStream=null, watchTimer=null, watchers=0, watchChip=null;
+  let watchStream=null, watchTimer=null, watchers=0, watchChip=null, watchGL=null;
   function captureGame(){ if(watchStream) return watchStream;
     const off=document.createElement('canvas'); off.width=960; off.height=540; const x=off.getContext('2d');
     function pick(){ return [...document.querySelectorAll('canvas')].filter(c=>{ try{ const r=c.getBoundingClientRect(); return c.width>40&&c.height>40&&r.width>40&&r.height>40&&getComputedStyle(c).visibility!=='hidden'&&getComputedStyle(c).display!=='none'; }catch(e){ return false; } }); }
+    /* 3D (WebGL) canvases read back blank outside their own draw call, so each one is read through its own live
+       video stream instead; plain 2D canvases (HUD, menus) are copied directly */
+    const glv=new Map(); watchGL=glv;
+    const isGL=c=>{ if(c.__rrGL!==undefined) return c.__rrGL; let g=null; try{ g=c.getContext('webgl2'); }catch(e){} if(!g){ try{ g=c.getContext('webgl')||c.getContext('experimental-webgl'); }catch(e){} } return (c.__rrGL=!!g); };
+    const srcOf=c=>{ if(!isGL(c)||!c.captureStream) return c; let v=glv.get(c); if(!v){ v=document.createElement('video'); v.muted=true; v.playsInline=true; v.setAttribute('playsinline',''); try{ v.srcObject=c.captureStream(15); v.play().catch(()=>{}); }catch(e){ return c; } glv.set(c,v); } return v.readyState>=2?v:null; };
     function frame(){ const cvs=pick(); x.fillStyle='#0a0f1e'; x.fillRect(0,0,off.width,off.height);
       if(!cvs.length){ x.fillStyle='#64748b'; x.font='600 26px system-ui'; x.textAlign='center'; x.fillText('On a menu (no game drawing right now)',480,270); return; }
       /* union box of all game canvases, in page pixels, mapped into the 960×540 frame */
       let x0=1e9,y0=1e9,x1=-1e9,y1=-1e9; const boxes=cvs.map(c=>{ const r=c.getBoundingClientRect(); x0=Math.min(x0,r.left); y0=Math.min(y0,r.top); x1=Math.max(x1,r.right); y1=Math.max(y1,r.bottom); return [c,r]; });
       const bw=Math.max(1,x1-x0), bh=Math.max(1,y1-y0), sc=Math.min(off.width/bw,off.height/bh), ox=(off.width-bw*sc)/2, oy=(off.height-bh*sc)/2;
-      for(const [c,r] of boxes){ try{ x.drawImage(c,ox+(r.left-x0)*sc,oy+(r.top-y0)*sc,r.width*sc,r.height*sc); }catch(e){} } }
+      for(const [c,r] of boxes){ const s2=srcOf(c); if(!s2) continue; try{ x.drawImage(s2,ox+(r.left-x0)*sc,oy+(r.top-y0)*sc,r.width*sc,r.height*sc); }catch(e){} } }
     frame(); watchTimer=setInterval(frame,80);   /* ~12 fps — plenty to spectate, light on the device */
     watchStream=off.captureStream(12); return watchStream; }
-  function stopCaptureIfIdle(){ if(watchers<=0){ clearInterval(watchTimer); watchTimer=null; if(watchStream){ try{ watchStream.getTracks().forEach(t=>t.stop()); }catch(e){} watchStream=null; } if(watchChip){ watchChip.remove(); watchChip=null; } } }
+  function stopCaptureIfIdle(){ if(watchers<=0){ clearInterval(watchTimer); watchTimer=null; if(watchStream){ try{ watchStream.getTracks().forEach(t=>t.stop()); }catch(e){} watchStream=null; } if(watchGL){ for(const v of watchGL.values()){ try{ v.srcObject.getTracks().forEach(t=>t.stop()); }catch(e){} v.srcObject=null; } watchGL=null; } if(watchChip){ watchChip.remove(); watchChip=null; } } }
   function showWatchChip(label){ if(watchChip) return; css(); watchChip=document.createElement('div'); watchChip.id='rrWatchChip';
     watchChip.style.cssText='position:fixed;left:50%;top:6px;transform:translateX(-50%);z-index:2147482400;background:rgba(220,38,38,.92);color:#fff;border-radius:999px;padding:5px 12px;font:800 12px system-ui;box-shadow:0 4px 14px rgba(0,0,0,.4);pointer-events:none';
     watchChip.textContent='👁️ '+label; document.body.appendChild(watchChip); }
@@ -172,5 +177,6 @@
     return {stop}; }
   /* start listening a few seconds after the page loads, so games load first */
   if(!ADMIN) setTimeout(()=>{ if(!document.hidden) listen(); else addEventListener('visibilitychange',function v(){ if(!document.hidden){ removeEventListener('visibilitychange',v); listen(); } }); },2500);
+  if(/[?&]test\b/.test(location.search)) window.__rrCap=()=>captureGame();
   window.RRVIDEO={ open, callUser, end, listen, invite, watch, get state(){ return state; }, get line(){ return mePeer?{id:mePeer.id,mine:!!mePeer.__mine,open:mePeer.open,disc:mePeer.disconnected,dead:mePeer.destroyed}:null; } };
 })();
