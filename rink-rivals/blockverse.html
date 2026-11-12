@@ -37,6 +37,7 @@
 #tJump{right:150px;bottom:150px;width:66px;height:66px}
 #tBreak{right:24px;bottom:150px;width:72px;height:72px;font-size:26px}
 #tPlace{right:110px;bottom:70px;width:72px;height:72px;font-size:26px}
+#tDrop{right:196px;bottom:78px;width:56px;height:56px;font-size:20px;display:none}
 #tFly{right:24px;bottom:244px;width:56px;height:56px;font-size:20px}
 #tUp{right:150px;bottom:244px;width:56px;height:56px;font-size:22px}
 </style></head>
@@ -49,7 +50,7 @@
 <div id="toolM"><div class="w"><button class="x" id="toolX">✕</button><h2>🛠️ Tools</h2><div class="muted" style="color:#93a0bd;font-size:13px">The matching tool mines its block type much faster. Press <b>Q</b> to switch quickly.</div><div id="toolGrid"></div></div></div>
 <div id="craftM"><div class="w"><button class="x" id="craftX">✕</button><h2>🔨 Crafting</h2><div id="craftList"></div></div></div>
 <div id="touch"><div id="stick"><div id="knob"></div></div>
-  <div class="tb" id="tJump">⤒</div><div class="tb" id="tUp">▲</div><div class="tb" id="tFly">✈️</div><div class="tb" id="tBreak">⛏️</div><div class="tb" id="tPlace">⧉</div></div>
+  <div class="tb" id="tJump">⤒</div><div class="tb" id="tUp">▲</div><div class="tb" id="tFly">✈️</div><div class="tb" id="tBreak">⛏️</div><div class="tb" id="tPlace">⧉</div><div class="tb" id="tDrop">⤓</div></div>
 <script src="r3lib.js"></script>
 <script src="online.js"></script>
 <script>
@@ -274,17 +275,23 @@ function groundY(x,z){ x=Math.floor(x); z=Math.floor(z); if(!inB(x,0,z)) return 
 
 /* ---- blocks: hotbar + palette ---- */
 let hotbar=[1,2,3,6,8,7,10,3,5], sel=0;
-function renderHot(){ const el=$('hot'); el.innerHTML=hotbar.map((t,i)=>`<div class="slot${i===sel?' on':''}" data-s="${i}"><span class="k">${i+1}</span><span class="sw" style="${swS(t)}"></span>${MODE==='survival'?`<span class="k" style="top:auto;left:auto;bottom:1px;right:4px;color:#fde047">${inv[t]||0}</span>`:''}</div>`).join(''); }
+function renderHot(){ const el=$('hot'); if(MODE==='survival'){ for(let i=0;i<9;i++) if(slots[i]!=null&&!(inv[slots[i]]>0)) slots[i]=null; el.innerHTML=slots.map((k,i)=>`<div class="slot${i===sel?' on':''}" data-s="${i}"><span class="k">${i+1}</span>${k!=null?itemSw(k)+(inv[k]>1?`<span class="k" style="top:auto;left:auto;bottom:1px;right:4px;color:#fde047">${inv[k]}</span>`:''):''}</div>`).join(''); return; } el.innerHTML=hotbar.map((t,i)=>`<div class="slot${i===sel?' on':''}" data-s="${i}"><span class="k">${i+1}</span><span class="sw" style="${swS(t)}"></span>${MODE==='survival'?`<span class="k" style="top:auto;left:auto;bottom:1px;right:4px;color:#fde047">${inv[t]||0}</span>`:''}</div>`).join(''); }
 $('hot').addEventListener('click',e=>{ const s=e.target.closest('[data-s]'); if(s){ sel=+s.dataset.s; renderHot(); } });
-function renderPal(){ $('palGrid').innerHTML=B.map((b,i)=>i?`<div class="b" data-p="${i}"><div class="sw" style="${swS(i)}"></div><b>${b.n}${MODE==='survival'?' ×'+(inv[i]||0):''}</b></div>`:'').join(''); }
-$('palGrid').addEventListener('click',e=>{ const b=e.target.closest('[data-p]'); if(b){ hotbar[sel]=+b.dataset.p; renderHot(); $('pal').classList.remove('on'); } });
+function renderPal(){ const hd=document.querySelector('#pal h2'), sub=document.querySelector('#pal .muted');
+  if(MODE==='survival'){ if(hd) hd.textContent='🎒 Inventory'; if(sub) sub.textContent='Tap an item to put it in your selected hotbar slot. Press G to drop the item you are holding.'; const ks=Object.keys(inv).filter(k=>inv[k]>0).map(normK);
+    $('palGrid').innerHTML=ks.length?ks.map(k=>`<div class="b" data-iv="${k}">${ITEMN[k]?`<div class="sw" style="font-size:30px;display:flex;align-items:center;justify-content:center">${ITEMN[k][0]}</div>`:`<div class="sw" style="${swS(k)}"></div>`}<b>${invName(k)} ×${inv[k]}</b></div>`).join(''):'<p style="color:#93a0bd;grid-column:1/-1">Your inventory is empty. Mine some blocks, chop a tree or hunt a pig — whatever drops, walk over it to pick it up.</p>'; return; }
+  if(hd) hd.textContent='🎒 Pick a block'; if(sub) sub.textContent='Tap a block to put it in your selected slot.';
+  $('palGrid').innerHTML=B.map((b,i)=>i?`<div class="b" data-p="${i}"><div class="sw" style="${swS(i)}"></div><b>${b.n}${MODE==='survival'?' ×'+(inv[i]||0):''}</b></div>`:'').join(''); }
+$('palGrid').addEventListener('click',e=>{ const iv=e.target.closest('[data-iv]'); if(iv){ const k=normK(iv.dataset.iv), j=slots.indexOf(k); if(j>=0) slots[j]=slots[sel]; slots[sel]=k; renderHot(); $('pal').classList.remove('on'); survSave(); return; } const b=e.target.closest('[data-p]'); if(b){ hotbar[sel]=+b.dataset.p; renderHot(); $('pal').classList.remove('on'); } });
 $('btnPal').onclick=()=>{ renderPal(); $('pal').classList.add('on'); }; $('palX').onclick=()=>$('pal').classList.remove('on');
 
 /* ---- actions ---- */
 function breakBlock(){ const h=pick(); if(!h) return; if(get(h.x,h.y,h.z)===9) return; if(ONLINE&&!worldReady) return; const i=idx(h.x,h.y,h.z); world[i]=0; mark(i); saveSoon(); netEdit(i,0); }
-function placeBlock(){ const h=pick(); if(!h) return; if(MODE==='survival'&&!(inv[hotbar[sel]]>0)){ flash('None of that block left — mine or craft more'); return; } const x=h.x+h.nx,y=h.y+h.ny,z=h.z+h.nz; if(!inB(x,y,z)) return; if(get(x,y,z)!==0&&get(x,y,z)!==9) return;
+function placeBlock(){ const SV=MODE==='survival', blk=SV?slots[sel]:hotbar[sel];
+  if(SV){ if(blk==null){ flash('✋ Empty hand — mine something first'); return; } if(blk==='meat'||blk==='apple'){ eat(blk); return; } if(typeof blk!=='number'||!B[blk]){ flash(invName(blk)+" can't be placed"); return; } if(!(inv[blk]>0)) return; }
+  const h=pick(); if(!h) return; const x=h.x+h.nx,y=h.y+h.ny,z=h.z+h.nz; if(!inB(x,y,z)) return; if(get(x,y,z)!==0&&get(x,y,z)!==9) return;
   /* don't place inside yourself */ const px0=Math.floor(P.x-WR),px1=Math.floor(P.x+WR),pz0=Math.floor(P.z-WR),pz1=Math.floor(P.z+WR); if(x>=px0&&x<=px1&&z>=pz0&&z<=pz1&&y>=Math.floor(P.y)&&y<=Math.floor(P.y+PH)) return;
-  if(ONLINE&&!worldReady) return; const i=idx(x,y,z); world[i]=hotbar[sel]; mark(i); saveSoon(); netEdit(i,hotbar[sel]); if(MODE==='survival'){ inv[hotbar[sel]]--; renderHot(); } }
+  if(ONLINE&&!worldReady) return; const i=idx(x,y,z); world[i]=blk; mark(i); saveSoon(); netEdit(i,blk); if(SV){ inv[blk]--; renderHot(); } }
 
 /* ---- save / load (store only edits from the generated world) ---- */
 let saveT=null; function saveSoon(){ if(ONLINE||MODE==='disaster') return; clearTimeout(saveT); saveT=setTimeout(save,800); }
@@ -346,10 +353,10 @@ function mineTick(dt){ const T=curTool(); if(isCast(T)){ mineKey=null; return; }
   const key=h.x+','+h.y+','+h.z; if(key!==mineKey){ mineKey=key; mineP=0; }
   if(T.k==='omni'){ doBreak(h.x,h.y,h.z); mineKey=null; mineP=0; return; }
   if(T.k==='hammer'){ bulk(()=>hammerBreak(h.x,h.y,h.z,1)); mineKey=null; mineP=0; return; }
-  mineP+=dt*effSpeed(bt); if(mineP>=HARD[bt]){ if(MODE==='survival') giveDrop(bt); doBreak(h.x,h.y,h.z); mineKey=null; mineP=0; } }
+  mineP+=dt*effSpeed(bt); if(mineP>=HARD[bt]){ if(MODE==='survival') giveDrop(bt,h); doBreak(h.x,h.y,h.z); mineKey=null; mineP=0; } }
 function mineProgress(){ const T=curTool(); if(T.god||isCast(T)||!mineKey) return 0; const p=mineKey.split(',').map(Number); const bt=get(p[0],p[1],p[2]); return bt?clamp(mineP/HARD[bt],0,1):0; }
 function primaryAct(){ const T=curTool(); if(isCast(T)){ castTool(T); return; } if(MODE==='survival'&&hitMob()) return; breaking=true; lastBreak=performance.now(); mineTick(.001); }
-function secondaryAct(){ const T=curTool(); if(T.k==='mega'){ const h=pick(10); if(!h) return; bulk(()=>megaPlace(h.x+h.nx,h.y+h.ny,h.z+h.nz,hotbar[sel],2)); return; } placeBlock(); }
+function secondaryAct(){ const T=curTool(); if(T.k==='mega'){ const h=pick(10); if(!h) return; bulk(()=>megaPlace(h.x+h.nx,h.y+h.ny,h.z+h.nz,MODE==='survival'&&typeof slots[sel]==='number'?slots[sel]:hotbar[sel],2)); return; } placeBlock(); }
 function castTool(T){ const a=aimPoint(70); if(T.k==='meteor') fxMeteor(a.x,a.z); else if(T.k==='storm') fxBolt(a.x,a.z); else if(T.k==='volcano') fxVolcano(a.x,a.z); else if(T.k==='nuke') fxNuke(a.x,a.y,a.z); else startDisaster(T.k); flash(T.ic+' '+T.n+' cast!'); }
 
 /* ===== dramatic effects (also reused by Disaster mode) ===== */
@@ -392,39 +399,62 @@ const DISASTERS=['tsunami','earthquake','meteor','tornado','lightning','volcano'
 const DISINFO={tsunami:['🌊 TSUNAMI','get to high ground!'],earthquake:['🌍 EARTHQUAKE','watch for cracks opening!'],meteor:['☄️ METEOR SHOWER','dodge the meteors!'],tornado:['🌪️ TORNADO','run from the funnel!'],lightning:['⛈️ LIGHTNING STORM','keep moving!'],volcano:['🌋 VOLCANO','get away from the lava!']};
 
 /* ===== SURVIVAL: inventory, drops, crafting, hunger, zombies and animals ===== */
+let slots=Array(9).fill(null), drops=[];
+const normK=k=>(typeof k==='string'&&/^\d+$/.test(k))?+k:k;
 let SAVEKEY='rrBlockverse5', inv={}, owned={0:1}, food=100, fallV=0, mobs=[], mobT=0, needMsgT=0;
 const toolOK=i=>MODE!=='survival'||!!allTools[i].god||!!owned[i];
 const ITEMN={stick:['🥢','Sticks'],meat:['🍖','Meat'],apple:['🍎','Apple']};
 const invName=k=>ITEMN[k]?ITEMN[k][1]:(B[k]?B[k].n:k);
-function addInv(k,n){ inv[k]=(inv[k]||0)+n; renderHot(); saveSoon(); }
-function survSave(){ try{ localStorage.setItem('rrBvS',JSON.stringify({inv,owned,health,food})); }catch(e){} }
-function survLoad(){ inv={}; owned={0:1}; health=100; food=100; try{ const s=JSON.parse(localStorage.getItem('rrBvS')||'null'); if(s){ inv=s.inv||{}; owned=s.owned||{0:1}; owned[0]=1; health=s.health>0?s.health:100; food=s.food==null?100:s.food; } }catch(e){} }
-function enterSurvival(){ if(ONLINE){ flash('🌍 Leave online play first to start Survival'); return; } save(); MODE='survival'; SAVEKEY='rrBlockverseS5'; dis=null; disWarn=0; fx.length=0; shake=0; mobs.length=0; P.fly=false; if(!load()) gen((Math.random()*1e9)|0); survLoad(); dirty=true; spawn(); tool=0; for(let i=5;i>=1;i--) if(owned[i]){ tool=i; break; } toolBadge(); renderHot(); updateMode(); flash('⚔️ SURVIVAL — punch trees for wood, press C to craft, and watch out at night!'); }
-function giveDrop(bt){ const T=curTool(), nag=m=>{ if(performance.now()>needMsgT){ needMsgT=performance.now()+2500; flash(m); } };
+const itemSw=k=>ITEMN[k]?`<span class="sw" style="display:flex;align-items:center;justify-content:center;font-size:20px;background:none">${ITEMN[k][0]}</span>`:`<span class="sw" style="${swS(k)}"></span>`;
+function addInv(k,n){ k=normK(k); inv[k]=(inv[k]||0)+n; if(MODE==='survival'&&!slots.includes(k)){ const e=slots.indexOf(null); if(e>=0) slots[e]=k; } renderHot(); saveSoon(); }
+function survSave(){ try{ localStorage.setItem('rrBvS5',JSON.stringify({inv,owned,health,food,slots})); }catch(e){} }
+function survLoad(){ inv={}; owned={0:1}; health=100; food=100; slots=Array(9).fill(null); drops.length=0; try{ const s=JSON.parse(localStorage.getItem('rrBvS5')||'null'); if(s){ inv=s.inv||{}; owned=s.owned||{0:1}; owned[0]=1; health=s.health>0?s.health:100; food=s.food==null?100:s.food; if(Array.isArray(s.slots)&&s.slots.length===9) slots=s.slots.map(k=>k==null?null:normK(k)); } }catch(e){} }
+function enterSurvival(){ if(ONLINE){ flash('🌍 Leave online play first to start Survival'); return; } save(); MODE='survival'; SAVEKEY='rrBlockverseS5'; dis=null; disWarn=0; fx.length=0; shake=0; mobs.length=0; P.fly=false; if(!load()) gen((Math.random()*1e9)|0); survLoad(); dirty=true; spawn(); tool=0; for(let i=5;i>=1;i--) if(owned[i]){ tool=i; break; } toolBadge(); renderHot(); updateMode(); flash('⚔️ SURVIVAL — you start with nothing. Punch a tree, walk over what drops, press C to craft · E inventory · G drop'); }
+function giveDrop(bt,h){ const D=(k,n)=>spawnDrop(k,n,h.x+.5,h.y+.45,h.z+.5); const T=curTool(), nag=m=>{ if(performance.now()>needMsgT){ needMsgT=performance.now()+2500; flash(m); } };
   if(PREF[bt]==='pick'&&bt!==10){ if(T.k!=='pick'&&!T.god){ nag('⛏️ You need a pickaxe to collect that'); return; } if(bt===27){ nag('🪨 Bedrock can\'t be broken'); return; } if((bt===13||bt===14||bt===18||bt===25||bt===26)&&T.pw<5&&!T.god){ nag('⛏️ Needs an Iron Pickaxe or better'); return; } if((bt===22||bt===24)&&T.pw<3.2&&!T.god){ nag('⛏️ Needs a Stone Pickaxe or better'); return; } }
-  if(bt===7){ if(Math.random()<.3) addInv('stick',1); if(Math.random()<.12) addInv('apple',1); if(T.k==='shears') addInv(7,1); return; }
-  if(bt===10) return; addInv(bt===1?2:bt===3?4:bt,1); }
+  if(bt===7){ if(Math.random()<.3) D('stick',1); if(Math.random()<.12) D('apple',1); if(T.k==='shears') D(7,1); return; }
+  if(bt===10) return; D(bt===1?2:bt===3?4:bt,1); }
 const RECIPES=[ {o:8,n:4,need:{6:1}},{o:'stick',n:4,need:{8:2}},{t:1,need:{8:3,stick:2}},{t:2,need:{4:3,stick:2}},{t:3,need:{22:3,stick:2}},{t:4,need:{13:3,stick:2}},{t:5,need:{14:3,stick:2}},{t:6,need:{8:3,stick:2}},{t:7,need:{8:1,stick:2}},{t:8,need:{22:2}},{t:9,need:{4:2,stick:1}},{o:15,n:4,need:{4:4}},{o:10,n:2,need:{5:2}},{o:11,n:2,need:{20:2}} ];
 const canCraft=r=>Object.keys(r.need).every(k=>(inv[k]||0)>=r.need[k]);
 function renderCraft(){ const L=$('craftList'); if(MODE!=='survival'){ L.innerHTML='<p style="color:#93a0bd">Crafting is part of <b>⚔️ Survival</b> mode — tap the mode button (🧱 Creative) to switch. In Creative you already have every block and tool.</p>'; return; }
   L.innerHTML='<div style="color:#93a0bd;font-size:13px">You have: '+(Object.keys(inv).filter(k=>inv[k]>0).map(k=>invName(k)+' ×'+inv[k]).join(' · ')||'nothing yet — go mine something')+'</div>'+RECIPES.map((r,i)=>{ const tl=r.t!=null?TOOLS[r.t]:null, have=tl&&owned[r.t];
     return `<div class="r"><i>${tl?tl.ic:(ITEMN[r.o]?ITEMN[r.o][0]:'🧱')}</i><span>${tl?tl.n:invName(r.o)+' ×'+r.n}<small>${Object.keys(r.need).map(k=>`<b style="color:${(inv[k]||0)>=r.need[k]?'#86efac':'#fca5a5'}">${r.need[k]} ${invName(k)}</b>`).join(' + ')}</small></span><button data-cr="${i}" ${have||!canCraft(r)?'disabled':''}>${have?'Owned':'Craft'}</button></div>`; }).join(''); }
 $('craftList').addEventListener('click',e=>{ const b=e.target.closest('[data-cr]'); if(!b||b.disabled) return; const r=RECIPES[+b.dataset.cr]; if(!canCraft(r)) return; for(const k in r.need) inv[k]-=r.need[k];
-  if(r.t!=null){ owned[r.t]=1; selTool(r.t); flash('🔨 Crafted '+TOOLS[r.t].n+'!'); } else { inv[r.o]=(inv[r.o]||0)+r.n; flash('🔨 Crafted '+invName(r.o)+' ×'+r.n); } renderHot(); renderCraft(); survSave(); saveSoon(); });
+  if(r.t!=null){ owned[r.t]=1; selTool(r.t); flash('🔨 Crafted '+TOOLS[r.t].n+'!'); } else { addInv(r.o,r.n); flash('🔨 Crafted '+invName(r.o)+' ×'+r.n); } renderHot(); renderCraft(); survSave(); saveSoon(); });
 $('btnCraft').onclick=()=>{ renderCraft(); $('craftM').classList.add('on'); }; $('craftX').onclick=()=>$('craftM').classList.remove('on');
-function eat(){ if(MODE!=='survival') return; if(inv.meat>0){ inv.meat--; food=Math.min(100,food+35); flash('🍖 Yum (+35 food)'); } else if(inv.apple>0){ inv.apple--; food=Math.min(100,food+15); flash('🍎 Crunch (+15 food)'); } else flash('Nothing to eat — hunt a pig or shake some leaves'); survSave(); }
+function eat(pref){ if(MODE!=='survival') return; if(pref==='apple'&&inv.apple>0){ inv.apple--; food=Math.min(100,food+15); flash('🍎 Crunch (+15 food)'); survSave(); renderHot(); return; } if(inv.meat>0){ inv.meat--; food=Math.min(100,food+35); flash('🍖 Yum (+35 food)'); } else if(inv.apple>0){ inv.apple--; food=Math.min(100,food+15); flash('🍎 Crunch (+15 food)'); } else flash('Nothing to eat — hunt a pig or shake some leaves'); survSave(); renderHot(); }
+
+/* dropped items: little spinning cubes that pop out, fall, and fly to you when you walk close */
+function spawnDrop(k,n,x,y,z,vx,vy,vz,delay){ k=normK(k); if(solidAt(Math.floor(x),Math.floor(y),Math.floor(z))) y=Math.floor(y)+1.2;
+  drops.push({k,n,x,y,z,vx:vx==null?(Math.random()-.5)*2.6:vx,vy:vy==null?3.6:vy,vz:vz==null?(Math.random()-.5)*2.6:vz,age:0,delay:delay||.45,sp:Math.random()*6.283}); if(drops.length>240) drops.shift(); }
+const DROPC={stick:[.58,.42,.24],meat:[.95,.46,.46],apple:[.92,.16,.16]};
+const dropCol=k=>DROPC[k]||(B[k]?(k===1?B[k].rgbT:B[k].rgbS):[1,1,1]);
+function dropTick(dt){ for(let i=drops.length-1;i>=0;i--){ const d=drops[i]; d.age+=dt; if(d.age>300||d.y<-5){ drops.splice(i,1); continue; }
+    const dx=P.x-d.x, dy=(P.y+.7)-d.y, dz=P.z-d.z, dist=Math.hypot(dx,dy,dz);
+    if(d.age>d.delay&&dist<2.3){ const s2=Math.min(1,dt*10); d.x+=dx*s2; d.y+=dy*s2; d.z+=dz*s2; if(dist<.8){ addInv(d.k,d.n); drops.splice(i,1); } continue; }
+    d.vy-=22*dt; let nx=d.x+d.vx*dt, nz=d.z+d.vz*dt, ny=d.y+d.vy*dt;
+    if(solidAt(Math.floor(nx),Math.floor(d.y),Math.floor(d.z))){ nx=d.x; d.vx=0; }
+    if(solidAt(Math.floor(nx),Math.floor(d.y),Math.floor(nz))){ nz=d.z; d.vz=0; }
+    if(solidAt(Math.floor(nx),Math.floor(ny-.15),Math.floor(nz))){ ny=Math.floor(ny-.15)+1.15; d.vy=0; d.vx*=.75; d.vz*=.75; }
+    if(get(Math.floor(nx),Math.floor(ny),Math.floor(nz))===17){ drops.splice(i,1); continue; }   /* burns up in lava */
+    d.x=nx; d.y=ny; d.z=nz; } }
+function dropDraw(){ const t=performance.now()/1000; for(const d of drops){ if(Math.abs(d.x-P.x)>40||Math.abs(d.z-P.z)>40) continue; const c=dropCol(d.k), b=Math.sin(t*3+d.sp)*.08, s2=.24;
+    R3.part(R3.UB,R3.mm(R3.T(d.x*BS,(d.y+.1+b)*BS,d.z*BS),R3.RY(t*1.7+d.sp),R3.S(s2*BS,s2*BS,s2*BS)),c);
+    if(d.n>1) R3.part(R3.UB,R3.mm(R3.T((d.x+.12)*BS,(d.y+.22+b)*BS,(d.z+.08)*BS),R3.RY(t*1.7+d.sp+.8),R3.S(s2*BS,s2*BS,s2*BS)),c); } }
+function dropSel(){ if(MODE!=='survival') return; const k=slots[sel]; if(k==null||!(inv[k]>0)){ flash('✋ Nothing in your hand to drop'); return; } inv[k]--; const f=forward();
+  spawnDrop(k,1,P.x+f[0]*.7,P.y+1.35,P.z+f[2]*.7,f[0]*5.5,2.6,f[2]*5.5,1.6); renderHot(); survSave(); }
 function survivalTick(dt){ if(hurtFlash>0) hurtFlash=Math.max(0,hurtFlash-dt*1.2);
   const px=Math.floor(P.x), pz=Math.floor(P.z), py=Math.floor(P.y); if(get(px,py,pz)===17||get(px,py-1,pz)===17) hurt(dt*24);
   if(P.fly||inWater()) fallV=0; else if(!P.ground) fallV=Math.min(fallV,P.vy); else { if(fallV<-16) hurt((-fallV-16)*4.5); fallV=0; }
   food=Math.max(0,food-dt*.22); if(food>30) health=Math.min(100,health+dt*1.6); else if(food<=0) hurt(dt*2.5);
-  mobTick(dt); }
+  mobTick(dt); dropTick(dt); }
 function spawnMob(type){ for(let k=0;k<12;k++){ const a=Math.random()*6.283, r=type==='zombie'?11+Math.random()*12:8+Math.random()*22, x=Math.floor(P.x+Math.cos(a)*r), z=Math.floor(P.z+Math.sin(a)*r); if(x<2||z<2||x>SZ-3||z>SZ-3) continue; const y=groundY(x,z), g=get(x,y-1,z); if(y<=WL||g===9||g===17||g===7) continue; if(type==='pig'&&g!==1) continue;
     mobs.push({type,x:x+.5,y,z:z+.5,vy:0,dir:a,yaw:a,hp:type==='zombie'?30:12,hit:0,wt:0,atk:0,kx:0,kz:0,ground:false,go:false}); return; } }
 const mobSolid=(x,y,z)=>solidAt(Math.floor(x),Math.floor(y),Math.floor(z));
 function mobTick(dt){ const night=sky().day<.2; mobT-=dt;
   if(mobT<=0){ mobT=2.2; let nz=0,np=0; for(const m of mobs){ if(m.type==='zombie') nz++; else np++; } if(night&&nz<7) spawnMob('zombie'); if(np<5) spawnMob('pig'); }
   for(let i=mobs.length-1;i>=0;i--){ const m=mobs[i], dx=P.x-m.x, dz=P.z-m.z, dd=Math.hypot(dx,dz);
-    if(m.hp<=0){ if(m.type==='pig'){ addInv('meat',2); flash('🍖 +2 meat (press R to eat)'); } else { if(Math.random()<.35){ addInv(22,1); flash('🧟 Zombie dropped iron ore!'); } } mobs.splice(i,1); continue; }
+    if(m.hp<=0){ if(m.type==='pig'){ spawnDrop('meat',2,m.x,m.y+.6,m.z); flash('🍖 The pig dropped meat — grab it!'); } else { if(Math.random()<.35){ spawnDrop(22,1,m.x,m.y+.6,m.z); flash('🧟 The zombie dropped iron ore!'); } } mobs.splice(i,1); continue; }
     if(dd>64||m.y<-4||(m.type==='zombie'&&!night&&Math.random()<dt*.3)){ mobs.splice(i,1); continue; }
     let sp=0; if(m.type==='zombie'){ if(dd<28){ m.dir=Math.atan2(dx,dz); sp=dd>1?2.4:0; } } else { m.wt-=dt; if(m.wt<=0){ m.wt=1.5+Math.random()*3; m.dir=Math.random()*6.283; m.go=Math.random()<.6; } sp=m.hit>0?3.2:(m.go?1.1:0); }
     m.yaw=m.dir; const nx=m.x+(Math.sin(m.dir)*sp+m.kx)*dt, nz=m.z+(Math.cos(m.dir)*sp+m.kz)*dt; m.kx*=.88; m.kz*=.88;
@@ -448,9 +478,9 @@ function survivalHud(c,W,Hh){ const bw=220, by=58, bar=(x,v,col,txt)=>{ c.fillSt
   if(sky().day<.2){ c.font='900 18px system-ui'; c.fillStyle='#fca5a5'; c.fillText('🧟 Night — zombies are out!',W/2,by+72); }
   if(hurtFlash>0){ c.fillStyle='rgba(220,20,20,'+Math.min(.5,hurtFlash*.5)+')'; c.fillRect(0,0,W,Hh); } c.font='700 13px system-ui'; c.textAlign='left'; }
 function toggleFly(){ if(MODE==='survival'&&!OWNER){ P.fly=false; flash('🚫 No flying in Survival'); return; } if(MODE==='disaster'){ P.fly=false; flash('🚫 No flying in Disaster Survival'); return; } P.fly=!P.fly; P.vy=0; flash(P.fly?'✈️ Fly on':'🚶 Fly off'); }
-function updateMode(){ $('btnMode').textContent=MODE==='disaster'?'☄️ Disasters':MODE==='survival'?'⚔️ Survival':'🧱 Creative'; }
-function enterDisaster(){ if(ONLINE){ flash('🌍 Leave online play first to start Disaster Survival'); return; } save(); MODE='disaster'; mobs.length=0; tool=5; toolBadge(); renderHot(); health=100; survived=0; dis=null; disT=9; disWarn=0; fx.length=0; shake=0; P.fly=false; gen((Math.random()*1e9)|0); dirty=true; spawn(); updateMode(); flash('☄️ DISASTER SURVIVAL — stay alive as long as you can!'); }
-function enterCreative(){ MODE='creative'; SAVEKEY='rrBlockverse5'; mobs.length=0; tool=5; toolBadge(); renderHot(); dis=null; disWarn=0; fx.length=0; shake=0; hurtFlash=0; if(!load()) gen((Math.random()*1e9)|0); dirty=true; spawn(); updateMode(); flash('🧱 Creative mode — your saved world is back'); }
+function updateMode(){ $('tDrop').style.display=MODE==='survival'?'flex':'none'; $('btnMode').textContent=MODE==='disaster'?'☄️ Disasters':MODE==='survival'?'⚔️ Survival':'🧱 Creative'; }
+function enterDisaster(){ if(ONLINE){ flash('🌍 Leave online play first to start Disaster Survival'); return; } save(); MODE='disaster'; drops.length=0; mobs.length=0; tool=5; toolBadge(); renderHot(); health=100; survived=0; dis=null; disT=9; disWarn=0; fx.length=0; shake=0; P.fly=false; gen((Math.random()*1e9)|0); dirty=true; spawn(); updateMode(); flash('☄️ DISASTER SURVIVAL — stay alive as long as you can!'); }
+function enterCreative(){ MODE='creative'; drops.length=0; SAVEKEY='rrBlockverse5'; mobs.length=0; tool=5; toolBadge(); renderHot(); dis=null; disWarn=0; fx.length=0; shake=0; hurtFlash=0; if(!load()) gen((Math.random()*1e9)|0); dirty=true; spawn(); updateMode(); flash('🧱 Creative mode — your saved world is back'); }
 $('btnMode').onclick=()=>{ if(MODE==='creative') enterSurvival(); else if(MODE==='survival') enterDisaster(); else enterCreative(); };
 function hurt(d){ if(MODE==='creative'||d<=0) return; health=Math.max(0,health-d); hurtFlash=Math.min(1,hurtFlash+d/40); if(health<=0) die(); }
 window.__survHurt=(x,y,z,rad,dmg)=>{ if(MODE==='creative') return; const d=Math.hypot(P.x-x,(P.y+1)-y,P.z-z); if(d<rad) hurt(dmg*(1-d/rad)); };
@@ -480,7 +510,7 @@ function survTick(dt){ dt=Math.min(.05,dt); if(MODE==='survival') survivalTick(d
     d.em=(d.em||0)-dt; if(d.em<=0){ d.em=.3; const gx=Math.floor(d.x+(Math.random()*4-2)), gz=Math.floor(d.z+(Math.random()*4-2)), gy=groundY(gx,gz)-1; if(gy>WL) doBreak(gx,gy,gz); } }
   else if(d.name==='lightning'){ d.em-=dt; if(d.em<=0){ d.em=.75; const near=Math.random()<.35, a=Math.random()*6.283, r=near?Math.random()*3.5:5+Math.random()*24; fxBolt(clamp(P.x+Math.cos(a)*r,1,SZ-2),clamp(P.z+Math.sin(a)*r,1,SZ-2)); } }
   if(dis&&d.t>=d.dur) endDisaster(); }
-function survDraw(){ mobDraw(); if(!dis) return;
+function survDraw(){ mobDraw(); dropDraw(); if(!dis) return;
   if(dis.name==='tsunami'&&dis.y>WL+.2){ R3.part(R3.UB,R3.mm(R3.T(SZ/2*BS,(dis.y-.5)*BS,SZ/2*BS),R3.S((SZ+40)*BS,BS,(SZ+40)*BS)),[.16,.42,.95]); }
   else if(dis.name==='tornado'){ const gy=groundY(dis.x,dis.z), t=performance.now()/110; for(let k=0;k<16;k++){ const rr=.9+k*.42; R3.part(R3.UB,R3.mm(R3.T((dis.x+Math.cos(t+k*.7)*rr*.35)*BS,(gy+k*1.5)*BS,(dis.z+Math.sin(t+k*.7)*rr*.35)*BS),R3.RY(t+k),R3.S(rr*BS,1.5*BS,rr*BS)),[.42,.4,.38]); } } }
 function survHud(c,W,Hh){ if(MODE==='survival') return survivalHud(c,W,Hh); if(MODE!=='disaster') return; const bw=260, bx=W/2-bw/2, by=58;
@@ -561,6 +591,7 @@ addEventListener('keydown',e=>{ if(e.code==='Space'&&!e.repeat){ const t=perform
   if(e.code==='KeyQ'&&!e.repeat){ let n=tool; for(let k=0;k<allTools.length;k++){ n=(n+1)%allTools.length; if(toolOK(n)) break; } selTool(n); flash(curTool().ic+' '+curTool().n); }
   if(e.code==='KeyC'&&!e.repeat){ renderCraft(); $('craftM').classList.toggle('on'); }
   if(e.code==='KeyR'&&!e.repeat) eat();
+  if(e.code==='KeyG'&&!e.repeat) dropSel();
   if(e.code==='KeyT'&&!e.repeat){ renderTools(); $('toolM').classList.toggle('on'); }
   if(e.code==='KeyF'&&!e.repeat){ toggleFly(); }
   if(['KeyW','KeyA','KeyS','KeyD','Space','ShiftLeft','ShiftRight'].includes(e.code)) e.preventDefault();
@@ -586,6 +617,7 @@ if(coarse){ $('touch').classList.add('on');
   const hold=(el,on,off)=>{ el.addEventListener('pointerdown',e=>{ e.preventDefault(); on(); }); el.addEventListener('pointerup',e=>{ e.preventDefault(); off&&off(); }); el.addEventListener('pointercancel',()=>off&&off()); };
   hold($('tBreak'),()=>{ primaryAct(); },()=>{ breaking=false; mineKey=null; mineP=0; });
   hold($('tPlace'),()=>secondaryAct());
+  hold($('tDrop'),()=>dropSel());
   hold($('tJump'),()=>{ jumpQ=true; touchUp=true; },()=>touchUp=false);
   hold($('tUp'),()=>touchUp=true,()=>touchUp=false);
   $('tFly').addEventListener('pointerdown',e=>{ e.preventDefault(); toggleFly(); });
@@ -599,7 +631,7 @@ addEventListener('pagehide',save);
 /* ---- go ---- */
 if(!load()) gen((Math.random()*1e9)|0);
 spawn(); renderHot(); renderPal(); toolBadge(); requestAnimationFrame(frame);
-window.__bv={P,get,set:(x,y,z,t)=>{world[idx(x,y,z)]=t;mark(idx(x,y,z));},pick,gen,spawn,get SZ(){return SZ;},get tool(){return tool;},set tool(v){selTool(v);},fxMeteor,fxNuke,dbg:{mode:m=>{ if(m==='survival') enterSurvival(); },addInv,mobs:()=>mobs,spawnMob,setTOD:v=>{TOD=v;},hitMob,inv:()=>inv,st:()=>({MODE,health,food,tool,owned})},surv:{start:n=>{ if(MODE!=='disaster') enterDisaster(); startDisaster(n); },get s(){return {MODE,health,survived,dis:dis&&dis.name,disT};}}};
+window.__bv={P,get,set:(x,y,z,t)=>{world[idx(x,y,z)]=t;mark(idx(x,y,z));},pick,gen,spawn,get SZ(){return SZ;},get tool(){return tool;},set tool(v){selTool(v);},fxMeteor,fxNuke,dbg:{mode:m=>{ if(m==='survival') enterSurvival(); },addInv,mobs:()=>mobs,drops:()=>drops,slots:()=>slots,dropSel,mineAt:(x,y,z)=>{ const bt=get(x,y,z); if(bt){ giveDrop(bt,{x,y,z}); doBreak(x,y,z); } return bt; },spawnMob,setTOD:v=>{TOD=v;},hitMob,inv:()=>inv,st:()=>({MODE,health,food,tool,owned})},surv:{start:n=>{ if(MODE!=='disaster') enterDisaster(); startDisaster(n); },get s(){return {MODE,health,survived,dis:dis&&dis.name,disT};}}};
 })();
 </script>
 <script src="site.js"></script>
