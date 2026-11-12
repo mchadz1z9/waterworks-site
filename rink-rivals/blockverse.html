@@ -57,7 +57,7 @@
 'use strict';
 const $=id=>document.getElementById(id), clamp=(v,a,b)=>Math.max(a,Math.min(b,v));
 const R3=makeR3($('gl'),$('stage'));
-const BS=30, SZ=320, H=96, WL=48, CS=16;                 /* block size in world units, world width, height, water level */
+const BS=30, SZ=320, H=176, WL=128, CS=16;                 /* block size in world units, world width, height, water level */
 const inB=(x,y,z)=>x>=0&&x<SZ&&z>=0&&z<SZ&&y>=0&&y<H;
 const idx=(x,y,z)=>(y*SZ+z)*SZ+x;
 let world=new Uint8Array(SZ*SZ*H), base=new Uint8Array(SZ*SZ*H), seed=0;
@@ -89,6 +89,11 @@ const B=[null,
  {n:'Clay',c:'#9aa7b4'},
  {n:'Red sand',c:'#c56a37'},
  {n:'Iron ore',c:'#b9937c'},
+ {n:'Coal ore',c:'#5b5b5b'},
+ {n:'Copper ore',c:'#b8774c'},
+ {n:'Ruby ore',c:'#a84a5a',glow:1.08},
+ {n:'Sapphire ore',c:'#4a62a8',glow:1.08},
+ {n:'Bedrock',c:'#333333'},
 ];
 for(const b of B){ if(!b) continue; b.rgbT=hex(b.top||b.c); b.rgbS=hex(b.side||b.c); b.rgbB=hex(b.bot||b.c); b.icon=b.top||b.c; }
 /* ---- pixel-art block textures: original 16×16 tiles painted in code, packed into one 128×128 atlas ---- */
@@ -136,10 +141,15 @@ const TEXMAP={};   /* block id -> [top tile, side tile, bottom tile] */
   id.clay=tile(32,t=>{ t.fill(['#a0a7b4','#98a0ad','#a9b0bc','#939aa6']); });
   id.redSand=tile(33,t=>{ t.fill(['#c06a36','#b5602f','#ca7844','#a95629']); });
   id.ironOre=tile(34,oreP(['#d8a77e','#c48f63','#e8c4a2']));
+  id.coalOre=tile(35,oreP(['#2b2b2b','#1a1a1a','#3d3d3d']));
+  id.copperOre=tile(36,oreP(['#e0824a','#c46a35','#5fb89a','#f0a070']));
+  id.rubyOre=tile(37,oreP(['#e0254a','#b5132f','#ff6a85']));
+  id.sapphireOre=tile(38,oreP(['#2f5fe0','#1d3fb0','#7fa3ff']));
+  id.bedrock=tile(39,t=>{ t.fill(['#3b3b3b','#2a2a2a','#555555','#1f1f1f','#474747','#141414']); for(let k=0;k<8;k++){ const x=t.R()*16|0,y=t.R()*16|0; for(const [dx,dy] of [[0,0],[1,0],[0,1],[1,1]]) t.set(x+dx,y+dy,t.R()<.5?'#0e0e0e':'#6a6a6a'); } });
   /* average colour of each tile on the bottom row, for faraway blocks */
   const row=A.createImageData(128,1); for(let i=0;i<avg.length;i++){ row.data[i*4]=avg[i][0]; row.data[i*4+1]=avg[i][1]; row.data[i*4+2]=avg[i][2]; row.data[i*4+3]=255; } for(let i=avg.length;i<128;i++) row.data[i*4+3]=255; A.putImageData(row,0,127);
   const m=(t,s,b)=>[t,s==null?t:s,b==null?(s==null?t:s):b];
-  Object.assign(TEXMAP,{1:m(id.grassTop,id.grassSide,id.dirt),2:m(id.dirt),3:m(id.stone),4:m(id.cobble),5:m(id.sand),6:m(id.logTop,id.logSide,id.logTop),7:m(id.leaves),8:m(id.planks),10:m(id.glass),11:m(id.brick),12:m(id.snow),13:m(id.goldOre),14:m(id.gemOre),15:m(id.stoneBrick),16:m(id.pumpTop,id.pumpSide,id.pumpSide),17:m(id.lava),18:m(id.obsidian),19:m(id.moss),20:m(id.clay),21:m(id.redSand),22:m(id.ironOre)});
+  Object.assign(TEXMAP,{1:m(id.grassTop,id.grassSide,id.dirt),2:m(id.dirt),3:m(id.stone),4:m(id.cobble),5:m(id.sand),6:m(id.logTop,id.logSide,id.logTop),7:m(id.leaves),8:m(id.planks),10:m(id.glass),11:m(id.brick),12:m(id.snow),13:m(id.goldOre),14:m(id.gemOre),15:m(id.stoneBrick),16:m(id.pumpTop,id.pumpSide,id.pumpSide),17:m(id.lava),18:m(id.obsidian),19:m(id.moss),20:m(id.clay),21:m(id.redSand),22:m(id.ironOre),23:m(id.coalOre),24:m(id.copperOre),25:m(id.rubyOre),26:m(id.sapphireOre),27:m(id.bedrock)});
   /* little 3D cube icons for the hotbar and the block picker */
   for(const k in TEXMAP){ const [tt,ts]=TEXMAP[k], c=document.createElement('canvas'); c.width=c.height=48; const x=c.getContext('2d'); x.imageSmoothingEnabled=false;
     const face=(tl,a,b,cc,d,e,f,shade)=>{ x.setTransform(a,b,cc,d,e,f); x.drawImage(ATLAS,(tl%8)*16,Math.floor(tl/8)*16,16,16,0,0,16,16); if(shade){ x.fillStyle='rgba(0,0,0,'+shade+')'; x.fillRect(0,0,16,16); } };
@@ -151,7 +161,7 @@ let atlasOn=false;
 const transparent=t=>t===0||t===9;   /* faces of opaque blocks are drawn when the neighbour is air or water */
 
 /* ---- value-noise terrain ---- */
-function mkRand(s){ return ()=>{ s=(s*1103515245+12345)&0x7fffffff; return s/0x7fffffff; }; }
+function mkRand(s){ s=(s>>>0)||1; return ()=>{ s=(Math.imul(s,1103515245)+12345)>>>0; return (s>>>1)/0x80000000; }; }   /* 32-bit exact (the old float version lost bits and repeated) */
 function noise2(seed){ const g=new Float32Array(64*64); const r=mkRand(seed); for(let i=0;i<g.length;i++) g[i]=r();
   const sm=t=>t*t*(3-2*t);
   return (x,z)=>{ const xs=x/9, zs=z/9; const x0=Math.floor(xs)&63, z0=Math.floor(zs)&63, x1=(x0+1)&63, z1=(z0+1)&63; const fx=sm(xs-Math.floor(xs)), fz=sm(zs-Math.floor(zs));
@@ -164,17 +174,18 @@ function gen(s){ seed=s; dirty=true; world=new Uint8Array(SZ*SZ*H); const n1=noi
     for(let y=h+1;y<=WL;y++) world[idx(x,y,z)]=9;      /* water fills up to sea level */
   }
   /* caves: carve a few blobs */
-  for(let i=0;i<3000;i++){ let cx=r()*SZ, cy=4+r()*(WL-2), cz=r()*SZ; const len=8+r()*22; let dx=(r()-.5), dy=(r()-.5)*.4, dz=(r()-.5);
+  for(let i=0;i<7000;i++){ let cx=r()*SZ, cy=6+r()*(WL-6), cz=r()*SZ; const len=8+r()*22; let dx=(r()-.5), dy=(r()-.5)*.4, dz=(r()-.5);
     for(let s2=0;s2<len;s2++){ cx+=dx*1.6; cy+=dy*1.6; cz+=dz*1.6; const rad=1.4+r()*1.6; for(let ox=-2;ox<=2;ox++)for(let oy=-2;oy<=2;oy++)for(let oz=-2;oz<=2;oz++){ const X=Math.round(cx+ox),Y=Math.round(cy+oy),Z=Math.round(cz+oz); if(inB(X,Y,Z)&&Y>1&&ox*ox+oy*oy+oz*oz<rad*rad&&world[idx(X,Y,Z)]!==9) world[idx(X,Y,Z)]=0; } if(r()<.25){dx=(r()-.5);dy=(r()-.5)*.4;dz=(r()-.5);} } }
-  /* the deepest caves fill with lava */ for(let x=0;x<SZ;x++) for(let z=0;z<SZ;z++) for(let y=2;y<=5;y++){ const i=idx(x,y,z); if(world[i]===0) world[i]=17; }
+  /* bedrock floor: solid at the bottom, ragged a few blocks up */ for(let x=0;x<SZ;x++) for(let z=0;z<SZ;z++){ world[idx(x,0,z)]=27; for(let y=1;y<=3;y++) if(r()<.75-y*.2) world[idx(x,y,z)]=27; }
+  /* the deepest caves fill with lava */ for(let x=0;x<SZ;x++) for(let z=0;z<SZ;z++) for(let y=4;y<=10;y++){ const i=idx(x,y,z); if(world[i]===0) world[i]=17; }
   /* ore pockets: the good stuff is deep */
-  const ore=(t,n,maxY)=>{ for(let i=0;i<n;i++){ const X=1+Math.floor(r()*(SZ-2)),Y=2+Math.floor(r()*maxY),Z=1+Math.floor(r()*(SZ-2)); for(let k=0;k<3+r()*4;k++){ const x=X+Math.round((r()-.5)*2),y=Y+Math.round((r()-.5)*2),z=Z+Math.round((r()-.5)*2); if(inB(x,y,z)&&world[idx(x,y,z)]===3) world[idx(x,y,z)]=t; } } };
-  ore(13,1000,26); ore(14,650,13); ore(18,320,7);
+  const ore=(t,n,maxY,minY)=>{ minY=minY||5; for(let i=0;i<n;i++){ const X=1+Math.floor(r()*(SZ-2)),Y=minY+Math.floor(r()*(maxY-minY)),Z=1+Math.floor(r()*(SZ-2)); let x=X,y=Y,z=Z; const L=3+Math.floor(r()*6); for(let k=0;k<L;k++){ if(inB(x,y,z)&&world[idx(x,y,z)]===3) world[idx(x,y,z)]=t; const a=Math.floor(r()*6); if(a===0)x++; else if(a===1)x--; else if(a===2)y++; else if(a===3)y--; else if(a===4)z++; else z--; } } };   /* each pocket is a short winding vein */
+  ore(13,2400,60,6); ore(14,1100,22,5); ore(18,500,14,5); ore(23,20000,138,40); ore(24,4200,132,52); ore(25,1300,32,5); ore(26,1300,48,10);
   /* trees on grass */
   for(let i=0;i<2400;i++){ const x=2+Math.floor(r()*(SZ-4)), z=2+Math.floor(r()*(SZ-4)); let h=htOf(x,z); if(h<=WL) continue; if(world[idx(x,h,z)]!==1) continue; if(r()<.72) continue; const th=3+Math.floor(r()*3);
     for(let y=1;y<=th;y++) world[idx(x,h+y,z)]=6; const ty=h+th;
     for(let oy=-1;oy<=2;oy++)for(let ox=-2;ox<=2;ox++)for(let oz=-2;oz<=2;oz++){ const rr=Math.abs(ox)+Math.abs(oz)+Math.abs(oy); if(rr>3) continue; if(ox===0&&oz===0&&oy<2) continue; const X=x+ox,Y=ty+oy,Z=z+oz; if(inB(X,Y,Z)&&world[idx(X,Y,Z)]===0&&r()<.86) world[idx(X,Y,Z)]=7; } }
-  ore(22,1700,44);   /* iron — placed last so older saved worlds keep the same trees */
+  ore(22,10000,122,20);   /* iron — placed last so older saved worlds keep the same trees */
   base=world.slice();
 }
 
@@ -189,7 +200,7 @@ const FACES=[ /* dir, neighbour offset, 4 corner offsets (CCW seen from outside)
 ];
 function tint(x,y,z){ let h=(x*73856093^y*19349663^z*83492791)>>>0; return .93+ (h%100)/100*.12; }
 /* surface texture style per block (shader motif): 1 grain/dirt, 2 wood, 3 stone, 4 brick, 5 leaves, 6 grass-top, 7 water, 0 smooth */
-const MAT=[0,1,1,3,3,1,2,5,2,7,0,4,1,3,3,4,2,1,3,3,1,1,3];
+const MAT=[0,1,1,3,3,1,2,5,2,7,0,4,1,3,3,4,2,1,3,3,1,1,3,3,3,3,3,3];
 /* ambient occlusion: darken faces tucked into crevices — the single biggest look upgrade for voxels */
 const occ=(x,y,z)=>{ const t=inB(x,y,z)?world[idx(x,y,z)]:0; return (t!==0&&t!==9)?1:0; };
 const AOBR=[.46,.66,.84,1.0];
@@ -203,7 +214,7 @@ function build(g,cx,cz){ const tf=tint, x0=cx*CS, z0=cz*CS, x1=Math.min(SZ,x0+CS
   for(let fi=0;fi<6;fi++){ const F=FACES[fi], o=F[0], nx=x+o[0],ny=y+o[1],nz=z+o[2]; const nb=inB(nx,ny,nz)?world[idx(nx,ny,nz)]:0;
     if(t===9){ if(fi!==2) continue; if(nb!==0) continue; }   /* water: only the top surface, only under air */
     else { if(!(nb===0||nb===9)) continue; }                 /* opaque: draw face only against air/water */
-    const col=(F[2]==='T'?blk.rgbT:F[2]==='B'?blk.rgbB:blk.rgbS); const f=tf(x,y,z)*(t===9?1:faceAO(x,y,z,o))*em*(y<WL-8&&t!==17?Math.max(.42,1-(WL-8-y)*.016):1), c=[col[0]*f,col[1]*f,col[2]*f];
+    const col=(F[2]==='T'?blk.rgbT:F[2]==='B'?blk.rgbB:blk.rgbS); const f=tf(x,y,z)*(t===9?1:faceAO(x,y,z,o))*em*(y<WL-8&&t!==17?Math.max(.58,1-(WL-8-y)*.007):1), c=[col[0]*f,col[1]*f,col[2]*f];
     const C=F[1], P=i=>[ (x+C[i][0])*BS, (y+C[i][1])*BS - (t===9?BS*.12:0), (z+C[i][2])*BS ];
     const TX=TEXMAP[t]; if(TX){ const tl=F[2]==='T'?TX[0]:F[2]==='B'?TX[2]:TX[1], k=f/tf(x,y,z); g.quad(P(0),P(1),P(2),P(3),[k,k,k],-(1000+tl)); continue; }
     let mat=MAT[t]||0; if(t===1&&F[2]==='T') mat=6;
@@ -316,8 +327,8 @@ function drawPlayers(){ for(const id in others){ const o=others[id]; if(performa
 
 /* ===== TOOLS, MINING & OWNER GOD-POWERS ===== */
 const OWNER=(()=>{ try{ return localStorage.getItem('rrOwner')==='1'; }catch(e){ return false; } })();
-const HARD=[0,.9,.75,4.5,3.8,.6,2.2,.25,1.4,0,.4,3,.5,6,6.5,4.2,1.1,9,15,3.6,.7,.7,5];
-const PREF={1:'shovel',2:'shovel',3:'pick',4:'pick',5:'shovel',6:'axe',7:'shears',8:'axe',10:'pick',11:'pick',12:'shovel',13:'pick',14:'pick',15:'pick',16:'axe',18:'pick',19:'pick',20:'shovel',21:'shovel',22:'pick'};
+const HARD=[0,.9,.75,4.5,3.8,.6,2.2,.25,1.4,0,.4,3,.5,6,6.5,4.2,1.1,9,15,3.6,.7,.7,5,4.5,5,6.5,6,1e9];
+const PREF={1:'shovel',2:'shovel',3:'pick',4:'pick',5:'shovel',6:'axe',7:'shears',8:'axe',10:'pick',11:'pick',12:'shovel',13:'pick',14:'pick',15:'pick',16:'axe',18:'pick',19:'pick',20:'shovel',21:'shovel',22:'pick',23:'pick',24:'pick',25:'pick',26:'pick',27:'pick'};
 const TOOLS=[ {n:'Hand',ic:'✋',k:'hand',pw:1},{n:'Wood Pickaxe',ic:'⛏️',k:'pick',pw:2},{n:'Stone Pickaxe',ic:'⛏️',k:'pick',pw:3.2},{n:'Iron Pickaxe',ic:'⛏️',k:'pick',pw:5},{n:'Gold Pickaxe',ic:'⛏️',k:'pick',pw:7},{n:'Diamond Pickaxe',ic:'⛏️',k:'pick',pw:9},{n:'Axe',ic:'🪓',k:'axe',pw:5},{n:'Shovel',ic:'🥄',k:'shovel',pw:5},{n:'Shears',ic:'✂️',k:'shears',pw:6},{n:'Sword',ic:'🗡️',k:'sword',pw:3} ];
 const GODTOOLS=[ {n:'Omni-Pick (instant)',ic:'👑',k:'omni',god:1},{n:'God Hammer 3×3×3',ic:'🔨',k:'hammer',god:1},{n:'Mega Builder 5×5×5',ic:'🧱',k:'mega',god:1},{n:'Meteor Wand',ic:'☄️',k:'meteor',god:1},{n:'Storm Caller',ic:'⛈️',k:'storm',god:1},{n:'Volcano Staff',ic:'🌋',k:'volcano',god:1},{n:'Nuke',ic:'💥',k:'nuke',god:1},{n:'Summon Tsunami',ic:'🌊',k:'tsunami',god:1},{n:'Summon Earthquake',ic:'🌍',k:'earthquake',god:1},{n:'Summon Tornado',ic:'🌪️',k:'tornado',god:1} ];
 const allTools=OWNER?TOOLS.concat(GODTOOLS):TOOLS.slice();
@@ -327,7 +338,7 @@ const isCast=T=>T.k==='meteor'||T.k==='storm'||T.k==='volcano'||T.k==='nuke'||T.
 function effSpeed(bt){ const T=curTool(); if(T.god) return 1e9; const match=PREF[bt]===T.k||(T.k==='sword'&&PREF[bt]==='shears'); return T.pw*(match?1:(T.k==='hand'?.6:.5)); }
 let mineKey=null, mineP=0, bulkBuf=null;
 function bulk(fn){ bulkBuf=[]; fn(); const e=bulkBuf; bulkBuf=null; if(e.length){ saveSoon(); if(ONLINE&&net) net.send({t:'b',e}); } }
-function doBreak(x,y,z){ if(!inB(x,y,z)) return; const t=get(x,y,z); if(t===0||t===9) return; const i=idx(x,y,z); world[i]=0; mark(i); if(bulkBuf){ bulkBuf.push(i,0); } else { saveSoon(); netEdit(i,0); } }
+function doBreak(x,y,z){ if(!inB(x,y,z)) return; const t=get(x,y,z); if(t===0||t===9) return; if(t===27&&curTool().k!=='omni') return; const i=idx(x,y,z); world[i]=0; mark(i); if(bulkBuf){ bulkBuf.push(i,0); } else { saveSoon(); netEdit(i,0); } }
 function doPlace(x,y,z,v){ if(!inB(x,y,z)) return; const t=get(x,y,z); if(t!==0&&t!==9) return; const i=idx(x,y,z); world[i]=v; mark(i); if(bulkBuf){ bulkBuf.push(i,v); } else { saveSoon(); netEdit(i,v); } }
 function hammerBreak(x,y,z,r){ for(let dx=-r;dx<=r;dx++)for(let dy=-r;dy<=r;dy++)for(let dz=-r;dz<=r;dz++) doBreak(x+dx,y+dy,z+dz); }
 function megaPlace(x,y,z,v,r){ for(let dx=-r;dx<=r;dx++)for(let dy=-r;dy<=r;dy++)for(let dz=-r;dz<=r;dz++) doPlace(x+dx,y+dy,z+dz,v); }
@@ -344,7 +355,7 @@ function castTool(T){ const a=aimPoint(70); if(T.k==='meteor') fxMeteor(a.x,a.z)
 /* ===== dramatic effects (also reused by Disaster mode) ===== */
 let fx=[], flashA=0, shake=0;
 function flashScreen(a){ flashA=Math.max(flashA,a||.7); }
-function crater(cx,cy,cz,r,fire){ cx=Math.round(cx);cy=Math.round(cy);cz=Math.round(cz); for(let dx=-r;dx<=r;dx++)for(let dy=-r;dy<=r;dy++)for(let dz=-r;dz<=r;dz++){ if(dx*dx+dy*dy+dz*dz>r*r) continue; const x=cx+dx,y=cy+dy,z=cz+dz; if(!inB(x,y,z)) continue; if(get(x,y,z)===0) continue; const i=idx(x,y,z); const v=(fire&&dy<=-r+2&&Math.random()<.35)?17:0; world[i]=v; mark(i); if(bulkBuf){ bulkBuf.push(i,v); } else netEdit(i,v); } }
+function crater(cx,cy,cz,r,fire){ cx=Math.round(cx);cy=Math.round(cy);cz=Math.round(cz); for(let dx=-r;dx<=r;dx++)for(let dy=-r;dy<=r;dy++)for(let dz=-r;dz<=r;dz++){ if(dx*dx+dy*dy+dz*dz>r*r) continue; const x=cx+dx,y=cy+dy,z=cz+dz; if(get(x,y,z)===27) continue; if(!inB(x,y,z)) continue; if(get(x,y,z)===0) continue; const i=idx(x,y,z); const v=(fire&&dy<=-r+2&&Math.random()<.35)?17:0; world[i]=v; mark(i); if(bulkBuf){ bulkBuf.push(i,v); } else netEdit(i,v); } }
 function fxMeteor(tx,tz){ tx=Math.floor(tx); tz=Math.floor(tz); fx.push({t:'meteor',x:tx+.5,y:H+22,z:tz+.5,vy:-30,gy:groundY(tx,tz)}); }
 function fxBolt(tx,tz){ tx=Math.floor(tx); tz=Math.floor(tz); const gy=groundY(tx,tz); fx.push({t:'bolt',x:tx+.5,z:tz+.5,gy,life:.45,seed:Math.random()*999}); flashScreen(.55); for(let k=0;k<3;k++){ const x=tx+((Math.random()*3-1)|0),z=tz+((Math.random()*3-1)|0); if(inB(x,gy,z)&&Math.random()<.5) doPlace(x,gy,z,17); } damageAt(tx,gy,tz,2.5,45); }
 function fxVolcano(tx,tz){ tx=Math.floor(tx); tz=Math.floor(tz); fx.push({t:'volcano',x:tx+.5,z:tz+.5,gy:groundY(tx,tz),life:6,emit:0}); }
@@ -381,16 +392,16 @@ const DISASTERS=['tsunami','earthquake','meteor','tornado','lightning','volcano'
 const DISINFO={tsunami:['🌊 TSUNAMI','get to high ground!'],earthquake:['🌍 EARTHQUAKE','watch for cracks opening!'],meteor:['☄️ METEOR SHOWER','dodge the meteors!'],tornado:['🌪️ TORNADO','run from the funnel!'],lightning:['⛈️ LIGHTNING STORM','keep moving!'],volcano:['🌋 VOLCANO','get away from the lava!']};
 
 /* ===== SURVIVAL: inventory, drops, crafting, hunger, zombies and animals ===== */
-let SAVEKEY='rrBlockverse4', inv={}, owned={0:1}, food=100, fallV=0, mobs=[], mobT=0, needMsgT=0;
+let SAVEKEY='rrBlockverse5', inv={}, owned={0:1}, food=100, fallV=0, mobs=[], mobT=0, needMsgT=0;
 const toolOK=i=>MODE!=='survival'||!!allTools[i].god||!!owned[i];
 const ITEMN={stick:['🥢','Sticks'],meat:['🍖','Meat'],apple:['🍎','Apple']};
 const invName=k=>ITEMN[k]?ITEMN[k][1]:(B[k]?B[k].n:k);
 function addInv(k,n){ inv[k]=(inv[k]||0)+n; renderHot(); saveSoon(); }
 function survSave(){ try{ localStorage.setItem('rrBvS',JSON.stringify({inv,owned,health,food})); }catch(e){} }
 function survLoad(){ inv={}; owned={0:1}; health=100; food=100; try{ const s=JSON.parse(localStorage.getItem('rrBvS')||'null'); if(s){ inv=s.inv||{}; owned=s.owned||{0:1}; owned[0]=1; health=s.health>0?s.health:100; food=s.food==null?100:s.food; } }catch(e){} }
-function enterSurvival(){ if(ONLINE){ flash('🌍 Leave online play first to start Survival'); return; } save(); MODE='survival'; SAVEKEY='rrBlockverseS4'; dis=null; disWarn=0; fx.length=0; shake=0; mobs.length=0; P.fly=false; if(!load()) gen((Math.random()*1e9)|0); survLoad(); dirty=true; spawn(); tool=0; for(let i=5;i>=1;i--) if(owned[i]){ tool=i; break; } toolBadge(); renderHot(); updateMode(); flash('⚔️ SURVIVAL — punch trees for wood, press C to craft, and watch out at night!'); }
+function enterSurvival(){ if(ONLINE){ flash('🌍 Leave online play first to start Survival'); return; } save(); MODE='survival'; SAVEKEY='rrBlockverseS5'; dis=null; disWarn=0; fx.length=0; shake=0; mobs.length=0; P.fly=false; if(!load()) gen((Math.random()*1e9)|0); survLoad(); dirty=true; spawn(); tool=0; for(let i=5;i>=1;i--) if(owned[i]){ tool=i; break; } toolBadge(); renderHot(); updateMode(); flash('⚔️ SURVIVAL — punch trees for wood, press C to craft, and watch out at night!'); }
 function giveDrop(bt){ const T=curTool(), nag=m=>{ if(performance.now()>needMsgT){ needMsgT=performance.now()+2500; flash(m); } };
-  if(PREF[bt]==='pick'&&bt!==10){ if(T.k!=='pick'&&!T.god){ nag('⛏️ You need a pickaxe to collect that'); return; } if((bt===13||bt===14||bt===18)&&T.pw<5&&!T.god){ nag('⛏️ Needs an Iron Pickaxe or better'); return; } if(bt===22&&T.pw<3.2&&!T.god){ nag('⛏️ Needs a Stone Pickaxe or better'); return; } }
+  if(PREF[bt]==='pick'&&bt!==10){ if(T.k!=='pick'&&!T.god){ nag('⛏️ You need a pickaxe to collect that'); return; } if(bt===27){ nag('🪨 Bedrock can\'t be broken'); return; } if((bt===13||bt===14||bt===18||bt===25||bt===26)&&T.pw<5&&!T.god){ nag('⛏️ Needs an Iron Pickaxe or better'); return; } if((bt===22||bt===24)&&T.pw<3.2&&!T.god){ nag('⛏️ Needs a Stone Pickaxe or better'); return; } }
   if(bt===7){ if(Math.random()<.3) addInv('stick',1); if(Math.random()<.12) addInv('apple',1); if(T.k==='shears') addInv(7,1); return; }
   if(bt===10) return; addInv(bt===1?2:bt===3?4:bt,1); }
 const RECIPES=[ {o:8,n:4,need:{6:1}},{o:'stick',n:4,need:{8:2}},{t:1,need:{8:3,stick:2}},{t:2,need:{4:3,stick:2}},{t:3,need:{22:3,stick:2}},{t:4,need:{13:3,stick:2}},{t:5,need:{14:3,stick:2}},{t:6,need:{8:3,stick:2}},{t:7,need:{8:1,stick:2}},{t:8,need:{22:2}},{t:9,need:{4:2,stick:1}},{o:15,n:4,need:{4:4}},{o:10,n:2,need:{5:2}},{o:11,n:2,need:{20:2}} ];
@@ -439,7 +450,7 @@ function survivalHud(c,W,Hh){ const bw=220, by=58, bar=(x,v,col,txt)=>{ c.fillSt
 function toggleFly(){ if(MODE==='survival'&&!OWNER){ P.fly=false; flash('🚫 No flying in Survival'); return; } if(MODE==='disaster'){ P.fly=false; flash('🚫 No flying in Disaster Survival'); return; } P.fly=!P.fly; P.vy=0; flash(P.fly?'✈️ Fly on':'🚶 Fly off'); }
 function updateMode(){ $('btnMode').textContent=MODE==='disaster'?'☄️ Disasters':MODE==='survival'?'⚔️ Survival':'🧱 Creative'; }
 function enterDisaster(){ if(ONLINE){ flash('🌍 Leave online play first to start Disaster Survival'); return; } save(); MODE='disaster'; mobs.length=0; tool=5; toolBadge(); renderHot(); health=100; survived=0; dis=null; disT=9; disWarn=0; fx.length=0; shake=0; P.fly=false; gen((Math.random()*1e9)|0); dirty=true; spawn(); updateMode(); flash('☄️ DISASTER SURVIVAL — stay alive as long as you can!'); }
-function enterCreative(){ MODE='creative'; SAVEKEY='rrBlockverse4'; mobs.length=0; tool=5; toolBadge(); renderHot(); dis=null; disWarn=0; fx.length=0; shake=0; hurtFlash=0; if(!load()) gen((Math.random()*1e9)|0); dirty=true; spawn(); updateMode(); flash('🧱 Creative mode — your saved world is back'); }
+function enterCreative(){ MODE='creative'; SAVEKEY='rrBlockverse5'; mobs.length=0; tool=5; toolBadge(); renderHot(); dis=null; disWarn=0; fx.length=0; shake=0; hurtFlash=0; if(!load()) gen((Math.random()*1e9)|0); dirty=true; spawn(); updateMode(); flash('🧱 Creative mode — your saved world is back'); }
 $('btnMode').onclick=()=>{ if(MODE==='creative') enterSurvival(); else if(MODE==='survival') enterDisaster(); else enterCreative(); };
 function hurt(d){ if(MODE==='creative'||d<=0) return; health=Math.max(0,health-d); hurtFlash=Math.min(1,hurtFlash+d/40); if(health<=0) die(); }
 window.__survHurt=(x,y,z,rad,dmg)=>{ if(MODE==='creative') return; const d=Math.hypot(P.x-x,(P.y+1)-y,P.z-z); if(d<rad) hurt(dmg*(1-d/rad)); };
