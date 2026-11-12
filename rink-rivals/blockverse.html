@@ -40,7 +40,7 @@
 </style></head>
 <body>
 <div id="stage"><canvas id="gl"></canvas><canvas id="cv"></canvas></div>
-<div class="tools"><a href="./">← Home</a><button id="btnPal">🎒 Blocks</button><button id="btnTool">⛏️ Tools</button><button id="btnOnline">👥 Play online</button><button id="btnFly">✈️ Fly</button><button id="btnSave">💾 Save</button><button id="btnNew">🌱 New world</button><button id="btnFs">⛶ Full</button></div>
+<div class="tools"><a href="./">← Home</a><button id="btnPal">🎒 Blocks</button><button id="btnTool">⛏️ Tools</button><button id="btnMode">🧱 Creative</button><button id="btnOnline">👥 Play online</button><button id="btnFly">✈️ Fly</button><button id="btnSave">💾 Save</button><button id="btnNew">🌱 New world</button><button id="btnFs">⛶ Full</button></div>
 <div id="hint"></div>
 <div id="hot"></div>
 <div id="pal"><div class="w"><button class="x" id="palX">✕</button><h2>🎒 Pick a block</h2><div class="muted" style="color:#93a0bd;font-size:13px">Tap a block to put it in your selected slot.</div><div class="grid" id="palGrid"></div></div></div>
@@ -202,8 +202,8 @@ function placeBlock(){ const h=pick(); if(!h) return; const x=h.x+h.nx,y=h.y+h.n
   if(ONLINE&&!worldReady) return; const i=idx(x,y,z); world[i]=hotbar[sel]; dirty=true; saveSoon(); netEdit(i,hotbar[sel]); }
 
 /* ---- save / load (store only edits from the generated world) ---- */
-let saveT=null; function saveSoon(){ if(ONLINE) return; clearTimeout(saveT); saveT=setTimeout(save,800); }
-function save(){ if(ONLINE){ flash('🌍 Shared worlds are live — nothing to save'); return; } try{ const ed=[]; for(let i=0;i<world.length;i++) if(world[i]!==base[i]) ed.push(i,world[i]); localStorage.setItem('rrBlockverse',JSON.stringify({seed,ed})); }catch(e){} flash('💾 Saved'); }
+let saveT=null; function saveSoon(){ if(ONLINE||MODE==='disaster') return; clearTimeout(saveT); saveT=setTimeout(save,800); }
+function save(){ if(MODE==='disaster') return; if(ONLINE){ flash('🌍 Shared worlds are live — nothing to save'); return; } try{ const ed=[]; for(let i=0;i<world.length;i++) if(world[i]!==base[i]) ed.push(i,world[i]); localStorage.setItem('rrBlockverse',JSON.stringify({seed,ed})); }catch(e){} flash('💾 Saved'); }
 function load(){ try{ const s=JSON.parse(localStorage.getItem('rrBlockverse')||'null'); if(s&&s.seed!=null){ gen(s.seed); if(Array.isArray(s.ed)) for(let i=0;i<s.ed.length;i+=2) world[s.ed[i]]=s.ed[i+1]; return true; } }catch(e){} return false; }
 $('btnSave').onclick=save;
 $('btnNew').onclick=()=>{ if(ONLINE){ flash('🌍 Leave the online world first (👥) to make a new one'); return; } if(!confirm('Start a brand-new random world? Your current one is saved under 💾 unless you overwrite it.')) return; gen((Math.random()*1e9)|0); dirty=true; spawn(); flash('🌱 New world'); };
@@ -300,6 +300,58 @@ $('toolGrid').addEventListener('click',e=>{ const b=e.target.closest('[data-tl]'
 $('btnTool').onclick=()=>{ renderTools(); $('toolM').classList.add('on'); };
 $('toolX').onclick=()=>$('toolM').classList.remove('on');
 
+/* ===== NATURAL DISASTER SURVIVAL: random tsunamis, earthquakes, meteors, tornadoes, lightning, volcanoes ===== */
+let MODE='creative', health=100, survived=0, hurtFlash=0, disT=0, disWarn=0, disName='', dis=null;
+let survBest=(()=>{ try{ return +localStorage.getItem('rrBvSurv')||0; }catch(e){ return 0; } })();
+const DISASTERS=['tsunami','earthquake','meteor','tornado','lightning','volcano'];
+const DISINFO={tsunami:['🌊 TSUNAMI','get to high ground!'],earthquake:['🌍 EARTHQUAKE','watch for cracks opening!'],meteor:['☄️ METEOR SHOWER','dodge the meteors!'],tornado:['🌪️ TORNADO','run from the funnel!'],lightning:['⛈️ LIGHTNING STORM','keep moving!'],volcano:['🌋 VOLCANO','get away from the lava!']};
+function toggleFly(){ if(MODE==='disaster'){ P.fly=false; flash('🚫 No flying in Disaster Survival'); return; } P.fly=!P.fly; P.vy=0; flash(P.fly?'✈️ Fly on':'🚶 Fly off'); }
+function updateMode(){ $('btnMode').textContent=MODE==='disaster'?'☄️ Survival':'🧱 Creative'; }
+function enterDisaster(){ if(ONLINE){ flash('🌍 Leave online play first to start Disaster Survival'); return; } save(); MODE='disaster'; health=100; survived=0; dis=null; disT=9; disWarn=0; fx.length=0; shake=0; P.fly=false; gen((Math.random()*1e9)|0); dirty=true; spawn(); updateMode(); flash('☄️ DISASTER SURVIVAL — stay alive as long as you can!'); }
+function enterCreative(){ MODE='creative'; dis=null; disWarn=0; fx.length=0; shake=0; hurtFlash=0; if(!load()) gen((Math.random()*1e9)|0); dirty=true; spawn(); updateMode(); flash('🧱 Creative mode — your saved world is back'); }
+$('btnMode').onclick=()=>{ if(MODE==='disaster') enterCreative(); else enterDisaster(); };
+function hurt(d){ if(MODE!=='disaster'||d<=0) return; health=Math.max(0,health-d); hurtFlash=Math.min(1,hurtFlash+d/40); if(health<=0) die(); }
+window.__survHurt=(x,y,z,rad,dmg)=>{ if(MODE!=='disaster') return; const d=Math.hypot(P.x-x,(P.y+1)-y,P.z-z); if(d<rad) hurt(dmg*(1-d/rad)); };
+function die(){ survBest=Math.max(survBest,survived); try{ localStorage.setItem('rrBvSurv',survBest); }catch(e){} const n=survived; health=100; survived=0; dis=null; disWarn=0; fx.length=0; shake=0; gen((Math.random()*1e9)|0); dirty=true; spawn(); disT=8; flash('💀 You survived '+n+' disaster'+(n===1?'':'s')+' · best '+survBest+' — fresh world, try again!'); }
+function startDisaster(name){ disWarn=0; const d={name,t:0,dur:9}; dis=d; const a=Math.random()*6.283;
+  if(name==='tsunami'){ d.dur=13; d.y=WL; d.peak=Math.min(H-8,WL+12); }
+  else if(name==='earthquake'){ d.dur=8; d.em=0; }
+  else if(name==='meteor'){ d.dur=10; d.em=0; }
+  else if(name==='tornado'){ d.dur=12; d.x=clamp(P.x+Math.cos(a)*20,2,SZ-3); d.z=clamp(P.z+Math.sin(a)*20,2,SZ-3); }
+  else if(name==='lightning'){ d.dur=9; d.em=0; }
+  else if(name==='volcano'){ d.dur=9; fxVolcano(clamp(P.x+Math.cos(a)*9,2,SZ-3),clamp(P.z+Math.sin(a)*9,2,SZ-3)); } }
+function endDisaster(){ survived++; if(survived>survBest){ survBest=survived; try{ localStorage.setItem('rrBvSurv',survBest); }catch(e){} } dis=null; disT=7+Math.random()*6; shake=0; flash('✅ Survived! That is '+survived+' — catch your breath…'); }
+function survTick(dt){ if(MODE!=='disaster') return; dt=Math.min(.05,dt);
+  if(hurtFlash>0) hurtFlash=Math.max(0,hurtFlash-dt*1.2);
+  const px=Math.floor(P.x), pz=Math.floor(P.z), py=Math.floor(P.y); if(get(px,py,pz)===17||get(px,py-1,pz)===17) hurt(dt*24);   /* standing in or on lava */
+  if(P.y<1) hurt(dt*60);
+  if(!dis){ health=Math.min(100,health+dt*4); disT-=dt;
+    if(disT<=3.5&&!disWarn){ disWarn=1; disName=DISASTERS[(Math.random()*DISASTERS.length)|0]; }
+    if(disT<=0) startDisaster(disName); return; }
+  const d=dis; d.t+=dt;
+  if(d.name==='tsunami'){ d.y=WL+Math.sin(Math.min(1,d.t/d.dur)*Math.PI)*(d.peak-WL); if(P.y+EYE<d.y) hurt(dt*20); }
+  else if(d.name==='earthquake'){ shake=Math.max(shake,.4); d.em-=dt; if(d.em<=0){ d.em=.55; const near=Math.random()<.35, fx0=Math.floor(P.x+(near?Math.random()*4-2:Math.random()*30-15)), fz0=Math.floor(P.z+(near?Math.random()*4-2:Math.random()*30-15)), horiz=Math.random()<.5, len=4+((Math.random()*5)|0);
+      bulk(()=>{ for(let k=0;k<len;k++){ const x=fx0+(horiz?k:0), z=fz0+(horiz?0:k); for(let y=3;y<H;y++) doBreak(x,y,z); } }); } }
+  else if(d.name==='meteor'){ d.em-=dt; if(d.em<=0){ d.em=.65; const near=Math.random()<.3, a=Math.random()*6.283, r=near?Math.random()*4:5+Math.random()*24; fxMeteor(clamp(P.x+Math.cos(a)*r,1,SZ-2),clamp(P.z+Math.sin(a)*r,1,SZ-2)); } }
+  else if(d.name==='tornado'){ const dx=P.x-d.x, dz=P.z-d.z, dd=Math.hypot(dx,dz)||1; d.x+=dx/dd*dt*3.4; d.z+=dz/dd*dt*3.4;
+    if(dd<3.5){ P.vy=Math.max(P.vy,9); P.ground=false; hurt(dt*26); }
+    d.em=(d.em||0)-dt; if(d.em<=0){ d.em=.3; const gx=Math.floor(d.x+(Math.random()*4-2)), gz=Math.floor(d.z+(Math.random()*4-2)), gy=groundY(gx,gz)-1; if(gy>WL) doBreak(gx,gy,gz); } }
+  else if(d.name==='lightning'){ d.em-=dt; if(d.em<=0){ d.em=.75; const near=Math.random()<.35, a=Math.random()*6.283, r=near?Math.random()*3.5:5+Math.random()*24; fxBolt(clamp(P.x+Math.cos(a)*r,1,SZ-2),clamp(P.z+Math.sin(a)*r,1,SZ-2)); } }
+  if(dis&&d.t>=d.dur) endDisaster(); }
+function survDraw(){ if(MODE!=='disaster'||!dis) return;
+  if(dis.name==='tsunami'&&dis.y>WL+.2){ R3.part(R3.UB,R3.mm(R3.T(SZ/2*BS,(dis.y-.5)*BS,SZ/2*BS),R3.S((SZ+40)*BS,BS,(SZ+40)*BS)),[.16,.42,.95]); }
+  else if(dis.name==='tornado'){ const gy=groundY(dis.x,dis.z), t=performance.now()/110; for(let k=0;k<16;k++){ const rr=.9+k*.42; R3.part(R3.UB,R3.mm(R3.T((dis.x+Math.cos(t+k*.7)*rr*.35)*BS,(gy+k*1.5)*BS,(dis.z+Math.sin(t+k*.7)*rr*.35)*BS),R3.RY(t+k),R3.S(rr*BS,1.5*BS,rr*BS)),[.42,.4,.38]); } } }
+function survHud(c,W,Hh){ if(MODE!=='disaster') return; const bw=260, bx=W/2-bw/2, by=58;
+  c.fillStyle='rgba(0,0,0,.55)'; c.fillRect(bx-3,by-3,bw+6,26); c.fillStyle=health>45?'#22c55e':health>20?'#f59e0b':'#ef4444'; c.fillRect(bx,by,bw*health/100,20);
+  c.fillStyle='#fff'; c.textAlign='center'; c.font='800 13px system-ui'; c.fillText('❤️ '+Math.ceil(health),W/2,by+15);
+  c.font='800 15px system-ui'; c.fillStyle='rgba(0,0,0,.5)'; c.fillRect(W/2-150,by+28,300,24); c.fillStyle='#fff'; c.fillText('☄️ Survived '+survived+'   ·   🏆 Best '+survBest,W/2,by+45);
+  let msg='', col='#fde047'; if(dis){ msg=DISINFO[dis.name][0]+' — '+DISINFO[dis.name][1]; col='#fca5a5'; } else if(disWarn){ msg='⚠️ '+DISINFO[disName][0]+' in '+Math.max(1,Math.ceil(disT))+'…'; }
+  if(msg){ c.font='900 24px system-ui'; const w=c.measureText(msg).width+28; c.fillStyle='rgba(0,0,0,.6)'; c.fillRect(W/2-w/2,by+60,w,36); c.fillStyle=col; c.fillText(msg,W/2,by+86); }
+  if(dis&&dis.name==='tsunami'&&P.y+EYE<dis.y){ c.fillStyle='rgba(20,70,170,.45)'; c.fillRect(0,0,W,Hh); }
+  if(hurtFlash>0){ c.fillStyle='rgba(220,20,20,'+Math.min(.5,hurtFlash*.5)+')'; c.fillRect(0,0,W,Hh); }
+  c.font='700 13px system-ui'; }
+
+
 /* ---- HUD ---- */
 const cv=$('cv'), ctx=cv.getContext('2d'); let HW=0,HH=0;
 function resizeHUD(){ HW=cv.width=innerWidth; HH=cv.height=innerHeight; }
@@ -347,7 +399,7 @@ function frame(now){ const dt=(now-last)/1000; last=now; fps+=((1/Math.max(1e-3,
     const eye=[P.x*BS+sh[0],(P.y+EYE)*BS+sh[1],P.z*BS+sh[2]], f=forward(), ctr=[eye[0]+f[0]*BS,eye[1]+f[1]*BS,eye[2]+f[2]*BS];
     R3.frame({eye,center:ctr,fov:72,near:BS*.12,far:BS*62,sky:SK.s,bright:SK.bright,light:SK.light,
       fog:[BS*34,BS*24],fogMax:.82,cull:BS*36,unit:BS,tex:true,dome:true,shadow:{r:BS*40}},
-      ()=>{ clouds(dt,SK.day); drawPlayers(); fxDraw(); highlight(); },dt);
+      ()=>{ clouds(dt,SK.day); drawPlayers(); fxDraw(); survDraw(); highlight(); },dt);
   }
   netTick(dt); hud(); if(breaking) mineTick(dt);
   requestAnimationFrame(frame); }
@@ -361,16 +413,16 @@ glc.addEventListener('contextmenu',e=>e.preventDefault());
 addEventListener('mousemove',e=>{ if(document.pointerLockElement!==glc) return; P.yaw-=e.movementX*.0024; P.pitch=clamp(P.pitch-e.movementY*.0024,-1.5,1.5); });
 addEventListener('wheel',e=>{ sel=(sel+(e.deltaY>0?1:-1)+9)%9; renderHot(); },{passive:true});
 let lastSpace=0;
-addEventListener('keydown',e=>{ if(e.code==='Space'&&!e.repeat){ const t=performance.now(); if(t-lastSpace<300){ P.fly=!P.fly; P.vy=0; flash(P.fly?'✈️ Fly on':'🚶 Fly off'); } lastSpace=t; jumpQ=true; }
+addEventListener('keydown',e=>{ if(e.code==='Space'&&!e.repeat){ const t=performance.now(); if(t-lastSpace<300){ toggleFly(); } lastSpace=t; jumpQ=true; }
   if(/^Digit[1-9]$/.test(e.code)){ sel=+e.code.slice(5)-1; renderHot(); }
   if(e.code==='KeyE'&&!e.repeat){ $('pal').classList.toggle('on'); }
   if(e.code==='KeyQ'&&!e.repeat){ selTool((tool+1)%allTools.length); flash(curTool().ic+' '+curTool().n); }
   if(e.code==='KeyT'&&!e.repeat){ renderTools(); $('toolM').classList.toggle('on'); }
-  if(e.code==='KeyF'&&!e.repeat){ P.fly=!P.fly; P.vy=0; flash(P.fly?'✈️ Fly on':'🚶 Fly off'); }
+  if(e.code==='KeyF'&&!e.repeat){ toggleFly(); }
   if(['KeyW','KeyA','KeyS','KeyD','Space','ShiftLeft','ShiftRight'].includes(e.code)) e.preventDefault();
   keys.add(e.code); });
 addEventListener('keyup',e=>keys.delete(e.code)); addEventListener('blur',()=>keys.clear());
-$('btnFly').onclick=()=>{ P.fly=!P.fly; P.vy=0; flash(P.fly?'✈️ Fly on':'🚶 Fly off'); };
+$('btnFly').onclick=()=>{ toggleFly(); };
 $('btnFs').onclick=()=>{ const s=$('stage'); if(document.fullscreenElement) document.exitFullscreen(); else s.requestFullscreen&&s.requestFullscreen(); };
 
 /* ---- input: touch ---- */
@@ -392,7 +444,7 @@ if(coarse){ $('touch').classList.add('on');
   hold($('tPlace'),()=>secondaryAct());
   hold($('tJump'),()=>{ jumpQ=true; touchUp=true; },()=>touchUp=false);
   hold($('tUp'),()=>touchUp=true,()=>touchUp=false);
-  $('tFly').addEventListener('pointerdown',e=>{ e.preventDefault(); P.fly=!P.fly; P.vy=0; flash(P.fly?'✈️ Fly on':'🚶 Fly off'); });
+  $('tFly').addEventListener('pointerdown',e=>{ e.preventDefault(); toggleFly(); });
 }
 
 /* ---- hints ---- */
@@ -403,7 +455,7 @@ addEventListener('pagehide',save);
 /* ---- go ---- */
 if(!load()) gen((Math.random()*1e9)|0);
 spawn(); renderHot(); renderPal(); toolBadge(); requestAnimationFrame(frame);
-window.__bv={P,get,set:(x,y,z,t)=>{world[idx(x,y,z)]=t;dirty=true;},pick,gen,spawn,get SZ(){return SZ;},get tool(){return tool;},set tool(v){selTool(v);},fxMeteor,fxNuke};
+window.__bv={P,get,set:(x,y,z,t)=>{world[idx(x,y,z)]=t;dirty=true;},pick,gen,spawn,get SZ(){return SZ;},get tool(){return tool;},set tool(v){selTool(v);},fxMeteor,fxNuke,surv:{start:n=>{ if(MODE!=='disaster') enterDisaster(); startDisaster(n); },get s(){return {MODE,health,survived,dis:dis&&dis.name,disT};}}};
 })();
 </script>
 <script src="site.js"></script>
