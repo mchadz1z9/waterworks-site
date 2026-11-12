@@ -211,6 +211,10 @@ void main(){vec4 t=texture2D(uTex,vUV*uUVR.zw+uUVR.xy);if(t.a<0.04)discard;gl_Fr
     build(g,c,{primBox,primCyl,primSphere,T,S,RX,RY,RZ,mm,I}); freeMesh(world); freeMesh(crowdM); for(const t of chunks) freeMesh(t.mesh); chunks=[];
     const G=CH?g.glob:g; world=G.p.length?upload(G):null; crowdM=c.p.length?upload(c):null;
     for(const t of tiles.values()) if(t.p.length) chunks.push({mesh:upload(t),cx:t.cx,cz:t.cz,r:CH*.75}); }
+  /* keyed scenery tiles a game can rebuild one at a time (voxel worlds): drawn, culled and shadowed like setStatic chunks */
+  function dropChunk(key){ const i=chunks.findIndex(t=>t.key===key); if(i>=0){ freeMesh(chunks[i].mesh); chunks.splice(i,1); } }
+  function setChunk(key,build,cx,cz,r){ const g=new Geo(); build(g); dropChunk(key); if(g.p.length) chunks.push({key,mesh:upload(g),cx,cz,r}); curMesh=null; }
+  function clearChunks(){ for(const t of chunks) freeMesh(t.mesh); chunks=[]; curMesh=null; }
   /* crowd: seats in tiers with fans that bob when the crowd cheers */
   const FANS=['#e2e8f0','#f87171','#60a5fa','#fbbf24','#34d399','#f472b6','#a78bfa','#94a3b8','#1f2937','#f97316'];
   function crowdRow(g,c,a,b,y,depth,rows,seat){
@@ -390,6 +394,6 @@ void main(){vec4 t=texture2D(uTex,vUV*uUVR.zw+uUVR.xy);if(t.a<0.04)discard;gl_Fr
   function mkMesh(fn,old){ const g=new Geo(); fn(g,{primBox,primCyl,primSphere}); if(!old) return upload(g);
     for(const [k,arr] of [['pos',g.p],['nor',g.n],['col',g.c],['ph',g.ph]]){ gl.bindBuffer(gl.ARRAY_BUFFER,old[k]); gl.bufferData(gl.ARRAY_BUFFER,new Float32Array(arr),gl.DYNAMIC_DRAW); }
     old.n=g.p.length/3; curMesh=null; return old; }
-  return {ok:true,hq:GHI,shInfo:()=>{ let st=null; if(PS){ gl.bindFramebuffer(gl.FRAMEBUFFER,PS.fb); const px=new Uint8Array(64*64*4); gl.readPixels(SHTX/2-32,SHTX/2-32,64,64,gl.RGBA,gl.UNSIGNED_BYTE,px); gl.bindFramebuffer(gl.FRAMEBUFFER,null); let mn=9,mx=0; for(let i=0;i<px.length;i+=4){ const d=px[i]/255+px[i+1]/65025; mn=Math.min(mn,d); mx=Math.max(mx,d); } st=[mn,mx]; } return {on:SHON,ps:PS===null?"null":!!PS,L:LIGHT,tx:SHTX,st,M:SHM&&Array.from(SHM).map(v=>+v.toFixed(5))}; },setGround,setStatic,crowdRow,frame,part,athlete,ball,shadow,proj,unproject,mkMesh,freeMesh,UB,UC,US,T,S,RX,RY,RZ,mm,beam,I};
+  return {ok:true,hq:GHI,setChunk,dropChunk,clearChunks,shInfo:()=>{ let st=null; if(PS){ gl.bindFramebuffer(gl.FRAMEBUFFER,PS.fb); const px=new Uint8Array(64*64*4); gl.readPixels(SHTX/2-32,SHTX/2-32,64,64,gl.RGBA,gl.UNSIGNED_BYTE,px); gl.bindFramebuffer(gl.FRAMEBUFFER,null); let mn=9,mx=0; for(let i=0;i<px.length;i+=4){ const d=px[i]/255+px[i+1]/65025; mn=Math.min(mn,d); mx=Math.max(mx,d); } st=[mn,mx]; } return {on:SHON,ps:PS===null?"null":!!PS,L:LIGHT,tx:SHTX,st,M:SHM&&Array.from(SHM).map(v=>+v.toFixed(5))}; },setGround,setStatic,crowdRow,frame,part,athlete,ball,shadow,proj,unproject,mkMesh,freeMesh,UB,UC,US,T,S,RX,RY,RZ,mm,beam,I};
 }
 

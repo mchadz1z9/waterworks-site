@@ -57,7 +57,7 @@
 'use strict';
 const $=id=>document.getElementById(id), clamp=(v,a,b)=>Math.max(a,Math.min(b,v));
 const R3=makeR3($('gl'),$('stage'));
-const BS=30, SZ=72, H=46, WL=15;                 /* block size in world units, world width, height, water level */
+const BS=30, SZ=320, H=46, WL=15, CS=16;                 /* block size in world units, world width, height, water level */
 const inB=(x,y,z)=>x>=0&&x<SZ&&z>=0&&z<SZ&&y>=0&&y<H;
 const idx=(x,y,z)=>(y*SZ+z)*SZ+x;
 let world=new Uint8Array(SZ*SZ*H), base=new Uint8Array(SZ*SZ*H), seed=0;
@@ -95,28 +95,28 @@ const transparent=t=>t===0||t===9;   /* faces of opaque blocks are drawn when th
 
 /* ---- value-noise terrain ---- */
 function mkRand(s){ return ()=>{ s=(s*1103515245+12345)&0x7fffffff; return s/0x7fffffff; }; }
-function noise2(seed){ const g=new Float32Array(16*16); const r=mkRand(seed); for(let i=0;i<g.length;i++) g[i]=r();
+function noise2(seed){ const g=new Float32Array(64*64); const r=mkRand(seed); for(let i=0;i<g.length;i++) g[i]=r();
   const sm=t=>t*t*(3-2*t);
-  return (x,z)=>{ const xs=x/9, zs=z/9; const x0=Math.floor(xs)&15, z0=Math.floor(zs)&15, x1=(x0+1)&15, z1=(z0+1)&15; const fx=sm(xs-Math.floor(xs)), fz=sm(zs-Math.floor(zs));
-    const a=g[z0*16+x0], b=g[z0*16+x1], c=g[z1*16+x0], d=g[z1*16+x1]; return (a*(1-fx)+b*fx)*(1-fz)+(c*(1-fx)+d*fx)*fz; }; }
-function gen(s){ seed=s; world=new Uint8Array(SZ*SZ*H); const n1=noise2(s), n2=noise2(s*7+13), n3=noise2(s*31+5); const r=mkRand(s*101+9);
-  const htOf=(x,z)=>{ let h=WL-2 + n1(x,z)*16 + n2(x+99,z-40)*8 - 4; /* island: lower near the edges */ const dx=Math.min(x,SZ-1-x), dz=Math.min(z,SZ-1-z), edge=Math.min(dx,dz); if(edge<10) h-=(10-edge)*1.1; return clamp(Math.round(h),2,H-6); };
+  return (x,z)=>{ const xs=x/9, zs=z/9; const x0=Math.floor(xs)&63, z0=Math.floor(zs)&63, x1=(x0+1)&63, z1=(z0+1)&63; const fx=sm(xs-Math.floor(xs)), fz=sm(zs-Math.floor(zs));
+    const a=g[z0*64+x0], b=g[z0*64+x1], c=g[z1*64+x0], d=g[z1*64+x1]; return (a*(1-fx)+b*fx)*(1-fz)+(c*(1-fx)+d*fx)*fz; }; }
+function gen(s){ seed=s; dirty=true; world=new Uint8Array(SZ*SZ*H); const n1=noise2(s), n2=noise2(s*7+13), n3=noise2(s*31+5); const r=mkRand(s*101+9);
+  const htOf=(x,z)=>{ let h=WL-2 + n1(x,z)*16 + n2(x+99,z-40)*8 - 4 + (n3(x*.28,z*.28)-.5)*16;   /* n3: big regions of highlands and lowlands */ /* island: lower near the edges */ const dx=Math.min(x,SZ-1-x), dz=Math.min(z,SZ-1-z), edge=Math.min(dx,dz); if(edge<10) h-=(10-edge)*1.1; return clamp(Math.round(h),2,H-6); };
   for(let x=0;x<SZ;x++) for(let z=0;z<SZ;z++){ const h=htOf(x,z);
     for(let y=0;y<=h;y++){ let t=3; if(y<h-3) t=3; else if(y<h) t=2; else t = h<=WL? 5 : 1;  /* stone, dirt, then grass or sand */
       if(y<=2) t=4; if(h<=WL&&y>=h-1) t=5;  /* shoreline sand */ world[idx(x,y,z)]=t; }
     for(let y=h+1;y<=WL;y++) world[idx(x,y,z)]=9;      /* water fills up to sea level */
   }
   /* caves: carve a few blobs */
-  for(let i=0;i<70;i++){ let cx=r()*SZ, cy=4+r()*(WL-2), cz=r()*SZ; const len=8+r()*22; let dx=(r()-.5), dy=(r()-.5)*.4, dz=(r()-.5);
+  for(let i=0;i<1300;i++){ let cx=r()*SZ, cy=4+r()*(WL-2), cz=r()*SZ; const len=8+r()*22; let dx=(r()-.5), dy=(r()-.5)*.4, dz=(r()-.5);
     for(let s2=0;s2<len;s2++){ cx+=dx*1.6; cy+=dy*1.6; cz+=dz*1.6; const rad=1.4+r()*1.6; for(let ox=-2;ox<=2;ox++)for(let oy=-2;oy<=2;oy++)for(let oz=-2;oz<=2;oz++){ const X=Math.round(cx+ox),Y=Math.round(cy+oy),Z=Math.round(cz+oz); if(inB(X,Y,Z)&&Y>1&&ox*ox+oy*oy+oz*oz<rad*rad&&world[idx(X,Y,Z)]!==9) world[idx(X,Y,Z)]=0; } if(r()<.25){dx=(r()-.5);dy=(r()-.5)*.4;dz=(r()-.5);} } }
   /* ore pockets */
   const ore=(t,n,maxY)=>{ for(let i=0;i<n;i++){ const X=1+Math.floor(r()*(SZ-2)),Y=2+Math.floor(r()*maxY),Z=1+Math.floor(r()*(SZ-2)); for(let k=0;k<3+r()*4;k++){ const x=X+Math.round((r()-.5)*2),y=Y+Math.round((r()-.5)*2),z=Z+Math.round((r()-.5)*2); if(inB(x,y,z)&&world[idx(x,y,z)]===3) world[idx(x,y,z)]=t; } } };
-  ore(13,26,10); ore(14,16,7); ore(18,10,5);
+  ore(13,500,10); ore(14,320,7); ore(18,200,5);
   /* trees on grass */
-  for(let i=0;i<120;i++){ const x=2+Math.floor(r()*(SZ-4)), z=2+Math.floor(r()*(SZ-4)); let h=htOf(x,z); if(h<=WL) continue; if(world[idx(x,h,z)]!==1) continue; if(r()<.72) continue; const th=3+Math.floor(r()*3);
+  for(let i=0;i<2400;i++){ const x=2+Math.floor(r()*(SZ-4)), z=2+Math.floor(r()*(SZ-4)); let h=htOf(x,z); if(h<=WL) continue; if(world[idx(x,h,z)]!==1) continue; if(r()<.72) continue; const th=3+Math.floor(r()*3);
     for(let y=1;y<=th;y++) world[idx(x,h+y,z)]=6; const ty=h+th;
     for(let oy=-1;oy<=2;oy++)for(let ox=-2;ox<=2;ox++)for(let oz=-2;oz<=2;oz++){ const rr=Math.abs(ox)+Math.abs(oz)+Math.abs(oy); if(rr>3) continue; if(ox===0&&oz===0&&oy<2) continue; const X=x+ox,Y=ty+oy,Z=z+oz; if(inB(X,Y,Z)&&world[idx(X,Y,Z)]===0&&r()<.86) world[idx(X,Y,Z)]=7; } }
-  ore(22,36,16);   /* iron — placed last so older saved worlds keep the same trees */
+  ore(22,700,16);   /* iron — placed last so older saved worlds keep the same trees */
   base=world.slice();
 }
 
@@ -138,8 +138,10 @@ const AOBR=[.46,.66,.84,1.0];
 function faceAO(x,y,z,o){ const fx=x+o[0],fy=y+o[1],fz=z+o[2]; let a1,a2;
   if(o[0]){a1=[0,1,0];a2=[0,0,1];} else if(o[1]){a1=[1,0,0];a2=[0,0,1];} else {a1=[1,0,0];a2=[0,1,0];}
   let sum=0; for(const su of [-1,1]) for(const sv of [-1,1]){ const s1=occ(fx+a1[0]*su,fy+a1[1]*su,fz+a1[2]*su), s2=occ(fx+a2[0]*sv,fy+a2[1]*sv,fz+a2[2]*sv), sc=occ(fx+a1[0]*su+a2[0]*sv,fy+a1[1]*su+a2[1]*sv,fz+a1[2]*su+a2[2]*sv); sum+=AOBR[(s1&&s2)?0:3-(s1+s2+sc)]; } return sum/4; }
-let dirty=true, builtOnce=false;
-function build(g){ const tf=tint; for(let x=0;x<SZ;x++) for(let z=0;z<SZ;z++) for(let y=0;y<H;y++){ const t=world[idx(x,y,z)]; if(t===0) continue; const blk=B[t], em=blk.glow||1;
+let dirty=true, builtOnce=false;   /* dirty = rebuild everything; single edits call mark(i) and only redo their chunk */
+const NC=Math.ceil(SZ/CS), cbuilt=new Set(), cdirty=new Set();
+function mark(i){ const x=i%SZ, z=((i/SZ)|0)%SZ, cx=(x/CS)|0, cz=(z/CS)|0, lx=x%CS, lz=z%CS; cdirty.add(cx+cz*NC); const ex=lx===0?-1:lx===CS-1?1:0, ez=lz===0?-1:lz===CS-1?1:0; if(ex) cdirty.add(cx+ex+cz*NC); if(ez) cdirty.add(cx+(cz+ez)*NC); if(ex&&ez) cdirty.add(cx+ex+(cz+ez)*NC); }
+function build(g,cx,cz){ const tf=tint, x0=cx*CS, z0=cz*CS, x1=Math.min(SZ,x0+CS), z1=Math.min(SZ,z0+CS); for(let x=x0;x<x1;x++) for(let z=z0;z<z1;z++) for(let y=0;y<H;y++){ const t=world[idx(x,y,z)]; if(t===0) continue; const blk=B[t], em=blk.glow||1;
   for(let fi=0;fi<6;fi++){ const F=FACES[fi], o=F[0], nx=x+o[0],ny=y+o[1],nz=z+o[2]; const nb=inB(nx,ny,nz)?world[idx(nx,ny,nz)]:0;
     if(t===9){ if(fi!==2) continue; if(nb!==0) continue; }   /* water: only the top surface, only under air */
     else { if(!(nb===0||nb===9)) continue; }                 /* opaque: draw face only against air/water */
@@ -147,7 +149,15 @@ function build(g){ const tf=tint; for(let x=0;x<SZ;x++) for(let z=0;z<SZ;z++) fo
     const C=F[1], P=i=>[ (x+C[i][0])*BS, (y+C[i][1])*BS - (t===9?BS*.12:0), (z+C[i][2])*BS ];
     let mat=MAT[t]||0; if(t===1&&F[2]==='T') mat=6;
     g.quad(P(0),P(1),P(2),P(3),c,mat?-mat:0); } } }
-function doRemesh(){ dirty=false; R3.setStatic(build,{chunk:BS*8}); builtOnce=true; }
+function meshChunk(k){ const cx=k%NC, cz=(k/NC)|0; if(cx<0||cz<0||cx>=NC||cz>=NC) return; R3.setChunk(k,g=>build(g,cx,cz),(cx+.5)*CS*BS,(cz+.5)*CS*BS,CS*BS*.75); cbuilt.add(k); }
+function doRemesh(){ if(dirty){ dirty=false; R3.clearChunks(); cbuilt.clear(); cdirty.clear(); }
+  for(const k of cdirty){ if(cbuilt.has(k)) meshChunk(k); } cdirty.clear();
+  /* stream in the chunks around you (nearest first, a few ms per frame) and drop far ones */
+  const pcx=Math.floor(P.x/CS), pcz=Math.floor(P.z/CS), R=5, t0=performance.now(); let todo=[];
+  for(let dz=-R;dz<=R;dz++) for(let dx=-R;dx<=R;dx++){ const cx=pcx+dx, cz=pcz+dz; if(cx<0||cz<0||cx>=NC||cz>=NC) continue; const d=dx*dx+dz*dz; if(d>R*R+1) continue; const k=cx+cz*NC; if(!cbuilt.has(k)) todo.push([d,k]); }
+  if(todo.length){ todo.sort((a,b)=>a[0]-b[0]); const budget=builtOnce?7:60; for(const t of todo){ meshChunk(t[1]); if(performance.now()-t0>budget) break; } }
+  if(cbuilt.size>190){ for(const k of [...cbuilt]){ const cx=k%NC, cz=(k/NC)|0; if(Math.abs(cx-pcx)>R+2||Math.abs(cz-pcz)>R+2){ R3.dropChunk(k); cbuilt.delete(k); } } }
+  builtOnce=true; }
 
 /* ---- player ---- */
 const P={x:SZ/2+.5,y:0,z:SZ/2+.5,vx:0,vy:0,vz:0,yaw:0,pitch:.2,fly:false,ground:false};
@@ -156,8 +166,8 @@ function spawn(){ /* land on the highest open grass/sand hilltop near the middle
   const cx=Math.floor(SZ/2), cz=Math.floor(SZ/2); let bx=cx, bz=cz, best=-1;
   for(let x=cx-13;x<=cx+13;x++) for(let z=cz-13;z<=cz+13;z++){ if(x<1||z<1||x>=SZ-1||z>=SZ-1) continue; let y=H-1; while(y>0&&!solidAt(x,y,z)) y--; const t=world[idx(x,y,z)]; if((t===1||t===5)&&y>best){ best=y; bx=x; bz=z; } }
   if(best<0){ let y=H-1; while(y>0&&!solidAt(cx,y,cz)) y--; best=y; bx=cx; bz=cz; }
-  for(let y=best+1;y<=best+3;y++){ const i=idx(bx,y,bz); if(world[i]&&world[i]!==9) world[i]=0; }   /* clear head space */
-  P.x=bx+.5; P.z=bz+.5; P.y=best+1; P.vx=P.vy=P.vz=0; P.pitch=.06; dirty=true; }
+  for(let y=best+1;y<=best+3;y++){ const i=idx(bx,y,bz); if(world[i]&&world[i]!==9){ world[i]=0; mark(i); } }   /* clear head space */
+  P.x=bx+.5; P.z=bz+.5; P.y=best+1; P.vx=P.vy=P.vz=0; P.pitch=.06; }
 function boxHits(x,y,z){ const x0=Math.floor(x-WR),x1=Math.floor(x+WR),z0=Math.floor(z-WR),z1=Math.floor(z+WR),y0=Math.floor(y),y1=Math.floor(y+PH);
   for(let X=x0;X<=x1;X++)for(let Z=z0;Z<=z1;Z++)for(let Y=y0;Y<=y1;Y++){ if(solidAt(X,Y,Z)) return true; } return false; }
 function inWater(){ return get(Math.floor(P.x),Math.floor(P.y+EYE),Math.floor(P.z))===9 || get(Math.floor(P.x),Math.floor(P.y+.3),Math.floor(P.z))===9; }
@@ -201,10 +211,10 @@ $('palGrid').addEventListener('click',e=>{ const b=e.target.closest('[data-p]');
 $('btnPal').onclick=()=>{ renderPal(); $('pal').classList.add('on'); }; $('palX').onclick=()=>$('pal').classList.remove('on');
 
 /* ---- actions ---- */
-function breakBlock(){ const h=pick(); if(!h) return; if(get(h.x,h.y,h.z)===9) return; if(ONLINE&&!worldReady) return; const i=idx(h.x,h.y,h.z); world[i]=0; dirty=true; saveSoon(); netEdit(i,0); }
+function breakBlock(){ const h=pick(); if(!h) return; if(get(h.x,h.y,h.z)===9) return; if(ONLINE&&!worldReady) return; const i=idx(h.x,h.y,h.z); world[i]=0; mark(i); saveSoon(); netEdit(i,0); }
 function placeBlock(){ const h=pick(); if(!h) return; if(MODE==='survival'&&!(inv[hotbar[sel]]>0)){ flash('None of that block left — mine or craft more'); return; } const x=h.x+h.nx,y=h.y+h.ny,z=h.z+h.nz; if(!inB(x,y,z)) return; if(get(x,y,z)!==0&&get(x,y,z)!==9) return;
   /* don't place inside yourself */ const px0=Math.floor(P.x-WR),px1=Math.floor(P.x+WR),pz0=Math.floor(P.z-WR),pz1=Math.floor(P.z+WR); if(x>=px0&&x<=px1&&z>=pz0&&z<=pz1&&y>=Math.floor(P.y)&&y<=Math.floor(P.y+PH)) return;
-  if(ONLINE&&!worldReady) return; const i=idx(x,y,z); world[i]=hotbar[sel]; dirty=true; saveSoon(); netEdit(i,hotbar[sel]); if(MODE==='survival'){ inv[hotbar[sel]]--; renderHot(); } }
+  if(ONLINE&&!worldReady) return; const i=idx(x,y,z); world[i]=hotbar[sel]; mark(i); saveSoon(); netEdit(i,hotbar[sel]); if(MODE==='survival'){ inv[hotbar[sel]]--; renderHot(); } }
 
 /* ---- save / load (store only edits from the generated world) ---- */
 let saveT=null; function saveSoon(){ if(ONLINE||MODE==='disaster') return; clearTimeout(saveT); saveT=setTimeout(save,800); }
@@ -219,8 +229,8 @@ function netEdit(i,v){ if(ONLINE&&net) net.send({t:'e',i,v}); }
 function hostSnapshot(){ const ed=[]; for(let i=0;i<world.length;i++) if(world[i]!==base[i]) ed.push(i,world[i]); return {t:'world',seed,ed}; }
 function onNet(m,api){
   if(m.t==='p'){ const o=others[m.id]||(others[m.id]={x:m.x,y:m.y,z:m.z}); o.name=m.n; o.yaw=m.yaw; o.pitch=m.pitch; o.tx=m.x; o.ty=m.y; o.tz=m.z; o.seen=performance.now(); o.sw=m.sw; }
-  else if(m.t==='e'){ if(m.i>=0&&m.i<world.length){ world[m.i]=m.v; dirty=true; } }
-  else if(m.t==='b'){ if(Array.isArray(m.e)){ for(let k=0;k<m.e.length;k+=2){ const i=m.e[k]; if(i>=0&&i<world.length) world[i]=m.e[k+1]; } dirty=true; } }
+  else if(m.t==='e'){ if(m.i>=0&&m.i<world.length){ world[m.i]=m.v; mark(m.i); } }
+  else if(m.t==='b'){ if(Array.isArray(m.e)){ for(let k=0;k<m.e.length;k+=2){ const i=m.e[k]; if(i>=0&&i<world.length){ world[i]=m.e[k+1]; mark(i); } } } }
   else if(m.t==='req'){ if(api.isHost()) net.send(hostSnapshot()); }
   else if(m.t==='world'){ if(!api.isHost()&&!worldReady){ gen(m.seed); if(Array.isArray(m.ed)) for(let k=0;k<m.ed.length;k+=2) world[m.ed[k]]=m.ed[k+1]; dirty=true; worldReady=true; spawn(); flash('🌍 Joined the shared world — '+api.all().length+' here'); } }
 }
@@ -258,8 +268,8 @@ const isCast=T=>T.k==='meteor'||T.k==='storm'||T.k==='volcano'||T.k==='nuke'||T.
 function effSpeed(bt){ const T=curTool(); if(T.god) return 1e9; const match=PREF[bt]===T.k||(T.k==='sword'&&PREF[bt]==='shears'); return T.pw*(match?1:(T.k==='hand'?.6:.5)); }
 let mineKey=null, mineP=0, bulkBuf=null;
 function bulk(fn){ bulkBuf=[]; fn(); const e=bulkBuf; bulkBuf=null; if(e.length){ saveSoon(); if(ONLINE&&net) net.send({t:'b',e}); } }
-function doBreak(x,y,z){ if(!inB(x,y,z)) return; const t=get(x,y,z); if(t===0||t===9) return; const i=idx(x,y,z); world[i]=0; dirty=true; if(bulkBuf){ bulkBuf.push(i,0); } else { saveSoon(); netEdit(i,0); } }
-function doPlace(x,y,z,v){ if(!inB(x,y,z)) return; const t=get(x,y,z); if(t!==0&&t!==9) return; const i=idx(x,y,z); world[i]=v; dirty=true; if(bulkBuf){ bulkBuf.push(i,v); } else { saveSoon(); netEdit(i,v); } }
+function doBreak(x,y,z){ if(!inB(x,y,z)) return; const t=get(x,y,z); if(t===0||t===9) return; const i=idx(x,y,z); world[i]=0; mark(i); if(bulkBuf){ bulkBuf.push(i,0); } else { saveSoon(); netEdit(i,0); } }
+function doPlace(x,y,z,v){ if(!inB(x,y,z)) return; const t=get(x,y,z); if(t!==0&&t!==9) return; const i=idx(x,y,z); world[i]=v; mark(i); if(bulkBuf){ bulkBuf.push(i,v); } else { saveSoon(); netEdit(i,v); } }
 function hammerBreak(x,y,z,r){ for(let dx=-r;dx<=r;dx++)for(let dy=-r;dy<=r;dy++)for(let dz=-r;dz<=r;dz++) doBreak(x+dx,y+dy,z+dz); }
 function megaPlace(x,y,z,v,r){ for(let dx=-r;dx<=r;dx++)for(let dy=-r;dy<=r;dy++)for(let dz=-r;dz<=r;dz++) doPlace(x+dx,y+dy,z+dz,v); }
 function mineTick(dt){ const T=curTool(); if(isCast(T)){ mineKey=null; return; } const h=pick(T.god?16:7); if(!h){ mineKey=null; mineP=0; return; } const bt=get(h.x,h.y,h.z); if(bt===0||bt===9){ mineKey=null; mineP=0; return; } if(ONLINE&&!worldReady) return;
@@ -275,7 +285,7 @@ function castTool(T){ const a=aimPoint(70); if(T.k==='meteor') fxMeteor(a.x,a.z)
 /* ===== dramatic effects (also reused by Disaster mode) ===== */
 let fx=[], flashA=0, shake=0;
 function flashScreen(a){ flashA=Math.max(flashA,a||.7); }
-function crater(cx,cy,cz,r,fire){ cx=Math.round(cx);cy=Math.round(cy);cz=Math.round(cz); for(let dx=-r;dx<=r;dx++)for(let dy=-r;dy<=r;dy++)for(let dz=-r;dz<=r;dz++){ if(dx*dx+dy*dy+dz*dz>r*r) continue; const x=cx+dx,y=cy+dy,z=cz+dz; if(!inB(x,y,z)) continue; if(get(x,y,z)===0) continue; const i=idx(x,y,z); const v=(fire&&dy<=-r+2&&Math.random()<.35)?17:0; world[i]=v; if(bulkBuf){ bulkBuf.push(i,v); } else netEdit(i,v); } dirty=true; }
+function crater(cx,cy,cz,r,fire){ cx=Math.round(cx);cy=Math.round(cy);cz=Math.round(cz); for(let dx=-r;dx<=r;dx++)for(let dy=-r;dy<=r;dy++)for(let dz=-r;dz<=r;dz++){ if(dx*dx+dy*dy+dz*dz>r*r) continue; const x=cx+dx,y=cy+dy,z=cz+dz; if(!inB(x,y,z)) continue; if(get(x,y,z)===0) continue; const i=idx(x,y,z); const v=(fire&&dy<=-r+2&&Math.random()<.35)?17:0; world[i]=v; mark(i); if(bulkBuf){ bulkBuf.push(i,v); } else netEdit(i,v); } }
 function fxMeteor(tx,tz){ tx=Math.floor(tx); tz=Math.floor(tz); fx.push({t:'meteor',x:tx+.5,y:H+22,z:tz+.5,vy:-30,gy:groundY(tx,tz)}); }
 function fxBolt(tx,tz){ tx=Math.floor(tx); tz=Math.floor(tz); const gy=groundY(tx,tz); fx.push({t:'bolt',x:tx+.5,z:tz+.5,gy,life:.45,seed:Math.random()*999}); flashScreen(.55); for(let k=0;k<3;k++){ const x=tx+((Math.random()*3-1)|0),z=tz+((Math.random()*3-1)|0); if(inB(x,gy,z)&&Math.random()<.5) doPlace(x,gy,z,17); } damageAt(tx,gy,tz,2.5,45); }
 function fxVolcano(tx,tz){ tx=Math.floor(tx); tz=Math.floor(tz); fx.push({t:'volcano',x:tx+.5,z:tz+.5,gy:groundY(tx,tz),life:6,emit:0}); }
@@ -312,14 +322,14 @@ const DISASTERS=['tsunami','earthquake','meteor','tornado','lightning','volcano'
 const DISINFO={tsunami:['🌊 TSUNAMI','get to high ground!'],earthquake:['🌍 EARTHQUAKE','watch for cracks opening!'],meteor:['☄️ METEOR SHOWER','dodge the meteors!'],tornado:['🌪️ TORNADO','run from the funnel!'],lightning:['⛈️ LIGHTNING STORM','keep moving!'],volcano:['🌋 VOLCANO','get away from the lava!']};
 
 /* ===== SURVIVAL: inventory, drops, crafting, hunger, zombies and animals ===== */
-let SAVEKEY='rrBlockverse', inv={}, owned={0:1}, food=100, fallV=0, mobs=[], mobT=0, needMsgT=0;
+let SAVEKEY='rrBlockverse3', inv={}, owned={0:1}, food=100, fallV=0, mobs=[], mobT=0, needMsgT=0;
 const toolOK=i=>MODE!=='survival'||!!allTools[i].god||!!owned[i];
 const ITEMN={stick:['🥢','Sticks'],meat:['🍖','Meat'],apple:['🍎','Apple']};
 const invName=k=>ITEMN[k]?ITEMN[k][1]:(B[k]?B[k].n:k);
 function addInv(k,n){ inv[k]=(inv[k]||0)+n; renderHot(); saveSoon(); }
 function survSave(){ try{ localStorage.setItem('rrBvS',JSON.stringify({inv,owned,health,food})); }catch(e){} }
 function survLoad(){ inv={}; owned={0:1}; health=100; food=100; try{ const s=JSON.parse(localStorage.getItem('rrBvS')||'null'); if(s){ inv=s.inv||{}; owned=s.owned||{0:1}; owned[0]=1; health=s.health>0?s.health:100; food=s.food==null?100:s.food; } }catch(e){} }
-function enterSurvival(){ if(ONLINE){ flash('🌍 Leave online play first to start Survival'); return; } save(); MODE='survival'; SAVEKEY='rrBlockverseS'; dis=null; disWarn=0; fx.length=0; shake=0; mobs.length=0; P.fly=false; if(!load()) gen((Math.random()*1e9)|0); survLoad(); dirty=true; spawn(); tool=0; for(let i=5;i>=1;i--) if(owned[i]){ tool=i; break; } toolBadge(); renderHot(); updateMode(); flash('⚔️ SURVIVAL — punch trees for wood, press C to craft, and watch out at night!'); }
+function enterSurvival(){ if(ONLINE){ flash('🌍 Leave online play first to start Survival'); return; } save(); MODE='survival'; SAVEKEY='rrBlockverseS3'; dis=null; disWarn=0; fx.length=0; shake=0; mobs.length=0; P.fly=false; if(!load()) gen((Math.random()*1e9)|0); survLoad(); dirty=true; spawn(); tool=0; for(let i=5;i>=1;i--) if(owned[i]){ tool=i; break; } toolBadge(); renderHot(); updateMode(); flash('⚔️ SURVIVAL — punch trees for wood, press C to craft, and watch out at night!'); }
 function giveDrop(bt){ const T=curTool(), nag=m=>{ if(performance.now()>needMsgT){ needMsgT=performance.now()+2500; flash(m); } };
   if(PREF[bt]==='pick'&&bt!==10){ if(T.k!=='pick'&&!T.god){ nag('⛏️ You need a pickaxe to collect that'); return; } if((bt===13||bt===14||bt===18)&&T.pw<5&&!T.god){ nag('⛏️ Needs an Iron Pickaxe or better'); return; } if(bt===22&&T.pw<3.2&&!T.god){ nag('⛏️ Needs a Stone Pickaxe or better'); return; } }
   if(bt===7){ if(Math.random()<.3) addInv('stick',1); if(Math.random()<.12) addInv('apple',1); if(T.k==='shears') addInv(7,1); return; }
@@ -370,7 +380,7 @@ function survivalHud(c,W,Hh){ const bw=220, by=58, bar=(x,v,col,txt)=>{ c.fillSt
 function toggleFly(){ if(MODE==='survival'&&!OWNER){ P.fly=false; flash('🚫 No flying in Survival'); return; } if(MODE==='disaster'){ P.fly=false; flash('🚫 No flying in Disaster Survival'); return; } P.fly=!P.fly; P.vy=0; flash(P.fly?'✈️ Fly on':'🚶 Fly off'); }
 function updateMode(){ $('btnMode').textContent=MODE==='disaster'?'☄️ Disasters':MODE==='survival'?'⚔️ Survival':'🧱 Creative'; }
 function enterDisaster(){ if(ONLINE){ flash('🌍 Leave online play first to start Disaster Survival'); return; } save(); MODE='disaster'; mobs.length=0; tool=5; toolBadge(); renderHot(); health=100; survived=0; dis=null; disT=9; disWarn=0; fx.length=0; shake=0; P.fly=false; gen((Math.random()*1e9)|0); dirty=true; spawn(); updateMode(); flash('☄️ DISASTER SURVIVAL — stay alive as long as you can!'); }
-function enterCreative(){ MODE='creative'; SAVEKEY='rrBlockverse'; mobs.length=0; tool=5; toolBadge(); renderHot(); dis=null; disWarn=0; fx.length=0; shake=0; hurtFlash=0; if(!load()) gen((Math.random()*1e9)|0); dirty=true; spawn(); updateMode(); flash('🧱 Creative mode — your saved world is back'); }
+function enterCreative(){ MODE='creative'; SAVEKEY='rrBlockverse3'; mobs.length=0; tool=5; toolBadge(); renderHot(); dis=null; disWarn=0; fx.length=0; shake=0; hurtFlash=0; if(!load()) gen((Math.random()*1e9)|0); dirty=true; spawn(); updateMode(); flash('🧱 Creative mode — your saved world is back'); }
 $('btnMode').onclick=()=>{ if(MODE==='creative') enterSurvival(); else if(MODE==='survival') enterDisaster(); else enterCreative(); };
 function hurt(d){ if(MODE==='creative'||d<=0) return; health=Math.max(0,health-d); hurtFlash=Math.min(1,hurtFlash+d/40); if(health<=0) die(); }
 window.__survHurt=(x,y,z,rad,dmg)=>{ if(MODE==='creative') return; const d=Math.hypot(P.x-x,(P.y+1)-y,P.z-z); if(d<rad) hurt(dmg*(1-d/rad)); };
@@ -441,12 +451,12 @@ function sky(){ const t=TOD; let day=clamp(Math.sin((t-.23)*Math.PI/.54),0,1); i
 
 /* ---- clouds: a few fat, flat, drifting cloud masses (tight overlapping puffs so each reads as one cloud, not specks) ---- */
 const CLOUDS=(()=>{ let s=20240719>>>0; const rnd=()=>((s=(s*1664525+1013904223)>>>0)/4294967296); const out=[];
-  for(let i=0;i<9;i++){ const cx=rnd()*(SZ+30)-15, cz=rnd()*(SZ+30)-15, cy=H+13+rnd()*5, rad=6+rnd()*5, puffs=5+(rnd()*4|0), cl=[];
+  for(let i=0;i<70;i++){ const cx=rnd()*(SZ+30)-15, cz=rnd()*(SZ+30)-15, cy=H+13+rnd()*5, rad=6+rnd()*5, puffs=5+(rnd()*4|0), cl=[];
     for(let p=0;p<puffs;p++){ const a=rnd()*6.283, r=rnd()*rad; cl.push({dx:Math.cos(a)*r, dz:Math.sin(a)*r*.8, dy:(rnd()-.5)*.8, w:rad*(.7+rnd()*.6), h:1.0+rnd()*.7, d:rad*(.7+rnd()*.6)}); }
     out.push({cx,cy,cz,cl}); } return out; })();
 let cloudX=0;
 function clouds(dt,day){ cloudX=(cloudX+dt*1.1)%(SZ+60); const g=1.12+day*.12, c=[g,g,Math.min(1.3,g*1.03)];
-  for(const C of CLOUDS){ let bx=C.cx+cloudX; bx=((bx+15)%(SZ+60))-15; for(const k of C.cl){ R3.part(R3.UB,R3.mm(R3.T((bx+k.dx)*BS,(C.cy+k.dy)*BS,(C.cz+k.dz)*BS),R3.S(k.w*BS,k.h*BS,k.d*BS)),c); } } }
+  for(const C of CLOUDS){ let bx=C.cx+cloudX; bx=((bx+15)%(SZ+60))-15; if(Math.abs(bx-P.x)>120||Math.abs(C.cz-P.z)>120) continue; for(const k of C.cl){ R3.part(R3.UB,R3.mm(R3.T((bx+k.dx)*BS,(C.cy+k.dy)*BS,(C.cz+k.dz)*BS),R3.S(k.w*BS,k.h*BS,k.d*BS)),c); } } }
 
 /* ---- draw loop ---- */
 function highlight(draw){ const h=pick(); if(!h) return; const col=[.05,.05,.07]; const e=.04;
@@ -456,7 +466,7 @@ function highlight(draw){ const h=pick(); if(!h) return; const col=[.05,.05,.07]
 }
 let last=performance.now();
 function frame(now){ const dt=(now-last)/1000; last=now; fps+=((1/Math.max(1e-3,dt))-fps)*.1; TOD=(TOD+dt/480)%1;   /* ~8 min day */
-  if(R3.ok){ if(dirty) doRemesh(); physics(dt); fxTick(dt); if(typeof survTick==='function') survTick(dt);
+  if(R3.ok){ doRemesh(); physics(dt); fxTick(dt); if(typeof survTick==='function') survTick(dt);
     const SK=sky(); let sh=[0,0,0]; if(shake>0){ const a=shake*BS*.9; sh=[(Math.random()-.5)*a,(Math.random()-.5)*a,(Math.random()-.5)*a]; }
     const eye=[P.x*BS+sh[0],(P.y+EYE)*BS+sh[1],P.z*BS+sh[2]], f=forward(), ctr=[eye[0]+f[0]*BS,eye[1]+f[1]*BS,eye[2]+f[2]*BS];
     R3.frame({eye,center:ctr,fov:72,near:BS*.12,far:BS*62,sky:SK.s,bright:SK.bright,light:SK.light,
@@ -519,7 +529,7 @@ addEventListener('pagehide',save);
 /* ---- go ---- */
 if(!load()) gen((Math.random()*1e9)|0);
 spawn(); renderHot(); renderPal(); toolBadge(); requestAnimationFrame(frame);
-window.__bv={P,get,set:(x,y,z,t)=>{world[idx(x,y,z)]=t;dirty=true;},pick,gen,spawn,get SZ(){return SZ;},get tool(){return tool;},set tool(v){selTool(v);},fxMeteor,fxNuke,dbg:{mode:m=>{ if(m==='survival') enterSurvival(); },addInv,mobs:()=>mobs,spawnMob,setTOD:v=>{TOD=v;},hitMob,inv:()=>inv,st:()=>({MODE,health,food,tool,owned})},surv:{start:n=>{ if(MODE!=='disaster') enterDisaster(); startDisaster(n); },get s(){return {MODE,health,survived,dis:dis&&dis.name,disT};}}};
+window.__bv={P,get,set:(x,y,z,t)=>{world[idx(x,y,z)]=t;mark(idx(x,y,z));},pick,gen,spawn,get SZ(){return SZ;},get tool(){return tool;},set tool(v){selTool(v);},fxMeteor,fxNuke,dbg:{mode:m=>{ if(m==='survival') enterSurvival(); },addInv,mobs:()=>mobs,spawnMob,setTOD:v=>{TOD=v;},hitMob,inv:()=>inv,st:()=>({MODE,health,food,tool,owned})},surv:{start:n=>{ if(MODE!=='disaster') enterDisaster(); startDisaster(n); },get s(){return {MODE,health,survived,dis:dis&&dis.name,disT};}}};
 })();
 </script>
 <script src="site.js"></script>
