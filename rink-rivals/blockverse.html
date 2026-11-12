@@ -71,11 +71,11 @@ const B=[null,
  {n:'Glass',c:'#bfe3ff'},
  {n:'Brick',c:'#a8432f'},
  {n:'Snow',c:'#f3f8ff'},
- {n:'Gold',c:'#f3c14a'},
- {n:'Gem',c:'#5fd3e0'},
+ {n:'Gold',c:'#f3c14a',glow:1.18},
+ {n:'Gem',c:'#5fd3e0',glow:1.25},
  {n:'Stone brick',c:'#9aa0a8'},
  {n:'Pumpkin',top:'#d98a2a',side:'#e08a2a',bot:'#caa15a'},
- {n:'Lava',c:'#ef6a1f'},
+ {n:'Lava',c:'#ef6a1f',glow:1.55},
  {n:'Obsidian',c:'#241f33'},
  {n:'Moss stone',c:'#5f7a52'},
  {n:'Clay',c:'#9aa7b4'},
@@ -119,13 +119,19 @@ const FACES=[ /* dir, neighbour offset, 4 corner offsets (CCW seen from outside)
  [[0,0,1],[[0,0,1],[1,0,1],[1,1,1],[0,1,1]],'S'],
  [[0,0,-1],[[1,0,0],[0,0,0],[0,1,0],[1,1,0]],'S'],
 ];
-function tint(x,y,z){ let h=(x*73856093^y*19349663^z*83492791)>>>0; return .9+ (h%100)/100*.18; }
+function tint(x,y,z){ let h=(x*73856093^y*19349663^z*83492791)>>>0; return .93+ (h%100)/100*.12; }
+/* ambient occlusion: darken faces tucked into crevices — the single biggest look upgrade for voxels */
+const occ=(x,y,z)=>{ const t=inB(x,y,z)?world[idx(x,y,z)]:0; return (t!==0&&t!==9)?1:0; };
+const AOBR=[.46,.66,.84,1.0];
+function faceAO(x,y,z,o){ const fx=x+o[0],fy=y+o[1],fz=z+o[2]; let a1,a2;
+  if(o[0]){a1=[0,1,0];a2=[0,0,1];} else if(o[1]){a1=[1,0,0];a2=[0,0,1];} else {a1=[1,0,0];a2=[0,1,0];}
+  let sum=0; for(const su of [-1,1]) for(const sv of [-1,1]){ const s1=occ(fx+a1[0]*su,fy+a1[1]*su,fz+a1[2]*su), s2=occ(fx+a2[0]*sv,fy+a2[1]*sv,fz+a2[2]*sv), sc=occ(fx+a1[0]*su+a2[0]*sv,fy+a1[1]*su+a2[1]*sv,fz+a1[2]*su+a2[2]*sv); sum+=AOBR[(s1&&s2)?0:3-(s1+s2+sc)]; } return sum/4; }
 let dirty=true, builtOnce=false;
-function build(g){ const tf=tint; for(let x=0;x<SZ;x++) for(let z=0;z<SZ;z++) for(let y=0;y<H;y++){ const t=world[idx(x,y,z)]; if(t===0) continue; const blk=B[t];
+function build(g){ const tf=tint; for(let x=0;x<SZ;x++) for(let z=0;z<SZ;z++) for(let y=0;y<H;y++){ const t=world[idx(x,y,z)]; if(t===0) continue; const blk=B[t], em=blk.glow||1;
   for(let fi=0;fi<6;fi++){ const F=FACES[fi], o=F[0], nx=x+o[0],ny=y+o[1],nz=z+o[2]; const nb=inB(nx,ny,nz)?world[idx(nx,ny,nz)]:0;
     if(t===9){ if(fi!==2) continue; if(nb!==0) continue; }   /* water: only the top surface, only under air */
     else { if(!(nb===0||nb===9)) continue; }                 /* opaque: draw face only against air/water */
-    const col=(F[2]==='T'?blk.rgbT:F[2]==='B'?blk.rgbB:blk.rgbS); const f=tf(x,y,z), c=[col[0]*f,col[1]*f,col[2]*f];
+    const col=(F[2]==='T'?blk.rgbT:F[2]==='B'?blk.rgbB:blk.rgbS); const f=tf(x,y,z)*(t===9?1:faceAO(x,y,z,o))*em, c=[col[0]*f,col[1]*f,col[2]*f];
     const C=F[1], P=i=>[ (x+C[i][0])*BS, (y+C[i][1])*BS - (t===9?BS*.12:0), (z+C[i][2])*BS ];
     g.quad(P(0),P(1),P(2),P(3),c); } } }
 function doRemesh(){ dirty=false; R3.setStatic(build,{chunk:BS*8}); builtOnce=true; }
@@ -206,6 +212,15 @@ function sky(){ const t=TOD; let day=clamp(Math.sin((t-.23)*Math.PI/.54),0,1); i
   const ang=(t-.25)*Math.PI*2; const light=[Math.cos(ang)*.7, Math.max(.12,Math.sin(ang)), .35];
   const bright=.42+day*.72; return {s,light,bright,day}; }
 
+/* ---- clouds: a few fat, flat, drifting cloud masses (tight overlapping puffs so each reads as one cloud, not specks) ---- */
+const CLOUDS=(()=>{ let s=20240719>>>0; const rnd=()=>((s=(s*1664525+1013904223)>>>0)/4294967296); const out=[];
+  for(let i=0;i<9;i++){ const cx=rnd()*(SZ+30)-15, cz=rnd()*(SZ+30)-15, cy=H+13+rnd()*5, rad=6+rnd()*5, puffs=5+(rnd()*4|0), cl=[];
+    for(let p=0;p<puffs;p++){ const a=rnd()*6.283, r=rnd()*rad; cl.push({dx:Math.cos(a)*r, dz:Math.sin(a)*r*.8, dy:(rnd()-.5)*.8, w:rad*(.7+rnd()*.6), h:1.0+rnd()*.7, d:rad*(.7+rnd()*.6)}); }
+    out.push({cx,cy,cz,cl}); } return out; })();
+let cloudX=0;
+function clouds(dt,day){ cloudX=(cloudX+dt*1.1)%(SZ+60); const g=1.12+day*.12, c=[g,g,Math.min(1.3,g*1.03)];
+  for(const C of CLOUDS){ let bx=C.cx+cloudX; bx=((bx+15)%(SZ+60))-15; for(const k of C.cl){ R3.part(R3.UB,R3.mm(R3.T((bx+k.dx)*BS,(C.cy+k.dy)*BS,(C.cz+k.dz)*BS),R3.S(k.w*BS,k.h*BS,k.d*BS)),c); } } }
+
 /* ---- draw loop ---- */
 function highlight(draw){ const h=pick(); if(!h) return; const col=[.05,.05,.07]; const e=.04;
   const bar=(x,y,z,w,hh,d)=>R3.part(R3.UB,R3.mm(R3.T(x*BS,y*BS,z*BS),R3.S(w*BS,hh*BS,d*BS)),col);
@@ -216,7 +231,9 @@ let last=performance.now();
 function frame(now){ const dt=(now-last)/1000; last=now; fps+=((1/Math.max(1e-3,dt))-fps)*.1; TOD=(TOD+dt/480)%1;   /* ~8 min day */
   if(R3.ok){ if(dirty) doRemesh(); physics(dt);
     const SK=sky(), eye=[P.x*BS,(P.y+EYE)*BS,P.z*BS], f=forward(), ctr=[eye[0]+f[0]*BS,eye[1]+f[1]*BS,eye[2]+f[2]*BS];
-    R3.frame({eye,center:ctr,fov:72,near:BS*.12,far:BS*60,sky:SK.s,bright:SK.bright,light:SK.light,fog:[BS*30,BS*20],fogMax:.75,cull:BS*34,unit:BS},()=>{ highlight(); },dt);
+    R3.frame({eye,center:ctr,fov:72,near:BS*.12,far:BS*62,sky:SK.s,bright:SK.bright,light:SK.light,
+      fog:[BS*34,BS*24],fogMax:.82,cull:BS*36,unit:BS,dome:true,shadow:{r:BS*40}},
+      ()=>{ clouds(dt,SK.day); highlight(); },dt);
   }
   hud(); if(breaking&&now-lastBreak>180){ lastBreak=now; breakBlock(); }
   requestAnimationFrame(frame); }
