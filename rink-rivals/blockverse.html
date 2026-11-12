@@ -853,7 +853,7 @@ $('toolX').onclick=()=>$('toolM').classList.remove('on');
 let MODE='creative', health=100, survived=0, hurtFlash=0, disT=0, disWarn=0, disName='', dis=null;
 let survBest=(()=>{ try{ return +localStorage.getItem('rrBvSurv')||0; }catch(e){ return 0; } })();
 const DISASTERS=['tsunami','earthquake','meteor','tornado','lightning','volcano'];
-const DISINFO={tsunami:['🌊 TSUNAMI','get to high ground!'],earthquake:['🌍 EARTHQUAKE','watch for cracks opening!'],meteor:['☄️ METEOR SHOWER','dodge the meteors!'],tornado:['🌪️ TORNADO','run from the funnel!'],lightning:['⛈️ LIGHTNING STORM','keep moving!'],volcano:['🌋 VOLCANO','get away from the lava!']};
+const DISINFO={tsunami:['🌊 TSUNAMI','a wall of water is coming — climb high!'],earthquake:['🌍 EARTHQUAKE','the ground is splitting — stay off the glowing crack!'],meteor:['☄️ METEOR SHOWER','dodge the meteors!'],tornado:['🌪️ TORNADO','run from the funnel!'],lightning:['⛈️ LIGHTNING STORM','keep moving!'],volcano:['🌋 VOLCANO','get away from the lava!']};
 
 /* ===== SURVIVAL: inventory, drops, crafting, hunger, zombies and animals ===== */
 let slots=Array(9).fill(null), drops=[];
@@ -987,8 +987,8 @@ function hurt(d){ if(MODE==='creative'||d<=0) return; health=Math.max(0,health-d
 window.__survHurt=(x,y,z,rad,dmg)=>{ if(MODE==='creative') return; const d=Math.hypot(P.x-x,(P.y+1)-y,P.z-z); if(d<rad) hurt(dmg*(1-d/rad)); };
 function die(){ if(MODE==='survival'){ health=100; food=70; mobs.length=0; dis=null; fx.length=0; shake=0; spawn(); survSave(); flash('💀 You died — back at spawn. Your items are safe.'); return; } survBest=Math.max(survBest,survived); try{ localStorage.setItem('rrBvSurv',survBest); }catch(e){} const n=survived; health=100; survived=0; dis=null; disWarn=0; fx.length=0; shake=0; gen((Math.random()*1e9)|0); dirty=true; spawn(); disT=8; flash('💀 You survived '+n+' disaster'+(n===1?'':'s')+' · best '+survBest+' — fresh world, try again!'); }
 function startDisaster(name){ disWarn=0; const d={name,t:0,dur:9}; dis=d; const a=Math.random()*6.283;
-  if(name==='tsunami'){ d.dur=13; d.y=WL; d.peak=Math.min(H-8,WL+12); }
-  else if(name==='earthquake'){ d.dur=8; d.em=0; }
+  if(name==='tsunami'){ d.dur=17; d.y=0; d.ax=Math.random()<.5?0:1; d.sg=Math.random()<.5?1:-1; d.pos=(d.ax?P.z:P.x)-d.sg*78; d.speed=11; d.crest=Math.min(H-6,WL+17); d.hitDone=false; d.lastCell=null; }
+  else if(name==='earthquake'){ d.dur=10; d.em=0; d.heads=[]; for(let i=0;i<4;i++){ const a0=Math.random()*6.283, r0=i?4+Math.random()*12:2+Math.random()*3; d.heads.push({x:P.x+Math.cos(a0)*r0,z:P.z+Math.sin(a0)*r0,a:Math.random()*6.283,main:i===0,n:0}); } }
   else if(name==='meteor'){ d.dur=10; d.em=0; }
   else if(name==='tornado'){ d.dur=12; d.x=clamp(P.x+Math.cos(a)*20,2,SZ-3); d.z=clamp(P.z+Math.sin(a)*20,2,SZ-3); }
   else if(name==='lightning'){ d.dur=9; d.em=0; }
@@ -1002,17 +1002,39 @@ function survTick(dt){ dt=Math.min(.05,dt); if(MODE==='survival') survivalTick(d
     if(disT<=3.5&&!disWarn){ disWarn=1; disName=DISASTERS[(Math.random()*DISASTERS.length)|0]; }
     if(disT<=0) startDisaster(disName); return; }
   const d=dis; d.t+=dt;
-  if(d.name==='tsunami'){ d.y=WL+Math.sin(Math.min(1,d.t/d.dur)*Math.PI)*(d.peak-WL); if(P.y+EYE<d.y) hurt(dt*20); }
-  else if(d.name==='earthquake'){ shake=Math.max(shake,.4); d.em-=dt; if(d.em<=0){ d.em=.55; const near=Math.random()<.35, fx0=Math.floor(P.x+(near?Math.random()*4-2:Math.random()*30-15)), fz0=Math.floor(P.z+(near?Math.random()*4-2:Math.random()*30-15)), horiz=Math.random()<.5, len=4+((Math.random()*5)|0);
-      bulk(()=>{ for(let k=0;k<len;k++){ const x=fx0+(horiz?k:0), z=fz0+(horiz?0:k); for(let y=3;y<H;y++) doBreak(x,y,z); } }); } }
+  if(d.name==='tsunami'){ d.pos+=d.sg*d.speed*dt; const pc=d.ax?P.z:P.x, behind=(d.pos-pc)*d.sg; d.y=tsuH(d,behind);
+    if(behind>=0&&P.y<d.y-.2){ if(!d.hitDone&&behind<4){ d.hitDone=true; hurt(16); shake=Math.max(shake,.9); flash('🌊 The wave hit you!'); }
+      const push=d.sg*d.speed*(behind<12?.6:.25)*dt, nx=P.x+(d.ax?0:push), nz=P.z+(d.ax?push:0); if(!boxHits(nx,P.y,nz)){ P.x=clamp(nx,.5,SZ-.5); P.z=clamp(nz,.5,SZ-.5); } else if(!boxHits(nx,P.y+1.1,nz)){ P.x=clamp(nx,.5,SZ-.5); P.z=clamp(nz,.5,SZ-.5); P.y+=1.1; }
+      P.vy=Math.max(P.vy,2.5); P.ground=false; if(P.y+EYE<d.y) hurt(dt*13); }
+    /* the front rips up plants, leaves and loose ground as it passes */ const cell=Math.floor(d.pos); if(cell!==d.lastCell&&cell>1&&cell<SZ-2){ d.lastCell=cell; const lc=Math.floor(d.ax?P.x:P.z), top=Math.floor(d.crest);
+      bulk(()=>{ for(let l=lc-26;l<=lc+26;l++){ const x=d.ax?l:cell, z=d.ax?cell:l; if(!inB(x,0,z)) continue; for(let y=top;y>=WL-1;y--){ const t=get(x,y,z); if(!t||t===9) continue; if(PLANT[t]||LEAF[t]) doBreak(x,y,z); else { if((t===1||t===2||t===5||t===12)&&Math.random()<.1) doBreak(x,y,z); break; } } } }); } }
+  else if(d.name==='earthquake'){ shake=Math.max(shake,.34+.18*Math.sin(d.t*9)); d.em-=dt;
+    while(d.em<=0){ d.em+=.05; for(const h of d.heads.slice()){ if(QC.length>760) break; const len=.5+Math.random()*.55; if(Math.random()<.07) h.a+=(Math.random()<.5?1:-1)*(.9+Math.random()*.6); else h.a+=(Math.random()-.5)*1.05;
+        const mx=h.x+Math.sin(h.a)*len/2, mz=h.z+Math.cos(h.a)*len/2; if(mx<2||mz<2||mx>SZ-2||mz>SZ-2){ h.a+=Math.PI; continue; }
+        QC.push({x:mx,z:mz,a:h.a,len,y:groundY(mx,mz),born:performance.now(),main:h.main,w:.75+Math.random()*.5}); h.x+=Math.sin(h.a)*len; h.z+=Math.cos(h.a)*len; h.n++;
+        if(h.main&&h.n%3===0&&h.n>6){ const cx=Math.floor(h.x), cz=Math.floor(h.z), gy=groundY(cx,cz)-1, dep=5+((Math.random()*6)|0); bulk(()=>{ for(let y=gy;y>gy-dep&&y>3;y--) doBreak(cx,y,cz); }); }
+        if(d.heads.length<9&&Math.random()<.035) d.heads.push({x:h.x,z:h.z,a:h.a+(Math.random()<.5?1:-1)*(.7+Math.random()*.6),main:false,n:0}); } } }
   else if(d.name==='meteor'){ d.em-=dt; if(d.em<=0){ d.em=.65; const near=Math.random()<.3, a=Math.random()*6.283, r=near?Math.random()*4:5+Math.random()*24; fxMeteor(clamp(P.x+Math.cos(a)*r,1,SZ-2),clamp(P.z+Math.sin(a)*r,1,SZ-2)); } }
   else if(d.name==='tornado'){ const dx=P.x-d.x, dz=P.z-d.z, dd=Math.hypot(dx,dz)||1; d.x+=dx/dd*dt*3.4; d.z+=dz/dd*dt*3.4;
     if(dd<3.5){ P.vy=Math.max(P.vy,9); P.ground=false; hurt(dt*26); }
     d.em=(d.em||0)-dt; if(d.em<=0){ d.em=.3; const gx=Math.floor(d.x+(Math.random()*4-2)), gz=Math.floor(d.z+(Math.random()*4-2)), gy=groundY(gx,gz)-1; if(gy>WL) doBreak(gx,gy,gz); } }
   else if(d.name==='lightning'){ d.em-=dt; if(d.em<=0){ d.em=.75; const near=Math.random()<.35, a=Math.random()*6.283, r=near?Math.random()*3.5:5+Math.random()*24; fxBolt(clamp(P.x+Math.cos(a)*r,1,SZ-2),clamp(P.z+Math.sin(a)*r,1,SZ-2)); } }
   if(dis&&d.t>=d.dur) endDisaster(); }
-function survDraw(){ mobDraw(); dropDraw(); if(!dis) return;
-  if(dis.name==='tsunami'&&dis.y>WL+.2){ R3.part(R3.UB,R3.mm(R3.T(SZ/2*BS,(dis.y-.5)*BS,SZ/2*BS),R3.S((SZ+40)*BS,BS,(SZ+40)*BS)),[.16,.42,.95]); }
+/* earthquake cracks: jagged lines that run straight across blocks (not along the grid), widening as they age */
+const QC=[];
+function quakeDraw(){ if(!QC.length) return; const now=performance.now(); for(let i=QC.length-1;i>=0;i--){ const q=QC[i], age=(now-q.born)/1000; if(age>42){ QC.splice(i,1); continue; } if(Math.abs(q.x-P.x)>44||Math.abs(q.z-P.z)>44) continue;
+    const fade=age>34?1-(age-34)/8:1, w=Math.min(q.main?.62:.3,.05+age*.14)*q.w*fade;
+    R3.part(R3.UB,R3.mm(R3.T(q.x*BS,(q.y+.025)*BS,q.z*BS),R3.RY(q.a),R3.S(w*BS,.05*BS,q.len*1.18*BS)),[.015,.012,.01],true);
+    if(q.main&&age>1.2) R3.part(R3.UB,R3.mm(R3.T(q.x*BS,(q.y+.035)*BS,q.z*BS),R3.RY(q.a),R3.S(w*.3*BS,.05*BS,q.len*1.05*BS)),[1.7,.5+.2*Math.sin(now/200+q.x),.08],true); } }
+/* tsunami: the height of the wave a given distance behind its front (a steep wall, then a long surge that drains away) */
+const TSU=[[0,1.2,.7],[1.2,4.5,1],[4.5,9,.86],[9,16,.7],[16,28,.56],[28,46,.44],[46,70,.33],[70,100,.2]];
+function tsuH(d,behind){ if(behind<0) return 0; for(const [a,b,f] of TSU) if(behind<b) return WL+(d.crest-WL)*f; return 0; }
+function survDraw(){ mobDraw(); dropDraw(); quakeDraw(); if(!dis) return;
+  if(dis.name==='tsunami'){ const d=dis, lat=d.ax?P.x:P.z, W=170, t=performance.now()/1000;
+    const slab=(b0,b1,y0,y1,col)=>{ const c=d.pos-d.sg*(b0+b1)/2, len=Math.abs(b1-b0); if(c<-30||c>SZ+30) return; R3.part(R3.UB,R3.mm(R3.T((d.ax?lat:c)*BS,(y0+y1)/2*BS,(d.ax?c:lat)*BS),R3.S((d.ax?W:len)*BS,(y1-y0)*BS,(d.ax?len:W)*BS)),col,true); };
+    TSU.forEach(([a,b,f],k)=>{ const top=WL+(d.crest-WL)*f+Math.sin(t*2.2+k)*.25; slab(a,b,WL-3,top,[.1+k*.012,.36+k*.02,.86+k*.012]); if(k<4) slab(a,b,top,top+.45,[1.25,1.3,1.35]); });
+    /* the curling lip and spray thrown ahead of the wall */ slab(-1.6,0,d.crest-3.2,d.crest+.4,[.2,.5,.95]); slab(-2.4,-1.6,d.crest-1.6,d.crest+.7,[1.3,1.35,1.4]);
+    for(let k=0;k<26;k++){ const u=((k*37.7+t*40)%W)-W/2, up=((k*13.3+t*6)%5); const c=d.pos+d.sg*(1.5+((k*7)%4)); R3.part(R3.UB,R3.mm(R3.T((d.ax?lat+u:c)*BS,(d.crest-4+up)*BS,(d.ax?c:lat+u)*BS),R3.S(.5*BS,.5*BS,.5*BS)),[1.3,1.35,1.4],true); } }
   else if(dis.name==='tornado'){ const gy=groundY(dis.x,dis.z), t=performance.now()/110; for(let k=0;k<16;k++){ const rr=.9+k*.42; R3.part(R3.UB,R3.mm(R3.T((dis.x+Math.cos(t+k*.7)*rr*.35)*BS,(gy+k*1.5)*BS,(dis.z+Math.sin(t+k*.7)*rr*.35)*BS),R3.RY(t+k),R3.S(rr*BS,1.5*BS,rr*BS)),[.42,.4,.38]); } } }
 function survHud(c,W,Hh){ if(MODE==='survival') return survivalHud(c,W,Hh); if(MODE!=='disaster') return; const bw=260, bx=W/2-bw/2, by=58;
   c.fillStyle='rgba(0,0,0,.55)'; c.fillRect(bx-3,by-3,bw+6,26); c.fillStyle=health>45?'#22c55e':health>20?'#f59e0b':'#ef4444'; c.fillRect(bx,by,bw*health/100,20);
@@ -1020,7 +1042,7 @@ function survHud(c,W,Hh){ if(MODE==='survival') return survivalHud(c,W,Hh); if(M
   c.font='800 15px system-ui'; c.fillStyle='rgba(0,0,0,.5)'; c.fillRect(W/2-150,by+28,300,24); c.fillStyle='#fff'; c.fillText('☄️ Survived '+survived+'   ·   🏆 Best '+survBest,W/2,by+45);
   let msg='', col='#fde047'; if(dis){ msg=DISINFO[dis.name][0]+' — '+DISINFO[dis.name][1]; col='#fca5a5'; } else if(disWarn){ msg='⚠️ '+DISINFO[disName][0]+' in '+Math.max(1,Math.ceil(disT))+'…'; }
   if(msg){ c.font='900 24px system-ui'; const w=c.measureText(msg).width+28; c.fillStyle='rgba(0,0,0,.6)'; c.fillRect(W/2-w/2,by+60,w,36); c.fillStyle=col; c.fillText(msg,W/2,by+86); }
-  if(dis&&dis.name==='tsunami'&&P.y+EYE<dis.y){ c.fillStyle='rgba(20,70,170,.45)'; c.fillRect(0,0,W,Hh); }
+  if(dis&&dis.name==='tsunami'&&dis.y>0&&P.y+EYE<dis.y){ c.fillStyle='rgba(20,70,170,.45)'; c.fillRect(0,0,W,Hh); }
   if(hurtFlash>0){ c.fillStyle='rgba(220,20,20,'+Math.min(.5,hurtFlash*.5)+')'; c.fillRect(0,0,W,Hh); }
   c.font='700 13px system-ui'; }
 
