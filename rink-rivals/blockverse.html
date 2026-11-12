@@ -139,7 +139,12 @@ function doRemesh(){ dirty=false; R3.setStatic(build,{chunk:BS*8}); builtOnce=tr
 /* ---- player ---- */
 const P={x:SZ/2+.5,y:0,z:SZ/2+.5,vx:0,vy:0,vz:0,yaw:0,pitch:.2,fly:false,ground:false};
 const WR=.3, PH=1.72, EYE=1.62;
-function spawn(){ let x=Math.floor(SZ/2), z=Math.floor(SZ/2); let y=H-1; while(y>0&&!solidAt(x,y,z)) y--; P.x=x+.5; P.z=z+.5; P.y=y+1; P.vx=P.vy=P.vz=0; }
+function spawn(){ /* land on the highest open grass/sand hilltop near the middle — a view, never boxed in */
+  let bx=Math.floor(SZ/2), bz=Math.floor(SZ/2), best=-1;
+  for(let x=bx-13;x<=bx+13;x++) for(let z=bz-13;z<=bz+13;z++){ if(x<1||z<1||x>=SZ-1||z>=SZ-1) continue; let y=H-1; while(y>0&&!solidAt(x,y,z)) y--; const t=world[idx(x,y,z)]; if((t===1||t===5)&&y>best){ best=y; bx=x; bz=z; } }
+  if(best<0){ let y=H-1; while(y>0&&!solidAt(bx,y,bz)) y--; best=y; }
+  for(let y=best+1;y<=best+3;y++){ const i=idx(bx,y,bz); if(world[i]&&world[i]!==9) world[i]=0; }   /* clear head space */
+  P.x=bx+.5; P.z=bz+.5; P.y=best+1; P.vx=P.vy=P.vz=0; P.pitch=.06; dirty=true; }
 function boxHits(x,y,z){ const x0=Math.floor(x-WR),x1=Math.floor(x+WR),z0=Math.floor(z-WR),z1=Math.floor(z+WR),y0=Math.floor(y),y1=Math.floor(y+PH);
   for(let X=x0;X<=x1;X++)for(let Z=z0;Z<=z1;Z++)for(let Y=y0;Y<=y1;Y++){ if(solidAt(X,Y,Z)) return true; } return false; }
 function inWater(){ return get(Math.floor(P.x),Math.floor(P.y+EYE),Math.floor(P.z))===9 || get(Math.floor(P.x),Math.floor(P.y+.3),Math.floor(P.z))===9; }
@@ -205,7 +210,7 @@ function hud(){ ctx.clearRect(0,0,HW,HH); const cx=HW/2,cy=HH/2;
 function timeStr(){ const h=Math.floor(TOD*24), m=Math.floor((TOD*24-h)*60); return (h<10?'0':'')+h+':'+(m<10?'0':'')+m; }
 
 /* ---- day / night ---- */
-let TOD=.32;   /* 0..1 of a day */
+let TOD=.40;   /* 0..1 of a day — mid-morning: bright, with long readable shadows */
 function sky(){ const t=TOD; let day=clamp(Math.sin((t-.23)*Math.PI/.54),0,1); if(t>.77||t<.21) day=0; const dusk=clamp(1-Math.abs(t-.78)/.08,0,1)+clamp(1-Math.abs(t-.2)/.08,0,1);
   const night=[.03,.04,.09], mid=[.52,.72,.95]; const s=[0,0,0]; for(let i=0;i<3;i++) s[i]=night[i]+(mid[i]-night[i])*day;
   s[0]+=dusk*.35; s[1]+=dusk*.12;
@@ -232,7 +237,7 @@ function frame(now){ const dt=(now-last)/1000; last=now; fps+=((1/Math.max(1e-3,
   if(R3.ok){ if(dirty) doRemesh(); physics(dt);
     const SK=sky(), eye=[P.x*BS,(P.y+EYE)*BS,P.z*BS], f=forward(), ctr=[eye[0]+f[0]*BS,eye[1]+f[1]*BS,eye[2]+f[2]*BS];
     R3.frame({eye,center:ctr,fov:72,near:BS*.12,far:BS*62,sky:SK.s,bright:SK.bright,light:SK.light,
-      fog:[BS*34,BS*24],fogMax:.82,cull:BS*36,unit:BS,dome:true,shadow:{r:BS*40}},
+      fog:[BS*34,BS*24],fogMax:.82,cull:BS*36,unit:BS,tex:true,dome:true,shadow:{r:BS*40}},
       ()=>{ clouds(dt,SK.day); highlight(); },dt);
   }
   hud(); if(breaking&&now-lastBreak>180){ lastBreak=now; breakBlock(); }

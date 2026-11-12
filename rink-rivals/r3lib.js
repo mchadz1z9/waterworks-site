@@ -56,7 +56,7 @@ precision highp float;
 precision mediump float;
 #endif
 varying vec3 vCol;varying vec3 vN;varying vec3 vW;varying float vMat;
-uniform vec3 uLight,uEye,uFog;uniform float uAlpha,uBright,uFogN,uFogF,uFogMax,uQ,uShOn,uShTx,uShB,uUnit,uPix;uniform mat4 uLVP;uniform sampler2D uSh;
+uniform vec3 uLight,uEye,uFog;uniform float uAlpha,uBright,uFogN,uFogF,uFogMax,uQ,uShOn,uShTx,uShB,uUnit,uPix,uTex;uniform mat4 uLVP;uniform sampler2D uSh;
 float unp(vec4 r){return dot(r,vec4(1.0,1.0/255.0,1.0/65025.0,1.0/16581375.0));}
 float shadowF(vec3 w,vec3 n){if(uShOn<0.5)return 1.0;vec4 p=uLVP*vec4(w+n*uShB,1.0);vec3 q=p.xyz/p.w*0.5+0.5;float e=min(min(q.x,1.0-q.x),min(q.y,1.0-q.y));if(e<0.0||q.z>1.0)return 1.0;float t=uShTx,z=q.z-0.0006,s=0.0;for(int i=-1;i<=1;i++)for(int j=-1;j<=1;j++){vec2 o=vec2(float(i),float(j))*t*1.25;s+=step(z,unp(texture2D(uSh,q.xy+o)));}return mix(1.0,s/9.0,smoothstep(0.0,0.08,e));}
 float h3(vec3 p){p=fract(p*0.1031);p+=dot(p,p.yzx+33.33);return fract((p.x+p.y)*p.z);}
@@ -66,6 +66,10 @@ void main(){vec3 n=normalize(vN);float d=max(dot(n,uLight),0.0);float h=0.5+0.5*
 vec3 V=normalize(uEye-vW);float sh=shadowF(vW,n);float w2=clamp((dot(n,uLight)+0.22)/1.22,0.0,1.0)*sh;vec3 amb=mix(vec3(0.30,0.28,0.27),vec3(0.57,0.585,0.62),h)*(uShOn>0.5?0.92:1.0);vec3 c=vCol*(amb+vec3(1.0,0.95,0.86)*(uShOn>0.5?0.64:0.56)*w2);float sp=pow(max(dot(n,normalize(uLight+V)),0.0),40.0)*0.2*d*sh;float rim=pow(1.0-max(dot(n,V),0.0),3.0)*0.2*(1.0-0.9*abs(n.y));c+=vec3(1.0,0.97,0.9)*sp+vec3(0.6,0.75,1.0)*rim*(0.5+0.5*dot(vCol,vec3(0.33)));float aoK=1.0-0.26*(1.0-smoothstep(0.0,55.00,vW.y))*(1.0-smoothstep(0.35,0.75,abs(n.y)));c*=aoK;float dist=length(vW-uEye);
 if(uQ>0.5&&vMat>0.5&&abs(n.y)<0.3){vec2 tg=normalize(vec2(-n.z,n.x));vec2 t=vec2(dot(vW.xz,tg),vW.y)/uUnit;if(t.y>3.4){bool cw=vMat>1.5;vec2 cs=cw?vec2(1.6,3.2):vec2(2.6,3.2);vec2 g=t/cs;vec2 id=floor(g);vec2 f=fract(g);float wx=cw?0.05:0.2,wy=cw?0.07:0.24;float fp=dist*uPix/uUnit;float ax=clamp(fp/cs.x,0.002,0.5),ay=clamp(fp/cs.y,0.002,0.5);float win=smoothstep(wx-ax,wx+ax,f.x)*(1.0-smoothstep(1.0-wx-ax,1.0-wx+ax,f.x))*smoothstep(wy-ay,wy+ay,f.y)*(1.0-smoothstep(0.86-ay,0.86+ay,f.y));win=mix(win,(1.0-2.0*wx)*(0.86-wy),smoothstep(0.12,0.35,max(ax,ay)));float r=h3(vec3(id,floor(dot(n.xz,vec2(3.0,7.0))+0.5)+17.0));float fr=pow(1.0-max(dot(n,V),0.0),2.5);vec3 gls=mix(vec3(0.08,0.11,0.16)+vec3(0.03,0.04,0.05)*r,uFog*1.05+0.04,0.18+0.62*fr);gls+=vec3(1.0,0.95,0.85)*pow(max(dot(reflect(-V,n),uLight),0.0),40.0)*0.7*sh;float nt=clamp((0.8-uBright)/0.4,0.0,1.0);vec3 lit=vec3(1.0,0.8,0.5)*(0.75+0.45*r)/max(uBright,0.25);gls=mix(gls,lit,nt*step(0.5,r)*(0.6+0.4*f.y));if(r<0.15&&nt<0.5)gls*=0.75;c=mix(c*(1.0-0.14*(1.0-smoothstep(0.05-ay,0.05+ay,f.y))*(1.0-smoothstep(0.12,0.35,ay))),gls,win);}}
 if(uQ>0.5){float fade=1.0-smoothstep(1500.0,9000.0,dist);float fpx=dist*uPix;float nz=vn(vW*0.012)*0.6+mix(vn(vW*0.05),0.5,smoothstep(4.0,14.0,fpx))*0.3+mix(vn(vW*0.21),0.5,smoothstep(1.0,4.0,fpx))*0.1;float lum=dot(vCol,vec3(0.33));c*=1.0+(nz-0.5)*0.22*fade*(lum<1.05?1.0:0.0);float sky=max(n.y,0.0);c+=vCol*vec3(0.05,0.07,0.1)*sky*0.6;c+=vec3(1.0,0.96,0.88)*pow(max(dot(n,normalize(uLight+V)),0.0),120.0)*0.25*d;}
+if(uTex>0.5){vec3 an=abs(n);vec2 uv=an.y>0.5?vW.xz:(an.x>0.5?vW.zy:vW.xy);uv/=uUnit;vec2 fb=fract(uv);float tf=1.0-smoothstep(900.0,3600.0,dist);
+vec2 cl=floor(fb*4.0);float gr=h3(vec3(floor(uv)+(cl+0.5)*0.25,dot(floor(n+0.5),vec3(1.0,5.0,9.0))));c*=mix(1.0,0.87+0.22*gr,tf);
+float edge=min(min(fb.x,1.0-fb.x),min(fb.y,1.0-fb.y));float bev=smoothstep(0.0,0.05,edge);c*=mix(1.0,0.55+0.45*bev,tf);
+vec2 pc=fract(fb*4.0);float pl=min(min(pc.x,1.0-pc.x),min(pc.y,1.0-pc.y));c*=mix(1.0,0.95+0.05*smoothstep(0.0,0.1,pl),tf);}
 c*=uBright;float f=clamp((dist-uFogN)/uFogF,0.0,uFogMax);vec3 fc=uFog+vec3(0.06,0.04,0.0)*pow(max(dot(normalize(vW-uEye),uLight),0.0),6.0);c=mix(c,fc,f);
 if(uQ>0.5){c=mix(c,aces(c*1.05),0.55);}
 gl_FragColor=vec4(c,uAlpha);}`);
@@ -169,7 +173,7 @@ void main(){vec4 t=texture2D(uTex,vUV*uUVR.zw+uUVR.xy);if(t.a<0.04)discard;gl_Fr
     gl.useProgram(PC.p); curMesh=null;
     for(const k of ['aPos','aNor','aCol','aPh']) gl.enableVertexAttribArray(PC.a[k]);
     gl.uniformMatrix4fv(PC.u.uVP,false,VP); gl.uniform3fv(PC.u.uLight,LIGHT); shUniforms(); gl.uniform3fv(PC.u.uEye,eye);
-    gl.uniform3fv(PC.u.uFog,sky); gl.uniform1f(PC.u.uBright,bright); if(PC.u.uQ) gl.uniform1f(PC.u.uQ,GHI?1:0); gl.uniform1f(PC.u.uFogN,fogN); gl.uniform1f(PC.u.uFogF,fogF); gl.uniform1f(PC.u.uFogMax,fogMax); gl.uniform1f(PC.u.uAlpha,1); gl.uniform1f(PC.u.uTime,time); gl.uniform1f(PC.u.uCheer,cheer);
+    gl.uniform3fv(PC.u.uFog,sky); gl.uniform1f(PC.u.uBright,bright); if(PC.u.uQ) gl.uniform1f(PC.u.uQ,GHI?1:0); gl.uniform1f(PC.u.uFogN,fogN); gl.uniform1f(PC.u.uFogF,fogF); gl.uniform1f(PC.u.uFogMax,fogMax); gl.uniform1f(PC.u.uAlpha,1); gl.uniform1f(PC.u.uTime,time); gl.uniform1f(PC.u.uCheer,cheer); if(PC.u.uTex) gl.uniform1f(PC.u.uTex,TEX);
   }
   function useT(){
     for(const k of ['aPos','aNor','aCol','aPh']) if(PC.a[k]!==undefined) gl.disableVertexAttribArray(PC.a[k]);
@@ -270,7 +274,7 @@ void main(){vec4 t=texture2D(uTex,vUV*uUVR.zw+uUVR.xy);if(t.a<0.04)discard;gl_Fr
 
 
   /* ---- sun shadows and a sky dome (graphics High / Ultra, for games that ask for them) ---- */
-  let PIX=.002, LIGHT=nrm([.35,.85,.4]), SHON=false, SHM=null, SHTX=2048, SHB=0, UNIT=100, PS=null, SKYP=null, SKYQ=null, WHITE=null;
+  let PIX=.002, LIGHT=nrm([.35,.85,.4]), SHON=false, SHM=null, SHTX=2048, SHB=0, UNIT=100, TEX=0, PS=null, SKYP=null, SKYQ=null, WHITE=null;
   function ortho(l,r,b,t,n,f){ const m=new Float32Array(16); m[0]=2/(r-l); m[5]=2/(t-b); m[10]=-2/(f-n); m[12]=-(r+l)/(r-l); m[13]=-(t+b)/(t-b); m[14]=-(f+n)/(f-n); m[15]=1; return m; }
   function shMake(){ if(PS!==null) return PS; PS=false; if(!GHI) return PS;
     try{ const pr=prog('attribute vec3 aPos;uniform mat4 uLVP,uM;void main(){gl_Position=uLVP*uM*vec4(aPos,1.0);}',
@@ -341,7 +345,7 @@ void main(){vec4 t=texture2D(uTex,vUV*uUVR.zw+uUVR.xy);if(t.a<0.04)discard;gl_Fr
     resize();
     /* optional per-frame look: cam.sky (clear + fog colour), cam.bright (overall light), cam.fog [start,len] in world units */
     sky=cam.sky||[.04,.06,.12]; bright=cam.bright==null?1:cam.bright; fogN=cam.fog?cam.fog[0]:1500; fogF=cam.fog?cam.fog[1]:2600; fogMax=cam.fogMax==null?.55:cam.fogMax; cullD=cam.cull||0;
-    LIGHT=nrm(cam.light||[.35,.85,.4]); UNIT=cam.unit||100; PIX=2*Math.tan(cam.fov*Math.PI/360)/Math.max(1,ch); DYN2=DYN; DYN=[];
+    LIGHT=nrm(cam.light||[.35,.85,.4]); UNIT=cam.unit||100; TEX=cam.tex?1:0; PIX=2*Math.tan(cam.fov*Math.PI/360)/Math.max(1,ch); DYN2=DYN; DYN=[];
     eye=cam.eye; VP=mul(persp(cam.fov*Math.PI/180,cw/ch,cam.near||6,cam.far||14000),lookAt(cam.eye,cam.center,[0,1,0]));
     try{ shadowPass(cam); }catch(e){ SHON=false; PS=false; gl.bindFramebuffer(gl.FRAMEBUFFER,null); }
     const pp=ppBegin();
