@@ -347,7 +347,7 @@ function cashOut(){ if(!stake) return; const m=me(), chips=m?Math.max(0,m.chips)
 try{ const ps=JSON.parse(localStorage.getItem('rrPokerSess')||'null'); if(ps&&CUR[ps.c]&&ps.chips>0){ setTimeout(()=>{ wal.add(ps.c,ps.chips*CUR[ps.c].rate); toast(`Cashed out your last poker session: ${fmtCur(ps.c,ps.chips*CUR[ps.c].rate)}`,'#4ade80'); },2500); } localStorage.removeItem('rrPokerSess'); }catch(e){}
 addEventListener('pagehide',stakeSave);
 
-const myTurn=()=>T&&T.toAct===myId&&!me().ai&&phase==='play';
+let acting=0; const myTurn=()=>T&&T.toAct===myId&&!me().ai&&phase==='play'&&!(acting&&Date.now()-acting<4000);
 
 /* between hands: cash tables keep you in (a rebuy) and swap a busted pro for a fresh one */
 function nextHand(){ if(!T) return; stakeSave(); if(T.mode2==='cash'){ const m=me(); if(m&&m.chips<=0&&!online()){ if(stake&&!buyIn(2000)){ toast('Out of money — cashing out','#f87171'); cashOut(); toMenu(); return; } m.chips=2000; buyins+=2000; tlog(T,`${m.name} rebuys for 2000`); toast('Rebuy: 2000 chips','#fbbf24'); }
@@ -356,7 +356,7 @@ function nextHand(){ if(!T) return; stakeSave(); if(T.mode2==='cash'){ const m=m
   if(!newHand(T)){ return finish(); } sessHands++; SV.hands++; doneT=0; runT=0; aiT=-.3; actT=0; sfx.card(); broadcast(); }
 
 /* ---------- actions: local or on the host they change the table; a guest sends them to the host ---------- */
-function act(a,to){ if(!myTurn()) return; if(online()&&!net.isHost()){ net.send({t:'act',pid:myId,a,to,h:T.hands}); return; } doAct(myId,a,to); }
+function act(a,to){ if(!myTurn()) return; if(online()&&!net.isHost()){ acting=Date.now(); net.send({t:'act',pid:myId,a,to,h:T.hands}); return; } doAct(myId,a,to); }
 function doAct(i,a,to){ if(!T||T.toAct!==i) return false; let ok=actP(T,i,a,to); if(!ok&&a==='check') ok=actP(T,i,'call'); if(!ok&&a==='call') ok=actP(T,i,'check'); if(ok){ actT=0; aiT=0; broadcast(); } return ok; }
 function aiMove(i){ const [a,to]=aiAct(T,i,Math.random); if(!actP(T,i,a,to)&&!actP(T,i,'check')&&!actP(T,i,'call')) actP(T,i,'fold'); actT=0; broadcast(); }
 
@@ -503,8 +503,8 @@ net=window.RRO?RRO.init({game:'poker',maxPlayers:6,minPlayers:2,blurb:"Texas Hol
   onStart:(msg,api)=>{ const o=msg.opts||{}, all=api.all(), mi=all.findIndex(p=>p.id===api.me.id), players=all.map((p,i)=>({name:p.name||('Player '+(i+1)),ai:false})); const want=Math.min(6,Math.max(players.length,1+(o.fill|0))); players.push(...seatPros(want-players.length,[]));
     CR.keys={}; CR.myKey=null; CR.cache=null; crInit().then(()=>{ if(!CR.pub) return; if(api.isHost()) net.send({t:'hpk',jwk:CR.pub}); else net.send({t:'pk',pid:mi,jwk:CR.pub}); });
     newGame({online:true,players,me:mi,mode:o.mode,stack:o.stack}); },
-  onMsg:(m)=>{ if(m.t==='G'&&!net.isHost()){ const had=T; T=m.T; T.mode2=T.mode2||'sng'; if(had&&T.toAct!==had.toAct) actT=0; patchHand(); if(m.enc&&m.enc[myId]&&!(CR.cache&&CR.cache.n===T.hands)) openHand(m.enc[myId]); }
-    else if(m.t==='act'&&net.isHost()&&T&&m.h===T.hands&&!T.pl[m.pid].ai) doAct(m.pid,m.a,m.to);
+  onMsg:(m)=>{ if(m.t==='G'&&!net.isHost()){ acting=0; const had=T; T=m.T; T.mode2=T.mode2||'sng'; if(had&&T.toAct!==had.toAct) actT=0; patchHand(); if(m.enc&&m.enc[myId]&&!(CR.cache&&CR.cache.n===T.hands)) openHand(m.enc[myId]); }
+    else if(m.t==='act'&&net.isHost()&&T&&T.pl[m.pid]&&!T.pl[m.pid].ai){ if(m.h!==T.hands||!doAct(m.pid,m.a,m.to)) broadcast(); }
     else if(m.t==='pk'&&net.isHost()){ derive(m.jwk).then(k=>{ if(k){ CR.keys[m.pid]=k; net.send({t:'hpk',jwk:CR.pub}); broadcast(); } }); }
     else if(m.t==='hpk'&&!net.isHost()&&!CR.myKey){ derive(m.jwk).then(k=>{ CR.myKey=k; if(!k) return; net.send({t:'pk',pid:myId,jwk:CR.pub}); }); } },
   onPeers:(api,kind)=>{ if(kind==='leave'&&T&&api.isHost()){ const names=api.all().map(q=>q.name); T.pl.forEach(p=>{ if(!p.ai&&p.id!==myId&&!names.includes(p.name)){ p.ai=true; p.style='tight'; p.name+=' (AI)'; } }); T.ver++; broadcast(); toast('A player left: the AI plays their stack','#fbbf24'); } },
@@ -857,7 +857,7 @@ lbBoards([{id:'sng',name:'Sit & Gos won vs the pros',mode:'sum'},{id:'hu',name:'
 { const _f=finish; finish=function(){ const was=phase, r=_f.apply(this,arguments); try{ if(was==='play'&&T){ const m=T.pl[myId]; if(online()){ if(T.winner===myId) lbPost('online',1,`${T.pl.length} players`); } else if(T.mode2==='cash'){ const pr=m.chips-buyins; if(pr>0) lbPost('cash',pr,`${sessHands} hands`); } else if(T.winner===myId) lbPost(T.mode2==='hu'?'hu':'sng',1,T.mode2==='hu'?T.pl.find(p=>p.id!==myId).name:`${T.pl.length} players`); } }catch(e){} return r; }; }
 
 /* read-only view of the table for automated tests (only on ?test pages) */
-if(/[?&]test\b/.test(location.search)) window.__pk=()=>{ if(!T) return null; const m=T.pl[myId]; return {W,H,btns:BTN.map(b=>({id:b.id,x:b.x,y:b.y,w:b.w,h:b.h,dis:!!b.dis})),phase,turn:myTurn(),street:T.street,hand:T.hands,last:m.last,folded:m.folded,chips:m.chips,bet:m.bet,check:legal(T,myId).check,log:T.log[0]}; };
+if(/[?&]test\b/.test(location.search)&&window.__pk&&typeof window.__pk==='object') window.__pk.status=()=>{ if(!T) return null; const m=T.pl[myId]; return {W,H,btns:BTN.map(b=>({id:b.id,x:b.x,y:b.y,w:b.w,h:b.h,dis:!!b.dis})),phase,turn:myTurn(),street:T.street,hand:T.hands,last:m.last,folded:m.folded,chips:m.chips,bet:m.bet,check:legal(T,myId).check,log:T.log[0]}; };
 })();
 </script>
 <script>window.RR_TOUCH={"stick": "none", "buttons": [["Fold", "KeyF"], ["Check<br>Call", "Space"], ["Bet<br>Raise", "KeyR"], ["Size +", "ArrowUp"], ["Size \u2212", "ArrowDown"], ["All in", "KeyA"], ["Cam", "KeyC"]], "sys": [["Enter", "Enter"], ["Leave", "Escape"], ["View", "KeyV"]]};</script>
