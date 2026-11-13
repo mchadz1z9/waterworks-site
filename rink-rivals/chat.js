@@ -55,7 +55,7 @@
   const RRC_EXTRA=`.rrc header .adm{font:800 13px system-ui,sans-serif;color:#fde68a;background:rgba(253,230,138,.12);border:1px solid rgba(253,230,138,.3);border-radius:8px;padding:2px 7px;text-decoration:none;cursor:pointer}\n.rrc .tg{font:800 10px system-ui,sans-serif;background:#7c3aed;color:#fff;border-radius:6px;padding:1px 6px;margin:0 4px;vertical-align:middle;letter-spacing:.02em}\n.rrc .dmb{flex:0 0 auto;background:rgba(255,255,255,.1);border:0;border-radius:8px;color:#fff;cursor:pointer;font-size:14px;padding:3px 8px}\n.rrc .dmb:hover{background:rgba(255,255,255,.22)}\n.rrc .dmv{flex:1;min-height:0;background:#0f172a;flex-direction:column} .rrc:not(.dmopen) .dmv{display:none} .rrc.dmopen .dmv{display:flex} .rrc.dmopen .log,.rrc.dmopen .who,.rrc.dmopen .rules{display:none}\n.rrc .dmh{display:flex;align-items:center;gap:8px;padding:8px 10px;background:linear-gradient(135deg,#4c1d95,#1e3a8a);font:800 16px 'Big Shoulders Display',sans-serif}\n.rrc .dmh .bk{background:rgba(255,255,255,.15);border:0;border-radius:8px;color:#fff;font-size:18px;cursor:pointer;padding:2px 10px}\n.rrc .dml{flex:1;overflow-y:auto;padding:8px 10px;display:flex;flex-direction:column;gap:4px}\n.rrc .dml .undel{font-size:11px;color:#fca5a5}\n#rrcF.dm i{background:#a855f7}\n.rrc{position:relative}`;
   const RRC_LOOK=`
 .rrc{border:1px solid rgba(129,140,248,.38);border-radius:20px;background:linear-gradient(180deg,#0b1024,#0f172a);box-shadow:0 18px 50px rgba(0,0,0,.55),0 0 0 1px rgba(255,255,255,.03) inset}
-.rrc header{background:linear-gradient(120deg,#4f46e5,#7c3aed 55%,#db2777);padding:12px 14px;box-shadow:0 2px 12px rgba(0,0,0,.35)}
+.rrc header{background:linear-gradient(120deg,var(--v1,#4f46e5),var(--v2,#7c3aed) 55%,var(--v3,#db2777));padding:12px 14px;box-shadow:0 2px 12px rgba(0,0,0,.35)}
 .rrc header .pg{color:#fff;text-decoration:none;background:rgba(255,255,255,.16);border-radius:8px;padding:2px 8px;font:800 14px system-ui,sans-serif} .rrc header .pg:hover{background:rgba(255,255,255,.3)}
 .rrc .log{gap:9px;padding:12px;background:radial-gradient(circle at 15% 0,rgba(99,102,241,.13),transparent 55%),radial-gradient(circle at 90% 100%,rgba(219,39,119,.08),transparent 50%)}
 .rrc .log::-webkit-scrollbar{width:6px} .rrc .log::-webkit-scrollbar-thumb{background:#334155;border-radius:9px}
@@ -66,16 +66,24 @@
 .rrc .m.pub .tx{margin-top:2px;font-weight:500;color:#e5e7eb;word-wrap:break-word;overflow-wrap:anywhere}
 .rrc .m.pub .t{margin-left:10px}
 .rrc .m.pub.me{flex-direction:row-reverse}
-.rrc .m.pub.me .bd{background:linear-gradient(135deg,rgba(99,102,241,.5),rgba(14,165,233,.32));border-color:rgba(129,140,248,.45);border-radius:15px 4px 15px 15px}
+.rrc .m.pub.me .bd{background:linear-gradient(135deg,color-mix(in srgb,var(--v1,#6366f1) 55%,transparent),color-mix(in srgb,var(--v2,#0ea5e9) 34%,transparent));border-color:rgba(129,140,248,.45);border-radius:15px 4px 15px 15px}
 .rrc .m.pub .x{top:4px;right:auto;left:44px}
 .rrc .sys{text-align:center;background:rgba(251,191,36,.08);border-radius:999px;padding:3px 10px;align-self:center;font-style:normal}
 .rrc .rules{text-align:center;border-top:1px solid rgba(255,255,255,.06)}
 .rrc form{padding:10px;gap:8px;background:#0a0f1f;border-top:1px solid rgba(255,255,255,.06)}
 .rrc input{border-radius:999px;padding:10px 15px;background:#141c33;border-color:#2a3558} .rrc input:focus{border-color:#818cf8;box-shadow:0 0 0 3px rgba(99,102,241,.25)}
-.rrc form button{border-radius:999px;background:linear-gradient(135deg,#6366f1,#db2777);padding:0 18px;box-shadow:0 4px 12px rgba(99,102,241,.4)} .rrc form button:hover{filter:brightness(1.12)}
+.rrc form button{border-radius:999px;background:linear-gradient(135deg,var(--v1,#6366f1),var(--v3,#db2777));padding:0 18px;box-shadow:0 4px 12px rgba(99,102,241,.4)} .rrc form button:hover{filter:brightness(1.12)}
 .rrc .wr{border:1px solid rgba(255,255,255,.06);border-radius:12px}
-#rrcF{background:linear-gradient(135deg,#6366f1,#db2777);box-shadow:0 8px 22px rgba(99,102,241,.45)}
+
+.vsw{width:64px;height:44px;border-radius:12px;border:2px solid rgba(255,255,255,.18);cursor:pointer;position:relative;overflow:hidden;transition:transform .15s,border-color .15s;padding:0} .vsw:hover{transform:translateY(-2px) scale(1.05)} .vsw.on{border-color:#fff;box-shadow:0 0 0 3px rgba(255,255,255,.25),0 6px 18px rgba(0,0,0,.5)} .vsw span{position:absolute;left:0;right:0;bottom:0;font:800 10px system-ui,sans-serif;color:#fff;background:rgba(0,0,0,.45);padding:1px 0;letter-spacing:.03em}
+#rrcF{background:linear-gradient(135deg,var(--v1,#6366f1),var(--v3,#db2777));box-shadow:0 8px 22px rgba(99,102,241,.45)}
 .rrc header{flex-wrap:nowrap} .rrc header b{min-width:0;white-space:nowrap;overflow:hidden;text-overflow:ellipsis} #chatDock .rrc header{font-size:17px;gap:6px;padding:10px 10px} #chatDock .rrc header .nm{font-size:0;padding:3px 7px} #chatDock .rrc header .nm::before{content:'✎';font-size:13px}`;
+  /* vibe: a colour theme you pick once and see everywhere (chat, home page, calls) */
+  const VIBES={neon:['Neon','#4f46e5','#7c3aed','#db2777'],sunset:['Sunset','#f97316','#ef4444','#db2777'],ocean:['Ocean','#0ea5e9','#2563eb','#14b8a6'],mint:['Mint','#10b981','#16a34a','#eab308'],grape:['Grape','#7c3aed','#c026d3','#f472b6'],fire:['Fire','#dc2626','#ea580c','#facc15'],ice:['Ice','#38bdf8','#818cf8','#e0f2fe'],midnight:['Midnight','#334155','#475569','#94a3b8']};
+  function setVibe(k){ if(!VIBES[k]) k='neon'; const v=VIBES[k], r=document.documentElement.style; r.setProperty('--v1',v[1]); r.setProperty('--v2',v[2]); r.setProperty('--v3',v[3]); ls.set('rrVibe',k); document.documentElement.dataset.vibe=k; for(const b of document.querySelectorAll('[data-vibe-k]')) b.classList.toggle('on',b.dataset.vibeK===k); }
+  setVibe(ls.get('rrVibe')||'neon');
+  window.RRVIBE={ set:setVibe, list:VIBES, get cur(){ return ls.get('rrVibe')||'neon'; },
+    picker(el){ if(!el) return; el.innerHTML=Object.keys(VIBES).map(k=>`<button type="button" class="vsw${k===(ls.get('rrVibe')||'neon')?' on':''}" data-vibe-k="${k}" title="${VIBES[k][0]}" style="background:linear-gradient(135deg,${VIBES[k][1]},${VIBES[k][2]} 55%,${VIBES[k][3]})"><span>${VIBES[k][0]}</span></button>`).join(''); el.addEventListener('click',e=>{ const b=e.target.closest('[data-vibe-k]'); if(b) setVibe(b.dataset.vibeK); }); } };
   GN.chat='💬 Chat'; GN.blockverse='🟩 Blockverse'; GN.call='📹 Call';
   const st=document.createElement('style'); st.textContent=css+RRC_EXTRA+RRC_LOOK; document.head.appendChild(st);
 
