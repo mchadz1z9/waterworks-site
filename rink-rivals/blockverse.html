@@ -547,6 +547,15 @@ const MAT=[0,1,1,3,3,1,2,5,2,7,0,4,1,3,3,4,2,1,3,3,1,1,3,3,3,3,3,3,2,1,1,1,1];
 /* ambient occlusion: darken faces tucked into crevices — the single biggest look upgrade for voxels */
 const occ=(x,y,z)=>{ const t=inB(x,y,z)?world[idx(x,y,z)]:0; return (t!==0&&t!==9&&!PLANT[t])?1:0; };
 const AOBR=[.46,.66,.84,1.0];
+/* smooth lighting: each corner of a face gets its own shade from the blocks touching that corner */
+const AOV=[.5,.7,.86,1];
+function vAO(x,y,z,o,cn){ const fx=x+o[0], fy=y+o[1], fz=z+o[2]; let s1,s2,sc;
+  if(o[0]){ const sy=cn[1]?1:-1, sz=cn[2]?1:-1; s1=occ(fx,fy+sy,fz); s2=occ(fx,fy,fz+sz); sc=occ(fx,fy+sy,fz+sz); }
+  else if(o[1]){ const sx=cn[0]?1:-1, sz=cn[2]?1:-1; s1=occ(fx+sx,fy,fz); s2=occ(fx,fy,fz+sz); sc=occ(fx+sx,fy,fz+sz); }
+  else { const sx=cn[0]?1:-1, sy=cn[1]?1:-1; s1=occ(fx+sx,fy,fz); s2=occ(fx,fy+sy,fz); sc=occ(fx+sx,fy+sy,fz); }
+  return AOV[(s1&&s2)?0:3-(s1+s2+sc)]; }
+/* gentle colour patches so grass and leaves aren't one flat green everywhere */
+function pnoise(x,z){ const xs=x/22, zs=z/22, x0=Math.floor(xs), z0=Math.floor(zs), fx=xs-x0, fz=zs-z0, u=fx*fx*(3-2*fx), v=fz*fz*(3-2*fz); return (cH(x0,z0)*(1-u)+cH(x0+1,z0)*u)*(1-v)+(cH(x0,z0+1)*(1-u)+cH(x0+1,z0+1)*u)*v; }
 function faceAO(x,y,z,o){ const fx=x+o[0],fy=y+o[1],fz=z+o[2]; let a1,a2;
   if(o[0]){a1=[0,1,0];a2=[0,0,1];} else if(o[1]){a1=[1,0,0];a2=[0,0,1];} else {a1=[1,0,0];a2=[0,1,0];}
   let sum=0; for(const su of [-1,1]) for(const sv of [-1,1]){ const s1=occ(fx+a1[0]*su,fy+a1[1]*su,fz+a1[2]*su), s2=occ(fx+a2[0]*sv,fy+a2[1]*sv,fz+a2[2]*sv), sc=occ(fx+a1[0]*su+a2[0]*sv,fy+a1[1]*su+a2[1]*sv,fz+a1[2]*su+a2[2]*sv); sum+=AOBR[(s1&&s2)?0:3-(s1+s2+sc)]; } return sum/4; }
@@ -554,16 +563,19 @@ let dirty=true, builtOnce=false;   /* dirty = rebuild everything; single edits c
 const NC=Math.ceil(SZ/CS), cbuilt=new Set(), cdirty=new Set();
 function mark(i){ const x=i%SZ, z=((i/SZ)|0)%SZ, cx=(x/CS)|0, cz=(z/CS)|0, lx=x%CS, lz=z%CS; cdirty.add(cx+cz*NC); const ex=lx===0?-1:lx===CS-1?1:0, ez=lz===0?-1:lz===CS-1?1:0; if(ex) cdirty.add(cx+ex+cz*NC); if(ez) cdirty.add(cx+(cz+ez)*NC); if(ex&&ez) cdirty.add(cx+ex+(cz+ez)*NC); }
 function build(g,cx,cz){ const tf=tint, x0=cx*CS, z0=cz*CS, x1=Math.min(SZ,x0+CS), z1=Math.min(SZ,z0+CS); for(let x=x0;x<x1;x++) for(let z=z0;z<z1;z++) for(let y=0;y<H;y++){ const t=world[idx(x,y,z)]; if(t===0) continue; const blk=B[t], em=blk.glow||1;
-  if(PLANT[t]){ const tl=TEXMAP[t][0], k=y<WL-8?Math.max(.58,1-(WL-8-y)*.007):1, X0=x*BS,X1=(x+1)*BS,Z0=z*BS,Z1=(z+1)*BS,Y0=y*BS,Y1=(y+1)*BS, ph=-(1000+tl), cc=[k,k,k];
+  if(PLANT[t]){ const tl=TEXMAP[t][0], k=y<WL-8?Math.max(.58,1-(WL-8-y)*.007):1, X0=x*BS,X1=(x+1)*BS,Z0=z*BS,Z1=(z+1)*BS,Y0=y*BS,Y1=(y+1)*BS, ph=-(1000+tl), pv=t===29?pnoise(x,z)-.5:0, cc=[k*(1+pv*.26),k*(1+pv*.05),k*(1-pv*.3)];
     g.quad([X0,Y0,Z0],[X1,Y0,Z1],[X1,Y1,Z1],[X0,Y1,Z0],cc,ph); g.quad([X0,Y0,Z1],[X1,Y0,Z0],[X1,Y1,Z0],[X0,Y1,Z1],cc,ph); continue; }
   for(let fi=0;fi<6;fi++){ const F=FACES[fi], o=F[0], nx=x+o[0],ny=y+o[1],nz=z+o[2]; const nb=inB(nx,ny,nz)?world[idx(nx,ny,nz)]:0;
     if(t===9){ if(fi!==2) continue; if(nb!==0) continue; }   /* water: only the top surface, only under air */
     else { if(!TRANSP[nb]) continue; if(LEAF[t]&&LEAF[nb]) continue; }   /* draw a face only where you could see it */
-    const col=(F[2]==='T'?blk.rgbT:F[2]==='B'?blk.rgbB:blk.rgbS); const f=tf(x,y,z)*(t===9?1:faceAO(x,y,z,o))*em*(y<WL-8&&t!==17?Math.max(.58,1-(WL-8-y)*.007):1), c=[col[0]*f,col[1]*f,col[2]*f];
+    const col=(F[2]==='T'?blk.rgbT:F[2]==='B'?blk.rgbB:blk.rgbS), dk=(y<WL-8&&t!==17?Math.max(.58,1-(WL-8-y)*.007):1)*em;
     const C=F[1], P=i=>[ (x+C[i][0])*BS, (y+C[i][1])*BS - (t===9?BS*.12:0), (z+C[i][2])*BS ];
-    const TX=TEXMAP[t]; if(TX){ const tl=F[2]==='T'?TX[0]:F[2]==='B'?TX[2]:TX[1], k=f/tf(x,y,z); g.quad(P(0),P(1),P(2),P(3),[k,k,k],-(1000+tl)); continue; }
-    let mat=MAT[t]||0; if(t===1&&F[2]==='T') mat=6;
-    g.quad(P(0),P(1),P(2),P(3),c,mat?-mat:0); } } }
+    if(t===9){ /* water: turquoise in the shallows, deep blue where it's deep */ let d=1; while(d<7&&get(x,y-d,z)===9) d++; const u=(d-1)/6, w=tf(x,y,z), c=[(.30-.23*u)*w,(.72-.48*u)*w,(.82-.2*u)*w]; g.quad(P(0),P(1),P(2),P(3),c,-7); continue; }
+    const a0=vAO(x,y,z,o,C[0]), a1=vAO(x,y,z,o,C[1]), a2=vAO(x,y,z,o,C[2]), a3=vAO(x,y,z,o,C[3]), flip=a0+a2<a1+a3;
+    const TX=TEXMAP[t]; if(TX){ const tl=F[2]==='T'?TX[0]:F[2]==='B'?TX[2]:TX[1]; let r=dk, gg=dk, b=dk; if((t===1&&F[2]==='T')||LEAF[t]){ const v=pnoise(x,z)-.5; r*=1+v*.26; gg*=1+v*.05; b*=1-v*.3; }
+      g.quadc(P(0),P(1),P(2),P(3),[r*a0,gg*a0,b*a0],[r*a1,gg*a1,b*a1],[r*a2,gg*a2,b*a2],[r*a3,gg*a3,b*a3],-(1000+tl),flip); continue; }
+    const f=tf(x,y,z)*dk; let mat=MAT[t]||0; if(t===1&&F[2]==='T') mat=6;
+    g.quadc(P(0),P(1),P(2),P(3),[col[0]*f*a0,col[1]*f*a0,col[2]*f*a0],[col[0]*f*a1,col[1]*f*a1,col[2]*f*a1],[col[0]*f*a2,col[1]*f*a2,col[2]*f*a2],[col[0]*f*a3,col[1]*f*a3,col[2]*f*a3],mat?-mat:0,flip); } } }
 function meshChunk(k){ const cx=k%NC, cz=(k/NC)|0; if(cx<0||cz<0||cx>=NC||cz>=NC) return; R3.setChunk(k,g=>build(g,cx,cz),(cx+.5)*CS*BS,(cz+.5)*CS*BS,CS*BS*.75); cbuilt.add(k); }
 function doRemesh(){ if(!atlasOn&&R3.setAtlas){ R3.setAtlas(ATLAS); atlasOn=true; } if(dirty){ dirty=false; R3.clearChunks(); cbuilt.clear(); cdirty.clear(); }
   for(const k of cdirty){ if(cbuilt.has(k)) meshChunk(k); } cdirty.clear();

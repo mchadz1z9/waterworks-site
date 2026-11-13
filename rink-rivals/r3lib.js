@@ -122,6 +122,8 @@ void main(){vec4 t=texture2D(uTex,vUV*uUVR.zw+uUVR.xy);if(t.a<0.04)discard;gl_Fr
         this.p.push(v[0],v[1],v[2]); this.n.push(nn[0],nn[1],nn[2]); this.c.push(c[0],c[1],c[2]); this.ph.push(ph);
       }
     }
+    /* a quad with its own colour at each corner (smooth shading); flip picks the other diagonal */
+    quadc(a,b,c,d,ca,cb,cc,cd,ph=0,flip){ const nn=nrm(cross(sub(b,a),sub(c,a))), V=flip?[b,cb,c,cc,d,cd,b,cb,d,cd,a,ca]:[a,ca,b,cb,c,cc,a,ca,c,cc,d,cd]; for(let i=0;i<12;i+=2){ const q=V[i], k=V[i+1]; this.p.push(q[0],q[1],q[2]); this.n.push(nn[0],nn[1],nn[2]); this.c.push(k[0],k[1],k[2]); this.ph.push(ph); } }
     quad(a,b,c,d,col,ph=0){
       const k=typeof col==='string'?rgb(col):col, nn=nrm(cross(sub(b,a),sub(c,a)));
       for(const q of [a,b,c,a,c,d]){ this.p.push(...q); this.n.push(...nn); this.c.push(...k); this.ph.push(ph); }
