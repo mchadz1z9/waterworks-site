@@ -49,6 +49,9 @@ const nrm3=a=>{ const l=Math.hypot(a[0],a[1],a[2])||1; return [a[0]/l,a[1]/l,a[2
 const mix3=(a,b,t)=>[a[0]+(b[0]-a[0])*t,a[1]+(b[1]-a[1])*t,a[2]+(b[2]-a[2])*t];
 function OB(c,ax,ay,az,sx,sy,sz,col){ R3.part(R3.UB,new Float32Array([ax[0]*sx*K,ax[1]*sx*K,ax[2]*sx*K,0, ay[0]*sy*K,ay[1]*sy*K,ay[2]*sy*K,0, az[0]*sz*K,az[1]*sz*K,az[2]*sz*K,0, c[0]*K,c[1]*K,c[2]*K,1]),col); }
 const LB=(a,b,th,tw,col)=>R3.part(R3.UB,R3.beam(mul3(a,K),mul3(b,K),th*K,tw*K),col);
+function RL(a,b,th,tw,col){ const d=sub3(b,a), L=Math.hypot(d[0],d[1],d[2])||1e-4, xa=[d[0]/L,d[1]/L,d[2]/L], up=Math.abs(xa[1])>.95?[1,0,0]:[0,1,0], za=nrm3(crs3(xa,up)), ya=crs3(za,xa), rt=th*.56*K, rw=tw*.56*K, LK=L*K;
+  R3.part(R3.UC,new Float32Array([za[0]*rw,za[1]*rw,za[2]*rw,0, xa[0]*LK,xa[1]*LK,xa[2]*LK,0, ya[0]*rt,ya[1]*rt,ya[2]*rt,0, (a[0]+b[0])/2*K,(a[1]+b[1])/2*K,(a[2]+b[2])/2*K,1]),col); }
+function OS(c,ax,ay,az,sx,sy,sz,col){ sx*=.5*K; sy*=.5*K; sz*=.5*K; R3.part(R3.US,new Float32Array([ax[0]*sx,ax[1]*sx,ax[2]*sx,0, ay[0]*sy,ay[1]*sy,ay[2]*sy,0, az[0]*sz,az[1]*sz,az[2]*sz,0, c[0]*K,c[1]*K,c[2]*K,1]),col); }
 const SP=(p,r,col)=>R3.part(R3.US,R3.mm(R3.T(p[0]*K,p[1]*K,p[2]*K),R3.S(r*K,r*K,r*K)),col);
 
 /* Arcade Shop gear (armbands, wristbands, headbands, caps, crowns, sunglasses, chains, capes) on YOUR character in every game */
@@ -73,17 +76,17 @@ function drawGear(J,f,lk){ if(!lk||(!lk.me&&!lk.gear)) return; const G=lk.gear||
     OB(add3(mid,mul3(fz,sw)),Wd,ax,fz,.4*bch,len,.025,G.back.c); OB(top,Wd,ax,fz,.42*bch,.05,.04,G.back.c2||G.back.c); } }
 function drawBody(J,f,lk){ { const em=lk&&(lk.me&&window.RREMOTE?window.RREMOTE:lk.emote); if(em&&window.RREMOTES){ const t=(performance.now()-em.t0)/1000; if(t>=0&&t<3.5){ try{ J=JSON.parse(JSON.stringify(J)); const r=RREMOTES.apply(J,f,em.k,t); J=r[0]; f=r[1]; if(em.k==='flex') lk={...lk,flex:1}; }catch(e){} } } }
   if(lk.olympia){ const r=drawOlympia(J,f,lk); drawGear(J,f,lk); return r; } try{ drawGear(J,f,lk); }catch(e){} const m=(lk.buff||1)*(1+(lk.flex||0)*.08), bk=lk.bulk||1, bsh=1+(m-1)*.6, barm=(1+(m-1)*.8)*Math.sqrt(bk), bch=(1+(m-1)*.2)*bk, bleg=(1+(m-1)*.35)*bk, W=p=>wp(f,p), D=v=>nrm3(wd(f,v));
-  for(const sx of [-1,1]){ const h=W(J['hip'+sx]), k=W(J['knee'+sx]), a=W(J['ank'+sx]); LB(h,k,.085*bleg,.1*bleg,lk.legs); LB(k,a,.06*bleg,.07*bleg,lk.skin);
-    const toe=D(J.toe), up=[0,1,0], sd=nrm3(crs3(Math.abs(toe[1])>.9?[1,0,0]:up,toe)), u2=crs3(toe,sd); OB(add3(a,mul3(toe,.06)),sd,u2,toe,.11,.07,.22,lk.shoe); }
+  for(const sx of [-1,1]){ const h=W(J['hip'+sx]), k=W(J['knee'+sx]), a=W(J['ank'+sx]); RL(h,k,.1*bleg,.11*bleg,lk.legs); SP(h,.058*bleg,lk.legs); SP(k,.05*bleg,lk.legs); RL(k,a,.075*bleg,.08*bleg,lk.legs2||lk.skin); SP(mix3(k,a,.3),.05*bleg,lk.legs2||lk.skin); SP(a,.04*bleg,lk.legs2||lk.skin);
+    const toe=D(J.toe), up=[0,1,0], sd=nrm3(crs3(Math.abs(toe[1])>.9?[1,0,0]:up,toe)), u2=crs3(toe,sd); OS(add3(a,mul3(toe,.07)),sd,u2,toe,.115,.085,.27,lk.shoe); OB(add3(add3(a,mul3(toe,.07)),mul3(u2,-.032)),sd,u2,toe,.1,.02,.25,'#0b0f19'); }
   const pel=W(J.pelvis), ch=W(J.chest), A=nrm3(sub3(ch,pel)); let Fv=D(J.F); Fv=nrm3(sub3(Fv,mul3(A,dot3(Fv,A)))); const Wd=nrm3(crs3(A,Fv)), len=Math.hypot(...sub3(ch,pel));
-  OB(mix3(pel,ch,.5),Wd,A,Fv,.2*bch,len+.06,.145*bch,lk.top);
+  OS(mix3(pel,ch,.48),Wd,A,Fv,.25*bch,len+.2,.168*bch,lk.top); OS(add3(pel,mul3(A,.01)),Wd,A,Fv,.235*bch,.17,.165*bch,lk.legs); OS(mix3(pel,ch,.86),Wd,A,Fv,.33*bsh,.15,.16*bch,lk.top);
   const def=clamp((m-1)/.65,0,1), chM=add3(mix3(pel,ch,.66),mul3(Fv,.075*bch)), abM=mix3(pel,ch,.3);
-  OB(add3(chM,mul3(A,.02)),Wd,A,Fv,.2*bch,.18*bch,.065*bch,lk.top);
+  OS(add3(chM,mul3(A,.02)),Wd,A,Fv,.215*bch,.2*bch,.09*bch,lk.top);
   if(lk.shirtless!==false){ OB(add3(abM,mul3(Fv,.065)),Wd,A,Fv,.14*bch,.24*bch,.04*bch,'#9a7550');
     if(def>.08) for(const cx of [-1,1]) for(const ry of [.085,0,-.085]) OB(add3(add3(abM,mul3(Wd,cx*.045*bch)),add3(mul3(A,ry*bch),mul3(Fv,.08+.015*def))),Wd,A,Fv,.05*bch,.058*bch,(.03+.05*def)*bch,lk.skin); }
   for(const sx of [-1,1]) SP(W(J['sho'+sx]),.085*bsh,lk.top);
-  const hd=W(J.head); SP(mix3(ch,hd,.5),.07*bsh,lk.skin); SP(hd,.1,lk.skin); const HU=nrm3(sub3(hd,ch)); OB(add3(hd,mul3(HU,.055)),Wd,HU,nrm3(crs3(Wd,HU)),.1,.06,.1,lk.hair);
-  for(const sx of [-1,1]){ const s=W(J['sho'+sx]), e=W(J['elb'+sx]), h=W(J['hand'+sx]); LB(s,e,.07*barm,.075*barm,lk.skin); LB(e,h,.055*barm,.06*barm,lk.skin); SP(mix3(s,e,.5),.06*barm,lk.skin); SP(h,.05,lk.skin);
+  const hd=W(J.head); RL(mix3(ch,hd,.25),mix3(ch,hd,.75),.085*bsh,.085*bsh,lk.skin); const HU=nrm3(sub3(hd,ch)), HF=nrm3(crs3(Wd,HU)); OS(hd,Wd,HU,HF,.185,.23,.205,lk.skin); OS(add3(add3(hd,mul3(HU,.035)),mul3(HF,-.022)),Wd,HU,HF,.2,.19,.2,lk.hair); for(const ex of [-1,1]){ SP(add3(add3(hd,mul3(HF,.092)),add3(mul3(Wd,ex*.038),mul3(HU,.012))),.014,'#111827'); SP(add3(hd,mul3(Wd,ex*.095)),.022,lk.skin); } SP(add3(add3(hd,mul3(HF,.103)),mul3(HU,-.022)),.017,lk.skin);
+  for(const sx of [-1,1]){ const s=W(J['sho'+sx]), e=W(J['elb'+sx]), h=W(J['hand'+sx]); RL(s,mix3(s,e,.5),.085*barm,.085*barm,lk.sleeve||lk.top); RL(mix3(s,e,.45),e,.075*barm,.075*barm,lk.sleeve===undefined&&lk.long?lk.top:lk.skin); SP(e,.04*barm,lk.skin); RL(e,h,.062*barm,.066*barm,lk.skin); SP(mix3(e,h,.25),.04*barm,lk.skin); OS(add3(h,mul3(nrm3(sub3(h,e)),.03)),Wd,nrm3(sub3(h,e)),Fv,.05,.1,.075,lk.skin);
     if(J.db) dumbbell(h,f); }
   R3.shadow(f.x*K,f.z*K,48); }
 function dumbbell(h,f){ const ax=nrm3(wd(f,[1,0,0])); R3.part(R3.UC,R3.mm(R3.T(h[0]*K,h[1]*K,h[2]*K),R3.RY(f.yaw),R3.RZ(PI/2),R3.S(.03*K,.22*K,.03*K)),'#94a3b8');
