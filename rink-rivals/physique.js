@@ -49,10 +49,11 @@ const nrm3=a=>{ const l=Math.hypot(a[0],a[1],a[2])||1; return [a[0]/l,a[1]/l,a[2
 const mix3=(a,b,t)=>[a[0]+(b[0]-a[0])*t,a[1]+(b[1]-a[1])*t,a[2]+(b[2]-a[2])*t];
 function OB(c,ax,ay,az,sx,sy,sz,col){ R3.part(R3.UB,new Float32Array([ax[0]*sx*K,ax[1]*sx*K,ax[2]*sx*K,0, ay[0]*sy*K,ay[1]*sy*K,ay[2]*sy*K,0, az[0]*sz*K,az[1]*sz*K,az[2]*sz*K,0, c[0]*K,c[1]*K,c[2]*K,1]),col); }
 const LB=(a,b,th,tw,col)=>R3.part(R3.UB,R3.beam(mul3(a,K),mul3(b,K),th*K,tw*K),col);
-function RL(a,b,th,tw,col){ const d=sub3(b,a), L=Math.hypot(d[0],d[1],d[2])||1e-4, xa=[d[0]/L,d[1]/L,d[2]/L], up=Math.abs(xa[1])>.95?[1,0,0]:[0,1,0], za=nrm3(crs3(xa,up)), ya=crs3(za,xa), rt=th*.56*K, rw=tw*.56*K, LK=L*K;
+let LOD=false;   /* far-away people are drawn with plain boxes: far cheaper, and you can't tell at that distance */
+function RL(a,b,th,tw,col){ if(LOD){ LB(a,b,th,tw,col); return; } const d=sub3(b,a), L=Math.hypot(d[0],d[1],d[2])||1e-4, xa=[d[0]/L,d[1]/L,d[2]/L], up=Math.abs(xa[1])>.95?[1,0,0]:[0,1,0], za=nrm3(crs3(xa,up)), ya=crs3(za,xa), rt=th*.56*K, rw=tw*.56*K, LK=L*K;
   R3.part(R3.UC,new Float32Array([za[0]*rw,za[1]*rw,za[2]*rw,0, xa[0]*LK,xa[1]*LK,xa[2]*LK,0, ya[0]*rt,ya[1]*rt,ya[2]*rt,0, (a[0]+b[0])/2*K,(a[1]+b[1])/2*K,(a[2]+b[2])/2*K,1]),col); }
-function OS(c,ax,ay,az,sx,sy,sz,col){ sx*=.5*K; sy*=.5*K; sz*=.5*K; R3.part(R3.US,new Float32Array([ax[0]*sx,ax[1]*sx,ax[2]*sx,0, ay[0]*sy,ay[1]*sy,ay[2]*sy,0, az[0]*sz,az[1]*sz,az[2]*sz,0, c[0]*K,c[1]*K,c[2]*K,1]),col); }
-const SP=(p,r,col)=>R3.part(R3.US,R3.mm(R3.T(p[0]*K,p[1]*K,p[2]*K),R3.S(r*K,r*K,r*K)),col);
+function OS(c,ax,ay,az,sx,sy,sz,col){ if(LOD){ OB(c,ax,ay,az,sx*.85,sy*.85,sz*.85,col); return; } sx*=.5*K; sy*=.5*K; sz*=.5*K; R3.part(R3.US,new Float32Array([ax[0]*sx,ax[1]*sx,ax[2]*sx,0, ay[0]*sy,ay[1]*sy,ay[2]*sy,0, az[0]*sz,az[1]*sz,az[2]*sz,0, c[0]*K,c[1]*K,c[2]*K,1]),col); }
+const SP=(p,r,col)=>(LOD&&r<.09)?0:R3.part(R3.US,R3.mm(R3.T(p[0]*K,p[1]*K,p[2]*K),R3.S(r*K,r*K,r*K)),col);
 
 /* Arcade Shop gear (armbands, wristbands, headbands, caps, crowns, sunglasses, chains, capes) on YOUR character in every game */
 let GEARC=null, GEART=0; function gearNow(){ const t=Date.now(); if(t-GEART>800){ GEART=t; GEARC={}; try{ if(window.RRCOIN) for(const sl of ['arm','wrist','head','face','neck','back']) GEARC[sl]=RRCOIN.equipped(sl); }catch(e){} } return GEARC; }
@@ -74,7 +75,7 @@ function drawGear(J,f,lk){ if(!lk||(!lk.me&&!lk.gear)) return; const G=lk.gear||
       OB(mid,dir,nrm3(crs3(Fv,dir)),Fv,L,(.12-k*.02)*sz,.025,G.back.c); } } }
   else   if(G.back){ const top=add3(ch,mul3(Fv,-.14*bch)), bot=add3(add3(pel,mul3(Fv,-.22*bch)),mul3(A,-.45)), sw=Math.sin(Date.now()/300)*.04, mid=mix3(top,bot,.5), len=Math.hypot(...sub3(top,bot)), ax=nrm3(sub3(top,bot)), fz=nrm3(crs3(Wd,ax));
     OB(add3(mid,mul3(fz,sw)),Wd,ax,fz,.4*bch,len,.025,G.back.c); OB(top,Wd,ax,fz,.42*bch,.05,.04,G.back.c2||G.back.c); } }
-function drawBody(J,f,lk){ { const em=lk&&(lk.me&&window.RREMOTE?window.RREMOTE:lk.emote); if(em&&window.RREMOTES){ const t=(performance.now()-em.t0)/1000; if(t>=0&&t<3.5){ try{ J=JSON.parse(JSON.stringify(J)); const r=RREMOTES.apply(J,f,em.k,t); J=r[0]; f=r[1]; if(em.k==='flex') lk={...lk,flex:1}; }catch(e){} } } }
+function drawBody(J,f,lk){ LOD=!!(lk&&lk.lod); { const em=lk&&(lk.me&&window.RREMOTE?window.RREMOTE:lk.emote); if(em&&window.RREMOTES){ const t=(performance.now()-em.t0)/1000; if(t>=0&&t<3.5){ try{ J=JSON.parse(JSON.stringify(J)); const r=RREMOTES.apply(J,f,em.k,t); J=r[0]; f=r[1]; if(em.k==='flex') lk={...lk,flex:1}; }catch(e){} } } }
   if(lk.olympia){ const r=drawOlympia(J,f,lk); drawGear(J,f,lk); return r; } try{ drawGear(J,f,lk); }catch(e){} const m=(lk.buff||1)*(1+(lk.flex||0)*.08), bk=lk.bulk||1, bsh=1+(m-1)*.6, barm=(1+(m-1)*.8)*Math.sqrt(bk), bch=(1+(m-1)*.2)*bk, bleg=(1+(m-1)*.35)*bk, W=p=>wp(f,p), D=v=>nrm3(wd(f,v));
   for(const sx of [-1,1]){ const h=W(J['hip'+sx]), k=W(J['knee'+sx]), a=W(J['ank'+sx]); RL(h,k,.1*bleg,.11*bleg,lk.legs); SP(h,.058*bleg,lk.legs); SP(k,.05*bleg,lk.legs); RL(k,a,.075*bleg,.08*bleg,lk.legs2||lk.skin); SP(mix3(k,a,.3),.05*bleg,lk.legs2||lk.skin); SP(a,.04*bleg,lk.legs2||lk.skin);
     const toe=D(J.toe), up=[0,1,0], sd=nrm3(crs3(Math.abs(toe[1])>.9?[1,0,0]:up,toe)), u2=crs3(toe,sd); OS(add3(a,mul3(toe,.07)),sd,u2,toe,.115,.085,.27,lk.shoe); OB(add3(add3(a,mul3(toe,.07)),mul3(u2,-.032)),sd,u2,toe,.1,.02,.25,'#0b0f19'); }
