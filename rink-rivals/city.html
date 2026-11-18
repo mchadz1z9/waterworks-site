@@ -744,8 +744,16 @@ function hitPed(p,dmg,gun,dir){ if(p.thief){ p.thief=false; p.down=6; p.say='Oka
   if(!gun) crime(.6,'assault'); }
 function hitCar(c,dmg,gun){ c.byMe=1; c.hp=Math.max(0,c.hp-dmg*(gun?.45:.12)*armorK(c)); if(c.cop||c.M.cop) crime(1,'attacked the police'); else if(c.ai&&gun){ c.stop=0; c.honk=1; }
   if(c.hp<=0&&!c.wreck){ c.wreck=true; c.dead=true; c.v=0; c.stop=1e9; if(c.siren) c.siren=false; noise(.6,.4,300); say(c.cop||c.M.cop?'💥 Police car disabled!':'💥 Wrecked it!','#fb923c',1.6); } }
+/* a weapon drawn inside a school: no shot is fired — the alarm goes off, the school locks down, you're thrown out and the police come at full strength */
+function schoolLockdown(st){ if(st.lockT>T) return; st.lockT=T+30; st.tfight=false; CLASSQ=null; SV.wsel='fist';
+  for(const kd of st.kids||[]){ kd.hostile=false; kd.say=['LOCKDOWN!','Get down!','Everyone out!'][Math.floor(Math.random()*3)]; kd.sayT=2; }
+  clerkSay(st,'LOCKDOWN! Everyone out — police are on their way!',2.5);
+  for(let i=0;i<6;i++) tone(i%2?660:880,.22,'square',.05,0,i*.25);
+  bigTitle('LOCKDOWN','#ef4444','Weapon at school — SWAT is on the way ★★★★★');
+  heat=5; seenT=0; SWATSAID=false; SV.st=SV.st||{}; SV.st.lockdowns=(SV.st.lockdowns||0)+1; saveSV();
+  setTimeout(()=>{ try{ if(curStore()===st) leaveStore(); say('🚨 Five stars. SWAT, helicopters and every unit in the city are coming for you','#f87171',4); }catch(e){} },1200); }
 function attack(){ const k=curW(), w=WEAP[k]; if(ME.atkCd>0) return; ME.atkCd=w.rate;
-  { const st0=curStore(); if(st0&&st0.type==='school'&&k!=='fist'){ ME.atkCd=.6; say('🏫 School rule: no weapons — fists only (press Q for fists)','#fbbf24',2.2); return; } }
+  { const st0=curStore(); if(st0&&st0.type==='school'&&k!=='fist'){ ME.atkCd=1.5; schoolLockdown(st0); return; } }
   if(k!=='fist'&&!w.melee&&!(SV.guns[k]>0)){ ME.atkCd=.4; tone(180,.04,'square',.03); say('*click* — out of ammo. Press Q to switch, or buy more at 🔫 Rival Arms','#fbbf24',2); return; }
   if(w.thrown){ SV.guns[k]--; const a=fpNow()?camYaw+PI:ME.yaw, pit=fpNow()?camPitch:.25, sp=15; ME.yaw=a; ME.aimT=.4; ME.atkT=0; NADES.push({x:ME.x+Math.sin(a)*.5,y:1.6,z:ME.z+Math.cos(a)*.5,vx:Math.sin(a)*sp*Math.cos(pit),vy:4+Math.sin(pit)*sp,vz:Math.cos(a)*sp*Math.cos(pit),t:2.6,me:1}); noise(.12,.12,1200); saveSV(); return; }
   const tg=findTarget(w); let aim=tg?Math.atan2(tg.x-ME.x,tg.z-ME.z):camYaw+PI; ME.yaw=aim; ME.aimT=k==='fist'?.35:1.2; ME.atkT=0; ME.punchSide=-(ME.punchSide||1);
@@ -1293,7 +1301,7 @@ function copsStep(dt){ const target=outPos(), stars=Math.ceil(heat);
   /* patrols nearby join in once you're wanted */ if(stars>0) for(const c of CARS){ if(c.ai&&c.M.cop&&!c.off&&Math.hypot(c.x-target.x,c.z-target.z)<80&&COPS.length<Math.min(6,stars+2)){ c.ai=null; c.siren=true; c.cop=true; COPS.push(c); say('📻 "Patrol unit joining the pursuit!"','#93c5fd',2); } }
   const want=stars&&(!ME.indoor||ME.indoor==='store')?Math.min(6,stars+1):0;
   while(COPS.filter(c=>!c.leaving).length<want){ /* arrive from a road out of sight */ const ang=Math.random()*PI*2, R=110; let x=clamp(Math.round((target.x+Math.cos(ang)*R)/P)*P,0,CW), z=clamp(target.z+Math.sin(ang)*R,0,CW); const onD=!!(ME.car&&ME.car.onDeck&&!ME.car.M.plane&&!ME.car.M.heli); if(onD){ x=HX+(Math.random()<.5?-3.5:3.5); z=clamp(target.z+(Math.random()<.5?-1:1)*(90+Math.random()*50),HZ0+5,HZ1-5); }
-    const swat=stars>=4&&Math.random()<.55; const c=mkCar(swat?'policesuv':'police',x,z,Math.atan2(target.x-x,target.z-z)); c.siren=true; c.cop=true; if(onD){ c.y=HWY_Y; c.onDeck=true; c.yaw=target.z>z?0:PI; if(!FWYSAID){ FWYSAID=1; say('📻 "Units, get up on the freeway!"','#93c5fd',2.2); } } if(swat){ c.swat=true; c.col='#111827'; c.mods={arm:3}; if(!SWATSAID){ SWATSAID=true; say('🚨 SWAT team deployed!','#f87171',2.5); } } COPS.push(c); CARS.push(c); }
+    const swat=stars>=4&&(Math.random()<.55||(SV.st&&SV.st.lockdowns&&heat>=4.9)); const c=mkCar(swat?'policesuv':'police',x,z,Math.atan2(target.x-x,target.z-z)); c.siren=true; c.cop=true; if(onD){ c.y=HWY_Y; c.onDeck=true; c.yaw=target.z>z?0:PI; if(!FWYSAID){ FWYSAID=1; say('📻 "Units, get up on the freeway!"','#93c5fd',2.2); } } if(swat){ c.swat=true; c.col='#111827'; c.mods={arm:3}; if(!SWATSAID){ SWATSAID=true; say('🚨 SWAT team deployed!','#f87171',2.5); } } COPS.push(c); CARS.push(c); }
   for(const c of COPS){ if(c.unloaded&&!c.leaving){ drive(c,0,1,0,false,dt); if(!Math.ceil(heat)&&!NPCS.some(n=>n.car===c)) c.unloaded=false; continue; } if(c.leaving){ aiDriveTo(c,c.x+Math.sin(c.yaw)*50,c.z+Math.cos(c.yaw)*50,dt,15); c.leaveT-=dt; continue; }
     if(!stars||ME.indoor&&ME.indoor!=='store'){ c.leaving=true; c.siren=false; c.leaveT=8; continue; }
     const [tx,tz]=copTarget(c,target.x,target.z), dd=Math.hypot(target.x-c.x,target.z-c.z); aiDriveTo(c,tx,tz,dt,c.hp<20?8:dd<16?Math.max(2.5,(dd-4)*1.3+Math.abs((ME.car&&ME.car.v)||0)):30+stars*4,true); }   /* pull up beside you, don't plough into you */
