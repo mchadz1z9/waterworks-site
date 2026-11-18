@@ -361,7 +361,7 @@ function newMatch(){ const rng=mulberry32(window.RRV&&RRV.on?(RRV.seed||1):Math.
   /* floor loot */ for(const s of WORLD.SP){ if(rng()<.62){ const it=rollItem(rng,0); BR.items.push(Object.assign(it,{x:s.x,y:s.y+.1,z:s.z,id:BR.items.length,hs:s.hs,lv:s.lv})); } }
   /* the bus flies straight across the island */ const a=rng()*Math.PI*2, R=ISL.R+60; BR.bus={x0:Math.cos(a)*R,z0:Math.sin(a)*R,x1:-Math.cos(a)*R,z1:-Math.sin(a)*R,y:160,v:42,t:0}; BR.bus.dur=Math.hypot(BR.bus.x1-BR.bus.x0,BR.bus.z1-BR.bus.z0)/BR.bus.v;
   const names=NAMES.slice().sort(()=>rng()-.5);
-  const me=mkEnt(0,((()=>{ try{ return localStorage.getItem('rrOnlineName'); }catch(e){ return ''; } })()||'You').slice(0,16)||'You',false,SKINS[0]); me.me=true; BR.me=me; BR.ents.push(me);
+  const me=mkEnt(0,((()=>{ try{ return localStorage.getItem('rrOnlineName'); }catch(e){ return ''; } })()||'You').slice(0,16)||'You',false,(()=>{ try{ const k=window.RRCOIN&&RRCOIN.equipped('brskin'); if(k) return k; }catch(e){} return SKINS[0]; })()); me.me=true; BR.me=me; BR.ents.push(me);
   /* online opponents ride the same bus as ghosts that play their own match: we add the AI players */
   for(let i=1;i<nPlayers;i++){ const e=mkEnt(i,names[i%names.length]+(i>=names.length?i:''),true,SKINS[i%SKINS.length]); e.sk=LVLK[lvl]*(.75+rng()*.35); e.target=pickTown(rng); e.jumpAt=.12+rng()*.76; BR.ents.push(e); }
   /* duos and squads: you and AI teammates on team 0, everyone else in teams of the same size that jump together */
@@ -491,7 +491,10 @@ function giveItem(e,it){ if(it.kind==='ammo'){ e.ammo[it.a]=Math.min(999,e.ammo[
   const i=e.inv.indexOf(null); if(i<0) return false; e.inv[i]=it.kind==='gun'?{kind:'gun',g:it.g,rar:it.rar,mag:it.mag}:{kind:'heal',h:it.h,n:it.n}; if(e.sel<0&&it.kind==='gun') e.sel=i; return true; }
 function openChest(e,c){ c.open=true; const r=BR.rng; const n=2+(r()<.5?1:0); for(let i=0;i<n;i++){ const it=rollItem(r,c.tier+(i===0?1:0)); BR.items.push(Object.assign(it,{x:c.x+rnd(-.8,.8),y:c.y+.15,z:c.z+rnd(-.8,.8),id:BR.items.length})); }
   BR.items.push({kind:'mat',m:'wood',n:30,x:c.x,y:c.y+.15,z:c.z-.6,id:BR.items.length}); const g=BR.items.find(it=>it.kind==='gun'&&Math.hypot(it.x-c.x,it.z-c.z)<1.5); if(g) BR.items.push({kind:'ammo',a:GUNS[g.g].ammo,n:AMMO_PICK[GUNS[g.g].ammo],x:c.x+.5,y:c.y+.15,z:c.z+.5,id:BR.items.length});
-  if(e.me) sfx.chest(); }
+  if(e.me){ sfx.chest(); SV.chests=(SV.chests||0)+1; saveSV(); const left=200-SV.chests%200;
+    if(SV.chests%200===0){ SV.pirates=(SV.pirates||0)+1; saveSV(); banner('🏴‍☠️ PIRATE TOKEN!','Everything in the shop is free for 2 hours — your whole lobby got one too','#fbbf24',5);
+      try{ window.RRCOIN&&RRCOIN.pirate('opened '+SV.chests+' chests in Storm Royale'); }catch(x){} try{ if(window.RRV&&RRV.on) RRV.send({t:'pirate',who:BR.me.name}); }catch(x){} }
+    else if(left<=10||SV.chests%25===0) banner(`📦 ${SV.chests%200}/200 chests`,`${left} more for a 🏴‍☠️ Pirate token`,'#fde68a',1.6); } }
 function nearestInteract(e){ let best=null, bd=2.4; for(const c of WORLD.CH){ if(c.open) continue; const d=Math.hypot(c.x-e.x,c.z-e.z); if(d<bd&&Math.abs(c.y-e.y)<1.6){ bd=d; best={chest:c}; } }
   for(const it of BR.items){ if(it.taken) continue; const d=Math.hypot(it.x-e.x,it.z-e.z); if(d<Math.min(bd,2)&&Math.abs(it.y-e.y)<1.6){ bd=d; best={item:it}; } } return best; }
 function useHeal(e,slot){ const s=e.inv[slot]; if(!s||s.kind!=='heal'||e.heal) return; const H=HEALS[s.h]; if(H.hp&&e.hp>=H.cap||H.sh&&e.sh>=H.cap){ if(e.me) toast(H.hp?'Health is already full for that':'Shield is already full for that','#94a3b8'); return; } e.heal={slot,t:0,dur:H.t,h:s.h}; e.rel=0; }
@@ -592,7 +595,7 @@ function endMatch(won){ if(BR.over) return; BR.over=true; const me=BR.me, place=
   SV.games++; SV.kills+=me.kills; if(won) SV.wins++; SV.best=Math.min(SV.best,place); SV.top=Math.max(SV.top,me.kills); saveSV();
   if(won){ sfx.win(); banner('#1 LAST ONE STANDING!',`${me.kills} eliminations`,'#fbbf24',5); speak&&speak('Number one! Last one standing!',true); }
   else banner(`#${place}`,`${me.kills} elimination${me.kills===1?'':'s'}${BR.spec?' · spectating '+BR.spec.name:''}`,'#f87171',3.5);
-  setTimeout(()=>{ phase='over'; $('resultIn').innerHTML=`<h2>${won?'#1 · Last one standing! 🏆':`You placed #${place}`}</h2><div class="rs">${me.kills} elimination${me.kills===1?'':'s'}</div><p>of ${BR.ents.length} players · ${LVL[lvl]} · survived ${fmtT(BR.t)}${BR.longShot?` · longest snipe ${Math.round(BR.longShot)} m`:''}</p><p>Career: ${SV.wins} win${SV.wins===1?'':'s'} in ${SV.games} matches · ${SV.kills} eliminations</p><p>Enter for the menu, R to drop again.</p>`; $('result').classList.remove('hidden'); if(document.pointerLockElement) document.exitPointerLock(); },won?2500:3200); }
+  setTimeout(()=>{ phase='over'; $('resultIn').innerHTML=`<h2>${won?'#1 · Last one standing! 🏆':`You placed #${place}`}</h2><div class="rs">${me.kills} elimination${me.kills===1?'':'s'}</div><p>of ${BR.ents.length} players · ${LVL[lvl]} · survived ${fmtT(BR.t)}${BR.longShot?` · longest snipe ${Math.round(BR.longShot)} m`:''}</p><p>📦 Chests: ${(SV.chests||0)%200}/200 to the next 🏴‍☠️ Pirate token${SV.pirates?` · ${SV.pirates} found`:''}</p><p>Career: ${SV.wins} win${SV.wins===1?'':'s'} in ${SV.games} matches · ${SV.kills} eliminations</p><p>Enter for the menu, R to drop again.</p>`; $('result').classList.remove('hidden'); if(document.pointerLockElement) document.exitPointerLock(); },won?2500:3200); }
 
 /* ---------- 3D engine (shared with the other Arcade Rivals sports) ---------- */
 function makeR3(glc,stage){
@@ -1086,7 +1089,7 @@ lbBoards([{id:'wins',name:'Wins (#1 finishes)',mode:'sum'},{id:'kills',name:'Mos
 
 
 /* ---------- online score battle ---------- */
-const NETV=window.RRV?RRV.attach({game:'br',title:'storm royale battle',blurb:'Storm Royale battle: everyone drops into the same island at the same time (same bus route, loot and storm). Best placement wins; eliminations break ties.',
+const NETV=window.RRV?RRV.attach({onMsg(m){ if(m.t==='pirate'){ try{ window.RRCOIN&&RRCOIN.pirate((m.who||'A player')+' found one in your lobby'); }catch(x){} try{ banner('🏴‍☠️ PIRATE TOKEN!',`${m.who||'Someone'} hit 200 chests — you got one too!`,'#fbbf24',5); }catch(x){} } },game:'br',title:'storm royale battle',blurb:'Storm Royale battle: everyone drops into the same island at the same time (same bus route, loot and storm). Best placement wins; eliminations break ties.',
   better:'low', opts:()=>({lvl,nPlayers}), start(o){ if(o.lvl!=null) lvl=o.lvl; if(o.nPlayers) nPlayers=o.nPlayers; newMatch(); },
   state(){ if(!BR) return null; const me=BR.me, done=!!BR.over, place=done?BR.place:BR.alive; return {v:done?+(place-Math.min(me.kills,40)/100).toFixed(2):null,txt:done?`#${BR.place} · ${me.kills} elims`:`${me.dead?'out':'alive'} · ${me.kills} elims · ${BR.alive} left`,done,pos:[+me.x.toFixed(1),+me.y.toFixed(1),+me.z.toFixed(1),+me.yaw.toFixed(2)]}; }}):null;
 

@@ -37,7 +37,7 @@
       api=RRO.init({game:c.game,maxPlayers:c.maxPlayers||4,minPlayers:1,blurb:c.blurb||'Score battle: everyone plays the same course at the same time, best score wins.',getOpts:()=>c.opts?c.opts():null,
         onStart(msg){ go(msg); },
         onMsg(m){ if(m.t==='vs'){ them[m.from]=Object.assign(them[m.from]||{},{v:m.v,txt:m.txt,done:m.done,pos:m.pos,t:performance.now()}); drawPanel(); checkEnd(); }
-          else if(m.t==='vsAgain') go(m); },
+          else if(m.t==='vsAgain') go(m); else if(c.onMsg) c.onMsg(m); },
         onPeers(net,kind,m){ if(kind==='leave'){ delete them[m.id]; drawPanel(); checkEnd(); } else drawPanel(); },
         onEnd(){ stop(); c.onEnd&&c.onEnd(); } });
       return api; },
@@ -45,5 +45,6 @@
     /* the other players, for games that draw them as ghosts: [{name,col,pos,age}] */
     ghosts(){ if(!on||!api) return []; return api.peers.filter(p=>them[p.id]&&them[p.id].pos).map(p=>({id:p.id,name:p.name,col:colOf(p.id),pos:them[p.id].pos,age:(performance.now()-them[p.id].t)/1000})); },
     mySeat(){ return api&&api.me?api.me.seat:0; }, players(){ return api?api.all():[]; },
-    open(){ api&&api.open(); } };
+    open(){ api&&api.open(); },
+    send(o){ if(api) api.send(o); } };
 })();
