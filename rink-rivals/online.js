@@ -1,3 +1,11 @@
+/* smooth graphics: on High, draw every game at a higher resolution than the screen (supersampling) so edges are smooth instead of jagged.
+   Low keeps it at 1×. If a computer can't keep up, it steps back down on its own. */
+(function(){ if(window.__rrDPR) return; window.__rrDPR=1; try{ if(/hq-owa9/.test(location.pathname)) return; const real=window.devicePixelRatio||1; let g='high'; try{ g=localStorage.getItem('rrGfx')||'high'; }catch(e){}
+  let want=real; if(g==='low') want=1; else if(real<1.75){ const strong=(navigator.hardwareConcurrency||4)>=4&&(navigator.deviceMemory||4)>=4; want=g==='ultra'?2:(strong?1.75:1.4); }
+  if(Math.abs(want-real)<.01) return; let cur=want; const floor=g==='low'?1:Math.max(1,real);
+  Object.defineProperty(window,'devicePixelRatio',{get:()=>cur,configurable:true});
+  let n=0,t0=0,acc=0; const tick=t=>{ if(t0&&!document.hidden){ acc+=Math.min(100,t-t0); n++; } t0=t; if(n>=90){ const avg=acc/n; acc=0; n=0; if(avg>30&&cur>floor) cur=Math.max(floor,cur-.2); } if(cur>floor) requestAnimationFrame(tick); }; requestAnimationFrame(tick);
+}catch(e){} })();
 /* Arcade Rivals online play: rooms with a short code, relayed through the rink-rivals-rooms worker.
    A game calls RRO.init({game, maxPlayers, onStart, onMsg, onPeers}) (dropIn: true skips the waiting room; publicRoom: 'GYM' makes "Play anyone" join one shared open room) and gets RRO.send / RRO.me / RRO.peers / RRO.isHost(). */
 (function(){

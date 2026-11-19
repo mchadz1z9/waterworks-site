@@ -96,7 +96,7 @@
 
   /* ---------- graphics: a colour grade and vignette over every 3D game, with a High / Low switch ---------- */
   const GFX=()=>{ const g=ls.get('rrGfx'); return g==='low'||g==='ultra'?g:'high'; };
-  if(GFX()==='low'){ try{ Object.defineProperty(window,'devicePixelRatio',{get:()=>1,configurable:true}); }catch(e){} }
+  if(GFX()==='low'&&!window.__rrDPR){ try{ Object.defineProperty(window,'devicePixelRatio',{get:()=>1,configurable:true}); }catch(e){} }
   function gfxApply(){ const gl=document.getElementById('gl'); if(!gl) return; const hi=GFX()!=='low';
     gl.style.filter=hi?(GFX()==='ultra'?'saturate(1.12) contrast(1.04)':'saturate(1.18) contrast(1.07) brightness(1.03)'):''; let v=document.getElementById('rrVig');
     if(hi&&!v&&gl.parentNode){ v=document.createElement('div'); v.id='rrVig'; v.style.cssText='position:absolute;inset:0;pointer-events:none;background:radial-gradient(ellipse at 50% 45%,rgba(0,0,0,0) 55%,rgba(0,0,0,.34) 100%);border-radius:inherit'; gl.insertAdjacentElement('afterend',v); }
