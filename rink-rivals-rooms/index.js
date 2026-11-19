@@ -71,10 +71,11 @@ async function itchPlay(url){ const u=String(url.searchParams.get('u')||''); if(
   try{ const h=await itchFetch(u,21600); if(/class="[^"]*content_warning|adult_content|This game contains mature content|is_adult/i.test(h)) return J({err:'This game is marked for adults only.'});
     const title=unx((h.match(/<title>([^<]*)<\/title>/)||[])[1]||'').replace(/ by .*$/,'').trim();
     if(ITCH_BAD.test(title)||ITCH_IP.test(title)) return J({err:'This game is not available here.'});
-    let m=h.match(/https?:\/\/html(?:-classic)?\.itch\.zone\/html\/\d+\/[^"'&\s<>]*/)||h.match(/\/\/html(?:-classic)?\.itch\.zone\/html\/\d+\/[^"'&\s<>]*/);
+    let m=h.match(/https?:\/\/[a-z-]*\.?itch\.zone\/html\/[\d-]+\/[^"'&\s<>]*/)||h.match(/\/\/[a-z-]*\.?itch\.zone\/html\/[\d-]+\/[^"'&\s<>]*/);
     if(!m){ const e=(h.match(/itch\.io\/embed-upload\/(\d+)/)||[])[1]; if(e) return J({play:'https://itch.io/embed-upload/'+e+'?color=0b1020',title}); return J({err:'This game only runs on its own page (or as a download).',page:u}); }
-    let play=m[0].replace(/&amp;/g,'&'); if(play.startsWith('//')) play='https:'+play; play=play.replace(/^http:/,'https:');
-    return J({play,title}); }catch(e){ return J({err:'Could not open that game.'},502); } }
+    /* itch.io blocks its game files from being linked directly, so use itch's own embed player for that upload */
+    const up=(m[0].match(/\/html\/(\d+)/)||[])[1]; if(!up) return J({err:'Could not open that game.'});
+    return J({play:'https://itch.io/embed-upload/'+up+'?color=0b1020',title}); }catch(e){ return J({err:'Could not open that game.'},502); } }
 export default {
   /* nightly chat wipe at 10 p.m. Toronto time. Cron runs at 02:00 and 03:00 UTC, and only the one that lands on 22:00 local (EST or EDT) clears */
   async scheduled(ev, env, ctx){
