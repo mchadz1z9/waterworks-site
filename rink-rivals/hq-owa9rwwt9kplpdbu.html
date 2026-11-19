@@ -392,6 +392,15 @@ body{background:radial-gradient(1200px 600px at 10% -10%,#1e1b4b 0,transparent 6
     <div class="row" style="margin-top:6px"><input id="fxAward" maxlength="240" placeholder="Award, e.g. 🏆 Player of the week!"><button class="go" data-fx="award" style="flex:0 0 auto">🏆 Give award</button></div>
     <div class="msg" id="fxMsg"></div>
   </div>
+  <div class="card" data-grp="chat">
+    <h2>📨 Private messages</h2>
+    <p class="mut">Every private conversation between players (owner only). Search by name or word, open a conversation, delete anything that breaks the rules. Players are told in the Messages app that the admin can see messages.</p>
+    <div class="row"><input id="dmQ" placeholder="Search names or words…"><button class="go" id="dmGo" style="flex:0 0 auto">🔎 Search</button><span class="mut" id="dmTot" style="align-self:center"></span></div>
+    <div style="display:grid;grid-template-columns:minmax(220px,1fr) 2fr;gap:10px;margin-top:8px">
+      <div id="dmList" class="list" style="max-height:420px;overflow:auto"><span class="mut">Press Search to load conversations.</span></div>
+      <div id="dmThread" class="list" style="max-height:420px;overflow:auto"><span class="mut">Pick a conversation.</span></div>
+    </div><div class="msg" id="dmMsg"></div>
+  </div>
   <div id="moreTools" style="display:contents"></div>
   <div class="card" data-grp="accounts">
     <h2>🔑 Reset a player's PIN</h2>
@@ -707,6 +716,16 @@ const PLACES=[['call|group=1','📹 Group call (joins it)'],['call','📞 Calls 
 const placeOpts=()=>'<optgroup label="Places"><option value="home">🏠 Home page</option>'+PLACES.map(([k,n])=>`<option value="${k}">${n}</option>`).join('')+'</optgroup><optgroup label="Games">'+GAMES.map(([k,n])=>`<option value="${k}">${esc(n)}</option>`).join('')+'</optgroup>';
 const gotoArgs=v=>{ const [page,q]=String(v).split('|'); return q?{page,q}:{page}; };
 
+
+/* ---- private messages viewer ---- */
+let DMK=null;
+async function dmLoad(){ try{ const d=await api('/admin/chat','dms',{q:$('dmQ').value.trim()}); if(d.err){ setMsg('dmMsg',d.err==='forbidden'?'Only the owner can read private messages.':'Could not load.',0); return; } $('dmTot').textContent=(d.total||0).toLocaleString()+' messages stored';
+  $('dmList').innerHTML=(d.convos||[]).map(c=>`<div class="row" data-dmk="${esc(c.k)}" style="cursor:pointer;flex-direction:column;align-items:stretch;gap:2px;padding:8px;border-radius:10px;${DMK===c.k?'background:rgba(99,102,241,.2)':''}"><b>${esc(c.an)} ↔ ${esc(c.bn)}</b><span class="mut" style="font-size:12px">${c.n} msg · ${new Date(c.ts).toLocaleString()}</span><span class="mut" style="font-size:12px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">${esc(c.last||'')}</span></div>`).join('')||'<span class="mut">No private messages found.</span>'; }catch(e){ setMsg('dmMsg','Could not load.',0); } }
+async function dmOpen(k){ DMK=k; const d=await api('/admin/chat','dmThread',{k}).catch(()=>({})); const ms=d.msgs||[]; const a=ms[0]&&ms[0].fpub;
+  $('dmThread').innerHTML=ms.map(x=>`<div style="display:flex;${x.fpub===a?'':'flex-direction:row-reverse;'}gap:6px;margin:5px 0"><div style="max-width:78%;background:${x.fpub===a?'#1e293b':'#312e81'};border-radius:12px;padding:7px 10px"><div style="font-size:11px;opacity:.7">${esc(x.fname)} · ${new Date(x.ts).toLocaleString()}${x.seen?'':' · unread'}</div><div>${esc(x.text)}</div></div><button class="del" data-dmdel="${x.id}" title="Delete" style="flex:0 0 auto;align-self:center;padding:3px 8px">🗑</button></div>`).join('')||'<span class="mut">Empty.</span>'; $('dmThread').scrollTop=1e9; dmLoad(); }
+document.addEventListener('click',async e=>{ const k=e.target.closest('[data-dmk]'); if(k){ dmOpen(k.dataset.dmk); return; } const d=e.target.closest('[data-dmdel]'); if(d){ if(!confirm('Delete this message?')) return; await api('/admin/chat','dmDel',{id:+d.dataset.dmdel}); if(DMK) dmOpen(DMK); } });
+document.addEventListener('DOMContentLoaded',()=>{ const g=document.getElementById('dmGo'); if(g) g.onclick=dmLoad; const q=document.getElementById('dmQ'); if(q) q.onkeydown=e=>{ if(e.key==='Enter') dmLoad(); }; });
+try{ const g=document.getElementById('dmGo'); if(g) g.onclick=dmLoad; const q=document.getElementById('dmQ'); if(q) q.onkeydown=e=>{ if(e.key==='Enter') dmLoad(); }; }catch(e){}
 /* ================= v3: 32 more tools ================= */
 const VIBE_KEYS=[['aurora','Aurora'],['galaxy','Galaxy'],['gold','Gold'],['neon','Neon'],['sunset','Sunset'],['ocean','Ocean'],['mint','Mint'],['grape','Grape'],['fire','Fire'],['ice','Ice'],['midnight','Midnight']];
 const BG_KEYS=[['aurora','Aurora'],['arcade','Arcade'],['black','Space'],['midnight','Moonlit'],['navy','City'],['purple','Synthwave'],['grape','Sparkle'],['forest','Forest'],['teal','Reef'],['crimson','Volcano'],['sunset','Sunset'],['ocean','Ocean'],['slate','Circuit'],['coffee','Canyon'],['candy','Candy']];

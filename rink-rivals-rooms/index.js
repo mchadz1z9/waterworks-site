@@ -429,6 +429,14 @@ export class Chat {
       if(m.op==='who'){ const seen=new Set(), out=[]; for(const ws of this.socks()){ const a=ws.deserializeAttachment(); if(seen.has(a.who)) continue; seen.add(a.who); out.push({name:a.name,game:a.game,id:pubId(a.who),tag:this.tagOf(a.name)}); } return J({who:out}); }
       if(m.op==='recent'){ const rows=this.sql.exec('SELECT name FROM m WHERE hid=0 ORDER BY id DESC LIMIT 300').toArray(); const seen=new Set(), out=[]; for(const r of rows){ const k=r.name.toLowerCase(); if(seen.has(k)) continue; seen.add(k); out.push({name:r.name,tag:this.tagOf(r.name),banned:!!this.isBanned(r.name)}); if(out.length>=40) break; } return J({recent:out}); }
       if(m.op==='reservedSet'){ if(!full) return J({err:'forbidden'},403); this.cfgSet('reserved',JSON.stringify(Array.isArray(m.list)?m.list:[])); return J({ok:true}); }
+      /* private messages, for the site owner: every conversation, a full thread, delete a message */
+      if(m.op==='dms'){ if(!full) return J({err:'forbidden'},403); const q='%'+String(m.q||'').toLowerCase().replace(/[%_]/g,'').slice(0,30)+'%';
+        const rows=this.sql.exec("SELECT CASE WHEN fpub<tpub THEN fpub||'|'||tpub ELSE tpub||'|'||fpub END AS k, MAX(id) AS mid, COUNT(*) AS n FROM dmsg WHERE lower(fname) LIKE ? OR lower(tname) LIKE ? OR lower(text) LIKE ? GROUP BY k ORDER BY mid DESC LIMIT 150",q,q,q).toArray();
+        const out=rows.map(r=>{ const x=this.sql.exec('SELECT ts,fpub,fname,tpub,tname,text FROM dmsg WHERE id=?',r.mid).toArray()[0]||{}; return {k:r.k,n:r.n,ts:x.ts,a:x.fpub,an:x.fname,b:x.tpub,bn:x.tname,last:x.text}; });
+        return J({convos:out,total:this.sql.exec('SELECT COUNT(*) AS c FROM dmsg').toArray()[0].c}); }
+      if(m.op==='dmThread'){ if(!full) return J({err:'forbidden'},403); const [x,y]=String(m.k||'').split('|').map(v=>String(v||'').slice(0,12)); if(!x||!y) return J({err:'bad'},400);
+        return J({msgs:this.sql.exec('SELECT id,ts,fpub,fname,tpub,tname,text,seen FROM dmsg WHERE (fpub=? AND tpub=?) OR (fpub=? AND tpub=?) ORDER BY id DESC LIMIT 400',x,y,y,x).toArray().reverse()}); }
+      if(m.op==='dmDel'){ if(!full) return J({err:'forbidden'},403); this.sql.exec('DELETE FROM dmsg WHERE id=?',+m.id||0); return J({ok:true}); }
       if(m.op==='msgs') return J({msgs:this.sql.exec('SELECT id,ts,name,text,game,hid FROM m ORDER BY id DESC LIMIT 200').toArray(),slow:+(this.cfgGet('slow')||0),words:JSON.parse(this.cfgGet('words')||'[]')});
       if(m.op==='slow'){ this.cfgSet('slow',Math.max(0,Math.min(600,Math.round(+m.secs||0)))); return J({ok:true}); }
       if(m.op==='words'){ const w=(Array.isArray(m.words)?m.words:[]).map(x=>String(x).toLowerCase().trim().slice(0,30)).filter(Boolean).slice(0,200); this.cfgSet('words',JSON.stringify(w)); return J({ok:true}); }
