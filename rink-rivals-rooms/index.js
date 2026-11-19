@@ -33,6 +33,15 @@ async function rrAI(req,env,RCF){
     return J({reply:t.trim()||'Hmm, I could not think of an answer. Try asking another way?'});
   }catch(e){ return J({err:'The AI is busy right now — try again in a moment',why:String(e&&e.message||e).slice(0,200)},502); }
 }
+
+/* ---------- Rivals Browser: can this page be shown inside another site? (status OK, no X-Frame-Options / frame-ancestors block) ---------- */
+async function frameOK(u){ let x; try{ x=new URL(u); }catch(e){ return false; } if(x.protocol!=='https:'||/^(localhost|[\d.]+|\[.*\])$/i.test(x.hostname)||/\.(local|internal)$/i.test(x.hostname)) return false;
+  const c=caches.default, key=new Request('https://fc.cache/'+encodeURIComponent(x.href)); const hit=await c.match(key); if(hit) return (await hit.text())==='1';
+  let ok=false; try{ const ac=new AbortController(), t=setTimeout(()=>ac.abort(),5000); const r=await fetch(x.href,{redirect:'follow',signal:ac.signal,headers:{'user-agent':'Mozilla/5.0 (RivalsBrowser frame check)'}}); clearTimeout(t);
+    const xf=(r.headers.get('x-frame-options')||'').toLowerCase(), csp=(r.headers.get('content-security-policy')||'').toLowerCase(), fa=(csp.match(/frame-ancestors([^;]*)/)||[])[1];
+    ok=r.status<400&&!/deny|sameorigin/.test(xf)&&(fa==null||/\*(\s|$)|rink-rivals/.test(fa)); try{ r.body&&r.body.cancel(); }catch(e){} }catch(e){ ok=false; }
+  await c.put(key,new Response(ok?'1':'0',{headers:{'cache-control':'max-age=86400'}})); return ok; }
+async function frameCheck(url){ const us=url.searchParams.getAll('u').slice(0,40); const out={}; await Promise.all(us.map(async u=>{ out[u]=await frameOK(u); })); return J(out); }
 export default {
   /* nightly chat wipe at 10 p.m. Toronto time. Cron runs at 02:00 and 03:00 UTC, and only the one that lands on 22:00 local (EST or EDT) clears */
   async scheduled(ev, env, ctx){
@@ -73,6 +82,7 @@ export default {
           if(vid&&/"isLiveNow":true|"isLive":true/.test(lh)){ const tt=(lh.match(/<meta name="title" content="([^"]{0,140})"/)||[])[1]||'NHL live'; yt={id:vid,title:tt.replace(/&amp;/g,'&').replace(/&#39;/g,"'").replace(/&quot;/g,'"')}; } }catch(e){}
         r=new Response(JSON.stringify({date:d.currentDate,games,yt}),{headers:{'content-type':'application/json','cache-control':'max-age=30'}}); await c.put(key,r.clone()); }
       const h=new Headers(r.headers); for(const k in CORS) h.set(k,CORS[k]); return new Response(r.body,{headers:h}); }
+    if(url.pathname==='/fc'){ if(req.method==='OPTIONS') return new Response(null,{headers:CORS}); return frameCheck(url); }
     if(url.pathname==='/ai'){ if(req.method==='OPTIONS') return new Response(null,{headers:CORS}); if(req.method!=='POST') return J({err:'method'},405); return rrAI(req,env,RCF); }
     if(url.pathname==='/acct'){ if(req.method==='OPTIONS') return new Response(null,{headers:CORS}); return env.ACCT.get(env.ACCT.idFromName('ACCT')).fetch(req); }
     if(url.pathname==='/site'){ if(req.method==='OPTIONS') return new Response(null,{headers:CORS}); return env.SITE.get(env.SITE.idFromName('SITE')).fetch(req); }

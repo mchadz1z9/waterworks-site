@@ -58,6 +58,20 @@ const $=id=>document.getElementById(id), view=$('view'), urlIn=$('url');
 const ls={get:(k,d)=>{ try{ return JSON.parse(localStorage.getItem(k)||'null')??d; }catch(e){ return d; } }, set:(k,v)=>{ try{ localStorage.setItem(k,JSON.stringify(v)); }catch(e){} }};
 const TOOL=/\b(engine|framework|library|sdk|toolkit|boilerplate|template|starter|tutorial|awesome|renderer|plugin)\b/i;
 const BAD=/\b(nsfw|porn|hentai|xxx|sex|nude|onlyfans|casino|gambl|betting|cheat engine|aimbot|keylogger|malware|exploit|ddos|phish)\b/i;
+/* real game websites, each checked to play inside the Rivals Browser */
+const FEAT=[
+ ['🐍','Slither.io','Grow the longest snake','https://slither.io','io'],['🔺','Diep.io','Tank battles — level up your tank','https://diep.io','io'],['🟥','Splix.io','Claim land, don\'t get cut off','https://splix.io','io'],['🐛','Wormate.io','Candy-eating worms','https://wormate.io','io'],
+ ['⚡','Powerline.io','Neon snake racing','https://powerline.io','io'],['🗺️','Territorial.io','Conquer the map','https://territorial.io','io'],['🧟','ZombsRoyale','2D battle royale','https://zombsroyale.io','io'],['🔫','Surviv.io','Top-down battle royale','https://surviv.io','io'],
+ ['🎯','Krunker','Fast browser shooter','https://krunker.io','fps'],['🥚','Shell Shockers','Egg shooter','https://shellshock.io','fps'],['🏹','Narrow.One','Castle archery battles','https://narrow.one','fps'],['🟦','Kirka.io','Blocky shooter','https://kirka.io','fps'],['🦸','Venge.io','Hero shooter','https://venge.io','fps'],
+ ['🏎️','Smash Karts','Kart battles','https://smashkarts.io','race'],['🏍️','Moto X3M','Bike stunts (Coolmath)','https://www.coolmathgames.com/0-moto-x3m','race'],['🏃','Run 3','Space tunnel runner (Coolmath)','https://www.coolmathgames.com/0-run-3','race'],
+ ['🧱','Bloxd.io','Blocky worlds and minigames','https://bloxd.io','build'],['⏳','Sandspiel','Falling sand sandbox','https://sandspiel.club','build'],['⚗️','Little Alchemy 2','Mix elements, discover 700+','https://littlealchemy2.com','puzzle'],
+ ['🟪','Tetris','The real Tetris','https://tetris.com/play-tetris','puzzle'],['💣','Minesweeper','Minesweeper online','https://minesweeper.online','puzzle'],['🌍','WorldGuessr','Guess where on Earth you are','https://worldguessr.com','puzzle'],
+ ['🐦','Flappy Bird','Tap to flap','https://flappybird.io','arcade'],['🦖','Dino Run','The Chrome dinosaur game','https://chromedino.com','arcade'],['🦘','Doodle Jump','Bounce up the platforms','https://doodle-jump.co','arcade'],['🧮','Coolmath Games','Hundreds of games','https://www.coolmathgames.com','arcade']];
+const FCAT={io:'🐍 .io games',fps:'🎯 Shooters',race:'🏎️ Racing & runners',build:'🧱 Build & sandbox',puzzle:'🧩 Puzzle & brain',arcade:'👾 Arcade'};
+const SRV=()=>{ try{ if(localStorage.getItem('rrSrv')==='relay') return location.origin+'/rr'; }catch(e){} return 'https://rink-rivals-rooms.mitchellchad2026.workers.dev'; };
+/* ask the server which pages allow being shown inside another site, so only games that will actually load are listed */
+async function frameable(urls){ const out={}; for(let i=0;i<urls.length;i+=30){ const part=urls.slice(i,i+30); try{ const r=await fetch(SRV()+'/fc?'+part.map(u=>'u='+encodeURIComponent(u)).join('&')); Object.assign(out,await r.json()); }catch(e){ for(const u of part) out[u]=true; } } return out; }
+function fcard(f){ return `<div class="card"><div class="n">${f[0]} ${esc(f[1])}</div><div class="o">${esc(new URL(f[3]).hostname.replace(/^www\./,''))}</div><div class="d">${esc(f[2])}</div><div class="r"><span class="sp"></span><button class="fav" data-fav='${esc(JSON.stringify({n:f[1],u:f[3],d:f[2],o:'',av:'',s:0}))}'>${isFav(f[3])?'★':'☆'}</button><button class="play" data-go="${esc(f[3])}" data-t="${esc(f[1])}">▶ Play</button></div></div>`; }
 const CATS=[['🔥 Popular','browser game'],['🏃 Platformer','platformer game'],['🧩 Puzzle','puzzle game'],['🏎️ Racing','racing game'],['🚀 Shooter','shooter game'],['🔢 2048','2048 game'],['🟦 Tetris','tetris'],['🐍 Snake','snake game'],['♟️ Chess','chess game'],['🖱️ Clicker','idle clicker game'],['🧱 Voxel','voxel game javascript'],['👾 Retro','retro arcade game']];
 let tabs=[], cur=null, tid=0;
 /* where a GitHub repo can be played: its homepage, or its GitHub Pages site */
@@ -67,16 +81,17 @@ async function ghSearch(q){ const key='rbq:'+q; try{ const c=JSON.parse(sessionS
   const r=await fetch('https://api.github.com/search/repositories?q='+encodeURIComponent(q+' in:name,description,topics')+'&sort=stars&order=desc&per_page=60',{headers:{accept:'application/vnd.github+json'}});
   if(r.status===403||r.status===429) throw new Error('GitHub says slow down — wait a minute and try again.'); if(!r.ok) throw new Error('GitHub search did not work ('+r.status+').');
   const j=await r.json(), out=(j.items||[]).filter(x=>!x.archived||x.has_pages).map(x=>({n:x.name,o:x.owner.login,av:x.owner.avatar_url,d:x.description||'',s:x.stargazers_count,u:playURL(x),gh:x.html_url})).filter(x=>x.u&&!BAD.test(x.n+' '+x.d)&&!TOOL.test(x.n+' '+x.d));
-  try{ sessionStorage.setItem(key,JSON.stringify({t:Date.now(),r:out})); }catch(e){} return out; }
+  const ok=await frameable(out.map(x=>x.u)); const keep=out.filter(x=>ok[x.u]!==false);
+  try{ sessionStorage.setItem(key,JSON.stringify({t:Date.now(),r:keep})); }catch(e){} return keep; }
 function card(g){ return `<div class="card"><div class="n" title="${esc(g.n)}">🎮 ${esc(g.n.replace(/[-_]/g,' '))}</div><div class="o"><img src="${esc(g.av)}&s=40" alt="" loading="lazy">${esc(g.o)}</div><div class="d">${esc(g.d||'No description')}</div><div class="r">⭐ ${g.s.toLocaleString()}<span class="sp"></span><button class="fav" data-fav='${esc(JSON.stringify(g))}'>${isFav(g.u)?'★':'☆'}</button><button class="play" data-go="${esc(g.u)}" data-t="${esc(g.n)}">▶ Play</button></div></div>`; }
 const favs=()=>ls.get('rbFav',[]), isFav=u=>favs().some(f=>f.u===u);
 function toggleFav(g){ let f=favs(); f=isFav(g.u)?f.filter(x=>x.u!==g.u):[{n:g.n,o:g.o||'',av:g.av||'',d:g.d||'',s:g.s||0,u:g.u},...f].slice(0,60); ls.set('rbFav',f); }
 /* ---- the home page ---- */
-function homeEl(t){ const el=document.createElement('div'); el.className='home'; el.innerHTML=`<div class="wrap"><div class="hero"><h1>🌐 Rivals Browser</h1><p>Free web games people have made and shared on GitHub — search, play, and keep your favourites.</p>
+function homeEl(t){ const el=document.createElement('div'); el.className='home'; el.innerHTML=`<div class="wrap"><div class="hero"><h1>🌐 Rivals Browser</h1><p>Real game websites that play right here, plus thousands of free games people have shared on GitHub — search, play, and keep your favourites.</p>
   <form class="sbox"><input name="q" placeholder="Search games on GitHub (e.g. tetris, racing, minecraft clone)" value="${esc(t.q||'')}"><button>Search</button></form>
   <div class="cats">${CATS.map(([l,q])=>`<button data-q="${esc(q)}" class="${t.q===q?'on':''}">${l}</button>`).join('')}</div></div>
-  <div class="favs"></div><h3 class="rt">${t.q?'Results for “'+esc(t.q)+'”':'🔥 Popular games on GitHub'}</h3><div class="grid res"><div class="msg">Loading…</div></div>
-  <p class="msg" style="font-size:12px">Games here come from GitHub and are made by other people, not Arcade Rivals. If one stays blank, use ↗ to open it in its own tab.</p></div>`;
+  <div class="favs"></div>${t.q?'':Object.entries(FCAT).map(([k,l])=>`<h3>${l}</h3><div class="grid">${FEAT.filter(f=>f[4]===k).map(fcard).join('')}</div>`).join('')}<h3 class="rt">${t.q?'Results for “'+esc(t.q)+'”':'🔥 Popular games on GitHub'}</h3><div class="grid res"><div class="msg">Loading…</div></div>
+  <p class="msg" style="font-size:12px">These games are made by other people and websites, not Arcade Rivals. Only games that allow being played inside another site are shown — if one still stays blank, use ↗ to open it in its own tab.</p></div>`;
   el.querySelector('form').onsubmit=e=>{ e.preventDefault(); const q=e.target.q.value.trim(); if(q) navigate(t,'rivals://search/'+q); };
   el.querySelectorAll('.cats button').forEach(b=>b.onclick=()=>navigate(t,'rivals://search/'+b.dataset.q));
   el.onclick=e=>{ const g=e.target.closest('[data-go]'); if(g){ navigate(t,g.dataset.go,g.dataset.t); return; } const f=e.target.closest('[data-fav]'); if(f){ const o=JSON.parse(f.dataset.fav); toggleFav(o); f.textContent=isFav(o.u)?'★':'☆'; drawFavs(el); } };
