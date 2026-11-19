@@ -6,6 +6,7 @@ const AI_SYS="You are Rink Rivals AI, the friendly helper on Arcade Rivals, a ga
  "If the user sends a photo, read it carefully: for maths, work it out step by step and give the final answer clearly; for other homework, explain it simply. "+
  "Help with learning, games, coding, stories and ideas. Never produce anything sexual, hateful, violent in a graphic way, or about self-harm, drugs or weapons; if asked, say kindly that you can't help with that and suggest a trusted adult if it sounds serious. "+
  "Never ask for or repeat personal details (full names, addresses, phone numbers, passwords). You are an AI and can make mistakes, so for important answers suggest double-checking.";
+const AI_MODES={homework:'Mode: Homework helper. Teach step by step so the student learns; show working, then the answer.',coach:'Mode: Game coach. Give practical tips, strategies and tricks for video games and sports.',story:'Mode: Story writer. Write fun, vivid, age-appropriate stories, poems and ideas; keep going if asked.',code:'Mode: Code helper. Explain and write code clearly (HTML, JavaScript, Python, Scratch ideas); use fenced code blocks.',quiz:'Mode: Quiz master. Ask one question at a time, wait for the answer, say if it is right, keep score, then ask the next.',eli10:'Mode: Explain like I am 10. Use simple words, short sentences and a fun example.'};
 const AI_BLOCK=/\b(nude|naked|nsfw|sex|sexy|porn|boob|breast|genital|penis|vagina|gore|gory|blood(y)?|behead|corpse|suicide|self[- ]?harm|kill (him|her|them|myself)|swastika|nazi|kkk|drug|cocaine|meth|weed|gun|rifle|pistol|bomb|shoot(ing)?)\b/i;
 const AI_HITS=new Map();
 function aiRate(ip,kind,max,win){ const now=Date.now(), k=kind+':'+ip, a=(AI_HITS.get(k)||[]).filter(t=>now-t<win); if(a.length>=max){ AI_HITS.set(k,a); return false; } a.push(now); AI_HITS.set(k,a); if(AI_HITS.size>5000) AI_HITS.clear(); return true; }
@@ -22,13 +23,16 @@ async function rrAI(req,env,RCF){
   }
   if(op!=='chat') return J({err:'bad'},400);
   if(!aiRate(ip,'chat',40,600000)) return J({err:'Slow down a little — try again in a few minutes'},429);
-  const hist=Array.isArray(b.messages)?b.messages.slice(-12):[]; const msgs=[{role:'system',content:AI_SYS}];
+  const hist=Array.isArray(b.messages)?b.messages.slice(-16):[]; const msgs=[{role:'system',content:AI_SYS+(AI_MODES[b.mode]?' '+AI_MODES[b.mode]:'')+' Use Markdown: **bold**, lists, headings and fenced code blocks when helpful.'}];
   for(const m of hist){ if(!m||(m.role!=='user'&&m.role!=='assistant')) continue; msgs.push({role:m.role,content:String(m.content||'').slice(0,4000)}); }
   if(msgs.length<2||msgs[msgs.length-1].role!=='user') return J({err:'Say something first'},400);
   let img=typeof b.image==='string'&&/^data:image\/(png|jpe?g|webp);base64,/.test(b.image)?b.image:null; if(img&&img.length>2800000) return J({err:'That photo is too big'},400);
   try{
     if(img){ const last=msgs.pop(); msgs.push({role:'user',content:[{type:'text',text:last.content||'What is in this picture? If it is a question, answer it.'},{type:'image_url',image_url:{url:img}}]}); }
-    const r=await env.AI.run('@cf/meta/llama-4-scout-17b-16e-instruct',{messages:msgs,max_tokens:900,temperature:.4});
+    const model=img?'@cf/meta/llama-4-scout-17b-16e-instruct':'@cf/meta/llama-3.3-70b-instruct-fp8-fast';
+    if(b.stream){ let st; try{ st=await env.AI.run(model,{messages:msgs,max_tokens:1400,temperature:.5,stream:true}); }catch(e){ st=await env.AI.run('@cf/meta/llama-4-scout-17b-16e-instruct',{messages:msgs,max_tokens:1400,temperature:.5,stream:true}); }
+      return new Response(st,{headers:{...CORS,'content-type':'text/event-stream','cache-control':'no-store'}}); }
+    const r=await env.AI.run(model,{messages:msgs,max_tokens:1400,temperature:.5});
     let t=r&&(r.response!=null?r.response:r.result&&r.result.response); if(typeof t!=='string') t=JSON.stringify(t||'');
     return J({reply:t.trim()||'Hmm, I could not think of an answer. Try asking another way?'});
   }catch(e){ return J({err:'The AI is busy right now — try again in a moment',why:String(e&&e.message||e).slice(0,200)},502); }
