@@ -1,5 +1,38 @@
 /* Arcade Rivals online rooms: one Durable Object per room code relays messages between up to 4 players. */
 const MAX=8;
+
+/* ---------- Rink Rivals AI: a homework / chat helper that can read photos, and a picture maker (Cloudflare Workers AI) ---------- */
+const AI_SYS="You are Rink Rivals AI, the friendly helper on Arcade Rivals, a games website used by school kids. Be kind, clear and short (a few sentences unless asked for more). "+
+ "If the user sends a photo, read it carefully: for maths, work it out step by step and give the final answer clearly; for other homework, explain it simply. "+
+ "Help with learning, games, coding, stories and ideas. Never produce anything sexual, hateful, violent in a graphic way, or about self-harm, drugs or weapons; if asked, say kindly that you can't help with that and suggest a trusted adult if it sounds serious. "+
+ "Never ask for or repeat personal details (full names, addresses, phone numbers, passwords). You are an AI and can make mistakes, so for important answers suggest double-checking.";
+const AI_BLOCK=/\b(nude|naked|nsfw|sex|sexy|porn|boob|breast|genital|penis|vagina|gore|gory|blood(y)?|behead|corpse|suicide|self[- ]?harm|kill (him|her|them|myself)|swastika|nazi|kkk|drug|cocaine|meth|weed|gun|rifle|pistol|bomb|shoot(ing)?)\b/i;
+const AI_HITS=new Map();
+function aiRate(ip,kind,max,win){ const now=Date.now(), k=kind+':'+ip, a=(AI_HITS.get(k)||[]).filter(t=>now-t<win); if(a.length>=max){ AI_HITS.set(k,a); return false; } a.push(now); AI_HITS.set(k,a); if(AI_HITS.size>5000) AI_HITS.clear(); return true; }
+async function rrAI(req,env,RCF){
+  if(!env.AI) return J({err:'AI is not switched on for this server yet'},503);
+  const ip=req.headers.get('cf-connecting-ip')||'?'; let b=null; try{ b=await req.json(); }catch(e){ return J({err:'bad'},400); }
+  const op=b&&b.op;
+  if(op==='image'){
+    const prompt=String(b.prompt||'').slice(0,400).trim(); if(prompt.length<3) return J({err:'Describe the picture you want'},400);
+    if(AI_BLOCK.test(prompt)) return J({err:"I can't make that picture — try something else!"},400);
+    if(!aiRate(ip,'img',8,3600000)) return J({err:'Picture limit reached — try again in a bit (8 an hour)'},429);
+    try{ const r=await env.AI.run('@cf/black-forest-labs/flux-1-schnell',{prompt:prompt+', colorful, family friendly, high quality',steps:6}); if(!r||!r.image) return J({err:'The picture maker is busy, try again'},502); return J({image:'data:image/jpeg;base64,'+r.image}); }
+    catch(e){ return J({err:'The picture maker is busy, try again'},502); }
+  }
+  if(op!=='chat') return J({err:'bad'},400);
+  if(!aiRate(ip,'chat',40,600000)) return J({err:'Slow down a little — try again in a few minutes'},429);
+  const hist=Array.isArray(b.messages)?b.messages.slice(-12):[]; const msgs=[{role:'system',content:AI_SYS}];
+  for(const m of hist){ if(!m||(m.role!=='user'&&m.role!=='assistant')) continue; msgs.push({role:m.role,content:String(m.content||'').slice(0,4000)}); }
+  if(msgs.length<2||msgs[msgs.length-1].role!=='user') return J({err:'Say something first'},400);
+  let img=typeof b.image==='string'&&/^data:image\/(png|jpe?g|webp);base64,/.test(b.image)?b.image:null; if(img&&img.length>2800000) return J({err:'That photo is too big'},400);
+  try{
+    if(img){ const last=msgs.pop(); msgs.push({role:'user',content:[{type:'text',text:last.content||'What is in this picture? If it is a question, answer it.'},{type:'image_url',image_url:{url:img}}]}); }
+    const r=await env.AI.run('@cf/meta/llama-4-scout-17b-16e-instruct',{messages:msgs,max_tokens:900,temperature:.4});
+    let t=r&&(r.response!=null?r.response:r.result&&r.result.response); if(typeof t!=='string') t=JSON.stringify(t||'');
+    return J({reply:t.trim()||'Hmm, I could not think of an answer. Try asking another way?'});
+  }catch(e){ return J({err:'The AI is busy right now — try again in a moment',why:String(e&&e.message||e).slice(0,200)},502); }
+}
 export default {
   /* nightly chat wipe at 10 p.m. Toronto time. Cron runs at 02:00 and 03:00 UTC, and only the one that lands on 22:00 local (EST or EDT) clears */
   async scheduled(ev, env, ctx){
@@ -40,6 +73,7 @@ export default {
           if(vid&&/"isLiveNow":true|"isLive":true/.test(lh)){ const tt=(lh.match(/<meta name="title" content="([^"]{0,140})"/)||[])[1]||'NHL live'; yt={id:vid,title:tt.replace(/&amp;/g,'&').replace(/&#39;/g,"'").replace(/&quot;/g,'"')}; } }catch(e){}
         r=new Response(JSON.stringify({date:d.currentDate,games,yt}),{headers:{'content-type':'application/json','cache-control':'max-age=30'}}); await c.put(key,r.clone()); }
       const h=new Headers(r.headers); for(const k in CORS) h.set(k,CORS[k]); return new Response(r.body,{headers:h}); }
+    if(url.pathname==='/ai'){ if(req.method==='OPTIONS') return new Response(null,{headers:CORS}); if(req.method!=='POST') return J({err:'method'},405); return rrAI(req,env,RCF); }
     if(url.pathname==='/acct'){ if(req.method==='OPTIONS') return new Response(null,{headers:CORS}); return env.ACCT.get(env.ACCT.idFromName('ACCT')).fetch(req); }
     if(url.pathname==='/site'){ if(req.method==='OPTIONS') return new Response(null,{headers:CORS}); return env.SITE.get(env.SITE.idFromName('SITE')).fetch(req); }
     if(url.pathname==='/tourney'||url.pathname==='/play'||url.pathname==='/daily'||url.pathname==='/like'||url.pathname==='/review'||url.pathname==='/vote'||url.pathname==='/namecheck'||url.pathname.startsWith('/feed/')){ if(req.method==='OPTIONS') return new Response(null,{headers:CORS}); const cf=RCF||req.cf||{}, h=new Headers(req.headers); h.set('x-rr-asn',String(cf.asn||'')); h.set('x-rr-aso',String(cf.asOrganization||'').slice(0,80)); h.set('x-rr-cc',String(cf.country||'')); return env.SITE.get(env.SITE.idFromName('SITE')).fetch(new Request(req,{headers:h})); }
