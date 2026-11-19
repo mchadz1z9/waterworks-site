@@ -45,7 +45,7 @@
   addEventListener('keydown',e=>{ if(e.code==='KeyP'&&e.shiftKey&&!e.repeat){ const t=document.activeElement; if(t&&(t.tagName==='INPUT'||t.tagName==='TEXTAREA')) return; photoToggle(); } else if(e.code==='Escape'&&photo) photoToggle(); });
   if(document.readyState==='loading') addEventListener('DOMContentLoaded',mount); else mount();
   /* ---- seasonal weather over the site ---- */
-  function weather(){ try{ if(localStorage.getItem('rrGfx')==='low'||localStorage.getItem('rrNoWeather')==='1') return; if(matchMedia&&matchMedia('(prefers-reduced-motion: reduce)').matches) return; }catch(e){}
+  function weather(){ try{ if(window.RR_NOWX||localStorage.getItem('rrGfx')==='low'||localStorage.getItem('rrNoWeather')==='1') return; if(matchMedia&&matchMedia('(prefers-reduced-motion: reduce)').matches) return; }catch(e){}
     const m=new Date().getMonth(), kind=[10,11,0].includes(m)?'snow':[1,2,3].includes(m)?'petal':[8,9].includes(m)?'leaf':'sun';
     const cv=document.createElement('canvas'); cv.id='rrWx'; cv.style.cssText='position:fixed;inset:0;width:100%;height:100%;pointer-events:none;z-index:2147481900'; document.body.appendChild(cv); const x=cv.getContext('2d');
     const N=kind==='sun'?14:kind==='snow'?55:30, P=[]; const rs=()=>{ cv.width=innerWidth; cv.height=innerHeight; }; rs(); addEventListener('resize',rs);
