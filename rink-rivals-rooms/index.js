@@ -29,18 +29,22 @@ async function rrAI(req,env,RCF){
   }
   if(op!=='chat') return J({err:'bad'},400);
   if(!aiRate(ip,'chat',40,600000)) return J({err:'Slow down a little — try again in a few minutes'},429);
-  const hist=Array.isArray(b.messages)?b.messages.slice(-16):[]; const msgs=[{role:'system',content:AI_SYS+(AI_MODES[b.mode]?' '+AI_MODES[b.mode]:'')+' Use Markdown: **bold**, lists, headings and fenced code blocks when helpful.'}];
+  const hist=Array.isArray(b.messages)?b.messages.slice(-16):[]; const msgs=[{role:'system',content:'Today is '+new Date().toISOString().slice(0,10)+'. '+AI_SYS+(AI_MODES[b.mode]?' '+AI_MODES[b.mode]:'')+' Use Markdown: **bold**, lists, headings and fenced code blocks when helpful.'}];
   for(const m of hist){ if(!m||(m.role!=='user'&&m.role!=='assistant')) continue; msgs.push({role:m.role,content:String(m.content||'').slice(0,4000)}); }
   if(msgs.length<2||msgs[msgs.length-1].role!=='user') return J({err:'Say something first'},400);
+  let sources=[];
+  if(b.web&&!b.image){ try{ const lastQ=msgs[msgs.length-1].content.slice(0,120); const d=await wsData(lastQ,false); const top=(d.results||[]).slice(0,6); sources=top.map(x=>({t:x.t,u:x.u}));
+      const ctx=(d.wiki?'Wikipedia — '+d.wiki.t+': '+d.wiki.d+'\n':'')+top.map((x,i)=>'['+(i+1)+'] '+x.t+' — '+x.d+' ('+x.u+')').join('\n');
+      if(ctx) msgs.splice(msgs.length-1,0,{role:'system',content:'Fresh web search results for the next question (use them if helpful, cite like [1], and say if they don\'t answer it):\n'+ctx}); if(d.wiki) sources.unshift({t:'Wikipedia: '+d.wiki.t,u:d.wiki.u}); }catch(e){} }
   let img=typeof b.image==='string'&&/^data:image\/(png|jpe?g|webp);base64,/.test(b.image)?b.image:null; if(img&&img.length>2800000) return J({err:'That photo is too big'},400);
   try{
     if(img){ const last=msgs.pop(); msgs.push({role:'user',content:[{type:'text',text:last.content||'What is in this picture? If it is a question, answer it.'},{type:'image_url',image_url:{url:img}}]}); }
     const model=img?'@cf/meta/llama-4-scout-17b-16e-instruct':'@cf/meta/llama-3.3-70b-instruct-fp8-fast';
     if(b.stream){ let st; try{ st=await env.AI.run(model,{messages:msgs,max_tokens:1400,temperature:.5,stream:true}); }catch(e){ st=await env.AI.run('@cf/meta/llama-4-scout-17b-16e-instruct',{messages:msgs,max_tokens:1400,temperature:.5,stream:true}); }
-      return new Response(st,{headers:{...CORS,'content-type':'text/event-stream','cache-control':'no-store'}}); }
+      return new Response(st,{headers:{...CORS,'content-type':'text/event-stream','cache-control':'no-store','x-sources':encodeURIComponent(JSON.stringify(sources.slice(0,6)))}}); }
     const r=await env.AI.run(model,{messages:msgs,max_tokens:1400,temperature:.5});
     let t=r&&(r.response!=null?r.response:r.result&&r.result.response); if(typeof t!=='string') t=JSON.stringify(t||'');
-    return J({reply:t.trim()||'Hmm, I could not think of an answer. Try asking another way?'});
+    return J({reply:t.trim()||'Hmm, I could not think of an answer. Try asking another way?',sources});
   }catch(e){ return J({err:'The AI is busy right now — try again in a moment',why:String(e&&e.message||e).slice(0,200)},502); }
 }
 
@@ -79,8 +83,9 @@ async function itchPlay(url){ const u=String(url.searchParams.get('u')||''); if(
 
 /* ---------- Rivals Browser: web search (DuckDuckGo with strict safe search; Wikipedia as a backup) ---------- */
 const WS_BAD=/\b(porn|xxx|nsfw|hentai|onlyfans|nude|naked|sex|escort|casino|betting|gambl|xvideos|pornhub|rule ?34|gore|torrent|piratebay|crack(ed)? download|warez)\b/i;
-async function webSearch(url){ const q=String(url.searchParams.get('q')||'').trim().slice(0,120); if(!q) return J({results:[]}); if(WS_BAD.test(q)) return J({results:[],blocked:true});
-  const c=caches.default, key=new Request('https://ws.cache/'+encodeURIComponent(q.toLowerCase())); const hit=await c.match(key); if(hit) return J(await hit.json());
+async function webSearch(url){ return J(await wsData(String(url.searchParams.get('q')||''),true)); }
+async function wsData(q0,frames){ const q=String(q0||'').trim().slice(0,120); if(!q) return {results:[]}; if(WS_BAD.test(q)) return {results:[],blocked:true};
+  const c=caches.default, key=new Request('https://ws.cache/'+encodeURIComponent(q.toLowerCase())); const hit=await c.match(key); if(hit) return await hit.json();
   let out=[], src='';
   const clean=x=>unx(String(x||'').replace(/<[^>]+>/g,'')).replace(/\s+/g,' ').trim();
   /* Bing, with strict safe search */
@@ -99,8 +104,10 @@ async function webSearch(url){ const q=String(url.searchParams.get('q')||'').tri
       out=(j.query&&j.query.search||[]).map(x=>({t:x.title,u:'https://en.wikipedia.org/wiki/'+encodeURIComponent(x.title.replace(/ /g,'_')),d:unx(x.snippet.replace(/<[^>]+>/g,''))})); src='wikipedia'; }catch(e){} }
   out=out.filter(x=>!WS_BAD.test(x.t+' '+x.u+' '+x.d));
   /* which results can open inside the Rivals Browser */
-  await Promise.all(out.map(async x=>{ x.frame=await frameOK(x.u).catch(()=>false); }));
-  const res={results:out,src}; await c.put(key,new Response(JSON.stringify(res),{headers:{'cache-control':'max-age=1800'}})); return J(res); }
+  if(frames) await Promise.all(out.map(async x=>{ x.frame=await frameOK(x.u).catch(()=>false); }));
+  /* a quick answer from Wikipedia for the top of the results */
+  let wiki=null; try{ const r=await fetch('https://en.wikipedia.org/w/api.php?action=query&list=search&format=json&srlimit=1&srsearch='+encodeURIComponent(q),{headers:{'user-agent':'ArcadeRivals/1.0 (games site)'}}); const j=await r.json(); const t=j.query&&j.query.search&&j.query.search[0]&&j.query.search[0].title; if(t){ const sr=await fetch('https://en.wikipedia.org/api/rest_v1/page/summary/'+encodeURIComponent(t.replace(/ /g,'_')),{headers:{'user-agent':'ArcadeRivals/1.0 (games site)'}}); const sj=await sr.json(); if(sj&&sj.extract&&sj.type!=='disambiguation'&&!WS_BAD.test(sj.extract)) wiki={t:sj.title,d:sj.extract.slice(0,600),u:(sj.content_urls&&sj.content_urls.desktop&&sj.content_urls.desktop.page)||('https://en.wikipedia.org/wiki/'+encodeURIComponent(t)),img:sj.thumbnail&&sj.thumbnail.source||''}; } }catch(e){}
+  const res={results:out,src,wiki}; if(frames) await c.put(key,new Response(JSON.stringify(res),{headers:{'cache-control':'max-age=1800'}})); return res; }
 export default {
   /* nightly chat wipe at 10 p.m. Toronto time. Cron runs at 02:00 and 03:00 UTC, and only the one that lands on 22:00 local (EST or EDT) clears */
   async scheduled(ev, env, ctx){
@@ -259,7 +266,7 @@ export class Lobby {
 /* bump this to make the server forget any password set from the admin page and go back to the ADMIN_KEY secret */
 const PW_RESET='2026-11-03';
 const ADMIN_URL='/hq-owa9rwwt9kplpdbu';
-const CORS={'Access-Control-Allow-Origin':'*','Access-Control-Allow-Methods':'GET,POST,OPTIONS','Access-Control-Allow-Headers':'content-type,x-admin-token,x-admin-pid,x-pid,x-name,x-cap,x-fp','Access-Control-Expose-Headers':'content-length,content-range,accept-ranges'};
+const CORS={'Access-Control-Allow-Origin':'*','Access-Control-Allow-Methods':'GET,POST,OPTIONS','Access-Control-Allow-Headers':'content-type,x-admin-token,x-admin-pid,x-pid,x-name,x-cap,x-fp','Access-Control-Expose-Headers':'content-length,content-range,accept-ranges,x-sources'};
 /* SHA-256 as hex, and a comparison that takes the same time whether the guess is close or not */
 async function sha(x){ const b=await crypto.subtle.digest('SHA-256',new TextEncoder().encode(String(x))); return [...new Uint8Array(b)].map(v=>v.toString(16).padStart(2,'0')).join(''); }
 /* reserved names: "Aiden", "A1den", "aiden_99", "AIDEN pro"… all count as Aiden. Only the devices it's reserved for may use it. */

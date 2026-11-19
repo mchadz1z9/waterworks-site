@@ -44,6 +44,8 @@ h1{margin:0;font:900 28px 'Big Shoulders Display',sans-serif;background:linear-g
 .m pre code{background:none;padding:0;font-size:13px;white-space:pre}
 .m pre .cp{position:absolute;top:6px;right:6px;border:0;border-radius:8px;background:#1e293b;color:#cbd5e1;font-size:12px;padding:3px 8px;cursor:pointer}
 .m a{color:#93c5fd}.m table{border-collapse:collapse}.m td,.m th{border:1px solid var(--line);padding:4px 8px}
+.srcs{margin-top:8px;font-size:13.5px;color:#94a3b8;display:flex;flex-wrap:wrap;gap:6px}.srcs a{color:#93c5fd;background:rgba(59,130,246,.12);border-radius:8px;padding:3px 8px;text-decoration:none;max-width:280px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+#webT.on{background:linear-gradient(90deg,#0ea5e9,#22c55e)!important;color:#fff!important;border-color:transparent!important}
 .acts{display:flex;gap:4px;margin-top:6px}.acts button{border:0;background:rgba(148,163,184,.12);color:#cbd5e1;border-radius:8px;padding:3px 8px;font-size:12px;cursor:pointer}.acts button:hover{background:rgba(148,163,184,.25)}
 .cur::after{content:'▍';animation:bl 1s steps(1) infinite;color:#93c5fd}@keyframes bl{50%{opacity:0}}
 .dots span{display:inline-block;width:8px;height:8px;margin:0 2px;border-radius:50%;background:#94a3b8;animation:b 1s infinite}.dots span:nth-child(2){animation-delay:.15s}.dots span:nth-child(3){animation-delay:.3s}
@@ -91,7 +93,7 @@ aside{width:290px}.ch{font-size:15px;padding:11px 12px}
 <div class="glow a"></div><div class="glow b"></div>
 <aside id="side"><div class="top"><a class="home" href="./">← Arcade Rivals</a><button id="newChat">＋ New chat</button></div><div class="side-h">YOUR CHATS</div><div id="chats"></div></aside>
 <main>
-<header><button id="menu" title="Chats">☰</button><h1>🤖 Rink Rivals AI</h1><div class="modes" id="modes"></div></header>
+<header><button id="menu" title="Chats">☰</button><h1>🤖 Rink Rivals AI</h1><div class="modes" id="modes"></div><button id="webT" title="Let the AI search the web for up-to-date answers (with sources)" style="flex:none;border:1px solid rgba(148,163,184,.25);background:rgba(15,23,42,.7);color:#cbd5e1;border-radius:999px;padding:8px 14px;font-weight:800;font-size:14px;cursor:pointer">🌐 Web: off</button></header>
 <div id="log"><div class="inner" id="inner"></div></div>
 <footer><div class="fw">
   <div id="styles"></div>
@@ -116,8 +118,9 @@ const START={chat:[['🌋 How volcanoes work','Explain how volcanoes work'],['�
  eli10:[['⚡ Electricity','How does electricity work?'],['🧬 DNA','What is DNA?'],['💰 Money','Why do things cost money?'],['🌈 Rainbows','Why do rainbows happen?']],
  image:[['🐧 Hockey penguin','A penguin playing hockey on a frozen lake'],['🏙️ Neon city','A neon race car in a futuristic city at night'],['🍕 Pizza dragon','A cute dragon eating pizza'],['🏰 Candy castle','A castle made of candy and clouds']]};
 const ls={get:(k,d)=>{ try{ return JSON.parse(localStorage.getItem(k)||'null')??d; }catch(e){ return d; } },set:(k,v)=>{ try{ localStorage.setItem(k,JSON.stringify(v)); }catch(e){ /* full: drop old chats */ const c=ls.get('rrAIChats',[]); if(c.length>3){ c.splice(-3); try{ localStorage.setItem(k,JSON.stringify(v)); }catch(x){} } } }};
+let webOn=!!ls.get('rrAIWeb',false); const webBtn=()=>{ const b=$('webT'); b.classList.toggle('on',webOn); b.textContent='🌐 Web: '+(webOn?'on':'off'); }; $('webT').onclick=()=>{ webOn=!webOn; ls.set('rrAIWeb',webOn); webBtn(); };
 let chats=ls.get('rrAIChats',[]), cur=null, mode=ls.get('rrAIMode','chat'), sty='', img=null, busy=false, ctrl=null;
-const trimM=x=>{ const y={role:x.role,content:x.content}; if(x.hadImg) y.hadImg=1; if(x.err) y.err=1; if(x.pic) y.pic=x.pic.length<400000?x.pic:''; return y; };
+const trimM=x=>{ const y={role:x.role,content:x.content}; if(x.src) y.src=x.src; if(x.hadImg) y.hadImg=1; if(x.err) y.err=1; if(x.pic) y.pic=x.pic.length<400000?x.pic:''; return y; };
 const save=()=>{ chats=chats.slice(0,40); ls.set('rrAIChats',chats.map(c=>({id:c.id,title:c.title,mode:c.mode,msgs:c.msgs.map(trimM)}))); };
 /* ---- markdown: bold, italic, headings, lists, links, code ---- */
 function esc(t){ return String(t).replace(/[&<>"]/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;'}[c])); }
@@ -151,7 +154,7 @@ inner.addEventListener('click',e=>{ const c=e.target.closest('[data-p]'); if(c){
 function rowHTML(m,i){ const u=m.role==='user'; let body;
   if(u) body=(m.img?`<img src="${m.img}" alt="photo">`:'')+(m.hadImg&&!m.img?'<i style="opacity:.7">📷 photo</i>\n':'')+esc(m.content);
   else if(m.pic) body=`<img src="${m.pic}" alt="${esc(m.content)}"><div class="acts"><a href="${m.pic}" download="rink-rivals-ai.jpg"><button>⬇ Save picture</button></a></div>`;
-  else body=md(m.content)+`<div class="acts"><button data-a="copy">📋 Copy</button><button data-a="say">🔊 Read</button>${i===cur.msgs.length-1?'<button data-a="retry">🔁 Retry</button>':''}</div>`;
+  else body=md(m.content)+(m.src&&m.src.length?`<div class="srcs">🔎 Sources: ${m.src.map((x,i)=>`<a href="${esc(x.u)}" target="_blank" rel="noopener" title="${esc(x.t)}">${i+1}. ${esc(x.t)}</a>`).join('')}</div>`:'')+`<div class="acts"><button data-a="copy">📋 Copy</button><button data-a="say">🔊 Read</button>${i===cur.msgs.length-1?'<button data-a="retry">🔁 Retry</button>':''}</div>`;
   return `<div class="row ${u?'u':'a'}" data-i="${i}"><div class="av">${u?'🙂':'🤖'}</div><div class="m">${body}</div></div>`; }
 function render(){ if(!cur||!cur.msgs.length){ hello(); return; } inner.innerHTML=cur.msgs.map(rowHTML).join(''); log.scrollTop=log.scrollHeight; }
 function drawChats(){ $('chats').innerHTML=chats.length?chats.map(c=>`<div class="ch ${cur&&c.id===cur.id?'on':''}" data-c="${c.id}"><span>${c.mode==='image'?'🎨':'💬'}</span><span class="t">${esc(c.title||'New chat')}</span><button class="d" data-del="${c.id}" title="Delete">🗑</button></div>`).join(''):'<div style="padding:10px;color:#64748b;font-size:13px">No chats yet</div>'; }
@@ -184,15 +187,17 @@ async function ask(){ const last=cur.msgs[cur.msgs.length-1]; if(!last||last.rol
       const r=await fetch(SERVER()+'/ai',{method:'POST',signal:ctrl.signal,headers:{'content-type':'application/json'},body:JSON.stringify({op:'image',prompt:last.content+(sty?', '+sty:''),q:qual,w:SHP[shape][0],h:SHP[shape][1]})}); const j=await r.json().catch(()=>({})); if(!r.ok||j.err) throw new Error(j.err||'The picture maker is busy');
       cur.msgs.push({role:'assistant',content:last.content,pic:j.image}); try{ window.RRCOIN&&RRCOIN.add(5,'made an AI picture',true); }catch(e){} }
     else { const msgs=cur.msgs.filter(x=>!x.pic&&!x.err).map(x=>({role:x.role,content:x.content})).slice(-16);
-      const r=await fetch(SERVER()+'/ai',{method:'POST',signal:ctrl.signal,headers:{'content-type':'application/json'},body:JSON.stringify({op:'chat',stream:true,mode:mode==='chat'?'':mode,messages:msgs,image:last.img||undefined})});
-      if(!r.ok||!/event-stream/.test(r.headers.get('content-type')||'')){ const j=await r.json().catch(()=>({})); if(j.reply){ cur.msgs.push({role:'assistant',content:j.reply}); } else throw new Error(j.err||'The AI is busy — try again'); }
-      else { const rd=r.body.getReader(), dec=new TextDecoder(); let buf='', txt=''; const am={role:'assistant',content:''}; cur.msgs.push(am); box.classList.add('cur');
+      const r=await fetch(SERVER()+'/ai',{method:'POST',signal:ctrl.signal,headers:{'content-type':'application/json'},body:JSON.stringify({op:'chat',stream:true,web:webOn&&!last.img,mode:mode==='chat'?'':mode,messages:msgs,image:last.img||undefined})});
+      if(!r.ok||!/event-stream/.test(r.headers.get('content-type')||'')){ const j=await r.json().catch(()=>({})); if(j.reply){ cur.msgs.push({role:'assistant',content:j.reply,src:j.sources||[]}); } else throw new Error(j.err||'The AI is busy — try again'); }
+      else { const rd=r.body.getReader(), dec=new TextDecoder(); let buf='', txt=''; const am={role:'assistant',content:''}; try{ const sx=r.headers.get('x-sources'); if(sx) am.src=JSON.parse(decodeURIComponent(sx)); }catch(e){} cur.msgs.push(am); if(webOn&&!last.img) box.insertAdjacentHTML('afterbegin','<div style="font-size:13px;opacity:.7">🔎 searched the web…</div>'); box.classList.add('cur');
         try{ for(;;){ const {done,value}=await rd.read(); if(done) break; buf+=dec.decode(value,{stream:true}); let k; while((k=buf.indexOf('\n'))>=0){ const line=buf.slice(0,k).trim(); buf=buf.slice(k+1); if(!line.startsWith('data:')) continue; const d=line.slice(5).trim(); if(d==='[DONE]') continue; try{ const o=JSON.parse(d); const piece=o.response!=null?o.response:(o.choices&&o.choices[0]&&o.choices[0].delta&&o.choices[0].delta.content)||''; if(piece){ txt+=piece; am.content=txt; box.innerHTML=md(txt); log.scrollTop=log.scrollHeight; } }catch(e){} } } }
         catch(e){ if(e.name!=='AbortError') throw e; }
         box.classList.remove('cur'); if(!txt){ am.content='Hmm, I could not think of an answer. Try asking another way?'; } } }
   }catch(e){ if(e.name==='AbortError'){ if(cur.msgs[cur.msgs.length-1].role==='user') cur.msgs.push({role:'assistant',content:'*(stopped)*',err:1}); } else cur.msgs.push({role:'assistant',content:'⚠️ '+e.message,err:1}); }
   save(); setBusy(false); ctrl=null; render(); drawChats(); q.focus(); }
-setMode(mode); drawChats(); render();
+setMode(mode); drawChats(); render(); webBtn();
+/* ai?q=...&web=1 — the Rivals Browser (or anything) can open the AI with a question ready */
+{ const q0=qs.get('q'); if(qs.get('web')==='1'){ webOn=true; webBtn(); } if(qs.get('mode')&&MODES.some(m=>m[0]===qs.get('mode'))) setMode(qs.get('mode')); if(q0&&!sessionStorage.getItem('rrAIq:'+q0)){ try{ sessionStorage.setItem('rrAIq:'+q0,'1'); history.replaceState(null,'',location.pathname+(webOn?'?web=1':'')); }catch(e){} cur=null; q.value=q0.slice(0,500); setTimeout(()=>{ if(!busy) send(); },300); } }
 })();
 </script>
 <script>window.RR_NOWX=1;</script><script src="site.js"></script><script src="chat.js"></script>
