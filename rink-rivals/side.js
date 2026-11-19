@@ -2,9 +2,9 @@
 (function(){ if(window.__rrSide) return; window.__rrSide=1;
   /* ---------- app sidebar (Neon Tokyo layout) on the main pages ---------- */
   try{ const pg=(location.pathname.split('/').pop()||'index').replace(/\.html$/,'')||'index';
-    const SIDE_PAGES=['index','chat','messages','ai','browser','call','clips','sports-arcade'];
+    const SIDE_PAGES=['index','chat','messages','ai','browser','call','clips','sports-arcade']; if(window.top!==window) return;
     if(SIDE_PAGES.includes(pg)&&!document.getElementById('rrSide')&&!window.RR_NOSIDE){
-      const L=[['index','🏠','Home','./'],['games','🎮','Games','./#games'],['worlds','🌍','Worlds','./#worlds'],['messages','📨','Messages','messages'],['chat','💬','Chat','chat'],['call','📞','Calls','call'],['ai','🤖','AI','ai'],['browser','🌐','Browser','browser'],['clips','📱','Clips','clips'],['sports-arcade','🏟️','Arcade','sports-arcade'],['shop','🪙','Shop','#shop']];
+      const L=[['index','🏠','Home','./'],['games','🎮','Games','./#games'],['worlds','🌍','Worlds','./#worlds'],['messages','📨','Messages','messages'],['ai','🤖','AI','ai'],['browser','🌐','Browser','browser'],['clips','📱','Clips','clips'],['sports-arcade','🏟️','Arcade','sports-arcade'],['shop','🪙','Shop','#shop']];
       const css=document.createElement('style'); css.textContent=`
 #rrSide{position:fixed;left:0;top:0;bottom:0;width:76px;z-index:2147480500;display:flex;flex-direction:column;align-items:stretch;gap:4px;padding:12px 8px;background:linear-gradient(180deg,rgba(10,6,24,.92),rgba(5,4,14,.95));border-right:1px solid color-mix(in srgb,var(--v1,#ff2d95) 35%,transparent);box-shadow:4px 0 30px color-mix(in srgb,var(--v1,#ff2d95) 14%,transparent);backdrop-filter:blur(14px);transition:width .2s;overflow:hidden;font-family:system-ui,sans-serif}
 #rrSide:hover,#rrSide.open{width:210px}
@@ -25,7 +25,7 @@ html.rr-side body{padding-left:76px!important}
 @media(max-width:760px){#rrSide{top:auto;left:0;right:0;bottom:0;width:auto!important;height:62px;flex-direction:row;padding:6px;overflow-x:auto;gap:2px;border-right:0;border-top:1px solid color-mix(in srgb,var(--v1,#ff2d95) 35%,transparent)}#rrSide .lg,#rrSide .sp,#rrSide a.it b{display:none}#rrSide a.it{flex-direction:column;gap:0;padding:4px 8px;font-size:11px}html.rr-side body{padding-left:0!important;padding-bottom:64px!important}}`;
       document.head.appendChild(css);
       const sd=document.createElement('nav'); sd.id='rrSide'; sd.setAttribute('aria-label','Arcade Rivals');
-      sd.innerHTML=`<a class="lg" href="./"><i>🏆</i><b>ARCADE RIVALS</b></a>`+L.map(([k,ic,n,h])=>`<a class="it${k===pg?' on':''}" href="${h}" data-k="${k}"><span>${ic}</span><b>${n}</b>${k==='messages'?'<em class="ub" id="rrSideUb"></em>':''}</a>`).join('')+`<div class="sp"></div><a class="it" href="#" data-k="theme"><span>🎨</span><b>Theme</b></a>`;
+      sd.innerHTML=`<a class="lg" href="./"><i>🏆</i><b>ARCADE RIVALS</b></a>`+L.map(([k,ic,n,h])=>`<a class="it${k===pg||(k==='messages'&&(pg==='chat'||pg==='call'))?' on':''}" href="${h}" data-k="${k}"><span>${ic}</span><b>${n}</b>${k==='messages'?'<em class="ub" id="rrSideUb"></em>':''}</a>`).join('')+`<div class="sp"></div><a class="it" href="#" data-k="theme"><span>🎨</span><b>Theme</b></a>`;
       const put=()=>{ document.body.appendChild(sd); document.documentElement.classList.add('rr-side'); };
       if(document.body) put(); else addEventListener('DOMContentLoaded',put);
       sd.addEventListener('click',e=>{ const a=e.target.closest('a.it'); if(!a) return;

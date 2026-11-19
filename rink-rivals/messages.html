@@ -1,6 +1,6 @@
 <!doctype html><html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
 <title>Messages — Arcade Rivals</title>
-<meta name="description" content="Arcade Rivals Messages: private chats with your friends.">
+<meta name="description" content="Arcade Rivals Messages: the everyone chat room, private chats and video calls in one app.">
 <link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'%3E%3Ctext y='.9em' font-size='90'%3E%F0%9F%93%A8%3C/text%3E%3C/svg%3E">
 <link rel="preconnect" href="https://fonts.googleapis.com"><link href="https://fonts.googleapis.com/css2?family=Big+Shoulders+Display:wght@700;900&display=swap" rel="stylesheet">
 <style>
@@ -11,6 +11,9 @@ aside{width:320px;flex:none;display:flex;flex-direction:column;background:var(--
 .top{padding:14px 14px 8px}.top a{color:#94a3b8;text-decoration:none;font-weight:700;font-size:14px}
 h1{margin:6px 0 10px;font:900 34px 'Big Shoulders Display',sans-serif;background:linear-gradient(90deg,var(--a1),var(--a2),var(--a3));-webkit-background-clip:text;background-clip:text;color:transparent}
 #find{width:100%;border:1px solid var(--line);background:rgba(15,23,42,.9);color:#fff;border-radius:12px;padding:10px 12px;font-size:15px;outline:0}#find:focus{border-color:var(--a2)}
+.tabs{display:flex;gap:6px;margin:0 0 10px}.tabs button{flex:1;border:1px solid var(--line);background:rgba(15,23,42,.8);color:#cbd5e1;border-radius:12px;padding:9px;font:800 14px system-ui;cursor:pointer}.tabs button.on{background:linear-gradient(90deg,var(--a1),var(--a2));color:#fff;border-color:transparent}
+#callF{flex:1;width:100%;border:0;background:#05070f;display:none}body.calls #callF{display:block}body.calls #log,body.calls #foot,body.calls header{display:none!important}
+.b .who{display:block;font:800 12px system-ui;margin-bottom:2px}
 .sec{font:800 11px system-ui;letter-spacing:.08em;color:#64748b;padding:12px 16px 4px}
 #list{flex:1;overflow-y:auto;padding:0 8px 12px}
 .c{display:flex;align-items:center;gap:10px;padding:9px 10px;border-radius:14px;cursor:pointer}.c:hover{background:rgba(148,163,184,.08)}.c.on{background:linear-gradient(90deg,color-mix(in srgb,var(--a2) 30%,transparent),transparent)}
@@ -41,11 +44,13 @@ footer{padding:12px 16px 16px;border-top:1px solid var(--line)}
 .warn{background:rgba(234,179,8,.12);border:1px solid rgba(234,179,8,.35);color:#fde68a;font-size:13px;border-radius:12px;padding:8px 12px;margin:0 8px 8px}
 @media(max-width:760px){aside{width:100%}main{display:none}body.chat aside{display:none}body.chat main{display:flex}#back{display:block}.b{max-width:85%}}
 </style></head><body>
-<aside><div class="top"><a href="./">← Arcade Rivals</a><h1>📨 Messages</h1><input id="find" placeholder="Search people online or chats…" autocomplete="off"></div>
+<aside><div class="top"><a href="./">← Arcade Rivals</a><h1>📨 Messages</h1><div class="tabs"><button data-tab="chats" class="on">💬 Chats</button><button data-tab="calls">📞 Calls</button></div><input id="find" placeholder="Search people online or chats…" autocomplete="off"></div>
+  <div id="callsSide" style="display:none;padding:0 14px;color:#94a3b8;font-size:14px;line-height:1.5"><p>📹 <b>Group call</b> — one big video call for everyone on the site.</p><p>📞 <b>Call someone</b> — ring anyone who is online from the list on the right.</p><p>🎮 You can even play a game together while you talk.</p></div>
   <div class="warn">🛡️ For everyone's safety, the site admin can see private messages. Be kind, and never share personal info.</div>
   <div id="list"></div></aside>
 <main><header><button id="back">←</button><div class="av" id="hAv" style="display:none"></div><div><div class="nm" id="hNm">Pick a chat</div><div class="st" id="hSt"></div></div></header>
-  <div id="log"><div class="empty"><div class="big">💬</div><h2>Your messages</h2><p>Pick someone on the left to start a private chat. People who are online show a green dot. Messages wait for people who are offline.</p></div></div>
+  <div id="log"><div class="empty"><div class="big">💬</div><h2>Your messages</h2><p>Pick <b>🌍 Everyone</b> to talk with the whole site, pick a person for a private chat, or open <b>📞 Calls</b> for video calls.</p></div></div>
+  <iframe id="callF" title="Calls" allow="camera; microphone; fullscreen; autoplay; display-capture"></iframe>
   <footer id="foot" style="display:none"><div class="emo" id="emo"></div><div class="bar"><input id="q" maxlength="300" placeholder="Message…" autocomplete="off"><button class="ib" id="send" title="Send">➤</button></div><div class="note" id="stat">Connecting…</div></footer></main>
 <script>
 (()=>{
@@ -61,22 +66,23 @@ const get=(id,nm)=>{ let t=T[id]; if(!t){ t=T[id]={id,name:nm||'Player',msgs:[],
 const online=id=>roster.some(r=>r.id===id);
 const fmtT=ts=>{ const d=new Date(ts), n=new Date(); return d.toDateString()===n.toDateString()?d.toLocaleTimeString([], {hour:'numeric',minute:'2-digit'}):d.toLocaleDateString([], {month:'short',day:'numeric'}); };
 function drawList(){ const q=$('find').value.trim().toLowerCase(), me=roster.find(r=>r.me);
-  const chats=Object.values(T).filter(t=>t.msgs.length&&(!q||t.name.toLowerCase().includes(q))).sort((a,b)=>(b.msgs[b.msgs.length-1].ts)-(a.msgs[a.msgs.length-1].ts));
+  const chats=Object.values(T).filter(t=>t.id!=='__all'&&t.msgs.length&&(!q||t.name.toLowerCase().includes(q))).sort((a,b)=>(b.msgs[b.msgs.length-1].ts)-(a.msgs[a.msgs.length-1].ts));
   const ppl=roster.filter(r=>!r.me&&!(T[r.id]&&T[r.id].msgs.length)&&(!q||r.name.toLowerCase().includes(q)));
   const row=(id,nm,sub,tm,ub)=>`<div class="c ${cur&&cur.id===id?'on':''}" data-id="${esc(id)}" data-nm="${esc(nm)}"><div class="av" style="background:${col(nm)}">${esc((nm[0]||'?').toUpperCase())}${online(id)?'<span class="dot"></span>':''}</div><div class="t"><b>${esc(nm)}</b><small>${sub}</small></div>${ub?`<span class="ub">${ub}</span>`:tm?`<span class="tm">${tm}</span>`:''}</div>`;
-  $('list').innerHTML=(chats.length?'<div class="sec">CHATS</div>'+chats.map(t=>{ const l=t.msgs[t.msgs.length-1]; return row(t.id,t.name,(l.mine?'You: ':'')+esc(l.text),fmtT(l.ts),t.unread); }).join(''):'')+
+  const all=T.__all, al=all&&all.msgs[all.msgs.length-1];
+  $('list').innerHTML=(!q||'everyone'.includes(q)?'<div class="sec">PUBLIC</div>'+`<div class="c ${cur&&cur.id==='__all'?'on':''}" data-id="__all" data-nm="Everyone"><div class="av" style="background:linear-gradient(135deg,var(--a1),var(--a3))">🌍</div><div class="t"><b>Everyone</b><small>${al?esc(al.from)+': '+esc(al.text):roster.length+' online · the site-wide chat room'}</small></div>${all&&all.unread?`<span class="ub">${all.unread}</span>`:''}</div>`:'')+(chats.length?'<div class="sec">CHATS</div>'+chats.map(t=>{ const l=t.msgs[t.msgs.length-1]; return row(t.id,t.name,(l.mine?'You: ':'')+esc(l.text),fmtT(l.ts),t.unread); }).join(''):'')+
     (ppl.length?'<div class="sec">ONLINE NOW — START A CHAT</div>'+ppl.map(r=>row(r.id,r.name,'🟢 '+esc(r.game==='home'?'on the home page':'playing '+r.game),'',0)).join(''):'')+
     (!chats.length&&!ppl.length?'<div class="sec">'+(q?'Nobody found':'Nobody else is online right now')+'</div>':'');
   document.title=(Object.values(T).reduce((a,t)=>a+t.unread,0)?'('+Object.values(T).reduce((a,t)=>a+t.unread,0)+') ':'')+'Messages — Arcade Rivals'; }
-function drawChat(){ if(!cur) return; const t=T[cur.id]||get(cur.id,cur.name); t.unread=0; $('hAv').style.display=''; $('hAv').style.background=col(t.name); $('hAv').innerHTML=esc((t.name[0]||'?').toUpperCase())+(online(t.id)?'<span class="dot"></span>':''); $('hNm').textContent=t.name; const r=roster.find(x=>x.id===t.id); $('hSt').textContent=r?'🟢 Online · '+(r.game==='home'?'home page':r.game):'Offline — they will get your message next time they come on'; $('foot').style.display='';
-  let html='', lastDay=''; for(const m of t.msgs){ const d=new Date(m.ts).toDateString(); if(d!==lastDay){ html+=`<div class="day">${d===new Date().toDateString()?'Today':new Date(m.ts).toLocaleDateString([], {weekday:'long',month:'short',day:'numeric'})}</div>`; lastDay=d; } html+=`<div class="b ${m.mine?'me':'th'}">${esc(m.text)}<span class="ts">${new Date(m.ts).toLocaleTimeString([], {hour:'numeric',minute:'2-digit'})}</span></div>`; }
+function drawChat(){ if(!cur) return; const t=T[cur.id]||get(cur.id,cur.name); t.unread=0; $('hAv').style.display=''; $('hAv').style.background=col(t.name); $('hAv').innerHTML=t.id==='__all'?'🌍':esc((t.name[0]||'?').toUpperCase())+(online(t.id)?'<span class="dot"></span>':''); if(t.id==='__all') $('hAv').style.background='linear-gradient(135deg,var(--a1),var(--a3))'; $('hNm').textContent=t.name; const r=roster.find(x=>x.id===t.id); $('hSt').textContent=t.id==='__all'?`🌍 ${roster.length} online · be kind, no personal info`:r?'🟢 Online · '+(r.game==='home'?'home page':r.game):'Offline — they will get your message next time they come on'; $('foot').style.display='';
+  let html='', lastDay=''; for(const m of t.msgs){ const d=new Date(m.ts).toDateString(); if(d!==lastDay){ html+=`<div class="day">${d===new Date().toDateString()?'Today':new Date(m.ts).toLocaleDateString([], {weekday:'long',month:'short',day:'numeric'})}</div>`; lastDay=d; } html+=`<div class="b ${m.mine?'me':'th'}">${t.id==='__all'&&!m.mine?`<span class="who" style="color:hsl(${[...String(m.from)].reduce((a,c)=>a*31+c.charCodeAt(0)>>>0,0)%360} 80% 72%)">${esc(m.from)}${m.tag?' '+esc(m.tag):''}</span>`:''}${esc(m.text)}<span class="ts">${new Date(m.ts).toLocaleTimeString([], {hour:'numeric',minute:'2-digit'})}</span></div>`; }
   $('log').innerHTML=html||`<div class="empty"><div class="big">👋</div><p>Say hi to ${esc(t.name)}!</p></div>`; $('log').scrollTop=1e9; drawList(); }
 function openChat(id,nm){ cur={id,name:nm}; get(id,nm); document.body.classList.add('chat'); drawChat(); setTimeout(()=>$('q').focus(),30); }
 $('list').onclick=e=>{ const c=e.target.closest('[data-id]'); if(c) openChat(c.dataset.id,c.dataset.nm); };
 $('back').onclick=()=>{ document.body.classList.remove('chat'); cur=null; drawList(); };
 $('find').oninput=drawList;
 $('emo').innerHTML=['👋','😂','🔥','👍','🎮','🏆','😎','❤️','😮','GG'].map(e=>`<button>${e}</button>`).join(''); $('emo').onclick=e=>{ const b=e.target.closest('button'); if(b){ $('q').value+=(($('q').value&&!/\s$/.test($('q').value))?' ':'')+b.textContent; $('q').focus(); } };
-function send(){ const t=$('q').value.trim(); if(!t||!cur) return; if(!name){ const n=prompt('Pick a name to chat with:'); if(!n) return; name=n.slice(0,16); ls.set('rrOnlineName',name); if(ws){ ws.close(); } return; } if(!ws||ws.readyState!==1){ $('stat').textContent='Not connected yet — try again in a second.'; return; } ws.send(JSON.stringify({t:'dm',to:cur.id,toName:cur.name,text:t})); $('q').value=''; }
+function send(){ const t=$('q').value.trim(); if(!t||!cur) return; if(!name){ const n=prompt('Pick a name to chat with:'); if(!n) return; name=n.slice(0,16); ls.set('rrOnlineName',name); if(ws){ ws.close(); } return; } if(!ws||ws.readyState!==1){ $('stat').textContent='Not connected yet — try again in a second.'; return; } ws.send(JSON.stringify(cur.id==='__all'?{t:'say',text:t}:{t:'dm',to:cur.id,toName:cur.name,text:t})); $('q').value=''; }
 $('send').onclick=send; $('q').onkeydown=e=>{ if(e.key==='Enter'){ e.preventDefault(); send(); } };
 function connect(){ try{ ws=new WebSocket(URL_WS); }catch(e){ return setTimeout(connect,3000); }
   ws.onopen=()=>{ retry=0; ws.send(JSON.stringify({t:'hello',name:name||'Player',pid,game:'messages'})); $('stat').textContent='🔒 Private chat · the admin can see messages for safety'; clearInterval(connect.p); connect.p=setInterval(()=>{ try{ ws.send('{"t":"ping"}'); }catch(e){} },45000); };
@@ -85,10 +91,17 @@ function connect(){ try{ ws=new WebSocket(URL_WS); }catch(e){ return setTimeout(
     else if(m.t==='you'){ name=m.name; ls.set('rrOnlineName',name); }
     else if(m.t==='dmhist'){ for(const t of Object.values(T)) t.msgs=[]; for(const x of m.list||[]){ const key=x.self?x.to:x.from, t=get(key,x.self?x.toName:x.fromName); t.msgs.push({mine:!!x.self,text:x.text,ts:x.ts}); if(x.unseen) t.unread++; } drawList(); if(cur) drawChat(); }
     else if(m.t==='dm'){ const key=m.self?m.to:m.from, t=get(key,m.self?m.toName:m.fromName); t.msgs.push({mine:!!m.self,text:m.text,ts:m.ts||Date.now()}); if(!m.self&&!(cur&&cur.id===key)){ t.unread++; try{ const A=new AudioContext(), o=A.createOscillator(), g=A.createGain(); o.frequency.value=880; g.gain.value=.06; o.connect(g); g.connect(A.destination); o.start(); o.stop(A.currentTime+.12); setTimeout(()=>A.close(),400); }catch(e){} } drawList(); if(cur&&cur.id===key) drawChat(); }
+    else if(m.t==='hist'){ const a=get('__all','Everyone'); a.msgs=(m.m||[]).map(x=>({mine:x.name===name,from:x.name,tag:x.tag,text:x.text,ts:x.ts,id:x.id})); drawList(); if(cur&&cur.id==='__all') drawChat(); }
+    else if(m.t==='msg'){ const a=get('__all','Everyone'), x=m.m; if(a.msgs.some(y=>y.id===x.id)) return; a.msgs.push({mine:x.name===name,from:x.name,tag:x.tag,text:x.text,ts:x.ts||Date.now(),id:x.id}); if(a.msgs.length>150) a.msgs.shift(); if(!(cur&&cur.id==='__all')&&x.name!==name) a.unread++; drawList(); if(cur&&cur.id==='__all') drawChat(); }
+    else if(m.t==='del'){ const a=T.__all; if(a){ a.msgs=a.msgs.filter(y=>y.id!==m.id); if(cur&&cur.id==='__all') drawChat(); } }
     else if(m.t==='sys'&&m.text){ $('stat').textContent='⚠️ '+m.text; }
     else if(m.t==='kicked'){ $('stat').textContent='You are not allowed to chat right now.'; } };
   ws.onclose=()=>{ $('stat').textContent='Reconnecting…'; setTimeout(connect,Math.min(15000,1500*(++retry))); }; }
 connect(); drawList();
+/* Chats / Calls tabs */
+function tab(k){ document.querySelectorAll('[data-tab]').forEach(b=>b.classList.toggle('on',b.dataset.tab===k)); document.body.classList.toggle('calls',k==='calls'); $('callsSide').style.display=k==='calls'?'':'none'; $('list').style.display=$('find').style.display=k==='calls'?'none':''; if(k==='calls'){ const f=$('callF'); if(!f.src){ const g=new URLSearchParams(location.search).get('group'); f.src='call?embed=1'+(g?'&group='+g:''); } document.body.classList.add('chat'); } else if(!cur) document.body.classList.remove('chat'); }
+document.querySelectorAll('[data-tab]').forEach(b=>b.onclick=()=>tab(b.dataset.tab));
+{ const P=new URLSearchParams(location.search); if(P.get('tab')==='calls'||P.get('group')) tab('calls'); else if(P.get('tab')==='everyone') setTimeout(()=>openChat('__all','Everyone'),300); }
 const want=new URLSearchParams(location.search).get('to'); if(want){ const [id,nm]=want.split(':'); if(id) setTimeout(()=>openChat(id,decodeURIComponent(nm||'Player')),600); }
 })();
 </script>
