@@ -29,7 +29,7 @@ window.SA3D=function(opt){
       if(ax==='z'){ const nx=x*c-y*s, ny=x*s+y*c; x=nx; y=ny; } else if(ax==='x'){ const ny=y*c-z*s, nz=y*s+z*c; y=ny; z=nz; } else { const nx=x*c+z*s, nz=-x*s+z*c; x=nx; z=nz; }
       J[k]=[x+pivot[0],y+pivot[1],z+pivot[2]]; } }
   /* ---- static scenery (built once) ---- */
-  function setStatic(fn,chunk){ R3.setStatic((g,c,Pp)=>{ const {primBox,primCyl,T:Tm,S:Sm,mm:M,RY:Ry,RX:Rx,RZ:Rz}=Pp, B=primBox(), CY=primCyl(12);
+  function setStatic(fn,chunk){ R3.setStatic((g,c,Pp)=>{ const {primBox,primCyl,T:Tm,S:Sm,mm:M,RY:Ry,RX:Rx,RZ:Rz}=Pp, B=primBox(), CY=primCyl(24);
     const sb=(x,y,z,w,h,d,col,ry)=>g.add(B,ry?M(Tm(x*K,y*K,z*K),Ry(ry),Sm(w*K,h*K,d*K)):M(Tm(x*K,y*K,z*K),Sm(w*K,h*K,d*K)),col);
     const sc=(x,y,z,r,h,col)=>g.add(CY,M(Tm(x*K,y*K,z*K),Sm(r*K,h*K,r*K)),col);
     const sbR=(x,y,z,w,h,d,col,ry,rx,rz)=>g.add(B,M(Tm(x*K,y*K,z*K),Ry(ry||0),Rx(rx||0),Rz(rz||0),Sm(w*K,h*K,d*K)),col);
