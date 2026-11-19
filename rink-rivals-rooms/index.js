@@ -18,8 +18,14 @@ async function rrAI(req,env,RCF){
     const prompt=String(b.prompt||'').slice(0,400).trim(); if(prompt.length<3) return J({err:'Describe the picture you want'},400);
     if(AI_BLOCK.test(prompt)) return J({err:"I can't make that picture — try something else!"},400);
     if(!aiRate(ip,'img',8,3600000)) return J({err:'Picture limit reached — try again in a bit (8 an hour)'},429);
-    try{ const r=await env.AI.run('@cf/black-forest-labs/flux-1-schnell',{prompt:prompt+', colorful, family friendly, high quality',steps:6}); if(!r||!r.image) return J({err:'The picture maker is busy, try again'},502); return J({image:'data:image/jpeg;base64,'+r.image}); }
-    catch(e){ return J({err:'The picture maker is busy, try again'},502); }
+    const P=prompt+', family friendly, high quality, detailed', hd=b.q==='hd', W=[1024,768,1344].includes(+b.w)?+b.w:1024, Hh=[1024,768,1344].includes(+b.h)?+b.h:1024;
+    const tries=hd?[['@cf/leonardo/lucid-origin',{prompt:P,width:W,height:Hh,steps:30}],['@cf/leonardo/phoenix-1.0',{prompt:P,width:W,height:Hh,num_steps:25}],['@cf/black-forest-labs/flux-1-schnell',{prompt:P,steps:8}]]:[['@cf/black-forest-labs/flux-1-schnell',{prompt:P,steps:6}]];
+    let why='';
+    for(const [m,inp] of tries){ try{ const r=await env.AI.run(m,inp); let img=null;
+        if(r&&r.image) img='data:image/jpeg;base64,'+r.image;
+        else if(r instanceof ReadableStream||(r&&typeof r.getReader==='function')){ const buf=new Uint8Array(await new Response(r).arrayBuffer()); let bin=''; for(let i=0;i<buf.length;i+=8192) bin+=String.fromCharCode.apply(null,buf.subarray(i,i+8192)); img='data:image/png;base64,'+btoa(bin); }
+        if(img) return J({image:img,model:m.split('/').pop()}); }catch(e){ why=String(e&&e.message||e).slice(0,160); } }
+    return J({err:'The picture maker is busy, try again',why},502);
   }
   if(op!=='chat') return J({err:'bad'},400);
   if(!aiRate(ip,'chat',40,600000)) return J({err:'Slow down a little — try again in a few minutes'},429);

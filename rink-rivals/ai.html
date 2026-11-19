@@ -116,10 +116,11 @@ function md(src){ const parts=String(src).split(/```/); let out='';
   return out; }
 /* ---- UI ---- */
 $('modes').innerHTML=MODES.map(([k,l])=>`<button data-m="${k}">${l}</button>`).join('');
-$('styles').innerHTML=STY.map(([v,l],i)=>`<button data-s="${i}" class="${i?'':'on'}">${l}</button>`).join('');
+$('styles').innerHTML=STY.map(([v,l],i)=>`<button data-s="${i}" class="${i?'':'on'}">${l}</button>`).join('')+'<span style="width:10px"></span>'+[['hd','💎 HD'],['fast','⚡ Fast']].map(([k,l])=>`<button data-qq="${k}" class="${k==='hd'?'on':''}">${l}</button>`).join('')+'<span style="width:10px"></span>'+[['sq','⬛ Square'],['wide','▬ Wide'],['tall','▮ Tall']].map(([k,l])=>`<button data-sh="${k}" class="${k==='sq'?'on':''}">${l}</button>`).join('');
+let qual='hd', shape='sq'; const SHP={sq:[1024,1024],wide:[1344,768],tall:[768,1344]};
 function setMode(m){ mode=m; ls.set('rrAIMode',m); document.querySelectorAll('#modes button').forEach(b=>b.classList.toggle('on',b.dataset.m===m)); $('styles').style.display=m==='image'?'flex':'none'; $('cam').style.display=m==='image'?'none':''; q.placeholder=m==='image'?'Describe the picture you want…':m==='quiz'?'Say what to be quizzed on, or answer the question…':'Ask anything, or send a photo of a question…'; if(m==='image') setImg(null); if(!cur||!cur.msgs.length) hello(); }
 $('modes').onclick=e=>{ const b=e.target.closest('[data-m]'); if(b){ setMode(b.dataset.m); q.focus(); } };
-$('styles').onclick=e=>{ const b=e.target.closest('[data-s]'); if(!b) return; sty=STY[+b.dataset.s][0]; document.querySelectorAll('#styles button').forEach(x=>x.classList.toggle('on',x===b)); };
+$('styles').onclick=e=>{ const qq=e.target.closest('[data-qq]'); if(qq){ qual=qq.dataset.qq; document.querySelectorAll('[data-qq]').forEach(x=>x.classList.toggle('on',x===qq)); return; } const sh=e.target.closest('[data-sh]'); if(sh){ shape=sh.dataset.sh; document.querySelectorAll('[data-sh]').forEach(x=>x.classList.toggle('on',x===sh)); return; } const b=e.target.closest('[data-s]'); if(!b) return; sty=STY[+b.dataset.s][0]; document.querySelectorAll('#styles [data-s]').forEach(x=>x.classList.toggle('on',x===b)); };
 function hello(){ inner.innerHTML=`<div class="hello"><div class="big">🤖</div><h2>${mode==='image'?'What should I draw?':'Hi! How can I help?'}</h2><div>${mode==='image'?'Describe anything — pick a style below the box.':'Ask anything, <b>send a photo</b> of a question 📷, or <b>talk</b> 🎤. Pick a helper up top.'}</div><div class="cards">${(START[mode]||START.chat).map(([t,p])=>`<button data-p="${esc(p)}"><b>${t}</b>${esc(p)}</button>`).join('')}</div></div>`; }
 inner.addEventListener('click',e=>{ const c=e.target.closest('[data-p]'); if(c){ const p=c.dataset.p; if(p.startsWith('(')){ $('cam').click(); return; } q.value=p; send(); return; }
   const cp=e.target.closest('.cp'); if(cp){ navigator.clipboard&&navigator.clipboard.writeText(cp.nextElementSibling.textContent); cp.textContent='Copied!'; setTimeout(()=>cp.textContent='Copy',1200); return; }
@@ -159,8 +160,8 @@ async function ask(){ const last=cur.msgs[cur.msgs.length-1]; if(!last||last.rol
   const row=document.createElement('div'); row.className='row a'; row.innerHTML='<div class="av">🤖</div><div class="m"><span class="dots"><span></span><span></span><span></span></span></div>'; inner.appendChild(row); log.scrollTop=log.scrollHeight; const box=row.querySelector('.m');
   ctrl=new AbortController();
   try{
-    if(mode==='image'){ box.insertAdjacentHTML('beforeend',' <span style="font-size:13px;opacity:.7">drawing…</span>');
-      const r=await fetch(SERVER()+'/ai',{method:'POST',signal:ctrl.signal,headers:{'content-type':'application/json'},body:JSON.stringify({op:'image',prompt:last.content+(sty?', '+sty:'')})}); const j=await r.json().catch(()=>({})); if(!r.ok||j.err) throw new Error(j.err||'The picture maker is busy');
+    if(mode==='image'){ box.insertAdjacentHTML('beforeend',` <span style="font-size:13px;opacity:.7">${qual==='hd'?'painting in HD… (about 10–20 s)':'drawing…'}</span>`);
+      const r=await fetch(SERVER()+'/ai',{method:'POST',signal:ctrl.signal,headers:{'content-type':'application/json'},body:JSON.stringify({op:'image',prompt:last.content+(sty?', '+sty:''),q:qual,w:SHP[shape][0],h:SHP[shape][1]})}); const j=await r.json().catch(()=>({})); if(!r.ok||j.err) throw new Error(j.err||'The picture maker is busy');
       cur.msgs.push({role:'assistant',content:last.content,pic:j.image}); try{ window.RRCOIN&&RRCOIN.add(5,'made an AI picture',true); }catch(e){} }
     else { const msgs=cur.msgs.filter(x=>!x.pic&&!x.err).map(x=>({role:x.role,content:x.content})).slice(-16);
       const r=await fetch(SERVER()+'/ai',{method:'POST',signal:ctrl.signal,headers:{'content-type':'application/json'},body:JSON.stringify({op:'chat',stream:true,mode:mode==='chat'?'':mode,messages:msgs,image:last.img||undefined})});
