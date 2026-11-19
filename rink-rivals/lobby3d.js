@@ -118,6 +118,12 @@
   /* ---------- scene ---------- */
   const parts=Array.from({length:110},()=>({x:(R()-.5)*19,y:R()*6.2,z:-7.6+R()*14,v:.04+R()*.12,ph:R()*6.3,s:.012+R()*.02}));
   const spots=[{x:-5,z:-3,c:'34,211,238',sp:.23,ph:0},{x:5,z:-3,c:'244,63,94',sp:.19,ph:2},{x:-1.5,z:0,c:'168,85,247',sp:.27,ph:4},{x:2,z:-6,c:'251,191,36',sp:.15,ph:1}];
+  /* tall neon street signs for the side walls (Neon Tokyo look) */
+  function neonSign(words,col,col2){ const c=document.createElement('canvas'); c.width=180; c.height=620; const g=c.getContext('2d'); g.fillStyle='rgba(8,4,20,.92)'; g.fillRect(0,0,180,620); g.strokeStyle=col; g.lineWidth=8; g.shadowColor=col; g.shadowBlur=22; g.strokeRect(10,10,160,600);
+    g.textAlign='center'; g.textBaseline='middle'; const step=560/words.length; words.forEach((w,i)=>{ g.font=`900 ${w.length>2?58:92}px ${FONT}`; g.shadowColor=i%2?col2:col; g.shadowBlur=26; g.fillStyle=i%2?col2:col; g.fillText(w,90,40+step*(i+.5)); g.shadowBlur=6; g.fillStyle='#fff'; g.globalAlpha=.55; g.fillText(w,90,40+step*(i+.5)); g.globalAlpha=1; }); return c; }
+  const NS=[[neonSign(['G','A','M','E'],'#ff2d95','#00e5ff'),-9.96,-6.6,'#ff2d95'],[neonSign(['24','H','R'],'#00e5ff','#ffe600'),-9.96,-2.4,'#00e5ff'],[neonSign(['W','I','N'],'#9d4dff','#ff2d95'),-9.96,1.8,'#9d4dff'],
+            [neonSign(['P','L','A','Y'],'#00e5ff','#ff2d95'),9.96,-6.6,'#00e5ff'],[neonSign(['V','S'],'#ffe600','#ff2d95'),9.96,-2.4,'#ffe600'],[neonSign(['1','U','P'],'#ff2d95','#9d4dff'),9.96,1.8,'#ff2d95']];
+  function neonWalls(t){ for(const [img,x,z,col] of NS){ const fl=(Math.sin(t*29+z*3)>.992)?.45:1; const a=x<0?V(x,5.4,z):V(x,5.4,z+1.4), b=x<0?V(x,5.4,z+1.4):V(x,5.4,z), c2=x<0?V(x,1.3,z+1.4):V(x,1.3,z), d=x<0?V(x,1.3,z):V(x,1.3,z+1.4); quadImg(img,a,b,c2,d,6,fl); } }
   function scene(t){
     ctx.globalCompositeOperation='source-over';
     /* room shell */
@@ -127,6 +133,7 @@
     poly([V(-10,0,-8),V(10,0,-8),V(10,6.5,-8),V(-10,6.5,-8)],g);
     for(let x=-9;x<=9;x+=1.5) line(V(x,0,-7.99),V(x,6.5,-7.99),'rgba(120,110,200,.08)',1);
     poly([V(-10,0,-8),V(-10,0,8),V(-10,6.5,8),V(-10,6.5,-8)],'#07081a'); poly([V(10,0,-8),V(10,6.5,-8),V(10,6.5,8),V(10,0,8)],'#07081a');
+    try{ neonWalls(t); }catch(e){}
     /* floor */
     poly([V(-10,0,-8),V(10,0,-8),V(10,0,8),V(-10,0,8)],'#05040c');
     ctx.lineWidth=1; for(let x=-10;x<=10;x+=1) line(V(x,0,-8),V(x,0,8),'rgba(34,211,238,.10)'); for(let z=-8;z<=8;z+=1) line(V(-10,0,z),V(10,0,z),'rgba(168,85,247,.10)');
