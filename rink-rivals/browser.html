@@ -43,6 +43,11 @@ h3{font:900 24px 'Big Shoulders Display',sans-serif;margin:24px 0 10px;color:#f1
 .card button{border:0;border-radius:10px;padding:7px 12px;font-weight:800;cursor:pointer}
 .play{background:#22c55e;color:#052e16}.fav{background:#1e293b;color:#e2e8f0}
 .msg{color:#94a3b8;text-align:center;padding:20px}
+.src{display:inline-flex;gap:4px;background:#0f172a;border:1px solid #33405f;border-radius:999px;padding:4px;margin:0 auto 12px}
+.src button{border:0;background:none;color:#cbd5e1;padding:7px 14px;border-radius:999px;font-weight:800;cursor:pointer}.src button.on{background:linear-gradient(90deg,#2563eb,#7c3aed);color:#fff}
+.card .th{height:120px;margin:-14px -14px 4px;border-radius:16px 16px 0 0;background:#0b1020 center/cover no-repeat}
+.card .err{font-size:12px;color:#fca5a5}
+.hist{display:flex;flex-direction:column;gap:6px}.hist a{display:flex;gap:10px;padding:10px 12px;border-radius:12px;background:#141b2e;color:#e2e8f0;text-decoration:none;cursor:pointer}.hist a:hover{background:#1b2440}.hist small{color:#94a3b8;margin-left:auto}
 .tip{position:absolute;right:12px;bottom:12px;background:rgba(15,23,42,.92);border:1px solid #33405f;border-radius:12px;padding:8px 12px;font-size:13px;color:#cbd5e1;max-width:360px;z-index:2}
 .tip button{margin-left:8px;border:0;background:#2563eb;color:#fff;border-radius:8px;padding:4px 9px;cursor:pointer}
 </style></head><body>
@@ -50,7 +55,7 @@ h3{font:900 24px 'Big Shoulders Display',sans-serif;margin:24px 0 10px;color:#f1
 <div id="bar"><a class="brand" href="./" title="Back to Arcade Rivals">Rivals</a>
   <button id="back" title="Back">←</button><button id="fwd" title="Forward">→</button><button id="rel" title="Reload">⟳</button><button id="hm" title="Home">🏠</button>
   <input id="url" placeholder="Search GitHub games or type a web address" autocomplete="off" spellcheck="false">
-  <button id="star" title="Save to favourites">☆</button><button id="full" title="Full screen">⛶</button><button id="ext" title="Open in a new browser tab">↗</button></div>
+  <button id="histB" title="History">🕘</button><button id="star" title="Save to favourites">☆</button><button id="full" title="Full screen">⛶</button><button id="ext" title="Open in a new browser tab">↗</button></div>
 <div id="view"></div>
 <script>
 (()=>{
@@ -79,6 +84,13 @@ const SRV=()=>{ try{ if(localStorage.getItem('rrSrv')==='relay') return location
 /* ask the server which pages allow being shown inside another site, so only games that will actually load are listed */
 async function frameable(urls){ const out={}; for(let i=0;i<urls.length;i+=30){ const part=urls.slice(i,i+30); try{ const r=await fetch(SRV()+'/fc?'+part.map(u=>'u='+encodeURIComponent(u)).join('&')); Object.assign(out,await r.json()); }catch(e){ for(const u of part) out[u]=true; } } return out; }
 function fcard(f){ return `<div class="card"><div class="n">${f[0]} ${esc(f[1])}</div><div class="o">${esc(new URL(f[3]).hostname.replace(/^www\./,''))}</div><div class="d">${esc(f[2])}</div><div class="r"><span class="sp"></span><button class="fav" data-fav='${esc(JSON.stringify({n:f[1],u:f[3],d:f[2],o:'',av:'',s:0}))}'>${isFav(f[3])?'★':'☆'}</button>${f[5]==='tab'?`<button class="play" data-ext="${esc(f[3])}" title="This one only plays in its own tab">↗ Play</button>`:`<button class="play" data-go="${esc(f[3])}" data-t="${esc(f[1])}">▶ Play</button>`}</div></div>`; }
+const ITAGS=[['🏃 Platformer','platformer'],['🧩 Puzzle','puzzle'],['🏎️ Racing','racing'],['👾 Arcade','arcade'],['😌 Casual','casual'],['🔫 Shooter','shooter'],['⚽ Sports','sports'],['🎨 Pixel art','pixel-art'],['👥 Multiplayer','multiplayer'],['🏃 Endless runner','endless-runner'],['🃏 Card game','card-game'],['🧠 Strategy','strategy']];
+const srcPref=()=>{ try{ return localStorage.getItem('rbSrc')||'itch'; }catch(e){ return 'itch'; } };
+async function itchList(o){ const key='rbi:'+JSON.stringify(o); try{ const c=JSON.parse(sessionStorage.getItem(key)||'null'); if(c&&Date.now()-c.t<6e5) return c.r; }catch(e){}
+  const r=await fetch(SRV()+'/itch?'+(o.q?'q='+encodeURIComponent(o.q):o.tag?'tag='+encodeURIComponent(o.tag):'')); const j=await r.json(); const g=j.games||[]; try{ sessionStorage.setItem(key,JSON.stringify({t:Date.now(),r:g})); }catch(e){} return g; }
+function icard(g){ return `<div class="card"><div class="th" style="background-image:url('${esc(g.img)}')"></div><div class="n" title="${esc(g.t)}">🕹️ ${esc(g.t)}</div><div class="o">itch.io${g.by?' · '+esc(g.by):''}</div><div class="d">${esc(g.d||'A free web game on itch.io')}</div><div class="r"><span class="sp"></span><button class="fav" data-ext="${esc(g.u)}" title="Open the itch.io page">↗</button><button class="play" data-itch="${esc(g.u)}" data-t="${esc(g.t)}">▶ Play</button></div></div>`; }
+const hist=()=>{ try{ return JSON.parse(localStorage.getItem('rbHist')||'[]'); }catch(e){ return []; } };
+function addHist(u,title){ if(u.startsWith('rivals://')) return; try{ const h=hist().filter(x=>x.u!==u); h.unshift({u,t:title||u,at:Date.now()}); localStorage.setItem('rbHist',JSON.stringify(h.slice(0,80))); }catch(e){} }
 const CATS=[['🔥 Popular','browser game'],['🏃 Platformer','platformer game'],['🧩 Puzzle','puzzle game'],['🏎️ Racing','racing game'],['🚀 Shooter','shooter game'],['🔢 2048','2048 game'],['🟦 Tetris','tetris'],['🐍 Snake','snake game'],['♟️ Chess','chess game'],['🖱️ Clicker','idle clicker game'],['🧱 Voxel','voxel game javascript'],['👾 Retro','retro arcade game']];
 let tabs=[], cur=null, tid=0;
 /* where a GitHub repo can be played: its homepage, or its GitHub Pages site */
@@ -95,38 +107,50 @@ const favs=()=>ls.get('rbFav',[]), isFav=u=>favs().some(f=>f.u===u);
 function toggleFav(g){ let f=favs(); f=isFav(g.u)?f.filter(x=>x.u!==g.u):[{n:g.n,o:g.o||'',av:g.av||'',d:g.d||'',s:g.s||0,u:g.u},...f].slice(0,60); ls.set('rbFav',f); }
 /* ---- the home page ---- */
 function homeEl(t){ const el=document.createElement('div'); el.className='home'; el.innerHTML=`<div class="wrap"><div class="hero"><h1>🌐 Rivals Browser</h1><p>Real game websites that play right here, plus thousands of free games people have shared on GitHub — search, play, and keep your favourites.</p>
-  <form class="sbox"><input name="q" placeholder="Search games on GitHub (e.g. tetris, racing, minecraft clone)" value="${esc(t.q||'')}"><button>Search</button></form>
-  <div class="cats">${CATS.map(([l,q])=>`<button data-q="${esc(q)}" class="${t.q===q?'on':''}">${l}</button>`).join('')}</div></div>
-  <div class="favs"></div>${t.q?'':Object.entries(FCAT).map(([k,l])=>`<h3>${l}</h3><div class="grid">${FEAT.filter(f=>f[4]===k).map(fcard).join('')}</div>`).join('')}<h3 class="rt">${t.q?'Results for “'+esc(t.q)+'”':'🔥 Popular games on GitHub'}</h3><div class="grid res"><div class="msg">Loading…</div></div>
+  <div class="src"><button data-src="itch" class="${t.src==='itch'?'on':''}">🕹️ itch.io games</button><button data-src="gh" class="${t.src==='gh'?'on':''}">🐙 GitHub games</button></div>
+  <form class="sbox"><input name="q" placeholder="${t.src==='itch'?'Search thousands of free web games on itch.io':'Search games on GitHub (e.g. tetris, racing, snake)'}" value="${esc(t.q||'')}"><button>Search</button></form>
+  <div class="cats">${t.src==='itch'?ITAGS.map(([l,g])=>`<button data-tag="${g}" class="${t.tag===g?'on':''}">${l}</button>`).join(''):CATS.map(([l,q])=>`<button data-q="${esc(q)}" class="${t.q===q?'on':''}">${l}</button>`).join('')}</div></div>
+  <div class="favs"></div>${t.q||t.tag?'':Object.entries(FCAT).map(([k,l])=>`<h3>${l}</h3><div class="grid">${FEAT.filter(f=>f[4]===k).map(fcard).join('')}</div>`).join('')}${(t.q||t.tag)&&t.src==='itch'?'':`${t.q||t.tag?'':'<h3>🕹️ Top free web games on itch.io</h3><div class="grid ires"><div class="msg">Loading…</div></div>'}`}
+  ${t.src==='itch'&&(t.q||t.tag)?`<h3>${t.q?'itch.io results for “'+esc(t.q)+'”':'🕹️ '+esc((ITAGS.find(x=>x[1]===t.tag)||['',t.tag])[0])+' games on itch.io'}</h3><div class="grid ires"><div class="msg">Loading…</div></div>`:`<h3 class="rt">${t.q?'GitHub results for “'+esc(t.q)+'”':'🔥 Popular games on GitHub'}</h3><div class="grid res"><div class="msg">Loading…</div></div>`}
   <p class="msg" style="font-size:12px">These games are made by other people and websites, not Arcade Rivals. Only games that allow being played inside another site are shown — if one still stays blank, use ↗ to open it in its own tab.</p></div>`;
-  el.querySelector('form').onsubmit=e=>{ e.preventDefault(); const q=e.target.q.value.trim(); if(q) navigate(t,'rivals://search/'+q); };
-  el.querySelectorAll('.cats button').forEach(b=>b.onclick=()=>navigate(t,'rivals://search/'+b.dataset.q));
-  el.onclick=e=>{ const x=e.target.closest('[data-ext]'); if(x){ open(x.dataset.ext,'_blank','noopener'); return; } const g=e.target.closest('[data-go]'); if(g){ navigate(t,g.dataset.go,g.dataset.t); return; } const f=e.target.closest('[data-fav]'); if(f){ const o=JSON.parse(f.dataset.fav); toggleFav(o); f.textContent=isFav(o.u)?'★':'☆'; drawFavs(el); } };
+  el.querySelector('form').onsubmit=e=>{ e.preventDefault(); const q=e.target.q.value.trim(); if(q) navigate(t,(t.src==='itch'?'rivals://itch/':'rivals://search/')+q); };
+  el.querySelectorAll('.cats button').forEach(b=>b.onclick=()=>navigate(t,b.dataset.tag?'rivals://itch-tag/'+b.dataset.tag:'rivals://search/'+b.dataset.q));
+  el.querySelectorAll('[data-src]').forEach(b=>b.onclick=()=>{ try{ localStorage.setItem('rbSrc',b.dataset.src); }catch(e){} t.src=b.dataset.src; const q=t.q; navigate(t,q?(t.src==='itch'?'rivals://itch/':'rivals://search/')+q:'rivals://home'); });
+  el.onclick=e=>{ const it=e.target.closest('[data-itch]'); if(it){ playItch(t,it); return; } const x=e.target.closest('[data-ext]'); if(x){ open(x.dataset.ext,'_blank','noopener'); return; } const g=e.target.closest('[data-go]'); if(g){ navigate(t,g.dataset.go,g.dataset.t); return; } const f=e.target.closest('[data-fav]'); if(f){ const o=JSON.parse(f.dataset.fav); toggleFav(o); f.textContent=isFav(o.u)?'★':'☆'; drawFavs(el); } };
   drawFavs(el);
-  ghSearch(t.q||'browser game').then(r=>{ el.querySelector('.res').innerHTML=r.length?r.map(card).join(''):'<div class="msg">No playable games found for that — try another word.</div>'; }).catch(e=>{ el.querySelector('.res').innerHTML=`<div class="msg">⚠️ ${esc(e.message)}</div>`; });
+  const ir=el.querySelector('.ires'); if(ir) itchList({q:t.src==='itch'?t.q:'',tag:t.src==='itch'?t.tag:''}).then(g=>{ ir.innerHTML=g.length?g.map(icard).join(''):'<div class="msg">No web games found for that — try another word.</div>'; }).catch(()=>{ ir.innerHTML='<div class="msg">⚠️ itch.io did not answer — try again in a moment.</div>'; });
+  if(el.querySelector('.res')) ghSearch(t.q||'browser game').then(r=>{ el.querySelector('.res').innerHTML=r.length?r.map(card).join(''):'<div class="msg">No playable games found for that — try another word.</div>'; }).catch(e=>{ el.querySelector('.res').innerHTML=`<div class="msg">⚠️ ${esc(e.message)}</div>`; });
   return el; }
+async function playItch(t,b){ const u=b.dataset.itch, c=b.closest('.card'); b.textContent='…'; try{ const j=await (await fetch(SRV()+'/itchplay?u='+encodeURIComponent(u))).json(); if(j.play){ navigate(t,j.play,j.title||b.dataset.t); return; } b.textContent='▶ Play'; c.querySelector('.err')||c.insertAdjacentHTML('beforeend',`<div class="err">${esc(j.err||'Could not open it')} <a href="${esc(u)}" target="_blank" rel="noopener" style="color:#93c5fd">Open on itch.io ↗</a></div>`); }catch(e){ b.textContent='▶ Play'; } }
 function drawFavs(el){ const f=favs(); el.querySelector('.favs').innerHTML=f.length?`<h3>⭐ Your favourites</h3><div class="grid">${f.map(card).join('')}</div>`:''; }
 /* ---- tabs ---- */
 function newTab(u){ const t={id:++tid,hist:[],pos:-1,title:'New tab',el:null,q:''}; tabs.push(t); navigate(t,u||'rivals://home'); show(t); return t; }
-function closeTab(t){ const i=tabs.indexOf(t); if(t.el) t.el.remove(); tabs.splice(i,1); if(!tabs.length){ newTab(); return; } if(cur===t) show(tabs[Math.max(0,i-1)]); else drawTabs(); }
+function closeTab(t){ setTimeout(saveTabs,0);  const i=tabs.indexOf(t); if(t.el) t.el.remove(); tabs.splice(i,1); if(!tabs.length){ newTab(); return; } if(cur===t) show(tabs[Math.max(0,i-1)]); else drawTabs(); }
 function show(t){ cur=t; for(const x of tabs) if(x.el) x.el.style.display=x===t?'':'none'; drawTabs(); syncBar(); }
 function drawTabs(){ const box=$('tabs'); box.querySelectorAll('.tab').forEach(e=>e.remove()); for(const t of tabs){ const d=document.createElement('div'); d.className='tab'+(t===cur?' on':''); d.innerHTML=`<span class="t">${esc(t.title)}</span><span class="x" title="Close">✕</span>`; d.onclick=e=>{ if(e.target.classList.contains('x')) closeTab(t); else show(t); }; box.insertBefore(d,$('newtab')); } }
 function curURL(t){ return t.hist[t.pos]||'rivals://home'; }
 function syncBar(){ if(!cur) return; const u=curURL(cur); urlIn.value=u==='rivals://home'?'':u.startsWith('rivals://search/')?decodeURIComponent(u.slice(16)):u; $('star').textContent=isFav(u)?'★':'☆'; $('back').disabled=cur.pos<=0; $('fwd').disabled=cur.pos>=cur.hist.length-1; }
 function load(t,u,title){ if(t.el) t.el.remove(); let el;
-  if(u.startsWith('rivals://')){ t.q=u.startsWith('rivals://search/')?decodeURIComponent(u.slice(16)):''; t.title=t.q?'🔎 '+t.q:'🏠 Home'; el=homeEl(t); }
+  if(u==='rivals://history'){ t.title='🕘 History'; el=document.createElement('div'); el.className='home'; const h=hist(); el.innerHTML=`<div class="wrap"><h3>🕘 Recently played</h3><div class="hist">${h.length?h.map(x=>`<a data-go="${esc(x.u)}" data-t="${esc(x.t)}">🎮 ${esc(x.t)}<small>${new Date(x.at).toLocaleString()}</small></a>`).join(''):'<div class="msg">Nothing yet — go play something!</div>'}</div>${h.length?'<p><button id="clrH" style="border:0;border-radius:10px;padding:8px 12px;background:#334155;color:#fff;cursor:pointer">Clear history</button></p>':''}</div>`; el.onclick=e=>{ const g=e.target.closest('[data-go]'); if(g) navigate(t,g.dataset.go,g.dataset.t); if(e.target.id==='clrH'){ try{ localStorage.removeItem('rbHist'); }catch(x){} load(t,u); } }; }
+  else if(u.startsWith('rivals://')){ t.src=srcPref(); t.q=''; t.tag='';
+    if(u.startsWith('rivals://search/')){ t.src='gh'; t.q=decodeURIComponent(u.slice(16)); }
+    else if(u.startsWith('rivals://itch/')){ t.src='itch'; t.q=decodeURIComponent(u.slice(14)); }
+    else if(u.startsWith('rivals://itch-tag/')){ t.src='itch'; t.tag=decodeURIComponent(u.slice(18)); }
+    t.title=t.q?'🔎 '+t.q:t.tag?'🕹️ '+t.tag:'🏠 Home'; el=homeEl(t); }
   else { el=document.createElement('div'); el.style.cssText='position:absolute;inset:0'; const f=document.createElement('iframe'); f.src=u; f.allow='fullscreen; gamepad; autoplay; clipboard-write'; f.setAttribute('allowfullscreen',''); f.referrerPolicy='no-referrer'; f.setAttribute('sandbox','allow-scripts allow-same-origin allow-forms allow-pointer-lock allow-popups allow-modals allow-downloads allow-orientation-lock'); el.appendChild(f);
     const tip=document.createElement('div'); tip.className='tip'; tip.innerHTML='Blank page? Some sites don\'t allow being shown inside others.<button>↗ Open it</button><button style="background:#334155">✕</button>'; tip.querySelectorAll('button')[0].onclick=()=>open(u,'_blank','noopener'); tip.querySelectorAll('button')[1].onclick=()=>tip.remove(); el.appendChild(tip); setTimeout(()=>tip.remove(),9000);
     t.title=title||(()=>{ try{ const x=new URL(u); return x.pathname.split('/').filter(Boolean).pop()||x.hostname; }catch(e){ return u; } })(); }
   t.el=el; el.style.display=t===cur||!cur?'':'none'; view.appendChild(el); drawTabs(); if(t===cur) syncBar(); }
-function navigate(t,u,title){ t.hist=t.hist.slice(0,t.pos+1); t.hist.push(u); t.pos++; load(t,u,title); }
+function navigate(t,u,title){ t.hist=t.hist.slice(0,t.pos+1); t.hist.push(u); t.pos++; t.titles=t.titles||{}; if(title) t.titles[u]=title; addHist(u,title); load(t,u,title); saveTabs(); }
+/* tabs come back when you reload or come back later */
+function saveTabs(){ try{ localStorage.setItem('rbTabs',JSON.stringify({cur:tabs.indexOf(cur),tabs:tabs.map(t=>({u:t.hist[t.pos]||'rivals://home',title:(t.titles||{})[t.hist[t.pos]]||t.title}))})); }catch(e){} }
 function go(raw){ const v=raw.trim(); if(!v){ navigate(cur,'rivals://home'); return; } let u=null;
   if(/^https?:\/\//i.test(v)) u=v; else if(/^[\w-]+(\.[\w-]+)+(\/\S*)?$/.test(v)) u='https://'+v;
   if(u&&/^http:\/\//i.test(u)) u=u.replace(/^http:/i,'https:');
   navigate(cur,u||'rivals://search/'+v); }
 urlIn.addEventListener('keydown',e=>{ if(e.key==='Enter'){ go(urlIn.value); urlIn.blur(); } });
 urlIn.addEventListener('focus',()=>urlIn.select());
-$('newtab').onclick=()=>newTab();
+$('newtab').onclick=()=>newTab(); $('histB').onclick=()=>navigate(cur,'rivals://history');
 $('back').onclick=()=>{ if(cur.pos>0){ cur.pos--; load(cur,curURL(cur)); } };
 $('fwd').onclick=()=>{ if(cur.pos<cur.hist.length-1){ cur.pos++; load(cur,curURL(cur)); } };
 $('rel').onclick=()=>load(cur,curURL(cur),cur.title);
@@ -135,7 +159,11 @@ $('ext').onclick=()=>{ const u=curURL(cur); if(!u.startsWith('rivals://')) open(
 $('full').onclick=()=>{ const f=cur.el&&cur.el.querySelector('iframe'); (f||view).requestFullscreen&&(f||view).requestFullscreen(); };
 $('star').onclick=()=>{ const u=curURL(cur); if(u.startsWith('rivals://')) return; toggleFav({n:cur.title,u,o:'',av:'',d:'',s:0}); syncBar(); };
 addEventListener('keydown',e=>{ if((e.ctrlKey||e.metaKey)&&e.key==='t'){ e.preventDefault(); newTab(); } if((e.ctrlKey||e.metaKey)&&e.key==='l'){ e.preventDefault(); urlIn.focus(); } });
-const start=new URLSearchParams(location.search).get('q'); newTab(start?'rivals://search/'+start:'rivals://home');
+const start=new URLSearchParams(location.search).get('q');
+if(start) newTab('rivals://search/'+start);
+else { let saved=null; try{ saved=JSON.parse(localStorage.getItem('rbTabs')||'null'); }catch(e){}
+  if(saved&&saved.tabs&&saved.tabs.length){ for(const s of saved.tabs.slice(0,12)){ const t=newTab(s.u); if(s.title&&!s.u.startsWith('rivals://')){ t.title=s.title; t.titles={[s.u]:s.title}; } } show(tabs[Math.max(0,Math.min(tabs.length-1,saved.cur||0))]); drawTabs(); }
+  else newTab('rivals://home'); }
 })();
 </script>
 <script>window.RR_NOWX=1;</script><script src="site.js"></script><script src="chat.js"></script>
