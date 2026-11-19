@@ -76,6 +76,31 @@ async function itchPlay(url){ const u=String(url.searchParams.get('u')||''); if(
     /* itch.io blocks its game files from being linked directly, so use itch's own embed player for that upload */
     const up=(m[0].match(/\/html\/(\d+)/)||[])[1]; if(!up) return J({err:'Could not open that game.'});
     return J({play:'https://itch.io/embed-upload/'+up+'?color=0b1020',title}); }catch(e){ return J({err:'Could not open that game.'},502); } }
+
+/* ---------- Rivals Browser: web search (DuckDuckGo with strict safe search; Wikipedia as a backup) ---------- */
+const WS_BAD=/\b(porn|xxx|nsfw|hentai|onlyfans|nude|naked|sex|escort|casino|betting|gambl|xvideos|pornhub|rule ?34|gore|torrent|piratebay|crack(ed)? download|warez)\b/i;
+async function webSearch(url){ const q=String(url.searchParams.get('q')||'').trim().slice(0,120); if(!q) return J({results:[]}); if(WS_BAD.test(q)) return J({results:[],blocked:true});
+  const c=caches.default, key=new Request('https://ws.cache/'+encodeURIComponent(q.toLowerCase())); const hit=await c.match(key); if(hit) return J(await hit.json());
+  let out=[], src='';
+  const clean=x=>unx(String(x||'').replace(/<[^>]+>/g,'')).replace(/\s+/g,' ').trim();
+  /* Bing, with strict safe search */
+  try{ const r=await fetch('https://www.bing.com/search?adlt=strict&setlang=en-US&cc=US&q='+encodeURIComponent(q),{headers:{'user-agent':'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/124 Safari/537.36','accept-language':'en-US,en;q=0.9','cookie':'SRCHHPGUSR=ADLT=STRICT'}});
+    const h=await r.text(); for(const blk of h.split('class="b_algo"').slice(1)){ const m=blk.match(/<h2[^>]*>\s*<a[^>]*href="([^"]+)"[^>]*>([\s\S]*?)<\/a>/); if(!m) continue; let u=m[1].replace(/&amp;/g,'&');
+      if(/bing\.com\/ck\/a/.test(u)){ const e=(u.match(/[?&]u=a1([^&]+)/)||[])[1]; if(e){ try{ u=atob(e.replace(/-/g,'+').replace(/_/g,'/')+'==='.slice((e.length+3)%4)); }catch(x){ continue; } } else continue; }
+      if(!/^https?:\/\//.test(u)) continue; const sn=(blk.match(/<p[^>]*>([\s\S]*?)<\/p>/)||[])[1]; out.push({t:clean(m[2]),u,d:clean(sn).slice(0,220)}); if(out.length>=20) break; }
+    if(out.length) src='web'; }catch(e){}
+  if(!out.length) try{ const r=await fetch('https://html.duckduckgo.com/html/?kp=1&kl=us-en&q='+encodeURIComponent(q),{headers:{'user-agent':'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/124 Safari/537.36','accept-language':'en-US,en;q=0.9'}});
+    const h=await r.text(); for(const blk of h.split('class="result ').slice(1)){ if(/result--ad/.test(blk.slice(0,80))) continue;
+      let u=(blk.match(/class="result__a"[^>]*href="([^"]+)"/)||[])[1]; const t=(blk.match(/class="result__a"[^>]*>([\s\S]*?)<\/a>/)||[])[1], sn=(blk.match(/class="result__snippet"[^>]*>([\s\S]*?)<\/a>/)||[])[1];
+      if(!u||!t) continue; u=u.replace(/&amp;/g,'&'); const ud=(u.match(/[?&]uddg=([^&]+)/)||[])[1]; if(ud) u=decodeURIComponent(ud); if(u.startsWith('//')) u='https:'+u; if(!/^https?:\/\//.test(u)||/duckduckgo\.com\/y\.js/.test(u)) continue;
+      out.push({t:clean(t),u,d:clean(sn).slice(0,220)}); if(out.length>=20) break; }
+    if(out.length) src='web'; }catch(e){}
+  if(!out.length){ try{ const r=await fetch('https://en.wikipedia.org/w/api.php?action=query&list=search&format=json&srlimit=12&srsearch='+encodeURIComponent(q),{headers:{'user-agent':'ArcadeRivals/1.0 (games site)'}}); const j=await r.json();
+      out=(j.query&&j.query.search||[]).map(x=>({t:x.title,u:'https://en.wikipedia.org/wiki/'+encodeURIComponent(x.title.replace(/ /g,'_')),d:unx(x.snippet.replace(/<[^>]+>/g,''))})); src='wikipedia'; }catch(e){} }
+  out=out.filter(x=>!WS_BAD.test(x.t+' '+x.u+' '+x.d));
+  /* which results can open inside the Rivals Browser */
+  await Promise.all(out.map(async x=>{ x.frame=await frameOK(x.u).catch(()=>false); }));
+  const res={results:out,src}; await c.put(key,new Response(JSON.stringify(res),{headers:{'cache-control':'max-age=1800'}})); return J(res); }
 export default {
   /* nightly chat wipe at 10 p.m. Toronto time. Cron runs at 02:00 and 03:00 UTC, and only the one that lands on 22:00 local (EST or EDT) clears */
   async scheduled(ev, env, ctx){
@@ -116,6 +141,7 @@ export default {
           if(vid&&/"isLiveNow":true|"isLive":true/.test(lh)){ const tt=(lh.match(/<meta name="title" content="([^"]{0,140})"/)||[])[1]||'NHL live'; yt={id:vid,title:tt.replace(/&amp;/g,'&').replace(/&#39;/g,"'").replace(/&quot;/g,'"')}; } }catch(e){}
         r=new Response(JSON.stringify({date:d.currentDate,games,yt}),{headers:{'content-type':'application/json','cache-control':'max-age=30'}}); await c.put(key,r.clone()); }
       const h=new Headers(r.headers); for(const k in CORS) h.set(k,CORS[k]); return new Response(r.body,{headers:h}); }
+    if(url.pathname==='/ws'){ if(req.method==='OPTIONS') return new Response(null,{headers:CORS}); return webSearch(url); }
     if(url.pathname==='/itch'){ if(req.method==='OPTIONS') return new Response(null,{headers:CORS}); return itchList(url); }
     if(url.pathname==='/itchplay'){ if(req.method==='OPTIONS') return new Response(null,{headers:CORS}); return itchPlay(url); }
     if(url.pathname==='/fc'){ if(req.method==='OPTIONS') return new Response(null,{headers:CORS}); return frameCheck(url); }
