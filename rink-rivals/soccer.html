@@ -1146,6 +1146,8 @@ void main(){vec4 t=texture2D(uTex,vUV*uUVR.zw+uUVR.xy);if(t.a<0.04)discard;gl_Fr
   function freeMesh(m){ if(!m) return; for(const k of ['pos','nor','col','ph']) gl.deleteBuffer(m[k]); }
   const unit=pr=>{ const g=new Geo(); g.add(pr,I(),[1,1,1]); return upload(g); };
   const UB=unit(primBox()), UC=unit(primCyl(28)), US=unit(primSphere(16,24)), UCT=unit(primCyl(24,.6));
+  /* rounded body parts for people: tapered limbs, a torso narrowing to the waist, arms built along x for beam() */
+  const UCT2=unit(primCyl(18,.82)), UCT3=(()=>{ const g=new Geo(); g.add(primCyl(22,1.12),I(),[1,1,1]); return upload(g); })(), UCX=(()=>{ const g=new Geo(); g.add(primCyl(16,.8),RZ(Math.PI/2),[1,1,1]); return upload(g); })();
   /* textured quad meshes */
   function texMesh(pos,uv){
     const b1=gl.createBuffer(); gl.bindBuffer(gl.ARRAY_BUFFER,b1); gl.bufferData(gl.ARRAY_BUFFER,new Float32Array(pos),gl.STATIC_DRAW);
@@ -1247,22 +1249,22 @@ void main(){vec4 t=texture2D(uTex,vUV*uUVR.zw+uUVR.xy);if(t.a<0.04)discard;gl_Fr
     for(const s of [-1,1]){
       const sw=Math.sin(o.ph+(s>0?0:Math.PI))*.75*k, spread=crouch*.35;
       const leg=mm(base,T(0,hip,s*3.3),RX(-s*spread),RZ(sw));
-      part(UB,mm(leg,T(0,-6,0),S(4.8*bleg,12,4.8*bleg)),pants);
-      part(UB,mm(leg,T(0,-16.5,0),S(4.1*bleg,10,4.1*bleg)),socks);
-      part(UB,mm(leg,T(1.6,-hip+1.6+(o.down?0:0),0),RZ(-sw*.3),S(7.5,3,4.6)),'#111827');
+      part(UCT2,mm(leg,T(0,-6,0),S(2.55*bleg,12,2.55*bleg)),pants);
+      part(US,mm(leg,T(0,-11.6,0),S(2.1*bleg,2.1,2.1*bleg)),socks); part(UCT2,mm(leg,T(0,-16.5,0),S(2.05*bleg,10,2.05*bleg)),socks);
+      part(US,mm(leg,T(1.7,-hip+1.6,0),RZ(-sw*.3),S(3.9,1.7,2.35)),'#111827'); part(UB,mm(leg,T(1.5,-hip+.5,0),RZ(-sw*.3),S(7.4,1,4.4)),'#e5e7eb');
     }
     const lean=(o.fb?.12:.06)+.28*k+crouch*.45;
     const tor=mm(base,T(0,hip,0),RZ(-lean));
-    part(UB,mm(tor,T(0,8,0),S(7*bch,15,12*bch)),t.jersey);
-    part(UB,mm(tor,T(0,1.5,0),S(7.4*bch,2,12.4*bch)),t.trim);
-    part(UB,mm(tor,T(0,15.5,0),S((o.fb?9:7.6)*bsh,o.fb?5:3.6,(o.fb?18:14)*bsh)),t.jersey);
+    part(UCT3,mm(tor,T(0,7.6,0),S(3.75*bch,15.2,6.1*bch)),t.jersey); part(US,mm(tor,T(.3,11.5,0),S(3.9*bch,4.2,6.2*bch)),t.jersey);
+    part(UC,mm(tor,T(0,1.5,0),S(3.85*bch,2,6.25*bch)),t.trim);
+    part(US,mm(tor,T(0,15.2,0),S((o.fb?4.7:3.8)*bsh,o.fb?3:2.1,(o.fb?9.4:7.1)*bsh)),t.jersey);
     part(US,mm(tor,T(.6,20,0),S(2.2,2.2,2.2)),skin);
     part(US,mm(tor,T(.8,23,0),S(3.4,3.9,3.3)),skin);
     if(o.fb){ part(US,mm(tor,T(.4,23.6,0),S(4.4,4.5,4.3)),t.helmet); part(UB,mm(tor,T(4.3,22,0),S(.9,3.4,4.8)),'#d1d5db'); part(UB,mm(tor,T(.4,24.2,0),S(8.6,.8,1)),t.trim); }
     else if(o.helm){ part(US,mm(tor,T(.4,24,0),S(3.9,3.6,3.8)),t.dark); part(UB,mm(tor,T(3.6,23,0),S(3,.6,4.6)),t.dark); }
     else { part(US,mm(tor,T(.4,24.6,0),S(3.6,2.4,3.5)),t.dark); part(UB,mm(tor,T(3.5,24,0),S(3.2,.5,4)),t.dark); }
-    decals.push({m:mm(tor,T(-3.55,9.5,0),RY(Math.PI),S(1,7.5,7.5)),n:o.num,c:t.trim});
-    decals.push({m:mm(tor,T(3.55,10.5,0),S(1,4.5,4.5)),n:o.num,c:t.trim});
+    decals.push({m:mm(tor,T(-(3.75*bch+.12),9.5,0),RY(Math.PI),S(1,7.5,7.5)),n:o.num,c:t.trim});
+    decals.push({m:mm(tor,T(3.75*bch+.12,10.5,0),S(1,4.5,4.5)),n:o.num,c:t.trim});
     /* arms */
     const sh=15, L=p=>tp(mm(tor),p);
     let ha, hb; const pose=o.pose||'run', ph=o.ph;
@@ -1274,8 +1276,8 @@ void main(){vec4 t=texture2D(uTex,vUV*uUVR.zw+uUVR.xy);if(t.a<0.04)discard;gl_Fr
     else if(pose==='block'){ ha=[11,13,-5]; hb=[11,13,5]; }
     else if(pose==='cheer'){ const j=Math.abs(Math.sin(ph*1.5))*3; ha=[2,30+j,-7]; hb=[2,30+j,7]; }
     else { const a=Math.sin(ph)*6*k; ha=[a+1.5,7,-8.5]; hb=[-a+1.5,7,8.5]; }
-    const sl=L([0,sh,-6.5]), sr=L([0,sh,6.5]), A=L(ha), B=L(hb);
-    part(UB,beam(sl,A,2.8*barm,2.8*barm),t.jersey); part(UB,beam(sr,B,2.8*barm,2.8*barm),t.jersey);
+    const sl=L([0,sh,-6.5]), sr=L([0,sh,6.5]), A=L(ha), B=L(hb); part(US,mm(T(...sl),S(2,2,2)),t.jersey); part(US,mm(T(...sr),S(2,2,2)),t.jersey);
+    part(UCX,beam(sl,A,(2.8*barm)*.52,(2.8*barm)*.52),t.jersey); part(UCX,beam(sr,B,(2.8*barm)*.52,(2.8*barm)*.52),t.jersey);
     part(US,mm(T(...A),S(1.6,1.6,1.6)),skin); part(US,mm(T(...B),S(1.6,1.6,1.6)),skin);
     if(o.glove) part(UB,mm(T(...A),S(3.2,3.6,2.4)),'#8b5a2b');
     if(pose==='bat'){ const a=o._bat, dir=[Math.cos(a)*.35,Math.sin(a)+.25,Math.sin(a)*-.9+.2], d=nrm(dir), top=[B[0]+d[0]*26,B[1]+d[1]*26,B[2]+d[2]*26];
