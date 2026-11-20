@@ -100,15 +100,45 @@ let AC=null;function ac(){try{AC=AC||new(window.AudioContext||window.webkitAudio
 function beep(f,d,t,v){const a=ac();if(!a)return;try{const o=a.createOscillator(),g=a.createGain();o.type=t||'triangle';o.frequency.value=f;g.gain.value=v||.06;g.gain.exponentialRampToValueAtTime(.001,a.currentTime+d);o.connect(g);g.connect(a.destination);o.start();o.stop(a.currentTime+d)}catch(e){}}
 function ld(k,d){try{return Object.assign(d,JSON.parse(localStorage[k]||'{}'))}catch(e){return d}}
 function sv_(k,o){try{localStorage[k]=JSON.stringify(o)}catch(e){}}
-const RV=[['Casual Carl',.22],['Club Clara',.14],['Skip Sven',.08]];
-let sv=ld('cu1',{w:0,l:0,rv:0});
+/* shared athlete renderer: shaded limbs, kit, head, hair. X,Y = feet centre, H = height in px, angles in radians (0 = hanging down, + swings toward facing side, PI = straight up) */
+function ath(x,X,Y,H,o){o=o||{};const f=o.f||1,sk=o.skin||'#e0ad82',sh=o.shirt||'#2f7fd0',sr=o.shorts||'#1b2a50',ha=o.hair||'#3a2410',sc=o.sock||sh,lean=o.lean||0;
+ const la=o.la===undefined?.25:o.la,ra=o.ra===undefined?-.25:o.ra,ll=o.ll===undefined?.12:o.ll,rl=o.rl===undefined?-.12:o.rl,eb=o.eb===undefined?.35:o.eb;
+ const U=H/10;x.save();x.translate(X,Y);x.scale(f,1);
+ if(!o.noShadow){x.fillStyle='rgba(0,0,0,.28)';x.beginPath();x.ellipse(0,1,H*.2,H*.045,0,0,7);x.fill()}
+ x.lineCap='round';x.lineJoin='round';
+ const limb=(x0,y0,a,len,w,col,b2)=>{const x1=x0+Math.sin(a)*len,y1=y0+Math.cos(a)*len;x.strokeStyle=col;x.lineWidth=w;x.beginPath();x.moveTo(x0,y0);x.lineTo(x1,y1);x.stroke();return[x1,y1]};
+ const leg=(hx,a,bk)=>{const hy=-U*4.6;const k=limb(hx,hy,a,U*2.3,U*1.05,sr);const fo=limb(k[0],k[1],a-(bk?.1:0)*0,U*2.1,U*.8,sk);x.strokeStyle=sc;x.lineWidth=U*.82;x.beginPath();x.moveTo(k[0]+(fo[0]-k[0])*.45,k[1]+(fo[1]-k[1])*.45);x.lineTo(fo[0],fo[1]);x.stroke();x.fillStyle='#f4f4f4';x.beginPath();x.ellipse(fo[0]+U*.45,fo[1]-U*.15,U*.85,U*.45,0,0,7);x.fill();x.fillStyle='rgba(0,0,0,.25)';x.fillRect(fo[0]-U*.4,fo[1]+U*.1,U*1.7,U*.18)};
+ leg(-U*.45,rl);
+ const sx=lean*U*2;x.save();x.translate(sx*.3,0);
+ const arm=(a,front)=>{const s0=[U*.0+(front?U*.3:-U*.3),-U*7.4];const e=limb(s0[0],s0[1],a,U*1.9,U*.95,front?sh:'rgba(0,0,0,.0)');const eC=front?sh:shade(sh,.75);x.strokeStyle=eC;x.lineWidth=U*.95;x.beginPath();x.moveTo(s0[0],s0[1]);x.lineTo(e[0],e[1]);x.stroke();const h=limb(e[0],e[1],a+eb*(a>0?-1:1)*(Math.abs(a)>2?-.2:1),U*1.7,U*.78,sk);x.fillStyle=sk;x.beginPath();x.arc(h[0],h[1],U*.55,0,7);x.fill();if(o.glove){x.fillStyle=o.glove;x.beginPath();x.arc(h[0],h[1],U*.95,0,7);x.fill();x.strokeStyle='rgba(255,255,255,.7)';x.lineWidth=1.2;x.stroke()}return h};
+ const hb=arm(ra,false);
+ // torso
+ const tg=x.createLinearGradient(-U*1.5,0,U*1.5,0);tg.addColorStop(0,shade(sh,.8));tg.addColorStop(.5,sh);tg.addColorStop(1,shade(sh,.7));x.fillStyle=tg;x.beginPath();x.moveTo(-U*1.35,-U*7.7);x.quadraticCurveTo(0,-U*8.1,U*1.35,-U*7.7);x.lineTo(U*1.1,-U*4.6);x.lineTo(-U*1.1,-U*4.6);x.closePath();x.fill();
+ x.fillStyle=sr;x.beginPath();x.moveTo(-U*1.15,-U*4.9);x.lineTo(U*1.15,-U*4.9);x.lineTo(U*1.35,-U*3.9);x.lineTo(-U*1.35,-U*3.9);x.closePath();x.fill();
+ if(o.stripe){x.fillStyle=o.stripe;x.fillRect(-U*1.35,-U*6.6,U*2.7,U*.45)}
+ if(o.num!==undefined){x.save();x.scale(f,1);x.fillStyle=o.numc||'#fff';x.font='800 '+Math.round(U*1.3)+'px system-ui';x.textAlign='center';x.fillText(o.num,0,-U*5.5);x.restore()}
+ const hf=arm(la,true);
+ x.restore();
+ leg(U*.45,ll,1);
+ // neck + head
+ x.fillStyle=sk;x.fillRect(-U*.35+sx*.3,-U*8.2,U*.7,U*.6);
+ const hx=sx*.45,hy=-U*8.95;const hg=x.createRadialGradient(hx-U*.3,hy-U*.35,U*.2,hx,hy,U*1.05);hg.addColorStop(0,shade(sk,1.15));hg.addColorStop(1,shade(sk,.82));x.fillStyle=hg;x.beginPath();x.ellipse(hx,hy,U*.88,U*1.02,0,0,7);x.fill();
+ if(o.helmet){x.fillStyle=o.helmet;x.beginPath();x.arc(hx,hy-U*.1,U*1.08,Math.PI,0);x.lineTo(hx+U*1.08,hy+U*.35);x.lineTo(hx+U*.4,hy+U*.35);x.lineTo(hx-U*.9,hy+U*.2);x.fill();x.strokeStyle='rgba(255,255,255,.55)';x.lineWidth=1.3;x.beginPath();x.arc(hx,hy-U*.1,U*1.08,Math.PI*1.1,Math.PI*1.7);x.stroke()}
+ else{x.fillStyle=ha;x.beginPath();x.ellipse(hx-U*.1,hy-U*.45,U*.95,U*.7,0,Math.PI,0);x.fill();if(!o.bald){x.fillRect(hx-U*.95,hy-U*.45,U*.35,U*.55)}}
+ if(o.cap){x.fillStyle=o.cap;x.beginPath();x.arc(hx,hy-U*.25,U*.98,Math.PI,0);x.fill();x.fillRect(hx+U*.3,hy-U*.35,U*1.2,U*.22)}
+ x.fillStyle='#fff';x.beginPath();x.arc(hx+U*.38,hy-U*.05,U*.2,0,7);x.fill();x.fillStyle='#222';x.beginPath();x.arc(hx+U*.45,hy-U*.05,U*.1,0,7);x.fill();
+ x.restore();return {hand:[X+(f*(hf?hf[0]+sx*.3:0)),Y+(hf?hf[1]:0)]}}
+function shade(c,k){let m;if(c[0]==='#'){const v=[1,3,5].map(i=>parseInt(c.slice(i,i+2),16));return 'rgb('+v.map(q=>Math.max(0,Math.min(255,Math.round(q*k)))).join(',')+')'}if(m=c.match(/rgba?\(([^)]+)\)/)){const v=m[1].split(',').map(Number);return 'rgb('+[0,1,2].map(i=>Math.max(0,Math.min(255,Math.round(v[i]*k)))).join(',')+')'}return c}
+
+const RV=[['Casual Carl',.22],['Club Clara',.14],['Skip Sven',.08],['Provincial Pro',.05],['Olympic Champion',.03]],ENDS=[2,4,6,8];
+let sv=ld('cu1',{w:0,l:0,rv:0,en:1});if(sv.en==null)sv.en=1;
 let V='title',G=null,raf=0;
 const SX=500,HY=130,HR=70,HOG=380,SY=520; // house center y
 function render(){cancelAnimationFrame(raf);let h='<div class="top"><div><h1>Curling Club</h1><div class="sub">Slide the stone, sweep to carry it, and finish closest to the button.</div></div></div>';
- if(V==='title')h+='<div class="hero"><div class="card"><h2>Play</h2><div style="display:grid;gap:8px"><button class="btn" data-a="go">Start match (4 ends)</button><button class="btn g" data-a="rv">Opponent: '+RV[sv.rv][0]+'</button></div><div class="tip" style="margin-top:10px">Record: <b style="color:var(--gold)">'+sv.w+'-'+sv.l+'</b></div></div><div class="card"><h2>Controls</h2><table><tr><td>Aim</td><td>Move the mouse left and right to set the line</td></tr><tr><td>Throw</td><td>Hold the button to charge, release to throw. Better with a medium push</td></tr><tr><td>Sweep</td><td>Hold Space or the mouse while the stone slides to carry it farther and straighter</td></tr><tr><td>Scoring</td><td>Only the closest team scores: 1 point per stone nearer than the opponent\'s best</td></tr></table></div></div>';
+ if(V==='title')h+='<div class="hero"><div class="card"><h2>Play</h2><div style="display:grid;gap:8px"><button class="btn" data-a="go">Start match ('+ENDS[sv.en]+' ends)</button><button class="btn g" data-a="en">Match length: '+ENDS[sv.en]+' ends</button><button class="btn g" data-a="rv">Opponent: '+RV[sv.rv][0]+'</button></div><div class="tip" style="margin-top:10px">Record: <b style="color:var(--gold)">'+sv.w+'-'+sv.l+'</b></div></div><div class="card"><h2>Controls</h2><table><tr><td>Aim</td><td>Move the mouse left and right to set the line</td></tr><tr><td>Throw</td><td>Hold the button to charge, release to throw. Better with a medium push</td></tr><tr><td>Sweep</td><td>Hold Space or the mouse while the stone slides to carry it farther and straighter</td></tr><tr><td>Scoring</td><td>Only the closest team scores: 1 point per stone nearer than the opponent\'s best</td></tr></table></div></div>';
  else h+='<canvas id="cv" width="1000" height="600"></canvas><div id="ovl"></div>';
  $('#app').innerHTML=h;if(V==='game')loop()}
-document.addEventListener('click',e=>{const b=e.target.closest('[data-a]');if(!b)return;ac();const a=b.dataset.a;if(a==='go')newG();else if(a==='rv'){sv.rv=(sv.rv+1)%3;sv_('cu1',sv);render()}else if(a==='title'){V='title';render()}else if(a==='next'){nextEnd()}});
+document.addEventListener('click',e=>{const b=e.target.closest('[data-a]');if(!b)return;ac();const a=b.dataset.a;if(a==='go')newG();else if(a==='en'){sv.en=(sv.en+1)%4;sv_('cu1',sv);render()}else if(a==='rv'){sv.rv=(sv.rv+1)%5;sv_('cu1',sv);render()}else if(a==='title'){V='title';render()}else if(a==='next'){nextEnd()}});
 function newG(){G={end:1,sc:[0,0],stones:[],turn:0,thrown:[0,0],ph:'aim',aim:0,pw:0,hold:false,cur:null,sweep:false,tt:0,msg:'',msgT:-9,hammer:1,over:false,wait:0};V='game';render()}
 function nextEnd(){const g=G;g.end++;g.stones=[];g.thrown=[0,0];g.turn=g.lastScorer===0?1:0;g.ph='aim';g.cur=null;$('#ovl').innerHTML=''}
 function throwStone(aim,pw,team){const g=G;g.cur={x:SX+(team===0?0:0),y:SY,vx:aim*70,vy:-pw*400,team,r:15,sw:0,curl:rnd(-1,1)*.5};g.ph='slide';beep(200,.1,'sine',.05)}
@@ -122,8 +152,8 @@ function step(dt){const g=G;if(!g||g.over)return;g.tt+=dt;
    if(!out&&s.y<=HOG)g.stones.push(s);g.cur=null;g.thrown[s.team]++;g.ph='settle';g.wait=.5;g.sweep=false}}
  else if(g.ph==='settle'){let mov=false;g.stones.forEach(o=>{o.x+=o.vx*dt;o.y+=o.vy*dt;o.vx*=Math.exp(-1.5*dt);o.vy*=Math.exp(-1.5*dt);if(Math.hypot(o.vx,o.vy)>3)mov=true;else o.vx=o.vy=0});g.stones=g.stones.filter(o=>o.x>250&&o.x<750&&o.y>HY-HR-10&&o.y<HOG+30);g.wait-=dt;if(!mov&&g.wait<=0){if(g.thrown[0]>=4&&g.thrown[1]>=4)endEnd();else{g.turn=g.thrown[0]<=g.thrown[1]?(g.turn===0&&g.thrown[0]<g.thrown[1]?0:1-g.turn):(1-g.turn);if(g.thrown[g.turn]>=4)g.turn=1-g.turn;g.ph='aim';g.pw=0;g.wait=0}}}}
 function endEnd(){const g=G;const inH=g.stones.filter(s=>dist(s)<HR+15).sort((a,b)=>dist(a)-dist(b));let pts=0,who=-1;if(inH.length){who=inH[0].team;const best=inH.find(s=>s.team!==who);const lim=best?dist(best):1e9;pts=inH.filter(s=>s.team===who&&dist(s)<lim).length;g.sc[who]+=pts;g.lastScorer=who}else g.lastScorer=g.lastScorer??0;
- if(g.end>=4&&g.sc[0]===g.sc[1]){g.msg='Extra end!';}
- const done=g.end>=4&&g.sc[0]!==g.sc[1]||g.end>=6;g.ph='endsum';
+ if(g.end>=ENDS[sv.en]&&g.sc[0]===g.sc[1]){g.msg='Extra end!';}
+ const done=g.end>=ENDS[sv.en]&&g.sc[0]!==g.sc[1]||g.end>=ENDS[sv.en]+2;g.ph='endsum';
  let ov='<div class="ovl"><div class="box"><h2>End '+g.end+'</h2><div class="big">'+g.sc[0]+' - '+g.sc[1]+'</div><div class="tip" style="margin:8px 0">'+(who<0?'Blank end':(who===0?'You score ':RV[sv.rv][0]+' scores ')+pts)+'</div>';
  if(done){g.over=true;const w=g.sc[0]>g.sc[1];if(w)sv.w++;else sv.l++;sv_('cu1',sv);ov+='<div style="font-size:22px;font-weight:900;margin:8px 0;color:'+(w?'var(--ok)':'var(--bad)')+'">'+(w?'YOU WIN!':'You lose')+'</div><div style="display:grid;gap:8px"><button class="btn" data-a="go">Rematch</button><button class="btn g" data-a="title">Menu</button></div>'}else ov+='<div style="display:grid;gap:8px"><button class="btn" data-a="next">Next end</button></div>';ov+='</div></div>';$('#ovl').innerHTML=ov}
 function fireH(){const g=G;if(!g||g.ph!=='aim'||g.turn!==0||!g.hold)return;g.hold=false;if(g.pw<.1){g.pw=0;return}throwStone(g.aim,.3+g.pw*.55,0);g.pw=0}
@@ -139,7 +169,7 @@ function draw(){const cv=$('#cv');if(!cv||!G)return;const x=cv.getContext('2d'),
  g.stones.forEach(s=>stone(x,s));if(g.cur)stone(x,g.cur);
  if(g.ph==='aim'&&g.turn===0){const px=SX,py=SY;stone(x,{x:px,y:py,team:0});x.strokeStyle='rgba(255,255,255,.8)';x.setLineDash([8,8]);x.lineWidth=2;x.beginPath();x.moveTo(px,py);x.lineTo(px+g.aim*70*3.2,HY+40);x.stroke();x.setLineDash([]);x.fillStyle='rgba(8,5,26,.85)';x.beginPath();x.roundRect(800,540,160,22,8);x.fill();x.fillStyle=g.pw>.8?'#ff6b5a':'#4be07a';x.fillRect(804,545,152*g.pw,12)}
  if(g.ph==='slide'&&g.sweep&&g.cur.team===0){x.strokeStyle='#ffd23f';x.lineWidth=3;for(let i=0;i<4;i++){x.beginPath();x.moveTo(g.cur.x-18+i*10,g.cur.y-26);x.lineTo(g.cur.x-12+i*10,g.cur.y-38);x.stroke()}}
- x.fillStyle='rgba(8,5,26,.85)';x.beginPath();x.roundRect(10,10,230,120,12);x.fill();x.textAlign='left';x.fillStyle='#fff';x.font='800 15px system-ui';x.fillText('END '+g.end+'/4',24,34);x.fillStyle='#2f7fd0';x.fillText('YOU  '+g.sc[0]+'   ('+(4-g.thrown[0])+' left)',24,62);x.fillStyle='#d03a3a';x.fillText(RV[sv.rv][0]+'  '+g.sc[1]+'   ('+(4-g.thrown[1])+' left)',24,88);x.fillStyle='#a79bc8';x.font='600 12px system-ui';x.fillText(g.ph==='aim'?(g.turn===0?'Your throw':'Opponent throwing'):g.ph==='slide'?'Hold Space to sweep':'',24,114)}
+ x.fillStyle='rgba(8,5,26,.85)';x.beginPath();x.roundRect(10,10,230,120,12);x.fill();x.textAlign='left';x.fillStyle='#fff';x.font='800 15px system-ui';x.fillText('END '+g.end+'/'+ENDS[sv.en],24,34);x.fillStyle='#2f7fd0';x.fillText('YOU  '+g.sc[0]+'   ('+(4-g.thrown[0])+' left)',24,62);x.fillStyle='#d03a3a';x.fillText(RV[sv.rv][0]+'  '+g.sc[1]+'   ('+(4-g.thrown[1])+' left)',24,88);x.fillStyle='#a79bc8';x.font='600 12px system-ui';x.fillText(g.ph==='aim'?(g.turn===0?'Your throw':'Opponent throwing'):g.ph==='slide'?'Hold Space to sweep':'',24,114)}
 function loop(){let last=performance.now();const f=now=>{const dt=Math.min(.03,(now-last)/1000||0);last=now;if(G){step(dt);draw()}if(V==='game')raf=requestAnimationFrame(f)};raf=requestAnimationFrame(f)}
 render();
 

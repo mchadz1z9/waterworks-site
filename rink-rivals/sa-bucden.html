@@ -1,0 +1,668 @@
+<!doctype html><html lang="en"><head>
+<script>/* Sports Arcade polish: a steady 60 fps on fast screens, so games run the same speed everywhere */
+(function(){ var raf=window.requestAnimationFrame.bind(window), last=0, q=[]; window.requestAnimationFrame=function(cb){ q.push(cb); if(q.length===1) raf(function tick(t){ if(t-last<15.5){ raf(tick); return; } last=t; var L=q; q=[]; for(var i=0;i<L.length;i++){ try{ L[i](t); }catch(e){ setTimeout(function(){ throw e; }); } } }); return q.length; }; })();</script>
+<style>canvas{filter:saturate(1.15) contrast(1.06)}#saVig{position:fixed;inset:0;pointer-events:none;z-index:2147480000;background:radial-gradient(ellipse at center,rgba(0,0,0,0) 62%,rgba(0,0,0,.32) 100%)}#saFs{position:fixed;right:10px;bottom:10px;z-index:2147482000;background:rgba(15,23,42,.8);color:#fff;border:1px solid rgba(255,255,255,.25);border-radius:999px;padding:7px 12px;font:700 13px system-ui,sans-serif;cursor:pointer}</style>
+<script>/* Sports Arcade update (from Connor): pause and mute any game — ⏸ / 🔇 buttons, P and M keys, auto-pause when you switch tabs */
+(function(){ if(window.SA_PM) return; window.SA_PM=1; var paused=false, muted=false, q=[], raf=window.requestAnimationFrame.bind(window), mg=[];
+ try{ muted=localStorage.getItem('saMute')==='1'; }catch(e){}
+ try{ var oc=AudioNode.prototype.connect; AudioNode.prototype.connect=function(t){ try{ if(t&&t.constructor&&/AudioDestinationNode/.test(t.constructor.name)){ var c=this.context, g=c.__m; if(!g){ g=c.__m=c.createGain(); g.gain.value=muted?0:1; oc.call(g,c.destination); mg.push(c); } return oc.call(this,g); } }catch(e){} return oc.apply(this,arguments); }; }catch(e){}
+ window.requestAnimationFrame=function(f){ return raf(function(t){ if(paused) q.push(f); else f(t); }); };
+ var bar, ov; function ui(){ if(!bar) return; bar.children[0].textContent=paused?'▶':'⏸'; bar.children[1].textContent=muted?'🔇':'🔊'; ov.style.display=paused?'flex':'none'; }
+ function setMute(m){ muted=m; try{ localStorage.setItem('saMute',m?'1':'0'); }catch(e){} mg.forEach(function(c){ try{ c.__m.gain.value=m?0:1; }catch(e){} }); ui(); }
+ function setPause(p){ if(p===paused) return; paused=p; if(!p){ var l=q; q=[]; l.forEach(function(f){ raf(f); }); } mg.forEach(function(c){ try{ p?c.suspend():c.resume(); }catch(e){} }); ui(); }
+ window.SA_PAUSE=setPause;
+ function mk(t,f,l){ var b=document.createElement('button'); b.textContent=t; b.title=l; b.setAttribute('aria-label',l); b.style.cssText='width:34px;height:34px;border-radius:10px;border:1px solid rgba(255,255,255,.3);background:rgba(8,14,28,.7);color:#fff;font-size:15px;cursor:pointer;padding:0'; b.onclick=function(e){ e.stopPropagation(); f(); b.blur(); }; return b; }
+ function init(){ bar=document.createElement('div'); bar.id='saPM'; bar.style.cssText='position:fixed;top:10px;left:50%;transform:translateX(-50%);display:flex;gap:6px;z-index:2147483000'; bar.appendChild(mk('⏸',function(){ setPause(!paused); },'Pause (P)')); bar.appendChild(mk('🔊',function(){ setMute(!muted); },'Mute (M)')); document.body.appendChild(bar);
+   ov=document.createElement('div'); ov.style.cssText='position:fixed;inset:0;display:none;align-items:center;justify-content:center;background:rgba(5,10,20,.55);color:#fff;font:800 30px system-ui;z-index:2147482999;letter-spacing:2px;pointer-events:none'; ov.textContent='PAUSED — press P'; document.body.appendChild(ov); ui(); }
+ if(document.body) init(); else document.addEventListener('DOMContentLoaded',init);
+ window.addEventListener('keydown',function(e){ if(e.target&&/INPUT|TEXTAREA|SELECT/.test(e.target.tagName)) return; if(e.key==='p'||e.key==='P'){ setPause(!paused); } else if((e.key==='m'||e.key==='M')&&!e.ctrlKey&&!e.metaKey){ setMute(!muted); } },true);
+ document.addEventListener('visibilitychange',function(){ if(document.hidden) setPause(true); });
+})();</script>
+<meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>Arcade Rivals - Buc Den</title>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Anton&family=Barlow+Condensed:wght@600;700;800&family=Barlow:wght@400;500;600;700&family=Bebas+Neue&family=Inter:wght@400;500;600;700&family=Oswald:wght@500;600;700&family=Roboto+Slab:wght@400;500;700&family=Teko:wght@500;600;700&display=swap">
+<style>html{color-scheme:light}body{margin:0}[hidden]{display:none!important}
+/* Layout: sticky tab bar over one-column sections; games get a card grid. Palette: pewter ground, buc red for action, flame orange for highlights, bone text. */
+:root{--bg:#efefef;--panel:#ffffff;--ink:#0d0d0d;--mut:#5a5a5a;--line:#d9d9d9;--red:#d50a0a;--flame:#d50a0a;--pew:#555555;--ok:#0d0d0d;--bad:#d50a0a;--chip:#e6e6e6;--blk:#0d0d0d;--wht:#ffffff;--hd:'Barlow Condensed',Impact,'Arial Narrow',sans-serif;--bd:'Barlow',system-ui,-apple-system,'Segoe UI',sans-serif}
+@media (prefers-color-scheme:dark){:root:not([data-theme="light"]){--bg:#070707;--panel:#141414;--ink:#f4f4f4;--mut:#a6a6a6;--line:#2c2c2c;--red:#ff2a2a;--flame:#ff4545;--pew:#a6a6a6;--ok:#f4f4f4;--bad:#ff2a2a;--chip:#232323;color-scheme:dark}}
+:root[data-theme="dark"]{--bg:#070707;--panel:#141414;--ink:#f4f4f4;--mut:#a6a6a6;--line:#2c2c2c;--red:#ff2a2a;--flame:#ff4545;--pew:#a6a6a6;--ok:#f4f4f4;--bad:#ff2a2a;--chip:#232323;color-scheme:dark}
+*{box-sizing:border-box}
+body{background:var(--bg);color:var(--ink);font-family:var(--bd);font-size:16px;line-height:1.5;padding-left:max(16px,env(safe-area-inset-left,0px));padding-right:max(16px,env(safe-area-inset-right,0px));padding-block:0 40px}
+body::before{content:"";position:fixed;inset:0 0 auto;height:env(safe-area-inset-top,0px);z-index:10;background:var(--blk)}
+.wrap{max-width:1040px;margin:0 auto}
+header{padding:22px 0 14px;display:flex;align-items:flex-end;gap:14px;flex-wrap:wrap;background:var(--blk);color:var(--wht);box-shadow:0 0 0 100vmax var(--blk);clip-path:inset(0 -100vmax)}
+.logo{width:46px;height:46px;flex:none}
+h1{font:800 44px/1 var(--hd);letter-spacing:.5px;margin:0;text-transform:uppercase}
+h1 span{color:var(--red)}
+header .tag{color:#bdbdbd}
+.tag{color:var(--mut);font-size:13px;margin-top:3px}
+nav{position:sticky;top:env(safe-area-inset-top,0px);z-index:5;background:var(--blk);box-shadow:0 0 0 100vmax var(--blk);clip-path:inset(0 -100vmax);border-bottom:4px solid var(--red);display:flex;gap:4px;overflow-x:auto;padding:8px 0 10px;margin-bottom:20px}
+nav a{font:700 16px var(--hd);letter-spacing:.8px;text-transform:uppercase;color:#d0d0d0;text-decoration:none;padding:7px 16px;border-radius:6px;white-space:nowrap}
+nav a[aria-current=page]{background:var(--red);color:#fff}
+nav a:hover{color:#fff}
+nav a:focus-visible,button:focus-visible,a:focus-visible{outline:3px solid var(--flame);outline-offset:2px}
+h2{font:800 30px/1.1 var(--hd);text-transform:uppercase;letter-spacing:.5px;margin:0 0 14px;padding-bottom:8px;border-bottom:4px solid var(--red);display:inline-block}
+h3{font:700 20px/1.15 var(--hd);text-transform:uppercase;letter-spacing:.4px;margin:0 0 8px}
+.sec{display:none}.sec.on{display:block}
+.grid{display:grid;gap:14px;grid-template-columns:repeat(auto-fit,minmax(min(100%,300px),1fr))}
+.panel{background:var(--panel);border:1px solid var(--line);border-top:4px solid var(--blk);border-radius:6px;padding:16px;min-width:0}
+.panel.blk{background:var(--blk);color:var(--wht);border-color:var(--blk);border-top-color:var(--red)}.panel.blk .lbl{color:#bdbdbd}.panel.blk .rec small{color:#bdbdbd}
+.panel.red{background:var(--red);color:#fff;border-color:var(--red);border-top-color:var(--blk)}.panel.red .lbl{color:#ffe0e0}
+:root[data-theme=dark] .panel,.panel{--bt:var(--blk)}
+.hero{display:grid;gap:14px;grid-template-columns:1fr 1.15fr 1fr}
+@media(max-width:900px){.hero{grid-template-columns:1fr}}
+.rec{font:800 84px/.9 var(--hd);letter-spacing:1px}
+.rec small{font-size:20px;color:var(--mut);letter-spacing:.5px;margin-left:8px}
+.lbl{font:700 13px var(--hd);letter-spacing:1.4px;text-transform:uppercase;color:var(--mut)}
+.pill{display:inline-block;font:800 14px var(--hd);letter-spacing:.8px;padding:2px 9px;border-radius:6px;color:#fff}
+.W{background:var(--blk);outline:1px solid var(--line)}.L{background:var(--red)}.T{background:var(--pew)}
+:root[data-theme=dark] .W{background:#f4f4f4;color:#000}@media(prefers-color-scheme:dark){:root:not([data-theme=light]) .W{background:#f4f4f4;color:#000}}
+table{width:100%;border-collapse:collapse;font-size:15px}
+.tw{overflow-x:auto}
+th{font:700 13px var(--hd);letter-spacing:1.2px;text-transform:uppercase;color:var(--mut);text-align:left;padding:6px 10px 6px 0;border-bottom:1px solid var(--line);white-space:nowrap}
+td{padding:9px 10px 9px 0;border-bottom:1px solid var(--line);vertical-align:top}
+tr:last-child td{border-bottom:0}
+td.n,th.n{font-variant-numeric:tabular-nums;text-align:right}
+.news{display:grid;gap:0}
+.news article{padding:12px 0;border-bottom:1px solid var(--line)}
+.news article:last-child{border-bottom:0}
+.news time{display:block;font:700 12px var(--hd);letter-spacing:1.2px;color:var(--flame);text-transform:uppercase}
+.news p{margin:3px 0 0;color:var(--mut)}
+.news b{color:var(--ink)}
+.chip{display:inline-block;background:var(--chip);border-radius:6px;padding:1px 8px;font-size:13px;margin:2px 4px 2px 0}
+.arrive{border-top-color:var(--blk)}.leave{border-top-color:var(--red)}
+ul.plain{list-style:none;margin:0;padding:0}ul.plain li{padding:7px 0;border-bottom:1px solid var(--line)}ul.plain li:last-child{border-bottom:0}
+.btn{font:800 17px var(--hd);letter-spacing:.8px;text-transform:uppercase;background:var(--red);color:#fff;border:0;border-radius:8px;padding:10px 18px;cursor:pointer}
+.btn.g{background:var(--chip);color:var(--ink)}
+.btn{border-radius:6px}
+.btn:hover{filter:brightness(1.08)}
+.src{font-size:13px;color:var(--mut)}.src a{color:var(--mut)}
+.note{font-size:13px;color:var(--mut);margin-top:10px}
+.gtabs{display:flex;gap:8px;flex-wrap:wrap;margin-bottom:14px}
+.gtabs button{font:700 16px var(--hd);letter-spacing:.8px;text-transform:uppercase;background:var(--chip);color:var(--ink);border:1px solid var(--line);border-radius:8px;padding:8px 14px;cursor:pointer}
+.gtabs button[aria-pressed=true]{background:var(--red);color:#fff;border-color:var(--red)}
+.opt{display:block;width:100%;text-align:left;background:var(--panel);color:var(--ink);border:1.5px solid var(--line);border-radius:10px;padding:11px 14px;margin:8px 0;font:500 16px var(--bd);cursor:pointer}
+.opt:hover:not(:disabled){border-color:var(--red)}
+.opt.ok{border-color:var(--ink);background:color-mix(in srgb,var(--ink) 9%,var(--panel))}.opt.ok::after{content:' \2713';font-weight:800}
+.opt.no{border-color:var(--bad);background:color-mix(in srgb,var(--bad) 14%,var(--panel))}
+canvas{width:100%;max-width:640px;display:block;border-radius:8px;background:#0d0d0d;touch-action:manipulation;border:2px solid var(--red)}
+input[type=range]{width:100%;accent-color:var(--red)}
+.bar{height:10px;border-radius:5px;background:var(--chip);overflow:hidden}.bar i{display:block;height:100%;background:var(--red)}
+.dist{display:flex;align-items:flex-end;gap:6px;height:130px;margin:10px 0 4px}
+.dist div{flex:1;background:var(--red);border-radius:4px 4px 0 0;position:relative;min-height:2px}
+.dist div span{position:absolute;top:-18px;left:0;right:0;text-align:center;font-size:12px;color:var(--mut);font-variant-numeric:tabular-nums}
+.dist.lab{height:auto;margin:0;gap:6px}.dist.lab div{background:none;text-align:center;font-size:12px;color:var(--mut);min-height:0}
+@media(prefers-reduced-motion:reduce){*{scroll-behavior:auto!important}}
+.note a,.src a{color:var(--red)}
+button.lnk{background:none;border:0;padding:0;font:inherit;color:var(--ink);cursor:pointer;text-align:left}button.lnk:hover{color:var(--red);text-decoration:underline}select{font:500 15px var(--bd);padding:8px;border-radius:6px;border:1px solid var(--line);background:var(--panel);color:var(--ink)}
+
+/* cool layer */
+header{position:relative;overflow:hidden}
+header::after{content:"";position:absolute;right:-30px;top:0;bottom:0;width:260px;background:repeating-linear-gradient(115deg,var(--red) 0 14px,transparent 14px 30px);opacity:.9;clip-path:polygon(40% 0,100% 0,100% 100%,0 100%)}
+@media(max-width:600px){header::after{width:90px}}
+.tick{display:flex;gap:10px;overflow-x:auto;padding:12px 0 2px;margin-bottom:6px}
+.tick .g{flex:none;background:var(--panel);border:1px solid var(--line);border-left:5px solid var(--blk);border-radius:6px;padding:7px 12px;min-width:150px}
+.tick .g.L{border-left-color:var(--red);background:var(--panel)}
+.tick .g b{font:800 20px var(--hd);letter-spacing:.5px}
+.tick .g span{display:block;font-size:12px;color:var(--mut)}
+.tick .g.nx{border-left-color:var(--red);background:var(--blk);color:#fff}.tick .g.nx span{color:#bdbdbd}
+.tick .g.L,.tick .g.W{background:var(--panel);outline:0}
+.tiles{display:grid;gap:12px;grid-template-columns:repeat(auto-fit,minmax(150px,1fr));margin-top:14px}
+.tile{background:var(--panel);border:1px solid var(--line);border-radius:6px;padding:12px 14px;position:relative;overflow:hidden}
+.tile::before{content:"";position:absolute;left:0;top:0;bottom:0;width:5px;background:var(--red)}
+.tile .v{font:800 40px/1 var(--hd);letter-spacing:.5px;font-variant-numeric:tabular-nums}
+.tile .tl{font:700 12px var(--hd);letter-spacing:1.4px;text-transform:uppercase;color:var(--mut);margin-top:2px}
+.tile .d{font-size:13px;color:var(--mut)}
+.form{display:flex;gap:5px;flex-wrap:wrap;margin-top:12px}
+.form i{font:800 13px var(--hd);width:30px;height:30px;display:grid;place-items:center;border-radius:6px;color:#fff;font-style:normal;background:var(--blk)}
+.form i.L{background:var(--red)}.form i.B{background:var(--chip);color:var(--mut)}
+:root[data-theme=dark] .form i:not(.L):not(.B){background:#f4f4f4;color:#000}
+@media(prefers-color-scheme:dark){:root:not([data-theme=light]) .form i:not(.L):not(.B){background:#f4f4f4;color:#000}}
+.links{display:grid;gap:12px;grid-template-columns:repeat(auto-fit,minmax(200px,1fr));margin-top:14px}
+.links a{display:block;text-decoration:none;color:var(--ink);background:var(--panel);border:1px solid var(--line);border-radius:6px;padding:14px 16px;position:relative;transition:transform .15s,border-color .15s}
+.links a:hover{transform:translateY(-3px);border-color:var(--red)}
+.links a b{font:800 24px var(--hd);text-transform:uppercase;letter-spacing:.5px;display:block}
+.links a span{font-size:14px;color:var(--mut)}
+.links a::after{content:"\2192";position:absolute;right:14px;top:12px;font:800 22px var(--hd);color:var(--red)}
+.news article{position:relative;padding-left:20px}
+.news article::before{content:"";position:absolute;left:0;top:18px;width:9px;height:9px;border-radius:50%;background:var(--red)}
+.news{position:relative}
+.panel{transition:box-shadow .2s}.panel:hover{box-shadow:0 6px 22px rgba(0,0,0,.12)}
+nav a{position:relative}
+nav .sep{flex:none;width:1px;background:#3a3a3a;margin:4px 6px}
+.rec{background:linear-gradient(transparent 82%,var(--red) 82% 88%,transparent 88%);display:inline-block}
+.panel.blk .rec{background:none}
+@media(prefers-reduced-motion:no-preference){.sec.on{animation:in .25s ease-out}@keyframes in{from{opacity:.4;transform:translateY(6px)}to{opacity:1;transform:none}}}
+.wi{display:grid;grid-template-columns:minmax(120px,1.2fr) auto;gap:8px;align-items:center;padding:6px 0;border-bottom:1px solid var(--line)}
+.seg3{display:inline-flex;border:1.5px solid var(--line);border-radius:7px;overflow:hidden}.seg3 button{background:var(--panel);color:var(--ink);border:0;font:700 14px var(--hd);letter-spacing:.8px;text-transform:uppercase;padding:6px 12px;cursor:pointer}
+.seg3 button[aria-pressed=true]{background:var(--blk);color:#fff}.seg3 button[data-v=L][aria-pressed=true]{background:var(--red)}
+:root[data-theme=dark] .seg3 button[aria-pressed=true]:not([data-v=L]){background:#f4f4f4;color:#000}@media(prefers-color-scheme:dark){:root:not([data-theme=light]) .seg3 button[aria-pressed=true]:not([data-v=L]){background:#f4f4f4;color:#000}}
+
+.subtabs{display:flex;gap:6px;flex-wrap:wrap;margin:0 0 14px}
+.subtabs button{font:700 16px var(--hd);letter-spacing:.8px;text-transform:uppercase;background:var(--panel);color:var(--ink);border:1.5px solid var(--line);border-radius:6px;padding:7px 14px;cursor:pointer}
+.subtabs button[aria-pressed=true]{background:var(--blk);color:#fff;border-color:var(--blk)}
+:root[data-theme=dark] .subtabs button[aria-pressed=true]{background:var(--red);border-color:var(--red)}@media(prefers-color-scheme:dark){:root:not([data-theme=light]) .subtabs button[aria-pressed=true]{background:var(--red);border-color:var(--red)}}
+.sub{display:none}.sub.on{display:block}
+.set{display:grid;gap:6px;padding:12px 0;border-bottom:1px solid var(--line)}.set:last-of-type{border-bottom:0}
+.seg3.wrapseg{flex-wrap:wrap}.set .seg3{width:fit-content;max-width:100%}
+.swatches{display:flex;gap:10px;flex-wrap:wrap}
+.sw{width:74px;border:2px solid var(--line);border-radius:8px;padding:6px;background:var(--panel);cursor:pointer;font:700 13px var(--hd);letter-spacing:.8px;text-transform:uppercase;color:var(--ink);text-align:center}
+.sw i{display:block;height:22px;border-radius:4px;margin-bottom:5px}
+.sw[aria-pressed=true]{border-color:var(--red);box-shadow:0 0 0 2px var(--red)}
+:root[data-skin=flame]{--red:#e8480c;--flame:#e8480c;--blk:#1c0f08}
+:root[data-skin=pewter]{--red:#c8102e;--flame:#c8102e;--blk:#34383d}
+:root[data-skin=neon]{--red:#ff2d55;--flame:#ff2d55;--blk:#06060c}
+:root[data-skin=gold]{--red:#b5121b;--flame:#b5121b;--blk:#14110a}
+:root[data-hd=oswald]{--hd:'Oswald',Impact,'Arial Narrow',sans-serif}
+:root[data-hd=bebas]{--hd:'Bebas Neue',Impact,'Arial Narrow',sans-serif}
+:root[data-hd=anton]{--hd:'Anton',Impact,'Arial Narrow',sans-serif}
+:root[data-hd=teko]{--hd:'Teko',Impact,'Arial Narrow',sans-serif}
+:root[data-bd=inter]{--bd:'Inter',system-ui,sans-serif}
+:root[data-bd=slab]{--bd:'Roboto Slab',Georgia,serif}
+:root[data-dens=compact] .panel{padding:11px}:root[data-dens=compact] body{font-size:15px}:root[data-dens=compact] td{padding:6px 10px 6px 0}
+.panel a,.news a{color:var(--red)}
+
+.live{display:flex;gap:10px;align-items:center;flex-wrap:wrap;background:var(--panel);border:1px solid var(--line);border-left:5px solid var(--red);border-radius:6px;padding:8px 12px;margin-bottom:6px;font-size:14px}
+.live .dot{width:10px;height:10px;border-radius:50%;background:var(--red);flex:none}
+@media(prefers-reduced-motion:no-preference){.live .dot{animation:pulse 1.6s infinite}@keyframes pulse{50%{opacity:.25}}}
+.live .btn{padding:5px 12px;font-size:14px;margin-left:auto}
+#gcards a{cursor:pointer}
+.res{font:800 30px var(--hd);text-transform:uppercase;letter-spacing:.5px;margin:8px 0}
+
+.vs{width:100%;border-collapse:collapse}.vs td,.vs th{padding:6px 8px;border-top:1px solid var(--line);text-align:right}.vs th:first-child,.vs td:first-child{text-align:left}.vs th{font:700 13px var(--hd);text-transform:uppercase;border-top:0}.vs .edge{font-weight:800;color:var(--red)}
+.pill{display:inline-block;background:var(--red);color:#fff;border-radius:99px;padding:1px 9px;font:700 12px var(--bd);margin-left:6px}
+.pkr{display:flex;gap:8px;align-items:center;padding:6px 0;border-top:1px solid var(--line)}.pkr>span:first-child{flex:1}.pkr small{color:var(--mut)}.pkm{width:44px;text-align:right;color:var(--mut)}
+.pkr .btn.on{background:var(--red);color:#fff;border-color:var(--red)}
+</style>
+<div class="wrap">
+<header>
+ <svg class="logo" viewBox="0 0 48 48" role="img" aria-label="Pirate flag"><rect x="6" y="3" width="4" height="42" rx="2" fill="#bdbdbd"/><path d="M10 5h30l-6 10 6 10H10z" fill="var(--red)"/><circle cx="24" cy="14" r="4" fill="#fff"/><path d="M17 21l14-14M17 7l14 14" stroke="#fff" stroke-width="2"/></svg>
+ <div><h1>Buc <span>Den</span></h1><div class="tag">Unofficial fan page for the Tampa Bay Buccaneers. Updated Nov 16, 2026 (standings from ESPN).</div></div>
+</header>
+<nav id="nav" aria-label="Sections"><a href="#home">Home</a><a href="#schedule">Schedule</a><span class="sep"></span><a href="#odds">Odds</a><a href="#teams">Teams</a><span class="sep"></span><a href="#offseason">Offseason</a><a href="#games">Games</a><span class="sep"></span><a href="#settings">Settings</a></nav>
+
+<section class="sec" id="s-home">
+ <div class="live" id="live"><span class="dot"></span><span id="liveTxt"></span><button class="btn g" type="button" id="liveBtn">Refresh</button></div>
+ <div class="tick" id="tick" aria-label="Recent results and next game"></div>
+ <div class="hero">
+  <div class="panel blk">
+   <div class="lbl">2026 record</div>
+   <div class="rec">3-6<small>bye in week 10</small></div>
+   <p style="margin:10px 0 0">After an 0-4 start the Bucs won three of their next five. Six losses, all by seven points or fewer.</p>
+   <div class="form" id="form"></div>
+  </div>
+  <div class="panel red">
+   <div class="lbl">Next game</div>
+   <h3 style="font-size:36px;margin:4px 0 2px">at Detroit Lions</h3>
+   <div>Sun, Nov 22 · 1:00 PM ET · FOX</div>
+   <div class="lbl" style="margin-top:14px">Model says</div>
+   <div style="font:800 26px var(--hd);text-transform:uppercase" id="nxtOdds"></div>
+   <div class="lbl" style="margin-top:10px">Then</div>
+   <div>Nov 30 vs Carolina (MNF) · Dec 6 vs Chargers · Dec 13 at Baltimore</div>
+  </div>
+  <div class="panel">
+   <div class="lbl">NFC South race</div>
+   <div id="raceMini" style="margin-top:8px"></div>
+   <p class="note"><a href="#odds">Full standings and odds</a></p>
+  </div>
+ </div>
+ <div class="tiles" id="tiles"></div>
+ <div class="grid" style="margin-top:14px">
+  <div class="panel" id="vsCard"></div>
+  <div class="panel" id="injCard"><h3>Injury watch</h3><div class="inj"><b>QB Baker Mayfield</b> <span class="pill">Questionable for Nov 22</span><p style="margin:6px 0 0">Lower-leg injury from the Bears game, in and out of a walking boot. Not an injured-reserve injury and expected to be short-term. Jalon Daniels would start if he sits. Source: Mike Garafolo report, Nov 15.</p></div><p class="note">Only the report above is listed. The team's official Week 11 injury report comes out later in the week.</p></div>
+  <div class="panel news">
+   <h2>Latest</h2>
+   <article><time>Nov 15 · Injury report</time><b>Mayfield has a lower-leg injury.</b><p>NFL insider Mike Garafolo reports Baker Mayfield hurt his lower leg against the Bears in Week 9 and has been in and out of a walking boot. It is not an injured-reserve injury and is expected to be short-term, but he may miss the Nov 22 game at Detroit. Jalon Daniels would start if he is out.</p></article>
+   <article><time>Nov 16 · Bye week</time><b>Week 10 off, then Detroit.</b><p>Tampa Bay (3-6) rests this week and visits the 7-2 Lions on Sunday, Nov 22 at 1:00 PM ET.</p></article>
+   <article><time>Nov 10 · Trade deadline</time><b>Bucs stand pat.</b><p>The deadline passed at 4 PM Tuesday with no trade. Reports describe Tampa Bay as neither a buyer nor a seller, and note that GM Jason Licht rarely makes in-season trades.</p></article>
+   <article><time>Nov 8 · Week 9</time><b>Bears 27, Bucs 24.</b><p>A primetime loss at Chicago drops Tampa Bay to 3-6 after wins over Carolina (43-13) and Atlanta (16-0).</p></article>
+   <article><time>Nov 1 · Week 8</time><b>Shutout of the Falcons, 16-0.</b><p>The defense blanked its division rival at home.</p></article>
+   <p class="note"><a href="#offseason">Older headlines, signings and the draft class are in the Offseason tab.</a></p>
+  </div>
+  <div class="panel">
+   <h2>Quick facts</h2>
+   <ul class="plain">
+    <li><b>Head coach:</b> Todd Bowles · <b>GM:</b> Jason Licht</li>
+    <li><b>Home:</b> Raymond James Stadium, Tampa</li>
+    <li><b>Division:</b> NFC South (Panthers, Falcons, Saints)</li>
+    <li><b>Super Bowl wins:</b> XXXVII (2002 season) and LV (2020 season)</li>
+    <li><b>First pick of 2026:</b> Rueben Bain Jr., edge rusher from Miami, 15th overall</li>
+    <li><b>Tight end Cade Otton</b> signed a three-year extension in March</li>
+   </ul>
+  </div>
+ </div>
+ <div class="links">
+  <a href="#schedule"><b>Schedule</b><span>Every game, score and win chance</span></a>
+  <a href="#odds"><b>Odds</b><span>Standings, division chances, game lines</span></a>
+  <a href="#teams"><b>All 32 teams</b><span>Standings, power ranks, matchup predictor</span></a>
+  <a href="#games"><b>Play</b><span>Trivia, Sack Attack, Draft Day, season sim</span></a>
+ </div>
+</section>
+
+<section class="sec" id="s-schedule">
+ <h2>2026 schedule and results</h2>
+ <div class="panel tw"><table id="schTbl"></table></div>
+ <div style="margin:10px 0"><button class="btn g" type="button" id="icsBtn">Add remaining games to my calendar (.ics)</button> <span class="note" id="icsMsg"></span></div>
+ <div class="panel" id="pickem"><h3>Pick'em: your picks vs the model</h3><div id="pkList"></div><div class="note" id="pkSum"></div></div>
+ <p class="note">Times are Eastern and subject to change. Week 16 at Atlanta may be played Dec 26-27 and week 18 at New Orleans may fall on Jan 9-10. Scores through week 9.</p>
+ <div class="grid" style="margin-top:14px">
+  <div class="panel"><h3>Points scored vs allowed</h3><div id="pts"></div></div>
+  <div class="panel"><h3>Season so far</h3><ul class="plain" id="seasonSum"></ul></div>
+ </div>
+</section>
+
+<section class="sec" id="s-odds"><h2>Standings and odds</h2><div class="subtabs" data-sec="odds"><button type="button" data-sub="main">Standings and division</button><button type="button" data-sub="what">What-if machine</button><button type="button" data-sub="lines">Game lines</button></div><div class="sub" data-sec="odds" data-sub="main">
+ 
+ <div class="grid">
+  <div class="panel tw"><h3>NFC South standings</h3><table id="stTbl"></table><p class="note">After week 9. Source: ESPN. The Bucs are tied for last on record but have the only positive point differential in the division and the only 2-0 division record.</p></div>
+  <div class="panel"><h3>NFC playoff picture</h3><ul class="plain" id="pic"></ul></div>
+ </div>
+ <div class="panel" style="margin-top:14px"><h3>Division title chance</h3><div id="divOdds"></div></div>
+ </div><div class="sub" data-sec="odds" data-sub="what"><div class="panel" style="margin-top:14px"><h3>What-if machine</h3><p style="margin:0 0 10px">Force a win or a loss in any remaining game and watch the division race change. Games left on "Model" use the win chance below.</p><div id="wi"></div><div id="wiOut" style="margin-top:12px"></div></div>
+ </div><div class="sub" data-sec="odds" data-sub="lines"><div class="panel tw" style="margin-top:14px"><h3>Who is favored in each remaining game</h3><table id="oddsTbl"></table>
+  <p class="note"><b>These are my model's numbers, not sportsbook lines.</b> Each team gets a rating from its points scored and allowed so far, pulled halfway toward average because nine games is a small sample, plus 2 points for the home team. A line of Bucs -2.5 means the model would favor Tampa Bay by 2.5. I could not retrieve live betting lines for this season. These are estimates from a simple model, not real predictions. <a href="https://www.si.com/betting/nfc-south-division-odds-for-2026-season-buccaneers-are-best-team-in-worst-division-01kzs9kk9q3h">SI's NFC South division odds</a> are a place to start.</p></div>
+</div></section>
+
+<section class="sec" id="s-teams"><h2>All 32 teams</h2><div class="subtabs" data-sec="teams"><button type="button" data-sub="div">Divisions</button><button type="button" data-sub="match">Matchup predictor</button><button type="button" data-sub="pwr">Power ranking</button></div><div class="sub" data-sec="teams" data-sub="div">
+ 
+ <div class="gtabs" id="cf"><button data-c="NFC">NFC</button><button data-c="AFC">AFC</button></div>
+ <div class="grid" id="divs"></div>
+ <div class="grid" style="margin-top:14px">
+  <div class="panel" id="tdet"></div>
+  </div></div><div class="sub" data-sec="teams" data-sub="match"><div class="panel"><h3>Matchup predictor</h3>
+   <p style="margin:0 0 8px">Pick any two teams. The model uses points scored and allowed this season, plus home field for the second team.</p>
+   <div style="display:grid;grid-template-columns:1fr 1fr;gap:8px"><label>Away<br><select id="mA" style="width:100%"></select></label><label>Home<br><select id="mB" style="width:100%"></select></label></div>
+   <div id="mOut" style="margin-top:12px"></div>
+   <p class="note">Same model as the Odds tab, not a sportsbook line.</p></div>
+ </div><div class="sub" data-sec="teams" data-sub="pwr"><div class="panel tw" style="margin-top:14px"><h3>Power ranking by point differential</h3><table id="pwr"></table><p class="note">Ranked by points scored minus points allowed per game after week 9. Source for all records and points: ESPN.</p></div>
+</div></section>
+
+
+
+
+
+<section class="sec" id="s-offseason"><h2>Offseason</h2><div class="subtabs" data-sec="off"><button type="button" data-sub="moves">Signings and exits</button><button type="button" data-sub="draft">2026 draft class</button><button type="button" data-sub="news">Past headlines</button></div><div class="sub" data-sec="off" data-sub="moves">
+ 
+ <div class="grid">
+  <div class="panel"><h3>Trades</h3>
+   <p style="margin:0 0 8px">No trades. The club's April 13 tracker lists none, and the Bucs made no deal before the deadline passed at 4 PM on Nov 10.</p></div>
+  <div class="panel arrive"><h3>Signed</h3><ul class="plain" id="mvIn"></ul></div>
+  <div class="panel leave"><h3>Departed</h3><ul class="plain" id="mvOut"></ul></div>
+  <div class="panel"><h3>Re-signed</h3><ul class="plain" id="mvRe"></ul><p class="note">Still unsigned at the April 13 update: DL Greg Gaines, LB Deion Jones, G Michael Jordan, OLB Haason Reddick, WR Sterling Shepard, LB Anthony Walker.</p></div>
+ </div>
+</div><div class="sub" data-sec="off" data-sub="draft">
+ 
+ <div class="panel tw"><table id="drTbl"></table></div>
+ <p class="note">Rounds, names and grades follow Sports Illustrated's final rookie-class grades (overall class grade: A). The club's own pick list gives No. 77 for the third-round pick and names the same other players; the two lists differ on a few slots, so treat the pick numbers as approximate. Bauer Sharp was acquired by trading up.</p>
+</div><div class="sub" data-sec="off" data-sub="news"><div class="panel news"><h3>Offseason headlines</h3>
+<article><time>Mar 12 to 13</time><b>Free agency opens.</b><p>Mike Evans signs with San Francisco, Jamel Dean with Pittsburgh. Tampa Bay brings in Alex Anzalone, Kenneth Gainwell and A'Shawn Robinson, and re-signs tight end Cade Otton.</p></article>
+<article><time>Mar 23</time><b>Lavonte David retires.</b><p>The linebacker ended a 14-year career, all of it in Tampa.</p></article>
+<article><time>Nov 15</time><b>Mayfield lower-leg injury.</b><p>Reported by Mike Garafolo. Short-term, may miss the Lions game.</p></article>
+<article><time>Nov 10</time><b>Deadline passes with no trade.</b><p>Tampa Bay did not buy or sell before the 4 PM deadline.</p></article>
+<article><time>Apr 13</time><b>Club free-agency tracker: no trades.</b><p>The team's update lists signings, departures and re-signings but no trades before the draft.</p></article>
+<article><time>April</time><b>Draft class.</b><p>Rueben Bain Jr. at 15 leads a seven-player class that Sports Illustrated graded A.</p></article></div></div></section>
+<section class="sec" id="s-settings"><h2>Settings</h2>
+ <div class="grid">
+  <div class="panel"><h3>Look</h3>
+   <div class="set"><b>Mode</b><div class="seg3" data-k="mode"><button type="button" data-v="auto">Auto</button><button type="button" data-v="light">Light</button><button type="button" data-v="dark">Dark</button></div></div>
+   <div class="set"><b>Color theme</b><div class="swatches" id="skins"></div></div>
+   <div class="set"><b>Heading font</b><div class="seg3 wrapseg" data-k="hd"><button type="button" data-v="barlow">Barlow</button><button type="button" data-v="oswald">Oswald</button><button type="button" data-v="bebas">Bebas</button><button type="button" data-v="anton">Anton</button><button type="button" data-v="teko">Teko</button></div></div>
+   <div class="set"><b>Body font</b><div class="seg3" data-k="bd"><button type="button" data-v="barlow">Barlow</button><button type="button" data-v="inter">Inter</button><button type="button" data-v="slab">Roboto Slab</button></div></div>
+   <div class="set"><b>Game sound</b><div class="seg3" data-k="snd"><button type="button" data-v="on">On</button><button type="button" data-v="off">Off</button></div></div>
+   <div class="set"><b>Spacing</b><div class="seg3" data-k="dens"><button type="button" data-v="cozy">Comfortable</button><button type="button" data-v="compact">Compact</button></div></div>
+  </div>
+  <div class="panel"><h3>Preview</h3><div class="panel blk" style="margin-bottom:10px"><div class="lbl">2026 record</div><div class="rec">3-6<small>bye in week 10</small></div></div><div class="panel red"><div class="lbl">Next game</div><h3 style="font-size:30px;margin:4px 0">at Detroit Lions</h3><div>Sun, Nov 22 · 1:00 PM ET</div></div><p class="note">Changes apply right away and are remembered on this device.</p><button class="btn g" type="button" id="setReset">Reset look</button></div>
+  <div class="panel"><h3>Game scores</h3><p style="margin:0 0 10px">Your best trivia score and Sack Attack score are saved on this device.</p><div id="scoreInfo" class="note"></div><button class="btn g" type="button" id="clrScores">Clear saved scores</button></div>
+  <div class="panel"><h3>About and sources</h3><p style="margin:0 0 8px">Buc Den is an independent fan page. It is not affiliated with or endorsed by the NFL or the Tampa Bay Buccaneers. Data is a snapshot as of Nov 16, 2026.</p><ul class="plain"><li><a href="https://www.espn.com/nfl/team/schedule/_/name/tb">ESPN</a>: results and standings</li><li><a href="https://www.buccaneers.com/news/nfl-schedule-2026-bucs-information-regular-season-opponents-preseason">Buccaneers.com</a>: schedule</li><li><a href="https://buccaneers.com/news/buccaneers-2026-free-agency-tracker-pre-draft-update">Free-agency tracker</a></li><li><a href="https://www.si.com/nfl/buccaneers/onsi/final-draft-grades-for-the-buccaneers-2026-nfl-rookie-class">SI draft grades</a> and <a href="https://www.si.com/nfl/buccaneers/onsi/news/buccaneers-position-groups-that-got-better-and-worse-in-free-agency-2026">free agency review</a></li><li><a href="https://www.joebucsfan.com/2026/11/bucs-stand-firm-as-nfl-trade-deadline-passes/">JoeBucsFan</a> and <a href="https://www.tampabay.com/sports/bucs/2026/11/10/nfl-trade-deadline-jason-licht-brian-thomas-josh-downs-jessie-bates-davon-godchaux/">Tampa Bay Times</a>: trade deadline</li></ul><p class="note">Odds and win chances are from my own model, not sportsbooks.</p></div>
+ </div>
+</section>
+
+<section class="sec" id="s-games">
+ <h2>Games</h2>
+ <div id="gHub"><div class="links" id="gcards"></div></div>
+ <div id="gPlay" hidden><button class="btn g" type="button" id="gBack" style="margin-bottom:12px">Back to all games</button><div id="gbox"></div></div>
+</section>
+
+<p class="src" style="margin-top:28px">Independent fan page, not affiliated with the NFL or the Buccaneers. Sources and data notes are under <a href="#settings">Settings</a>.</p>
+</div>
+
+<script>
+const $=s=>document.querySelector(s),clamp=(v,a,b)=>Math.max(a,Math.min(b,v)),rnd=(a,b)=>a+Math.random()*(b-a);
+const store={get(k,d){try{return JSON.parse(localStorage.getItem(k))??d}catch(e){return d}},set(k,v){try{localStorage.setItem(k,JSON.stringify(v))}catch(e){}}};
+let AC=null;function beep(f,d,t,v){try{if(store.get('bd_set',{}).snd==='off')return;AC=AC||new (window.AudioContext||window.webkitAudioContext)();const o=AC.createOscillator(),g=AC.createGain();o.type=t||'square';o.frequency.value=f;g.gain.value=v||.05;o.connect(g);g.connect(AC.destination);o.start();g.gain.exponentialRampToValueAtTime(.0001,AC.currentTime+d);o.stop(AC.currentTime+d)}catch(e){}}
+const esc=s=>String(s).replace(/[&<>"]/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;'}[c]));
+
+/* ---------- data ---------- */
+const SCH=[[1,'Sep 13','at','Cincinnati',27,33,'1:00 PM','FOX'],[2,'Sep 20','vs','Cleveland',19,23,'1:00 PM','CBS'],[3,'Sep 27','vs','Minnesota',16,23,'4:05 PM','FOX'],[4,'Oct 4','vs','Green Bay',14,17,'1:00 PM','FOX'],[5,'Oct 8','at','Dallas',24,16,'8:15 PM','Amazon'],[6,'Oct 18','vs','Pittsburgh (OT)',19,26,'1:00 PM','CBS'],[7,'Oct 25','at','Carolina',43,13,'1:00 PM','FOX'],[8,'Nov 1','vs','Atlanta',16,0,'1:00 PM','FOX'],[9,'Nov 8','at','Chicago',24,27,'8:20 PM','NBC'],[10,'','','Bye'],[11,'Nov 22','at','Detroit',null,null,'1:00 PM','FOX'],[12,'Nov 30','vs','Carolina',null,null,'8:15 PM','ESPN'],[13,'Dec 6','vs','L.A. Chargers',null,null,'1:00 PM','CBS'],[14,'Dec 13','at','Baltimore',null,null,'1:00 PM','FOX'],[15,'Dec 20','vs','New Orleans',null,null,'1:00 PM','FOX'],[16,'TBD','at','Atlanta',null,null,'TBD','TBD'],[17,'Jan 3','vs','L.A. Rams',null,null,'TBD','TBD'],[18,'TBD','at','New Orleans',null,null,'TBD','TBD']];
+$('#schTbl').innerHTML='<tr><th>Wk</th><th>Date</th><th>Opponent</th><th class="n">Score</th><th></th><th>Time / TV</th></tr>'+SCH.map(r=>{if(r[3]==='Bye')return`<tr><td>${r[0]}</td><td colspan="5" style="color:var(--mut)">Bye week</td></tr>`;const pl=r[4]!=null,w=pl&&r[4]>r[5];return`<tr><td>${r[0]}</td><td>${r[1]}</td><td>${r[2]} ${esc(r[3])}</td><td class="n">${pl?r[4]+'-'+r[5]:'-'}</td><td>${pl?`<span class="pill ${w?'W':'L'}">${w?'W':'L'}</span>`:''}</td><td>${esc(r[6]||'')} ${esc(r[7]||'')}</td></tr>`}).join('');
+const P=SCH.filter(r=>r[4]!=null),mx=Math.max(...P.flatMap(r=>[r[4],r[5]]));
+$('#pts').innerHTML=P.map(r=>`<div style="display:grid;grid-template-columns:34px 1fr;gap:8px;align-items:center;margin:6px 0"><span class="lbl">W${r[0]}</span><div><div class="bar" title="Bucs ${r[4]}"><i style="width:${r[4]/mx*100}%"></i></div><div class="bar" style="margin-top:3px" title="${esc(r[3])} ${r[5]}"><i style="width:${r[5]/mx*100}%;background:var(--pew)"></i></div></div></div>`).join('')+'<p class="note">Red is Tampa Bay, grey is the opponent.</p>';
+const pf=P.reduce((a,r)=>a+r[4],0),pa=P.reduce((a,r)=>a+r[5],0);
+$('#seasonSum').innerHTML=`<li><b>Record:</b> 3-6 (2-0 vs the NFC South so far: W at Carolina, W vs Atlanta)</li><li><b>Points:</b> ${pf} for, ${pa} against (${(pf/9).toFixed(1)} and ${(pa/9).toFixed(1)} a game)</li><li><b>One-score losses:</b> 6 of 6 losses were by 7 or less</li><li><b>Biggest win:</b> 43-13 at Carolina</li><li><b>Shutout:</b> 16-0 vs Atlanta</li>`;
+
+const IN=[['LB Alex Anzalone','2 yrs, from Detroit, Mar 12'],['RB Kenneth Gainwell','2 yrs, from Pittsburgh, Mar 12'],['DL A’Shawn Robinson','1 yr, from Carolina, Mar 13'],['QB Jake Browning','1 yr, Mar 13'],['S Miles Killebrew','1 yr, Mar 12'],['OLB Al-Quadin Muhammad','1 yr, Mar 12'],['LB Christian Rozeboom','1 yr, Mar 23'],['DL Rakeem Nuñez-Roches','1 yr, Apr 7'],['T Justin Skule','1 yr, Apr 6'],['WR David Sills','1 yr, Apr 7'],['CB Kemon Hall','1 yr, Apr 10'],['CB Chase Lucas','1 yr, Apr 10'],['DL Haggai Ndubuisi','1 yr, Apr 10']];
+const OUT=[['WR Mike Evans','3 yrs to San Francisco 49ers, Mar 12'],['CB Jamel Dean','3 yrs to Pittsburgh, reported $36.5M, Mar 13'],['RB Rachaad White','1 yr to Washington, Mar 13'],['DL Logan Hall','2 yrs to Houston, Mar 13'],['S Christian Izien','1 yr to Detroit, Mar 13'],['T Charlie Heck','1 yr to Miami, Mar 16'],['S J.T. Gray','1 yr to Philadelphia, Mar 21'],['CB Kindle Vildor','1 yr to New England, Mar 23'],['LB Lavonte David','Retired, Mar 23 (14 seasons)']];
+const RE=[['TE Cade Otton','3-year extension, Mar 12'],['G Dan Feeney','1 yr, Mar 16'],['TE Ko Kieft','1 yr, Mar 16'],['LS Evan Deckers','Renegotiated, Mar 10'],['RB Sean Tucker','Tendered as a restricted free agent']];
+const li=a=>a.map(x=>`<li><b>${esc(x[0])}</b><br><span style="color:var(--mut)">${esc(x[1])}</span></li>`).join('');
+$('#mvIn').innerHTML=li(IN);$('#mvOut').innerHTML=li(OUT);$('#mvRe').innerHTML=li(RE);
+
+const DR=[[1,15,'Rueben Bain Jr.','Edge','Miami','A+','A potential star pass rusher who fell to 15'],[2,46,'Josiah Trotter','LB','Missouri','C','Strong blitzer and tackler, needs work in coverage'],[3,84,'Ted Hurst','WR','Georgia State','B+','Athletic small-school receiver with boundary upside'],[4,116,'Keionte Scott','DB','Miami','A+','Aggressive nickel corner, blitzes and plays the run'],[5,155,'DeMonte Capehart','DT','Clemson','B+','Powerful run-stuffer with elite athletic testing'],[5,160,'Billy Schrauth','OG','Notre Dame','A-','Versatile guard who can start at either spot'],[6,185,'Bauer Sharp','TE','LSU','B','Developmental athletic tight end (traded up)']];
+$('#drTbl').innerHTML='<tr><th>Rd</th><th class="n">Pick</th><th>Player</th><th>Pos</th><th>School</th><th>Grade</th><th>Scouting note</th></tr>'+DR.map(r=>`<tr><td>${r[0]}</td><td class="n">${r[1]}</td><td><b>${esc(r[2])}</b></td><td>${r[3]}</td><td>${esc(r[4])}</td><td><b>${r[5]}</b></td><td style="color:var(--mut)">${esc(r[6])}</td></tr>`).join('');
+
+/* ---------- router ---------- */
+const VIEWS=['home','schedule','odds','teams','offseason','games','settings'];const ALIAS={moves:['offseason','moves'],draft:['offseason','draft']};
+let HH='';function route(){let h=(HH||location.hash||'#home').slice(1);if(ALIAS[h]){showSub('off',ALIAS[h][1]);h=ALIAS[h][0]}const v=VIEWS.includes(h)?h:'home';VIEWS.forEach(x=>$('#s-'+x).classList.toggle('on',x===v));document.querySelectorAll('#nav a').forEach(a=>a.getAttribute('href')==='#'+v?a.setAttribute('aria-current','page'):a.removeAttribute('aria-current'));if(v==='games'&&!curG)drawCards()}
+addEventListener('hashchange',()=>{HH='';route()});document.addEventListener('click',e=>{const a=e.target.closest&&e.target.closest('a[href^="#"]');if(!a)return;e.preventDefault();const h=a.getAttribute('href');if(window.top===window){HH='';location.hash=h;if(location.hash!==h)route()}else{HH=h;route();scrollTo(0,0)}},true);
+
+/* ---------- games ---------- */
+let curG=null,raf=0;
+const GAMES_LIST=[['quiz','Bucs Trivia','10 questions on Bucs history',()=>quiz()],['legends','Who Am I?','Guess the Bucs legend from the clues',()=>legends()],['sack','Sack Attack','Time the pass rush',()=>sack()],['cannon','Pirate Cannon','Fire the ship cannon at the fans',()=>cannon()],['kick','Field Goal Kicker','Power, aim and wind',()=>kick()],['pick','Pick-Six','Jump the routes and pick off passes',()=>pickSix()],['call','Play Caller','Make the call on 8 big downs',()=>caller()],['gm','Draft Day GM','Build a seven-pick class',()=>gm()],['sim','Rest-of-Season Sim','Set win odds, run 10,000 seasons',()=>sim()]];
+function openG(g){cancelAnimationFrame(raf);curG=g;$('#gHub').hidden=!!g;$('#gPlay').hidden=!g;if(g){const x=GAMES_LIST.find(q=>q[0]===g);x[3]()}else{drawCards()}}
+function drawCards(){$('#gcards').innerHTML=GAMES_LIST.map(g=>`<a href="#games" data-g="${g[0]}"><b>${g[1]}</b><span>${g[2]}</span><span style="display:block;margin-top:6px;color:var(--red);font-weight:700">${bestOf(g[0])}</span></a>`).join('')}
+function bestOf(k){const m={quiz:['bd_quiz','Best: ','/10'],legends:['bd_leg','Best: ','/8'],sack:['bd_sack','Best: ',' pts'],cannon:['bd_can','Best: ',' pts'],kick:['bd_kick','Best: ',' pts'],pick:['bd_pick','Best: ',' picks'],call:['bd_call','Best: ',' pts']}[k];if(!m)return '';const v=store.get(m[0],0);return v?m[1]+v+m[2]:'Not played yet'}
+$('#gcards').addEventListener('click',e=>{const a=e.target.closest('[data-g]');if(a){e.preventDefault();openG(a.dataset.g)}});
+$('#gBack').onclick=()=>{curG=null;cancelAnimationFrame(raf);openG(null)};
+
+/* Trivia */
+const QS=[['In which season did the Buccaneers play their first game?','1976',['1976','1966','1984','1992'],'Tampa Bay joined the NFL in 1976 and lost its first 26 games.'],
+['Who was the first Buccaneer inducted into the Pro Football Hall of Fame?','Lee Roy Selmon',['Lee Roy Selmon','Warren Sapp','Derrick Brooks','Ronde Barber'],'The defensive end went in with the class of 1995.'],
+['The Bucs won their first Super Bowl after the 2002 season. Who did they beat?','Oakland Raiders',['Oakland Raiders','Philadelphia Eagles','Pittsburgh Steelers','Kansas City Chiefs'],'Super Bowl XXXVII ended 48-21 in San Diego.'],
+['Who was the head coach of that first Super Bowl team?','Jon Gruden',['Jon Gruden','Tony Dungy','Bruce Arians','Raheem Morris'],'Gruden came over from Oakland in a 2002 trade.'],
+['Which stadium did the Bucs play in before Raymond James Stadium?','Tampa Stadium',['Tampa Stadium','Citrus Bowl','Tropicana Field','Mile High'],'Tampa Stadium was nicknamed the Big Sombrero.'],
+['Tampa Bay won Super Bowl LV at home. Who was the opponent?','Kansas City Chiefs',['Kansas City Chiefs','Green Bay Packers','Buffalo Bills','San Francisco 49ers'],'The Bucs won 31-9 in February 2021.'],
+['Who opened his career with 11 straight 1,000-yard receiving seasons, an NFL record?','Mike Evans',['Mike Evans','Chris Godwin','Keyshawn Johnson','Joey Galloway'],'Evans reached 1,000 yards every year from 2014 through 2024.'],
+['What does the Buccaneers’ raised pirate ship in the stadium do after touchdowns?','Fires cannons',['Fires cannons','Plays a horn','Launches fireworks','Drops confetti'],'The 103-foot ship fires cannons and sails beads to fans.'],
+['Which linebacker retired in March 2026 after a 14-year career?','Lavonte David',['Lavonte David','Devin White','Shaquil Barrett','Kwon Alexander'],'David played all 14 seasons in Tampa.'],
+['Who did the Bucs pick 15th overall in the 2026 draft?','Rueben Bain Jr.',['Rueben Bain Jr.','Josiah Trotter','Ted Hurst','Keionte Scott'],'The Miami edge rusher was graded A+ by SI.']];
+function quiz(){const qs=[...QS].sort(()=>Math.random()-.5);let i=0,s=0;const best=store.get('bd_quiz',0);
+ const box=$('#gbox');
+ function show(){if(i>=qs.length){const nb=Math.max(best,s);store.set('bd_quiz',nb);box.innerHTML=`<div class="panel"><h3>Final score</h3><div class="rec">${s}<small>of ${qs.length}</small></div><p>${s>=9?'Hall of Fame fan.':s>=6?'Solid fan. Another pass could get you there.':'Keep studying. The Bucs have a long history.'}</p><p class="note">Best on this device: ${nb}/${qs.length}</p><button class="btn" id="again">Play again</button></div>`;$('#again').onclick=quiz;return}
+  const q=qs[i],o=[...q[2]].sort(()=>Math.random()-.5);
+  box.innerHTML=`<div class="panel"><div class="lbl">Question ${i+1} of ${qs.length} · Score ${s}</div><h3 style="font-size:24px;text-transform:none;margin-top:6px">${esc(q[0])}</h3><div id="o">${o.map(x=>`<button class="opt" data-v="${esc(x)}">${esc(x)}</button>`).join('')}</div><div id="fb"></div></div>`;
+  $('#o').onclick=e=>{const b=e.target.closest('.opt');if(!b||b.disabled)return;const ok=b.dataset.v===q[1];if(ok)s++;[...document.querySelectorAll('#o .opt')].forEach(x=>{x.disabled=true;if(x.dataset.v===q[1])x.classList.add('ok');else if(x===b)x.classList.add('no')});$('#fb').innerHTML=`<p style="margin:10px 0"><b>${ok?'Correct.':'Not quite.'}</b> ${esc(q[3])}</p><button class="btn" id="nx">${i<qs.length-1?'Next':'See score'}</button>`;$('#nx').onclick=()=>{i++;show()}}}
+ show()}
+
+/* Sack Attack */
+function sack(){const box=$('#gbox');box.innerHTML=`<div class="panel"><h3>Sack Attack</h3><p style="margin:0 0 10px">Ten snaps. Press Space or tap the field when the marker is in the green zone to beat your blocker. The zone gets smaller and the marker faster every snap.</p><canvas id="cv" width="640" height="360"></canvas><div class="note" id="st"></div></div>`;
+ const cv=$('#cv'),x=cv.getContext('2d');let snap=0,sacks=0,pts=0,m=0,dir=1,c=.5,w=.2,ph='ready',res='',t=0,rush=0;const best=store.get('bd_sack',0);
+ function setup(){snap++;c=rnd(.25,.75);w=Math.max(.05,.16-snap*.01);m=0;dir=1;ph='play';rush=0;res=''}
+ function hit(){if(ph==='ready'){setup();return}if(ph==='play'){const d=Math.abs(m-c);if(d<w*.3){res='STRIP SACK! +2';pts+=2;sacks++}else if(d<w){res='SACK! +1';pts+=1;sacks++}else{res='Escaped.'}ph='res';t=0}else if(ph==='res'&&t>.5){if(snap>=10){ph='end';store.set('bd_sack',Math.max(best,pts))}else setup()}else if(ph==='end'&&t>.5){snap=0;sacks=0;pts=0;ph='ready'}}
+ cv.onpointerdown=hit;const kd=e=>{if(curG!=='sack'){removeEventListener('keydown',kd);return}if(e.code==='Space'){e.preventDefault();hit()}};addEventListener('keydown',kd);
+ let last=performance.now();
+ function loop(now){const dt=Math.min(.04,(now-last)/1000);last=now;t+=dt;
+  if(ph==='play'){m+=dir*dt*(.9+snap*.12);if(m>1){m=1;dir=-1}if(m<0){m=0;dir=1}}
+  if(ph==='res')rush=Math.min(1,rush+dt*3);
+  const g=x.createLinearGradient(0,0,0,360);g.addColorStop(0,'#1c1c1c');g.addColorStop(1,'#0a0a0a');x.fillStyle=g;x.fillRect(0,0,640,360);
+  x.strokeStyle='rgba(255,255,255,.16)';x.lineWidth=2;for(let i=1;i<6;i++){x.beginPath();x.moveTo(0,i*60);x.lineTo(640,i*60);x.stroke()}
+  const qx=420,qy=170;let rx=140+(qx-140-30)*(ph==='res'&&res!=='Escaped.'?rush:ph==='res'?rush*.55:0),ry=170+(ph==='res'&&res==='Escaped.'?-rush*70:0);
+  x.fillStyle='#b8b3ac';[110,160,210].forEach((y,i)=>{x.beginPath();x.arc(260,y+10,13,0,7);x.fill()});
+  x.fillStyle='#e8e2d8';x.beginPath();x.arc(qx,qy+(ph==='res'&&res!=='Escaped.'?rush*10:0),14,0,7);x.fill();
+  x.fillStyle='#d50a0a';x.beginPath();x.arc(rx,ry,15,0,7);x.fill();x.fillStyle='#fff';x.font='700 11px sans-serif';x.textAlign='center';x.fillText('YOU',rx,ry+4);
+  x.fillStyle='rgba(0,0,0,.5)';x.beginPath();x.roundRect(60,300,520,26,13);x.fill();
+  if(ph==='play'||ph==='res'){x.fillStyle='rgba(255,255,255,.9)';x.beginPath();x.roundRect(60+520*(c-w),300,520*w*2,26,13);x.fill();x.fillStyle='#d50a0a';x.fillRect(60+520*(c-w*.3),300,520*w*.6,26);x.fillStyle='#ff2a2a';x.fillRect(60+520*m-3,294,6,38)}
+  x.fillStyle='#fff';x.textAlign='left';x.font='700 18px Barlow Condensed,sans-serif';x.fillText('SNAP '+Math.min(10,snap||1)+'/10',20,28);x.textAlign='right';x.fillText('SACKS '+sacks+'   POINTS '+pts,620,28);x.textAlign='center';
+  if(ph==='ready'){x.font='800 30px Barlow Condensed,sans-serif';x.fillText('TAP OR PRESS SPACE TO START',320,120)}
+  if(ph==='res'){x.font='800 38px Barlow Condensed,sans-serif';x.fillStyle=res==='Escaped.'?'#aaa':'#ff2a2a';x.fillText(res,320,110)}
+  if(ph==='end'){x.fillStyle='rgba(0,0,0,.65)';x.fillRect(0,0,640,360);x.fillStyle='#fff';x.font='800 44px Barlow Condensed,sans-serif';x.fillText('FINAL: '+pts+' POINTS, '+sacks+' SACKS',320,150);x.font='600 20px Barlow,sans-serif';x.fillText('Best on this device: '+Math.max(best,pts),320,190);x.fillText('Tap to play again',320,230)}
+  $('#st')&&($('#st').textContent=ph==='res'||ph==='play'?'':'');
+  if(curG==='sack')raf=requestAnimationFrame(loop)}
+ raf=requestAnimationFrame(loop)}
+
+/* Draft Day GM */
+const NEED={QB:1,RB:2,WR:3,TE:2,OL:3,DL:3,EDGE:3,LB:3,CB:3,S:2};
+const POOLS=[['Round 1 · No. 15',[['EDGE',88],['CB',85],['OL',83],['WR',86],['DL',84]]],['Round 2 · No. 46',[['LB',80],['OL',79],['CB',81],['DL',78],['S',77]]],['Round 3 · No. 84',[['WR',75],['TE',74],['CB',73],['EDGE',72],['OL',74]]],['Round 4 · No. 116',[['CB',70],['S',70],['LB',69],['RB',71],['DL',68]]],['Round 5 · No. 155',[['DL',66],['OL',65],['WR',66],['TE',64],['LB',65]]],['Round 5 · No. 160',[['OL',65],['CB',64],['DL',64],['S',63],['RB',65]]],['Round 6 · No. 185',[['TE',60],['WR',61],['LB',60],['CB',60],['OL',59]]]];
+const FN=['Jaylen','Marcus','Devon','Isaiah','Tyrell','Caleb','Darius','Malik','Terrence','Andre','Corey','Jamal','Eli','Brandon','Xavier','Reggie','Zion','Micah','Kendrick','Dante'],LN=['Carter','Ellis','Mitchell','Brooks','Hayes','Reed','Foster','Coleman','Bishop','Warren','Ford','Hunt','Shaw','Dixon','Boyd','Lane','Pryor','Stone','Vance','Webb'];
+function gm(){const box=$('#gbox');let i=0,tot=0,log=[];const used=new Set();
+ const pools=POOLS.map(p=>[p[0],p[1].map(([pos,r])=>({pos,r:r+Math.round(rnd(-3,3)),n:FN[Math.floor(rnd(0,20))]+' '+LN[Math.floor(rnd(0,20))],need:NEED[pos]||1}))]);
+ function show(){if(i>=pools.length){const pct=tot/ (pools.length*100);const grade=pct>.78?'A':pct>.72?'B+':pct>.66?'B':pct>.6?'C+':'C';box.innerHTML=`<div class="panel"><h3>Your class</h3><div class="rec">${grade}<small>${tot} value points</small></div><div class="tw"><table><tr><th>Slot</th><th>Pick</th><th>Pos</th><th class="n">Rating</th></tr>${log.map(l=>`<tr><td>${esc(l[0])}</td><td>${esc(l[1])}</td><td>${l[2]}</td><td class="n">${l[3]}</td></tr>`).join('')}</table></div><p class="note">Compare with Jason Licht's real class (graded A by SI): Bain, Trotter, Hurst, Scott, Capehart, Schrauth, Sharp. Prospects here are made up; positions and ratings are random each run. Each pick scores its rating plus a bonus for team need (CB, OL, DL, EDGE and LB count most).</p><button class="btn" id="re">Draft again</button></div>`;$('#re').onclick=gm;return}
+  const [slot,opts]=pools[i];
+  box.innerHTML=`<div class="panel"><div class="lbl">On the clock · ${esc(slot)} · ${i+1} of ${pools.length}</div><h3 style="font-size:24px;margin-top:6px">Pick your player</h3>${opts.map((o,k)=>`<button class="opt" data-k="${k}"><b>${esc(o.n)}</b> · ${o.pos} · rating ${o.r}${o.need>=3?' · <span style="color:var(--red);font-weight:700">big need</span>':''}</button>`).join('')}<div class="note">Total so far: ${tot}</div></div>`;
+  box.querySelector('.panel').onclick=e=>{const b=e.target.closest('.opt');if(!b)return;const o=opts[+b.dataset.k],val=o.r+o.need*3;tot+=val;log.push([slot,o.n,o.pos,o.r]);i++;show()}}
+ show()}
+
+/* Rest-of-season sim */
+const REM=[['at Detroit',.38],['vs Carolina',.62],['vs L.A. Chargers',.45],['at Baltimore',.32],['vs New Orleans',.6],['at Atlanta',.52],['vs L.A. Rams',.4],['at New Orleans',.5]];
+function sim(){const box=$('#gbox');const pr=store.get('bd_sim',null)||REM.map(r=>r[1]);
+ box.innerHTML=`<div class="panel"><h3>Rest-of-season simulator</h3><p style="margin:0 0 6px">The Bucs are 3-6 with eight games left. Set the chance they win each one, then run 10,000 seasons. The defaults come from the Odds tab's model, not from betting lines.</p><div id="sl"></div><div style="display:flex;gap:8px;margin:10px 0"><button class="btn" id="go">Run 10,000 seasons</button><button class="btn g" id="rs">Reset</button></div><div id="out"></div></div>`;
+ $('#sl').innerHTML=REM.map((r,i)=>`<label style="display:grid;grid-template-columns:140px 1fr 48px;gap:10px;align-items:center;margin:4px 0" for="p${i}"><span>${esc(r[0])}</span><input type="range" id="p${i}" min="5" max="95" value="${Math.round(pr[i]*100)}"><b class="num" id="v${i}" style="text-align:right">${Math.round(pr[i]*100)}%</b></label>`).join('');
+ REM.forEach((r,i)=>$('#p'+i).oninput=e=>{$('#v'+i).textContent=e.target.value+'%'});
+ $('#rs').onclick=()=>{store.set('bd_sim',null);sim()};
+ $('#go').onclick=()=>{const p=REM.map((r,i)=>+$('#p'+i).value/100);store.set('bd_sim',p);const N=10000,dist=Array(9).fill(0);for(let n=0;n<N;n++){let w=0;for(const q of p)if(Math.random()<q)w++;dist[w]++}
+  const wins=k=>dist.slice(k).reduce((a,b)=>a+b,0)/N*100,mx=Math.max(...dist);const ev=dist.reduce((a,c,k)=>a+c*k,0)/N;
+  $('#out').innerHTML=`<div class="lbl">Final record (3 wins already banked)</div><div class="dist">${dist.map((c,k)=>`<div style="height:${c/mx*100}%"><span>${(c/N*100).toFixed(0)}%</span></div>`).join('')}</div><div class="dist lab">${dist.map((c,k)=>`<div>${3+k}-${14-k}</div>`).join('')}</div><ul class="plain" style="margin-top:12px"><li>Expected record: <b>${(3+ev).toFixed(1)}-${(14-ev).toFixed(1)}</b></li><li>At least 8 wins: <b>${wins(5).toFixed(0)}%</b></li><li>9 wins or more: <b>${wins(6).toFixed(0)}%</b></li><li>10 wins or more: <b>${wins(7).toFixed(0)}%</b></li><li>Win out (11-6): <b>${wins(8).toFixed(1)}%</b></li></ul><p class="note">Final records show wins-losses with no ties. How many wins win the NFC South depends on the other three teams, which this simulator does not model.</p>`}}
+
+/* ---------- odds model ---------- */
+const RT={TB:[202,178,9],DET:[257,199,9],CAR:[199,219,8],NO:[185,216,8],ATL:[188,223,9],LAR:[214,181,9],LAC:[121,219,8],BAL:[189,236,9]};
+const rate=k=>{const [f,a,g]=RT[k];return (f-a)/g*.5};
+const cdf=z=>{const t=1/(1+.2316419*Math.abs(z)),d=.3989423*Math.exp(-z*z/2),p=d*t*(.3193815+t*(-.3565638+t*(1.781478+t*(-1.821256+t*1.330274))));return z>0?1-p:p};
+const wp=sp=>cdf(sp/13);
+const GAMES=[['at Detroit','DET','Nov 22',-2],['vs Carolina','CAR','Nov 30',2],['vs L.A. Chargers','LAC','Dec 6',2],['at Baltimore','BAL','Dec 13',-2],['vs New Orleans','NO','Dec 20',2],['at Atlanta','ATL','TBD',-2],['vs L.A. Rams','LAR','Jan 3',2],['at New Orleans','NO','TBD',-2]];
+const MP=GAMES.map(g=>{const sp=rate('TB')-rate(g[1])+g[3];return{n:g[0],d:g[2],sp,p:wp(sp)}});
+$('#oddsTbl').innerHTML='<tr><th>Game</th><th>Date</th><th class="n">Model line</th><th class="n">Bucs win</th><th>Favored</th></tr>'+MP.map(m=>`<tr><td>${m.n}</td><td>${m.d}</td><td class="n">${m.sp>=0?'Bucs -':'Bucs +'}${Math.abs(m.sp).toFixed(1)}</td><td class="n"><b>${(m.p*100).toFixed(0)}%</b></td><td>${m.p>.53?'Bucs':m.p<.47?'Opponent':'Toss-up'}</td></tr>`).join('')+`<tr><td colspan="3"><b>Expected wins in the 8 games</b></td><td class="n"><b>${MP.reduce((a,m)=>a+m.p,0).toFixed(1)}</b></td><td></td></tr>`;
+// schedule table: add model column
+(function(){const t=$('#schTbl');const rows=t.querySelectorAll('tr');t.querySelector('tr').insertAdjacentHTML('beforeend','<th class="n">Win chance</th>');const fut=SCH.filter(r=>r[4]==null&&r[3]!=='Bye');let k=0;SCH.forEach((r,i)=>{const tr=rows[i+1];if(r[3]==='Bye'){tr.insertAdjacentHTML('beforeend','<td></td>');return}if(r[4]==null){tr.insertAdjacentHTML('beforeend',`<td class="n">${(MP[k++].p*100).toFixed(0)}%</td>`)}else tr.insertAdjacentHTML('beforeend','<td></td>')})})();
+// division sim
+(function(){const N=20000,names=['TB','CAR','ATL','NO'],w0={TB:3,CAR:3,ATL:3,NO:3},left={CAR:9,ATL:8,NO:9},win={TB:0,CAR:0,ATL:0,NO:0},dist=Array(15).fill(0);
+ const pc=k=>wp(rate(k));
+ for(let n=0;n<N;n++){const w={...w0};let tb=0;MP.forEach(m=>{if(Math.random()<m.p)tb++});w.TB+=tb;
+  // TB's games vs CAR (1), ATL (1), NO (2) feed those teams too; other games use average opponent
+  const res={CAR:MP[1],ATL:MP[5],NO:[MP[4],MP[7]]};
+  w.CAR+=(Math.random()>MP[1].p?1:0)+bin(8,pc('CAR'));w.ATL+=(Math.random()>MP[5].p?1:0)+bin(7,pc('ATL'));w.NO+=(Math.random()>MP[4].p?1:0)+(Math.random()>MP[7].p?1:0)+bin(7,pc('NO'));
+  const mxw=Math.max(...names.map(k=>w[k])),top=names.filter(k=>w[k]===mxw);win[top[Math.floor(Math.random()*top.length)]]++;dist[w.TB]++}
+ function bin(n,p){let c=0;for(let i=0;i<n;i++)if(Math.random()<p)c++;return c}
+ const F={TB:'Tampa Bay',CAR:'Carolina',ATL:'Atlanta',NO:'New Orleans'};
+ const row=names.map(k=>[k,win[k]/N*100]).sort((a,b)=>b[1]-a[1]);window.__div=row;
+ $('#divOdds').innerHTML=row.map(r=>`<div style="display:grid;grid-template-columns:110px 1fr 54px;gap:10px;align-items:center;margin:8px 0"><span${r[0]==='TB'?' style="font-weight:800"':''}>${F[r[0]]}</span><div class="bar"><i style="width:${r[1]}%;${r[0]==='TB'?'':'background:var(--pew)'}"></i></div><b class="num" style="text-align:right">${r[1].toFixed(0)}%</b></div>`).join('')+`<p class="note">20,000 simulated finishes. Each team's remaining games use its rating against an average opponent, except Tampa Bay's games against division rivals, which use the table below. Ties for first are broken at random, which ignores the real tiebreakers (the Bucs' 2-0 division record would help them). Playoff odds beyond the division title depend on the whole NFC, which this does not model. By record, the three wild-card spots right now belong to Detroit and Minnesota (6-2) and Green Bay (6-3), so the Bucs are three games behind the last one.</p>`;
+ })();
+$('#stTbl').innerHTML='<tr><th>Team</th><th class="n">W-L</th><th class="n">PF</th><th class="n">PA</th><th class="n">Diff</th><th class="n">Div</th></tr>'+[['Carolina Panthers','3-5',199,219,'1-1'],['New Orleans Saints','3-5',185,216,'0-1'],['Tampa Bay Buccaneers','3-6',202,178,'2-0'],['Atlanta Falcons','3-6',188,223,'1-2']].map(r=>`<tr${r[0].startsWith('Tampa')?' style="font-weight:700"':''}><td>${r[0]}</td><td class="n">${r[1]}</td><td class="n">${r[2]}</td><td class="n">${r[3]}</td><td class="n">${r[2]-r[3]>0?'+':''}${r[2]-r[3]}</td><td class="n">${r[4]}</td></tr>`).join('');
+$('#pic').innerHTML=['<li><b>Division leaders by record:</b> San Francisco 7-1, Chicago and Detroit tied at 7-2 in the North, N.Y. Giants 5-3-1, and the NFC South at 3-5 (Carolina and New Orleans)</li>','<li><b>Wild cards:</b> Minnesota 6-2, Green Bay 6-3</li>','<li><b>Just outside:</b> Seattle and the L.A. Rams, both 5-4</li>','<li><b>Tampa Bay:</b> 3-6, tied with Atlanta and Arizona. The NFC South title is the realistic path.</li>'].join('')+'<p class="note">Records only, from ESPN. Official seeding uses tiebreakers, so treat this as a rough read.</p>';
+// use model for simulator defaults
+REM.forEach((r,i)=>{r[1]=Math.round(MP[i].p*100)/100});
+
+/* ---------- all teams ---------- */
+const LG=[['AFC East','AFC',[['Buffalo Bills',7,1,0,256,187,'0-1'],['New England Patriots',5,5,0,221,242,'-'],['New York Jets',2,7,0,182,223,'0-2'],['Miami Dolphins',1,7,0,126,200,'1-1']]],
+['AFC North','AFC',[['Pittsburgh Steelers',6,2,0,180,144,'2-1'],['Cincinnati Bengals',6,2,0,240,175,'1-1'],['Cleveland Browns',5,4,0,161,196,'2-1'],['Baltimore Ravens',4,5,0,189,236,'0-2']]],
+['AFC South','AFC',[['Jacksonville Jaguars',6,2,0,229,121,'1-1'],['Houston Texans',3,5,0,209,192,'2-1'],['Indianapolis Colts',2,7,0,184,249,'1-2'],['Tennessee Titans',1,7,0,144,199,'1-1']]],
+['AFC West','AFC',[['Denver Broncos',7,2,0,198,186,'2-1'],['Kansas City Chiefs',6,2,0,202,143,'3-1'],['Las Vegas Raiders',4,5,0,238,268,'1-1'],['Los Angeles Chargers',0,8,0,121,219,'0-3']]],
+['NFC East','NFC',[['New York Giants',5,3,1,203,196,'-'],['Dallas Cowboys',4,5,0,246,236,'2-1'],['Washington Commanders',3,5,1,196,223,'-'],['Philadelphia Eagles',2,7,0,148,221,'1-3']]],
+['NFC North','NFC',[['Chicago Bears',7,2,0,241,184,'0-2'],['Detroit Lions',7,2,0,257,199,'-'],['Minnesota Vikings',6,2,0,146,116,'2-1'],['Green Bay Packers',6,3,0,216,191,'1-2']]],
+['NFC South','NFC',[['Carolina Panthers',3,5,0,199,219,'1-1'],['New Orleans Saints',3,5,0,185,216,'0-1'],['Tampa Bay Buccaneers',3,6,0,202,178,'2-0'],['Atlanta Falcons',3,6,0,188,223,'1-2']]],
+['NFC West','NFC',[['San Francisco 49ers',7,1,0,235,156,'3-0'],['Seattle Seahawks',5,4,0,202,162,'2-1'],['Los Angeles Rams',5,4,0,214,181,'0-2'],['Arizona Cardinals',3,6,0,178,255,'1-3']]]];
+const TM=[];LG.forEach(([d,c,ts])=>ts.forEach(t=>{const g=t[1]+t[2]+t[3];TM.push({n:t[0],w:t[1],l:t[2],t:t[3],pf:t[4],pa:t[5],dv:t[6],div:d,cf:c,g,pct:(t[1]+t[3]/2)/g,dg:(t[4]-t[5])/g})}));
+const rec=t=>t.w+'-'+t.l+(t.t?'-'+t.t:'');
+// seeds
+['AFC','NFC'].forEach(c=>{const T=TM.filter(t=>t.cf===c),by=(a,b)=>b.pct-a.pct||b.dg-a.dg,lead=[];[...new Set(T.map(t=>t.div))].forEach(d=>lead.push(T.filter(t=>t.div===d).sort(by)[0]));lead.sort(by);lead.forEach((t,i)=>{t.seed=i+1;t.lead=1});T.filter(t=>!t.lead).sort(by).forEach((t,i)=>{t.seed=i+5})});
+TM.forEach(t=>{t.rank=TM.slice().sort((a,b)=>b.dg-a.dg).indexOf(t)+1;t.rt=t.dg*.5;t.dr=TM.filter(x=>x.div===t.div).sort((a,b)=>b.pct-a.pct||b.dg-a.dg).indexOf(t)+1});
+let cfSel='NFC',tSel='Tampa Bay Buccaneers';
+function drawTeams(){document.querySelectorAll('#cf button').forEach(b=>b.setAttribute('aria-pressed',b.dataset.c===cfSel));
+ $('#divs').innerHTML=LG.filter(d=>d[1]===cfSel).map(([d,c,ts])=>`<div class="panel tw"><h3>${d}</h3><table><tr><th>Team</th><th class="n">W-L</th><th class="n">Diff</th><th class="n">Seed</th></tr>${TM.filter(t=>t.div===d).sort((a,b)=>b.pct-a.pct||b.dg-a.dg).map(t=>`<tr><td><button class="lnk" data-t="${t.n}"${t.n===tSel?' style="font-weight:800;color:var(--red)"':''}>${t.n}</button></td><td class="n">${rec(t)}</td><td class="n">${t.pf-t.pa>0?'+':''}${t.pf-t.pa}</td><td class="n">${t.seed<=7?t.seed:'-'}</td></tr>`).join('')}</table></div>`).join('');
+ const t=TM.find(x=>x.n===tSel),th=TM.filter(x=>x.cf===t.cf&&x.seed===7)[0];
+ const gb=t.seed<=7?0:((th.w-th.l)-(t.w-t.l))/2;
+ $('#tdet').innerHTML=`<div class="lbl">${t.div}</div><h3 style="font-size:30px;margin:2px 0 8px">${t.n}</h3><div class="rec" style="font-size:64px">${rec(t)}<small>${['1st','2nd','3rd','4th'][t.dr-1]} in division</small></div><ul class="plain" style="margin-top:10px"><li><b>Points per game:</b> ${(t.pf/t.g).toFixed(1)} scored, ${(t.pa/t.g).toFixed(1)} allowed (${t.dg>0?'+':''}${t.dg.toFixed(1)})</li><li><b>Division record:</b> ${t.dv}</li><li><b>Power rank by point differential:</b> ${t.rank} of 32</li><li><b>${t.cf} seed by record:</b> ${t.seed<=7?'No. '+t.seed+(t.lead?' (division leader)':' (wild card)'):'out of the top 7'+(gb>0?', '+gb+' games behind the last wild card':'')}</li></ul><p class="note">Click any team above to switch.</p>`;
+ mu()}
+function mu(){const A=TM.find(x=>x.n===$('#mA').value),B=TM.find(x=>x.n===$('#mB').value);if(!A||!B)return;if(A===B){$('#mOut').innerHTML='<p>Pick two different teams.</p>';return}
+ const sp=B.rt-A.rt+2,pB=wp(sp),fav=sp>=0?B:A;
+ $('#mOut').innerHTML=`<div style="font:800 28px var(--hd);text-transform:uppercase">${fav.n.split(' ').pop()} by ${Math.abs(sp).toFixed(1)}</div><div class="bar" style="margin:8px 0"><i style="width:${(1-pB)*100}%"></i></div><div style="display:flex;justify-content:space-between"><span>${A.n.split(' ').pop()} ${((1-pB)*100).toFixed(0)}%</span><span>${B.n.split(' ').pop()} ${(pB*100).toFixed(0)}%</span></div>`}
+const opts=TM.slice().sort((a,b)=>a.n.localeCompare(b.n)).map(t=>`<option>${t.n}</option>`).join('');
+$('#mA').innerHTML=opts;$('#mB').innerHTML=opts;$('#mA').value='Detroit Lions';$('#mB').value='Tampa Bay Buccaneers';$('#mA').onchange=$('#mB').onchange=mu;
+$('#cf').onclick=e=>{const b=e.target.closest('button');if(b){cfSel=b.dataset.c;drawTeams()}};
+$('#divs').onclick=e=>{const b=e.target.closest('[data-t]');if(b){tSel=b.dataset.t;cfSel=TM.find(x=>x.n===tSel).cf;drawTeams();$('#tdet').scrollIntoView({block:'nearest'})}};
+$('#pwr').innerHTML='<tr><th class="n">#</th><th>Team</th><th class="n">W-L</th><th class="n">PF/G</th><th class="n">PA/G</th><th class="n">Diff/G</th></tr>'+TM.slice().sort((a,b)=>b.dg-a.dg).map((t,i)=>`<tr${t.n.startsWith('Tampa')?' style="font-weight:700"':''}><td class="n">${i+1}</td><td>${t.n}</td><td class="n">${rec(t)}</td><td class="n">${(t.pf/t.g).toFixed(1)}</td><td class="n">${(t.pa/t.g).toFixed(1)}</td><td class="n">${t.dg>0?'+':''}${t.dg.toFixed(1)}</td></tr>`).join('');
+drawTeams();
+
+/* ---------- home widgets ---------- */
+(function(){const P=SCH.filter(r=>r[4]!=null),nx=SCH.filter(r=>r[4]==null&&r[3]!=='Bye')[0];
+ $('#tick').innerHTML=P.slice(-4).map(r=>`<div class="g ${r[4]>r[5]?'W':'L'}"><span>Wk ${r[0]} · ${r[1]}</span><b>${r[4]>r[5]?'W':'L'} ${r[4]}-${r[5]}</b><span>${r[2]} ${esc(r[3])}</span></div>`).join('')+`<div class="g nx"><span>Next · ${nx[1]}</span><b>${nx[2]} ${esc(nx[3])}</b><span>${nx[6]} ${nx[7]}</span></div>`;
+ $('#form').innerHTML=SCH.filter(r=>r[3]!=='Bye').map(r=>r[4]==null?`<i class="B" title="Week ${r[0]}">${r[0]}</i>`:`<i class="${r[4]>r[5]?'W':'L'}" title="Week ${r[0]}: ${r[4]}-${r[5]}">${r[4]>r[5]?'W':'L'}</i>`).join('');
+ const pf=P.reduce((a,r)=>a+r[4],0),pa=P.reduce((a,r)=>a+r[5],0);
+ $('#tiles').innerHTML=[[ (pf/9).toFixed(1),'Points per game','League avg '+(TM.reduce((a,t)=>a+t.pf,0)/TM.reduce((a,t)=>a+t.g,0)).toFixed(1)],[(pa/9).toFixed(1),'Allowed per game','Best in the NFC South'],['+'+(pf-pa),'Point differential','Only positive in division'],['2-0','Division record','Beat CAR and ATL'],['0','Lost by more than 7','Six losses, all close']].map(t=>`<div class="tile"><div class="v">${t[0]}</div><div class="tl">${t[1]}</div><div class="d">${t[2]}</div></div>`).join('');
+})();
+(function(){const F={TB:'Tampa Bay',CAR:'Carolina',ATL:'Atlanta',NO:'New Orleans'};
+ $('#raceMini').innerHTML=(window.__div||[]).map(r=>`<div style="display:grid;grid-template-columns:92px 1fr 40px;gap:8px;align-items:center;margin:7px 0"><span${r[0]==='TB'?' style="font-weight:800"':''}>${F[r[0]]}</span><div class="bar"><i style="width:${r[1]}%;${r[0]==='TB'?'':'background:var(--pew)'}"></i></div><b style="text-align:right">${r[1].toFixed(0)}%</b></div>`).join('')+'<div class="note" style="margin-top:2px">Chance to win the division (model)</div>';
+ $('#nxtOdds').textContent=(MP[0].p<.47?'Lions favored':'Bucs favored')+' · Bucs win '+(MP[0].p*100).toFixed(0)+'%'})();
+
+/* ---------- what-if machine ---------- */
+(function(){const st=GAMES.map(()=>'M');
+ function bin(n,p){let c=0;for(let i=0;i<n;i++)if(Math.random()<p)c++;return c}
+ function run(){const N=15000,F={TB:'Tampa Bay',CAR:'Carolina',ATL:'Atlanta',NO:'New Orleans'},names=['TB','CAR','ATL','NO'],win={TB:0,CAR:0,ATL:0,NO:0};let sumTB=0;const pc=k=>wp(rate(k));
+  for(let n=0;n<N;n++){const res=MP.map((m,i)=>st[i]==='W'?1:st[i]==='L'?0:(Math.random()<m.p?1:0));const tb=res.reduce((a,b)=>a+b,0);sumTB+=tb;
+   const w={TB:3+tb,CAR:3+(1-res[1])+bin(8,pc('CAR')),ATL:3+(1-res[5])+bin(7,pc('ATL')),NO:3+(1-res[4])+(1-res[7])+bin(7,pc('NO'))};
+   const mx=Math.max(...names.map(k=>w[k])),top=names.filter(k=>w[k]===mx);win[top[Math.floor(Math.random()*top.length)]]++}
+  const base=(window.__div||[]).find(r=>r[0]==='TB')[1],now=win.TB/N*100,ev=sumTB/N;
+  const rows=names.map(k=>[k,win[k]/N*100]).sort((a,b)=>b[1]-a[1]);
+  $('#wiOut').innerHTML=`<div style="display:flex;gap:12px;flex-wrap:wrap;align-items:stretch"><div class="tile" style="flex:1;min-width:150px"><div class="v">${now>99.5?'99+':now<.5?'<1':now.toFixed(0)}%</div><div class="tl">Bucs win the division</div><div class="d">${now>base+.5?'Up '+(now-base).toFixed(0)+' from the baseline':now<base-.5?'Down '+(base-now).toFixed(0)+' from the baseline':'Same as the baseline ('+base.toFixed(0)+'%)'}</div></div><div class="tile" style="flex:1;min-width:150px"><div class="v">${(3+ev).toFixed(1)}-${(14-ev).toFixed(1)}</div><div class="tl">Expected final record</div><div class="d">3 wins banked plus ${ev.toFixed(1)} more</div></div></div>`+rows.map(r=>`<div style="display:grid;grid-template-columns:100px 1fr 44px;gap:8px;align-items:center;margin:7px 0"><span${r[0]==='TB'?' style="font-weight:800"':''}>${F[r[0]]}</span><div class="bar"><i style="width:${r[1]}%;${r[0]==='TB'?'':'background:var(--pew)'}"></i></div><b style="text-align:right">${r[1].toFixed(0)}%</b></div>`).join('')}
+ function draw(){$('#wi').innerHTML=GAMES.map((g,i)=>`<div class="wi"><span>${g[0]}<br><small style="color:var(--mut)">${g[2]} · model ${(MP[i].p*100).toFixed(0)}%</small></span><span class="seg3" data-i="${i}">${[['W','Win'],['M','Model'],['L','Loss']].map(b=>`<button type="button" data-v="${b[0]}" aria-pressed="${st[i]===b[0]}">${b[1]}</button>`).join('')}</span></div>`).join('')+'<div style="margin-top:10px"><button class="btn g" type="button" id="wiReset">Reset all</button> <button class="btn" type="button" id="wiWin">Win out</button></div>';run()}
+ $('#wi').addEventListener('click',e=>{const b=e.target.closest('button');if(!b)return;if(b.id==='wiReset')st.fill('M');else if(b.id==='wiWin')st.fill('W');else{const i=+b.parentNode.dataset.i;st[i]=b.dataset.v}draw()});
+ draw()})();
+
+/* ---------- sub-tabs ---------- */
+function showSub(sec,k){document.querySelectorAll(`.subtabs[data-sec="${sec}"] button`).forEach(b=>b.setAttribute('aria-pressed',b.dataset.sub===k));document.querySelectorAll(`.sub[data-sec="${sec}"]`).forEach(x=>x.classList.toggle('on',x.dataset.sub===k))}
+document.querySelectorAll('.subtabs').forEach(bar=>{const f=bar.querySelector('button');showSub(bar.dataset.sec,f.dataset.sub);bar.addEventListener('click',e=>{const b=e.target.closest('button');if(b)showSub(bar.dataset.sec,b.dataset.sub)})});
+/* ---------- settings ---------- */
+const SKINS=[['classic','Classic','#d50a0a','#0d0d0d'],['flame','Flame','#e8480c','#1c0f08'],['pewter','Pewter','#c8102e','#34383d'],['neon','Neon','#ff2d55','#06060c'],['gold','Gold','#b5121b','#14110a']];
+let SETS=Object.assign({mode:'auto',skin:'classic',hd:'barlow',bd:'barlow',dens:'cozy',snd:'on'},store.get('bd_set',{}));
+function applySets(){const r=document.documentElement;if(SETS.mode==='auto')r.removeAttribute('data-theme');else r.setAttribute('data-theme',SETS.mode);
+ ['skin','hd','bd','dens'].forEach(k=>{const v=SETS[k],def={skin:'classic',hd:'barlow',bd:'barlow',dens:'cozy'}[k];if(v===def)r.removeAttribute('data-'+k);else r.setAttribute('data-'+k,v)});
+ document.querySelectorAll('.seg3[data-k]').forEach(g=>g.querySelectorAll('button').forEach(b=>b.setAttribute('aria-pressed',SETS[g.dataset.k]===b.dataset.v)));
+ document.querySelectorAll('#skins .sw').forEach(b=>b.setAttribute('aria-pressed',b.dataset.v===SETS.skin))}
+$('#skins').innerHTML=SKINS.map(k=>`<button type="button" class="sw" data-v="${k[0]}"><i style="background:linear-gradient(90deg,${k[3]} 50%,${k[2]} 50%)"></i>${k[1]}</button>`).join('');
+$('#s-settings').addEventListener('click',e=>{const b=e.target.closest('button');if(!b)return;
+ if(b.id==='setReset'){SETS={mode:'auto',skin:'classic',hd:'barlow',bd:'barlow',dens:'cozy',snd:'on'}}
+ else if(b.id==='clrScores'){try{localStorage.removeItem('bd_quiz');localStorage.removeItem('bd_sack');localStorage.removeItem('bd_sim');['bd_leg','bd_can','bd_kick','bd_pick','bd_call'].forEach(k=>localStorage.removeItem(k))}catch(x){}scoreInfo();return}
+ else if(b.classList.contains('sw'))SETS.skin=b.dataset.v;
+ else if(b.parentNode.dataset.k)SETS[b.parentNode.dataset.k]=b.dataset.v;else return;
+ store.set('bd_set',SETS);applySets()});
+function scoreInfo(){$('#scoreInfo').textContent='Trivia best: '+store.get('bd_quiz',0)+'/10 · Sack Attack best: '+store.get('bd_sack',0)+' points'}
+scoreInfo();applySets();
+
+/* ---------- live bar ---------- */
+(function(){const KICK=new Date('2026-11-22T13:00:00-05:00');
+ function t(){const n=new Date(),d=KICK-n,days=Math.floor(d/864e5),h=Math.floor(d%864e5/36e5),m=Math.floor(d%36e5/6e4);
+  $('#liveTxt').innerHTML=`<b>${n.toLocaleDateString(undefined,{weekday:'short',month:'short',day:'numeric'})} · ${n.toLocaleTimeString(undefined,{hour:'numeric',minute:'2-digit'})}</b> · Kickoff at Detroit in <b>${d>0?days+'d '+h+'h '+m+'m':'now'}</b> · Week 10 bye · News current to Nov 16`}
+ t();setInterval(t,30000);$('#liveBtn').onclick=()=>{t();const b=$('#liveBtn');b.textContent='Up to date';setTimeout(()=>b.textContent='Refresh',1500)}})();
+
+/* ---------- Legends ---------- */
+const LEG=[['Drafted first overall by Tampa Bay in 1976, he became the first Buc in the Hall of Fame.','Lee Roy Selmon',['Lee Roy Selmon','Hardy Nickerson','Paul Gruber','James Wilder']],
+['This linebacker returned an interception for a touchdown in Super Bowl XXXVII.','Derrick Brooks',['Derrick Brooks','Shelton Quarles','Barrett Ruud','Lavonte David']],
+['A defensive tackle and the 1999 Defensive Player of the Year.','Warren Sapp',['Warren Sapp','Simeon Rice','Booger McFarland','Gerald McCoy']],
+['This cornerback returned an interception for a touchdown to seal the 2002 NFC title game in Philadelphia.','Ronde Barber',['Ronde Barber','John Lynch','Dwight Smith','Brian Kelly']],
+['A fullback known as the A-Train.','Mike Alstott',['Mike Alstott','Warrick Dunn','Errict Rhett','LeGarrette Blount']],
+['He was the first overall pick in 2015 and threw for 5,109 yards in 2019.','Jameis Winston',['Jameis Winston','Josh Freeman','Trent Dilfer','Vinny Testaverde']],
+['He joined Tampa Bay in 2020 and was MVP of Super Bowl LV.','Tom Brady',['Tom Brady','Brad Johnson','Jameis Winston','Baker Mayfield']],
+['A tight end who came out of retirement to catch two touchdowns in Super Bowl LV.','Rob Gronkowski',['Rob Gronkowski','Cameron Brate','Cade Otton','O.J. Howard']]];
+function legends(){const qs=[...LEG].sort(()=>Math.random()-.5);let i=0,s=0;const box=$('#gbox');
+ (function show(){if(i>=qs.length){store.set('bd_leg',Math.max(store.get('bd_leg',0),s));box.innerHTML=`<div class="panel"><h3>Who Am I?</h3><div class="rec">${s}<small>of ${qs.length}</small></div><p>${s>=7?'Franchise historian.':s>=4?'Good eye for the legends.':'Back to the film room.'}</p><button class="btn" id="ag">Play again</button></div>`;$('#ag').onclick=legends;return}
+  const q=qs[i],o=[...q[2]].sort(()=>Math.random()-.5);box.innerHTML=`<div class="panel"><div class="lbl">Clue ${i+1} of ${qs.length} · ${s} right</div><h3 style="font-size:24px;text-transform:none;margin:6px 0 10px">${esc(q[0])}</h3><div id="o">${o.map(x=>`<button class="opt" data-v="${esc(x)}">${esc(x)}</button>`).join('')}</div><div id="fb"></div></div>`;
+  $('#o').onclick=e=>{const b=e.target.closest('.opt');if(!b||b.disabled)return;const ok=b.dataset.v===q[1];if(ok)s++;[...document.querySelectorAll('#o .opt')].forEach(x=>{x.disabled=true;if(x.dataset.v===q[1])x.classList.add('ok');else if(x===b)x.classList.add('no')});$('#fb').innerHTML=`<p style="margin:10px 0"><b>${ok?'Correct.':'It was '+esc(q[1])+'.'}</b></p><button class="btn" id="nx">${i<qs.length-1?'Next':'See score'}</button>`;$('#nx').onclick=()=>{i++;show()}}})()}
+
+/* ---------- Pirate Cannon ---------- */
+function cannon(){const box=$('#gbox');box.innerHTML=`<div class="panel"><h3>Pirate Cannon</h3><p style="margin:0 0 10px">Aim with the mouse or finger. Hold to charge, release to fire. Hit the fans in the stands, and the flag is worth 50. Ten shots. Arrow keys aim and Space fires.</p><canvas id="cv" width="640" height="360"></canvas></div>`;
+ const cv=$('#cv'),x=cv.getContext('2d');let ang=-.6,pw=0,hold=false,shots=10,score=0,ball=null,msg='',mt=0,wind=rnd(-1,1)*40,T=[];const best=store.get('bd_can',0);
+ const mk=()=>{T=[];for(let i=0;i<5;i++)T.push({x:260+i*70+rnd(-10,10),y:rnd(110,260),r:15,v:rnd(-25,25),pts:10,c:'#fff'});T.push({x:590,y:rnd(70,150),r:18,v:0,pts:50,flag:1,c:'#d50a0a'})};mk();
+ const CX=70,CY=290;function fire(){if(ball||shots<=0)return;const sp=220+pw*420;ball={x:CX+Math.cos(ang)*50,y:CY+Math.sin(ang)*50,vx:Math.cos(ang)*sp,vy:Math.sin(ang)*sp};shots--;pw=0}
+ cv.onpointermove=e=>{const r=cv.getBoundingClientRect(),px=(e.clientX-r.left)/r.width*640,py=(e.clientY-r.top)/r.height*360;ang=Math.max(-1.35,Math.min(-.05,Math.atan2(py-CY,px-CX)))};
+ cv.onpointerdown=e=>{if(shots<=0&&!ball){cannon();return}hold=true};cv.onpointerup=()=>{if(hold){hold=false;if(pw>.05)fire()}};
+ const kd=e=>{if(curG!=='cannon'){removeEventListener('keydown',kd);removeEventListener('keyup',ku);return}if(e.code==='ArrowUp')ang=Math.max(-1.35,ang-.05);if(e.code==='ArrowDown')ang=Math.min(-.05,ang+.05);if(e.code==='Space'){e.preventDefault();hold=true}};
+ const ku=e=>{if(e.code==='Space'&&hold){hold=false;if(pw>.05)fire()}};addEventListener('keydown',kd);addEventListener('keyup',ku);
+ let last=performance.now();function loop(now){const dt=Math.min(.03,(now-last)/1000);last=now;
+  if(hold)pw=Math.min(1,pw+dt*.9);T.forEach(t=>{t.x+=t.v*dt;if(t.x<230||t.x>610)t.v*=-1});
+  if(ball){ball.vx+=wind*dt;ball.vy+=420*dt;ball.x+=ball.vx*dt;ball.y+=ball.vy*dt;
+   const h=T.find(t=>Math.hypot(t.x-ball.x,t.y-ball.y)<t.r+5);if(h){score+=h.pts;msg=(h.flag?'FLAG! +50':'+10');mt=1;T=T.filter(t=>t!==h);if(!T.some(t=>t.pts===10))mk();ball=null;beep(h.flag?700:420,.12,'square',.05)}
+   else if(ball.y>330||ball.x>640){msg='Splash';mt=.8;ball=null}}
+  mt-=dt;x.fillStyle='#0b0b0f';x.fillRect(0,0,640,360);const g=x.createLinearGradient(0,0,0,360);g.addColorStop(0,'#15151c');g.addColorStop(1,'#0b0b0f');x.fillStyle=g;x.fillRect(0,0,640,360);
+  x.fillStyle='#1d4a7a';x.fillRect(0,320,640,40);x.strokeStyle='rgba(255,255,255,.18)';for(let i=0;i<8;i++){x.beginPath();x.moveTo(i*90+(now/60)%90,330);x.lineTo(i*90+30+(now/60)%90,330);x.stroke()}
+  x.fillStyle='#5b3a21';x.beginPath();x.moveTo(0,250);x.lineTo(140,250);x.lineTo(120,320);x.lineTo(0,320);x.fill();x.fillStyle='#3c2414';x.fillRect(0,250,140,8);
+  T.forEach(t=>{x.fillStyle=t.c;x.beginPath();x.arc(t.x,t.y,t.r,0,7);x.fill();x.fillStyle=t.flag?'#fff':'#d50a0a';x.beginPath();x.arc(t.x,t.y,t.r*.5,0,7);x.fill()});
+  x.save();x.translate(CX,CY);x.rotate(ang);x.fillStyle='#222';x.fillRect(0,-9,56,18);x.fillStyle='#d50a0a';x.fillRect(40,-11,8,22);x.restore();x.fillStyle='#333';x.beginPath();x.arc(CX,CY,16,0,7);x.fill();
+  if(!ball&&shots>0){x.strokeStyle='rgba(255,255,255,.4)';x.setLineDash([5,7]);x.beginPath();let px=CX+Math.cos(ang)*50,py=CY+Math.sin(ang)*50,vx=Math.cos(ang)*(220+Math.max(pw,.4)*420),vy=Math.sin(ang)*(220+Math.max(pw,.4)*420);x.moveTo(px,py);for(let i=0;i<30;i++){vx+=wind*.04;vy+=420*.04;px+=vx*.04;py+=vy*.04;x.lineTo(px,py)}x.stroke();x.setLineDash([])}
+  if(ball){x.fillStyle='#fff';x.beginPath();x.arc(ball.x,ball.y,6,0,7);x.fill()}
+  x.fillStyle='rgba(0,0,0,.6)';x.fillRect(20,20,120,12);x.fillStyle=pw>.85?'#ff2a2a':'#fff';x.fillRect(20,20,120*pw,12);
+  x.fillStyle='#fff';x.font='800 18px Barlow Condensed,sans-serif';x.textAlign='left';x.fillText('SHOTS '+shots+'   SCORE '+score,20,54);x.textAlign='right';x.fillText('WIND '+(wind>0?'→ ':'← ')+Math.abs(Math.round(wind/4)),620,28);x.textAlign='center';
+  if(mt>0){x.font='800 34px Barlow Condensed,sans-serif';x.fillStyle='#ff2a2a';x.fillText(msg,320,100)}
+  if(shots<=0&&!ball){store.set('bd_can',Math.max(best,score));x.fillStyle='rgba(0,0,0,.7)';x.fillRect(0,0,640,360);x.fillStyle='#fff';x.font='800 44px Barlow Condensed,sans-serif';x.fillText('FINAL: '+score+' POINTS',320,160);x.font='600 18px Barlow,sans-serif';x.fillText('Best: '+Math.max(best,score)+' · tap to play again',320,200)}
+  if(curG==='cannon')raf=requestAnimationFrame(loop)}raf=requestAnimationFrame(loop)}
+
+/* ---------- Field Goal Kicker ---------- */
+function kick(){const box=$('#gbox');box.innerHTML=`<div class="panel"><h3>Field Goal Kicker</h3><p style="margin:0 0 10px">Two taps per kick. Tap (or Space) to stop the power bar in the green band, then tap to stop the aim bar in the middle. Wind pushes the kick. Five kicks from longer and longer.</p><canvas id="cv" width="640" height="360"></canvas></div>`;
+ const cv=$('#cv'),x=cv.getContext('2d');const D=[28,34,41,48,54];let k=0,score=0,ph='pow',pw=0,pd=1,ac=0,ad=1,res=null,fl=0,tt=0,wind=rnd(-1,1)*10;const best=store.get('bd_kick',0);let pv=0,av=0;
+ function need(){return .35+(D[k]-20)/50*.5}
+ function stop(){if(ph==='pow'){pv=pw;ph='aim'}else if(ph==='aim'){av=ac;ph='fly';tt=0;const pe=Math.abs(pv-need()),ae=Math.abs(av-.5+wind*.006),ok=pe<.1&&ae<.1;res=ok?'GOOD':pe>=.1&&pv<need()?'SHORT':ae>=.1?'WIDE':'LONG';if(ok){score+=D[k]>=50?5:D[k]>=40?3:2}}else if(ph==='res'){k++;if(k>=D.length){ph='end';store.set('bd_kick',Math.max(best,score))}else{ph='pow';pw=0;pd=1;ac=0;ad=1;wind=rnd(-1,1)*10}}else if(ph==='end'){kick()}}
+ cv.onpointerdown=stop;const kd=e=>{if(curG!=='kick'){removeEventListener('keydown',kd);return}if(e.code==='Space'){e.preventDefault();stop()}};addEventListener('keydown',kd);
+ let last=performance.now();function loop(now){const dt=Math.min(.03,(now-last)/1000);last=now;
+  if(ph==='pow'){pw+=pd*dt*(1.1+k*.18);if(pw>1){pw=1;pd=-1}if(pw<0){pw=0;pd=1}}if(ph==='aim'){ac+=ad*dt*(1.3+k*.2);if(ac>1){ac=1;ad=-1}if(ac<0){ac=0;ad=1}}
+  if(ph==='fly'){tt+=dt;if(tt>1.6)ph='res'}
+  x.fillStyle='#0d0d0d';x.fillRect(0,0,640,360);const g=x.createLinearGradient(0,0,0,360);g.addColorStop(0,'#1a1a22');g.addColorStop(1,'#0a0a0e');x.fillStyle=g;x.fillRect(0,0,640,360);
+  x.fillStyle='#16341f';x.fillRect(0,250,640,110);x.strokeStyle='rgba(255,255,255,.2)';for(let i=0;i<9;i++){x.beginPath();x.moveTo(i*80,250);x.lineTo(i*80-40,360);x.stroke()}
+  // posts
+  x.strokeStyle='#ffd23f';x.lineWidth=5;x.beginPath();x.moveTo(500,250);x.lineTo(500,150);x.moveTo(440,150);x.lineTo(560,150);x.moveTo(440,150);x.lineTo(440,50);x.moveTo(560,150);x.lineTo(560,50);x.stroke();
+  // ball
+  let bx=80,by=300;if(ph==='fly'||ph==='res'){const p=Math.min(1,tt/1.2),tx=500+(av-.5+wind*.006)*-0+((av-.5)*180)+wind*2.5,ty=pv<need()-.1?270:pv>need()+.1?20:100;bx=80+(tx-80)*p;by=300-(300-ty)*p-Math.sin(p*Math.PI)*110}
+  x.fillStyle='#8a4b1c';x.beginPath();x.ellipse(bx,by,12,7,-.4,0,7);x.fill();x.fillStyle='#fff';x.fillRect(bx-5,by-1,10,2);
+  x.fillStyle='#fff';x.font='800 18px Barlow Condensed,sans-serif';x.textAlign='left';x.fillText('KICK '+Math.min(k+1,5)+'/5 · '+D[Math.min(k,4)]+' YARDS',20,28);x.fillText('POINTS '+score,20,50);x.textAlign='right';x.fillText('WIND '+(wind>0?'→ ':'← ')+Math.abs(Math.round(wind)),620,28);x.textAlign='center';
+  const bar=(y,v,c,lab)=>{x.fillStyle='rgba(255,255,255,.12)';x.fillRect(120,y,400,16);if(c!=null){x.fillStyle='rgba(255,255,255,.85)';x.fillRect(120+400*(c-.1),y,400*.2,16)}x.fillStyle='#d50a0a';x.fillRect(120+400*v-3,y-4,6,24);x.fillStyle='#bbb';x.font='700 12px sans-serif';x.textAlign='left';x.fillText(lab,20,y+13)};
+  if(ph==='pow'||ph==='aim'||ph==='fly'||ph==='res'){bar(300,ph==='pow'?pw:pv,need(),'POWER');if(ph!=='pow')bar(328,ph==='aim'?ac:av,.5-wind*.006,'AIM')}
+  x.textAlign='center';if(ph==='res'||ph==='fly'&&tt>1){x.font='800 44px Barlow Condensed,sans-serif';x.fillStyle=res==='GOOD'?'#fff':'#ff2a2a';x.fillText(res==='GOOD'?'IT IS GOOD!':res+'!',320,140)}
+  if(ph==='end'){x.fillStyle='rgba(0,0,0,.72)';x.fillRect(0,0,640,360);x.fillStyle='#fff';x.font='800 44px Barlow Condensed,sans-serif';x.fillText('FINAL: '+score+' POINTS',320,160);x.font='600 18px Barlow,sans-serif';x.fillText('Best: '+Math.max(best,score)+' · tap to play again',320,200)}
+  if(curG==='kick')raf=requestAnimationFrame(loop)}raf=requestAnimationFrame(loop)}
+
+/* ---------- Pick-Six ---------- */
+function pickSix(){const box=$('#gbox');box.innerHTML=`<div class="panel"><h3>Pick-Six</h3><p style="margin:0 0 10px">Move your cornerback up and down (mouse, finger or Up and Down keys) so he is in the passing lane when the throw crosses your spot. Three completions and the drive is over. Five picks in a row is a pick-six bonus.</p><canvas id="cv" width="640" height="360"></canvas></div>`;
+ const cv=$('#cv'),x=cv.getContext('2d');let py=180,balls=[],spawn=1,picks=0,miss=0,streak=0,score=0,sp=1,msg='',mt=0,over=false;const best=store.get('bd_pick',0),DX=130;
+ cv.onpointermove=e=>{const r=cv.getBoundingClientRect();py=Math.max(40,Math.min(320,(e.clientY-r.top)/r.height*360))};cv.onpointerdown=e=>{if(over)pickSix();else{const r=cv.getBoundingClientRect();py=Math.max(40,Math.min(320,(e.clientY-r.top)/r.height*360))}};
+ const kd=e=>{if(curG!=='pick'){removeEventListener('keydown',kd);return}if(e.code==='ArrowUp')py=Math.max(40,py-22);if(e.code==='ArrowDown')py=Math.min(320,py+22)};addEventListener('keydown',kd);
+ let last=performance.now();function loop(now){const dt=Math.min(.03,(now-last)/1000);last=now;
+  if(!over){spawn-=dt;if(spawn<=0){spawn=rnd(.9,1.6)/sp;const y0=rnd(60,300),y1=rnd(50,310);balls.push({x:600,y0,y1,t:0,v:rnd(.55,.8)*sp,done:0})}
+   balls.forEach(b=>{b.t+=dt*b.v;b.x=600-b.t*480;b.y=b.y0+(b.y1-b.y0)*b.t-Math.sin(b.t*Math.PI)*28;
+    if(!b.done&&b.x<=DX+14){if(Math.abs(b.y-py)<30){b.done=1;picks++;streak++;score+=1+(streak>=5?4:0);msg=streak>=5?'PICK-SIX! +5':'INTERCEPTED';sp+=.04;beep(660,.12,'square',.05)}else{b.done=2;miss++;streak=0;msg='Complete.';beep(180,.15,'sawtooth',.05)}mt=.8}});balls=balls.filter(b=>b.x>20&&b.done!==1);if(miss>=3){over=true;store.set('bd_pick',Math.max(best,picks))}}
+  mt-=dt;x.fillStyle='#0d0d0d';x.fillRect(0,0,640,360);const g=x.createLinearGradient(0,0,0,360);g.addColorStop(0,'#16341f');g.addColorStop(1,'#0e2214');x.fillStyle=g;x.fillRect(0,0,640,360);x.strokeStyle='rgba(255,255,255,.14)';for(let i=0;i<9;i++){x.beginPath();x.moveTo(i*80,0);x.lineTo(i*80,360);x.stroke()}
+  // WR targets
+  x.fillStyle='#bbb';[80,180,270].forEach(y=>{x.beginPath();x.arc(60,y+10,12,0,7);x.fill()});
+  x.fillStyle='#8a8a8a';x.beginPath();x.arc(620,180,14,0,7);x.fill();
+  x.fillStyle='#d50a0a';x.fillRect(DX-12,py-20,24,40);x.fillStyle='#f1c8a0';x.beginPath();x.arc(DX,py-26,9,0,7);x.fill();x.fillStyle='#fff';x.font='800 12px sans-serif';x.textAlign='center';x.fillText('TB',DX,py+5);
+  x.strokeStyle='rgba(255,255,255,.25)';x.setLineDash([4,6]);x.beginPath();x.moveTo(DX,0);x.lineTo(DX,360);x.stroke();x.setLineDash([]);
+  balls.forEach(b=>{x.fillStyle='#8a4b1c';x.beginPath();x.ellipse(b.x,b.y,11,6,-.3,0,7);x.fill();x.fillStyle='#fff';x.fillRect(b.x-4,b.y-1,8,2)});
+  x.fillStyle='#fff';x.font='800 18px Barlow Condensed,sans-serif';x.textAlign='left';x.fillText('PICKS '+picks+'   STREAK '+streak+'   SCORE '+score,20,28);x.textAlign='right';x.fillText('COMPLETIONS '+miss+'/3',620,28);x.textAlign='center';
+  if(mt>0){x.font='800 34px Barlow Condensed,sans-serif';x.fillStyle=msg.startsWith('PICK')?'#fff':msg==='INTERCEPTED'?'#fff':'#ff2a2a';x.fillText(msg,320,90)}
+  if(over){x.fillStyle='rgba(0,0,0,.72)';x.fillRect(0,0,640,360);x.fillStyle='#fff';x.font='800 44px Barlow Condensed,sans-serif';x.fillText(picks+' INTERCEPTIONS · '+score+' POINTS',320,160);x.font='600 18px Barlow,sans-serif';x.fillText('Best picks: '+Math.max(best,picks)+' · tap to play again',320,200)}
+  if(curG==='pick')raf=requestAnimationFrame(loop)}raf=requestAnimationFrame(loop)}
+
+/* ---------- Play Caller ---------- */
+const SIT=[['4th and 2 at the opponent 35, down 3, 6:00 left in the 4th.',[['Go for it',.55,'convert',4,'stopped',-2,'Quarterback keeper'],['Punt',1,'pins',1,'',0,''],['Field goal try (53 yards)',.62,'good',3,'miss',-1,'']]],
+['3rd and 8 at your own 25, up 4, 2:10 left.',[['Throw deep',.35,'first down',3,'incomplete',-1,''],['Run it',.2,'first down',3,'short, clock keeps running',1,''],['Short pass over the middle',.45,'first down',3,'short',0,'']]],
+['1st and goal at the 2, tied, 0:40 left, one timeout.',[['Quarterback sneak',.68,'touchdown',7,'stopped',2,''],['Play-action pass',.55,'touchdown',7,'incomplete',2,''],['Handoff up the middle',.6,'touchdown',7,'stuffed',2,'']]],
+['Your defense, 3rd and 9, opponent at their 40, up 2.',[['Send the blitz',.45,'sack',3,'big gain given up',-2,''],['Drop eight in coverage',.5,'stop',2,'first down',-1,''],['Show blitz, then drop',.52,'stop',2,'first down',-1,'']]],
+['2-point conversion try, down 1, 3:00 left.',[['Rollout pass',.46,'good',3,'no good',-1,''],['Inside run',.48,'good',3,'no good',-1,''],['Quick slant',.5,'good',3,'no good',-1,'']]],
+['Fourth and 1 at midfield, up 7, 4:00 left.',[['Punt',1,'pins',1,'',0,''],['Quarterback sneak',.72,'converted, drive continues',3,'stopped, short field for them',-3,''],['Handoff to the back',.66,'converted',3,'stopped',-3,'']]],
+['Last play, 2nd and 10, trailing by 3, ball at the opponent 40, no timeouts, 0:06.',[['Hail Mary',.14,'touchdown',7,'knocked down',0,''],['Pass to the sideline then kick',.32,'completed, field goal try',3,'incomplete, game over',0,''],['Run the ball',.05,'breaks one',7,'tackled, game over',0,'']]],
+['Special teams: kickoff, up 3, 1:30 left.',[['Deep kick',.5,'touchback',2,'returned to the 40',-1,''],['Onside kick',.2,'recovered',5,'they recover at midfield',-3,''],['Squib kick',.55,'pinned inside the 25',2,'gets a long return',-2,'']]]];
+function caller(){const box=$('#gbox');let i=0,pts=0;const qs=[...SIT].sort(()=>Math.random()-.5);
+ (function show(){if(i>=qs.length){store.set('bd_call',Math.max(store.get('bd_call',0),pts));box.innerHTML=`<div class="panel"><h3>Final score</h3><div class="rec">${pts}<small>points over ${qs.length} calls</small></div><p>${pts>=14?'Head coach material.':pts>=7?'Solid game plan.':'Time to study more film.'}</p><button class="btn" id="ag">Call another game</button></div>`;$('#ag').onclick=caller;return}
+  const q=qs[i];box.innerHTML=`<div class="panel"><div class="lbl">Situation ${i+1} of ${qs.length} · ${pts} points</div><h3 style="font-size:24px;text-transform:none;margin:6px 0 10px">${esc(q[0])}</h3><div id="o">${q[1].map((o,k)=>`<button class="opt" data-k="${k}">${esc(o[0])}</button>`).join('')}</div><div id="fb"></div></div>`;
+  $('#o').onclick=e=>{const b=e.target.closest('.opt');if(!b||b.disabled)return;const o=q[1][+b.dataset.k],ok=Math.random()<o[1];const p=ok?o[3]:o[5];pts+=p;[...document.querySelectorAll('#o .opt')].forEach(x=>x.disabled=true);b.classList.add(ok?'ok':'no');$('#fb').innerHTML=`<p style="margin:10px 0"><b>${ok?'It works: '+esc(o[2])+'.':'No luck: '+esc(o[4]||'it fails')+'.'}</b> ${p>=0?'+':''}${p} points. The odds on that call were about ${Math.round(o[1]*100)}%.</p><button class="btn" id="nx">${i<qs.length-1?'Next situation':'See score'}</button>`;$('#nx').onclick=()=>{i++;show()}}})()}
+
+/* ---------- vs card ---------- */
+(function(){const a=TM.find(t=>t.n.indexOf('Tampa')===0),b=TM.find(t=>t.n.indexOf('Detroit')===0);if(!a||!b)return;
+ const f=(v)=>v.toFixed(1),rec=t=>t.w+'-'+t.l+(t.t?'-'+t.t:'');
+ const rows=[['Record',rec(a),rec(b),a.pct>b.pct?0:1],['Points for / game',f(a.pf/a.g),f(b.pf/b.g),a.pf/a.g>b.pf/b.g?0:1],['Points against / game',f(a.pa/a.g),f(b.pa/b.g),a.pa/a.g<b.pa/b.g?0:1],['Point diff / game',(a.dg>0?'+':'')+f(a.dg),(b.dg>0?'+':'')+f(b.dg),a.dg>b.dg?0:1]];
+ $('#vsCard').innerHTML='<h3>Nov 22 matchup</h3><table class="vs"><tr><th></th><th>Bucs</th><th>Lions</th></tr>'+rows.map(r=>`<tr><td>${r[0]}</td><td class="${r[3]===0?'edge':''}">${r[1]}</td><td class="${r[3]===1?'edge':''}">${r[2]}</td></tr>`).join('')+'</table><p class="note">Highlight marks the better number. Season stats through this week, from ESPN standings.</p>'})();
+/* ---------- calendar ---------- */
+(function(){const MO={Jan:0,Feb:1,Mar:2,Apr:3,May:4,Jun:5,Jul:6,Aug:7,Sep:8,Oct:9,Nov:10,Dec:11};
+ $('#icsBtn').onclick=()=>{const ev=[];SCH.filter(r=>r[3]!=='Bye'&&r[4]==null).forEach(r=>{const m=/^(\w{3}) (\d+)$/.exec(r[1]),t=/^(\d+):(\d+) (AM|PM)$/.exec(r[6]||'');if(!m||!t)return;let h=+t[1]%12+(t[3]==='PM'?12:0);const yr=MO[m[1]]<6?2027:2026;const d=new Date(Date.UTC(yr,MO[m[1]],+m[2],h+5,+t[2]));const e=new Date(d.getTime()+3*36e5),z=x=>x.toISOString().replace(/[-:]/g,'').slice(0,15)+'Z';
+  ev.push('BEGIN:VEVENT\r\nUID:bucden-'+r[0]+'@bucden\r\nDTSTAMP:'+z(new Date())+'\r\nDTSTART:'+z(d)+'\r\nDTEND:'+z(e)+'\r\nSUMMARY:Bucs '+(r[2]==='at'?'at ':'vs ')+r[3]+'\r\nDESCRIPTION:Week '+r[0]+' on '+r[7]+'\r\nEND:VEVENT')});
+  if(!ev.length){$('#icsMsg').textContent='No games with a set time.';return}
+  const txt='BEGIN:VCALENDAR\r\nVERSION:2.0\r\nPRODID:-//Buc Den//EN\r\n'+ev.join('\r\n')+'\r\nEND:VCALENDAR\r\n';
+  try{const a=document.createElement('a');a.href=URL.createObjectURL(new Blob([txt],{type:'text/calendar'}));a.download='bucs-2026.ics';document.body.appendChild(a);a.click();a.remove()}catch(e){}$('#icsMsg').innerHTML=ev.length+' games. If no file downloaded, copy the text below into a file named <b>bucs-2026.ics</b> and import it into your calendar. TBD games are left out.<textarea id="icsTxt" readonly rows="6" style="width:100%;margin-top:8px"></textarea>';$('#icsTxt').value=txt;$('#icsTxt').onfocus=function(){this.select()}}})();
+/* ---------- pick'em ---------- */
+(function(){let pk=store.get('bd_pk',{});const MPL=(typeof MP!=='undefined'&&MP)||[];
+ function draw(){$('#pkList').innerHTML=GAMES.map((g,i)=>{const p=MPL[i]?MPL[i].p:.5,c=pk[i];return `<div class="pkr"><span>${esc(g[0])} <small>${esc(g[2])}</small></span><span class="pkm">${Math.round(p*100)}%</span><button type="button" class="btn g s${c==='W'?' on':''}" data-i="${i}" data-v="W">Win</button><button type="button" class="btn g s${c==='L'?' on':''}" data-i="${i}" data-v="L">Loss</button></div>`}).join('');
+  let w=3,l=6,ex=3;GAMES.forEach((g,i)=>{const p=MPL[i]?MPL[i].p:.5;ex+=p;const c=pk[i];if(c==='W')w++;else if(c==='L')l++;else{if(p>=.5)w++;else l++}});
+  $('#pkSum').textContent='Your projected finish: '+w+'-'+l+' (games you have not picked use the model favorite). The model alone expects about '+ex.toFixed(1)+' wins.'}
+ $('#pkList').addEventListener('click',e=>{const b=e.target.closest('button[data-i]');if(!b)return;const i=b.dataset.i;pk[i]=pk[i]===b.dataset.v?undefined:b.dataset.v;if(pk[i]===undefined)delete pk[i];store.set('bd_pk',pk);draw()});
+ draw()})();
+route();
+</script>
+<a id="saBack" href="sports-arcade" style="position:fixed;left:10px;top:10px;z-index:2147482000;background:rgba(15,23,42,.88);color:#fff;border:1px solid rgba(255,255,255,.25);border-radius:999px;padding:7px 13px;font:700 13px system-ui,sans-serif;text-decoration:none;box-shadow:0 4px 14px rgba(0,0,0,.4)">← Sports Arcade</a>
+<script src="site.js"></script>
+<script src="chat.js"></script>
+<div id="saVig"></div><button id="saFs" title="Full screen">⛶ Full screen</button>
+<script>document.getElementById('saFs').onclick=function(){ var d=document; if(d.fullscreenElement) d.exitFullscreen(); else (d.documentElement.requestFullscreen||function(){}).call(d.documentElement); };</script>
+</body></html>

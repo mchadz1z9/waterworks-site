@@ -47,7 +47,7 @@
   /* ---- seasonal weather over the site ---- */
   function weather(){ try{ if(window.RR_NOWX||localStorage.getItem('rrGfx')==='low'||localStorage.getItem('rrNoWeather')==='1') return; if(matchMedia&&matchMedia('(prefers-reduced-motion: reduce)').matches) return; }catch(e){}
     const m=new Date().getMonth(), kind=[10,11,0].includes(m)?'snow':[1,2,3].includes(m)?'petal':[8,9].includes(m)?'leaf':'sun';
-    const cv=document.createElement('canvas'); cv.id='rrWx'; cv.style.cssText='position:fixed;inset:0;width:100%;height:100%;pointer-events:none;z-index:2147481900'; document.body.appendChild(cv); const x=cv.getContext('2d');
+    const cv=document.createElement('canvas'); cv.id='rrWx'; cv.style.cssText='position:fixed!important;inset:0!important;width:100%!important;height:100%!important;max-width:none!important;max-height:none!important;margin:0!important;padding:0!important;border:0!important;border-radius:0!important;box-shadow:none!important;background:transparent!important;filter:none!important;pointer-events:none;z-index:2147481900';   /* a game's own canvas{} styles must not turn the weather layer into a box */ document.body.appendChild(cv); const x=cv.getContext('2d');
     const N=kind==='sun'?14:kind==='snow'?55:30, P=[]; const rs=()=>{ cv.width=innerWidth; cv.height=innerHeight; }; rs(); addEventListener('resize',rs);
     for(let i=0;i<N;i++) P.push({x:Math.random(),y:Math.random(),s:.5+Math.random(),v:.3+Math.random()*.7,ph:Math.random()*7});
     let last=performance.now(); (function tick(now){ const dt=Math.min(.05,(now-last)/1000); last=now; if(!document.hidden){ const W=cv.width, H=cv.height; x.clearRect(0,0,W,H);

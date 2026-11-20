@@ -101,9 +101,10 @@ const st=document.createElement('style');st.textContent='button,.btn,.tab{transi
 <script src="r3lib.js"></script><script src="physique.js"></script><script src="sa3d.js"></script>
 <script>
 const $=s=>document.querySelector(s),clamp=(v,a,b)=>Math.max(a,Math.min(b,v));
-let sv={diff:1,best:0,wins:0};try{Object.assign(sv,JSON.parse(localStorage.sz1||'{}'))}catch(e){}
+const PROS=[['Beginner Bob',.35],['Casual Cathy',.55],['League Larry',.8],['Pro Paula',1.05],['Jason Belmonte',1.35]],BALLS=[['Classic',1,1,'balanced'],['Hook Master',1.7,.93,'big hook, a bit slower'],['Power Rock',.55,1.1,'straighter and faster']],OIL=[['House shot',1],['Dry lanes',1.4],['Oily lanes',.65]];
+let sv={diff:0,best:0,wins:0,opp:1,ball:0,oil:0,mode:0,lg:null,titles:0};try{Object.assign(sv,JSON.parse(localStorage.sz1||'{}'))}catch(e){}
 const save=()=>{try{localStorage.sz1=JSON.stringify(sv)}catch(e){}};
-const DN=['Easy','Normal','Hard'],KEYS={};let V='title',G=null,raf=0,AC=null;
+const DN=['Easy','Normal','Hard'],KEYS={};if(sv.opp==null||sv.opp>4)sv.opp=1;let V='title',G=null,raf=0,AC=null;
 function ac(){try{AC=AC||new(window.AudioContext||window.webkitAudioContext)()}catch(e){}return AC}
 function beep(f,d,t,v){const a=ac();if(!a)return;try{const o=a.createOscillator(),g=a.createGain();o.type=t||'triangle';o.frequency.value=f;g.gain.value=v||.06;g.gain.exponentialRampToValueAtTime(.001,a.currentTime+d);o.connect(g);g.connect(a.destination);o.start();o.stop(a.currentTime+d)}catch(e){}}
 function crash(n){for(let i=0;i<Math.min(n,8);i++)setTimeout(()=>beep(300+Math.random()*900,.07,'square',.05),i*35)}
@@ -157,34 +158,34 @@ function pin3(p){ const b=W3(p.x,p.y,0),R3=V3.R3,m0=R3.mm(R3.T(b[0]*100,0,b[2]*1
   for(let k=0;k<prof.length-1;k++){const [h0,r0]=prof[k],[h1,r1]=prof[k+1];R3.part(R3.UC,R3.mm(m0,R3.T(0,(h0+h1)/2,0),R3.S((r0+r1)/2,h1-h0+.2,(r0+r1)/2)),k===6||k===7?'#e0262f':'#f8fafc')}
   R3.part(R3.US,R3.mm(m0,R3.T(0,37,0),R3.S(2.7,2.7,2.7)),'#f8fafc'); if(!p.down) V3.shadow(b[0],b[2],.06); }
 function render(){cancelAnimationFrame(raf);if(V3&&V!=='game')V3.canvas.style.display='none';let h='<div class="top"><div><h1>Strike Zone</h1><div class="sub">10 frames. Time your power and spin. Beat the CPU.</div></div><div class="sp"></div>'+(V==='game'?'<button class="btn g s" data-a="title">Quit</button>':'')+'</div>';
- if(V==='title')h+='<div class="hero"><div class="card"><h2>Play</h2><div class="sub" style="margin-bottom:12px">You against a CPU bowler. Full 10-frame scoring with strikes and spares.</div><div style="display:grid;gap:8px"><button class="btn" data-a="start">Start game</button><button class="btn g" data-a="diff">CPU level: '+DN[sv.diff]+'</button></div><div class="tip" style="margin-top:10px">Best score: <b style="color:var(--gold)">'+sv.best+'</b> · Wins: <b style="color:var(--gold)">'+sv.wins+'</b></div></div><div class="card"><h2>How to bowl</h2><table><tr><td>1. Aim</td><td>A / D (or arrows) slide the ball, W / S angle it</td></tr><tr><td>2. Power</td><td>Press Space when the bar is high but not red</td></tr><tr><td>3. Spin</td><td>Press Space again. Center is straight, sides hook</td></tr></table><div class="tip" style="margin-top:8px">On touch screens use the on-screen buttons. Aim for the pocket between the head pin and the pin beside it.</div></div></div>';
+ if(V==='title')h+='<div class="hero"><div class="card"><h2>Play</h2><div class="sub" style="margin-bottom:12px">You against a CPU bowler. Full 10-frame scoring with strikes and spares.</div><div style="display:grid;gap:8px"><button class="btn" data-a="start">Start game</button><button class="btn g" data-a="mode">Mode: '+['Match vs CPU','Practice (solo)','League (5 matches)'][sv.mode]+'</button>'+(sv.mode===0?'<button class="btn g" data-a="diff">Opponent: '+PROS[sv.opp][0]+'</button>':'')+'<button class="btn g" data-a="ball">Ball: '+BALLS[sv.ball][0]+' ('+BALLS[sv.ball][3]+')</button><button class="btn g" data-a="oil">Lane: '+OIL[sv.oil][0]+'</button></div><div class="tip" style="margin-top:10px">Best score: <b style="color:var(--gold)">'+sv.best+'</b> · League titles: <b style="color:var(--gold)">'+(sv.titles||0)+'</b> · Wins: <b style="color:var(--gold)">'+sv.wins+'</b></div></div><div class="card"><h2>How to bowl</h2><table><tr><td>1. Aim</td><td>A / D (or arrows) slide the ball, W / S angle it</td></tr><tr><td>2. Power</td><td>Press Space when the bar is high but not red</td></tr><tr><td>3. Spin</td><td>Press Space again. Center is straight, sides hook</td></tr></table><div class="tip" style="margin-top:8px">On touch screens use the on-screen buttons. Aim for the pocket between the head pin and the pin beside it.</div></div></div>';
  else if(V==='game')h+=vGame();$('#app').innerHTML=h;if(V==='game'){loop();refreshSB()}}
 function vGame(){return '<canvas id="cv" width="1000" height="560"></canvas><div class="card sc" id="sb" style="margin-top:12px"></div><div id="ovl"></div>'}
 document.addEventListener('click',e=>{const b=e.target.closest('[data-a]');if(!b)return;ac();const a=b.dataset.a;
- if(a==='title'){V='title';G=null;render()}else if(a==='diff'){sv.diff=(sv.diff+1)%3;save();render()}else if(a==='start'){newGame()}});
+ if(a==='title'){V='title';G=null;render()}else if(a==='diff'){sv.opp=(sv.opp+1)%5;save();render()}else if(a==='mode'){sv.mode=(sv.mode+1)%3;save();render()}else if(a==='ball'){sv.ball=(sv.ball+1)%3;save();render()}else if(a==='oil'){sv.oil=(sv.oil+1)%3;save();render()}else if(a==='lnext'){sv.lg.r++;newGame()}else if(a==='start'){newGame()}});
 function refreshSB(){const g=G,el=$('#sb');if(!el||!g)return;let h='<table><tr><th style="text-align:left">Player</th>'+[1,2,3,4,5,6,7,8,9,10].map(i=>'<th>'+i+'</th>').join('')+'<th>Total</th></tr>';
  g.pl.forEach((p,pi)=>{const fr=scoreRolls(p.rolls);h+='<tr><td class="nm" rowspan="2">'+p.n+'</td>'+fr.map((f,k)=>{const s=sym(f,k);const cur=g.turn===pi&&g.fr===k&&!g.over;return k<9?'<td class="rl '+(cur?'cur':'')+'">'+s[0]+' '+s[1]+'</td>':'<td class="rl '+(cur?'cur':'')+'">'+s.join(' ')+'</td>'}).join('')+'<td rowspan="2" class="cm">'+(fr.slice().reverse().find(f=>f.c!==null)||{c:0}).c+'</td></tr><tr>'+fr.map((f,k)=>'<td class="cm '+(g.turn===pi&&g.fr===k&&!g.over?'cur':'')+'">'+(f.c===null?'':f.c)+'</td>').join('')+'</tr>'});
  el.innerHTML=h+'</table>'}
 /* ---------- game */
-function newGame(){G={pl:[{n:'You',rolls:[],human:1},{n:'CPU ('+DN[sv.diff]+')',rolls:[],human:0}],turn:0,fr:0,b:0,standing:[...Array(10).keys()].map(()=>1),pins:null,ball:{x:0,y:-30,vx:0,vy:0,rot:0,ghost:0,sp:0,z:0},ph:'aim',aimX:0,ang:0,m:0,md:1,pw:0,spin:0,t:0,msg:'',msgT:-9,over:false,wait:0,cpu:null,flash:0};
+function newGame(){if(sv.mode===2&&(!sv.lg||sv.lg.r>4))sv.lg={r:0,w:0,l:0};const oi=sv.mode===2?sv.lg.r:sv.opp;G={opi:oi,conf:[],trail:[],pl:[{n:'You',rolls:[],human:1}].concat(sv.mode===1?[]:[{n:PROS[oi][0],rolls:[],human:0}]),turn:0,fr:0,b:0,standing:[...Array(10).keys()].map(()=>1),pins:null,ball:{x:0,y:-30,vx:0,vy:0,rot:0,ghost:0,sp:0,z:0},ph:'aim',aimX:0,ang:0,m:0,md:1,pw:0,spin:0,t:0,msg:'',msgT:-9,over:false,wait:0,cpu:null,flash:0};
  [...Array(10).keys()].forEach(()=>{});V='game';mkPins();CAM.init=false;render()}
 function mkPins(){G.pins=PINPOS.map((p,i)=>({i,x:p[0],y:p[1],vx:0,vy:0,down:0,gone:0,tilt:0,dir:1,on:G.standing[i]?1:0}))}
 function startTurn(){const g=G;g.ph='aim';g.aimX=0;g.ang=0;g.ball={x:0,y:-30,vx:0,vy:0,rot:0,ghost:0,sp:0,z:0};g.m=0;g.md=1;g.cpu=null;mkPins();g.t=0;
  if(!g.pl[g.turn].human){g.cpu={t:.9,stage:0};cpuPlan()}refreshSB()}
-function cpuPlan(){const g=G,lv=[.5,.85,1.2][sv.diff],sd=(1.15-lv*.55);const st=g.pins.filter(p=>p.on);let tx;
+function cpuPlan(){const g=G,lv=PROS[g.opi][1],sd=(1.15-lv*.55);const st=g.pins.filter(p=>p.on);let tx;
  if(g.b===0||st.length>=9){tx=-3.5+(Math.random()-.5)*sd*9}else tx=st.reduce((a,p)=>a+p.x,0)/Math.max(1,st.length);
  const sx=clamp(tx*.45+(Math.random()-.5)*sd*16,-38,38);const sp=g.b===0?.3+(Math.random()-.5)*sd*.35:(Math.random()-.5)*sd*.3;
  g.cpu.x=sx;g.cpu.ang=Math.atan2(tx-sx-sp*6,PINY)*180/Math.PI*(1+(Math.random()-.5)*sd*.35);g.cpu.pw=clamp(.8+(Math.random()-.5)*sd*.4,.55,.97);g.cpu.sp=sp}
-function throwBall(){const g=G,b=g.ball,sp=520+g.pw*620,a=g.ang*Math.PI/180+((g.pw>.94)?(Math.random()-.5)*.05:0)+(Math.random()-.5)*.003;
- b.x=g.aimX;b.y=0;b.vy=sp*Math.cos(a);b.vx=sp*Math.sin(a);b.sp=g.spin;b.ghost=0;b.z=0;b.rot=0;g.ph='roll';g.rollT=0;g.settle=0;beep(160,.25,'sine',.08)}
-function step(dt){const g=G;if(!g||g.over)return;g.t+=dt;if(g.flash>0)g.flash-=dt;
+function throwBall(){const g=G,b=g.ball,BL=BALLS[sv.ball],sp=(520+g.pw*620)*BL[2],a=g.ang*Math.PI/180+((g.pw>.94)?(Math.random()-.5)*.05:0)+(Math.random()-.5)*.003;
+ b.x=g.aimX;b.y=0;b.vy=sp*Math.cos(a);b.vx=sp*Math.sin(a);b.sp=g.spin*BL[1]*OIL[sv.oil][1];b.ghost=0;b.z=0;b.rot=0;g.ph='roll';g.rollT=0;g.settle=0;beep(160,.25,'sine',.08)}
+function step(dt){const g=G;if(!g)return;g.conf.forEach(p=>{p.x+=p.vx;p.y+=p.vy;p.vy+=.45;p.l-=dt*.5});g.conf=g.conf.filter(p=>p.l>0);if(g.over)return;g.t+=dt;if(g.flash>0)g.flash-=dt;
  if(g.ph==='aim'||g.ph==='power'||g.ph==='spin'){
   if(g.cpu){g.cpu.t-=dt;if(g.cpu.t<=0){g.aimX+=(g.cpu.x-g.aimX)*.2;g.ang+=(g.cpu.ang-g.ang)*.2;if(Math.abs(g.cpu.x-g.aimX)<1&&g.cpu.stage===0){g.aimX=g.cpu.x;g.ang=g.cpu.ang;g.cpu.stage=1;g.cpu.t=.5}else if(g.cpu.stage===1&&g.cpu.t<=0){g.pw=g.cpu.pw;g.spin=g.cpu.sp;throwBall()}}return}
   if(g.ph==='aim'){const mv=(KEYS.KeyD||KEYS.ArrowRight?1:0)-(KEYS.KeyA||KEYS.ArrowLeft?1:0),an=(KEYS.KeyW||KEYS.ArrowUp?1:0)-(KEYS.KeyS||KEYS.ArrowDown?1:0);
    g.aimX=clamp(g.aimX+mv*70*dt,-40,40);g.ang=clamp(g.ang+an*2.2*dt,-5,5)}
   else{g.m+=g.md*dt*(g.ph==='power'?1.25:1.55);if(g.m>1){g.m=1;g.md=-1}if(g.m<0){g.m=0;g.md=1}}
   g.ball.x=g.aimX;return}
- if(g.ph==='roll'){const N=4,h=dt/N;for(let k=0;k<N;k++)physics(h);g.rollT+=dt;
+ if(g.ph==='roll'){g.trail.push([g.ball.x,g.ball.y]);if(g.trail.length>16)g.trail.shift();const N=4,h=dt/N;for(let k=0;k<N;k++)physics(h);g.rollT+=dt;
   const moving=g.pins.some(p=>!p.gone&&(Math.hypot(p.vx,p.vy)>9));
   if(g.ball.y>PITY||Math.hypot(g.ball.vx,g.ball.vy)<20){g.ball.vx=g.ball.vy=0;g.settle+=dt;if(!moving||g.settle>3.2)finishRoll()}return}
  if(g.ph==='result'){g.wait-=dt;g.pins.forEach(p=>{p.tilt=Math.min(1.5,p.tilt+dt*4)});if(g.wait<=0)nextTurn();return}}
@@ -208,13 +209,14 @@ function finishRoll(){const g=G,P=g.pins,pl=g.pl[g.turn];let n=0;P.forEach(p=>{i
  if(totalNow===10){if(g.b===0)strike=true;else spare=true}
  if(!last){if(strike){nb=false}else if(g.b===0)nb=true;else nb=false}
  else{if(g.b===0){nb=true;if(strike)reset=true}else if(g.b===1){const r=pl.rolls.slice(-2);if(r[0]===10){nb=true;if(strike)reset=true}else if(r[0]+r[1]===10){nb=true;reset=true}else nb=false}else nb=false}
+ if(strike||spare)for(let i=0;i<70;i++)g.conf.push({x:500,y:200,vx:(Math.random()-.5)*14,vy:-Math.random()*12-3,l:1,c:['#ff4fd8','#38e1ff','#ffd23f','#7a5cff','#3ddc84'][i%5]});
  g.msg=strike?'STRIKE!':spare?'SPARE!':n===0?(g.ball.ghost?'GUTTER':'MISS'):n+' down';g.msgT=g.t;if(strike){beep(660,.15);setTimeout(()=>beep(880,.2),120);setTimeout(()=>beep(1180,.3),260)}else if(spare)beep(700,.2);
  g.nb=nb;g.reset=reset;g.ph='result';g.wait=1.8;refreshSB()}
 function nextTurn(){const g=G;const pl=g.pl[g.turn];
  if(g.nb){g.b++;if(g.reset||false){g.standing=g.standing.map(()=>1)}startTurn();return}
  g.b=0;g.standing=g.standing.map(()=>1);
- if(g.turn===0){g.turn=1}else{g.turn=0;g.fr++}
- if(g.fr>9){g.over=true;const a=scoreRolls(g.pl[0].rolls).slice(-1)[0].c||0,c=scoreRolls(g.pl[1].rolls).slice(-1)[0].c||0;g.fs=[a,c];if(a>sv.best)sv.best=a;if(a>c)sv.wins++;save();refreshSB();$('#ovl').innerHTML='<div class="ovl"><div class="box"><h2>Game over</h2><div class="big">'+a+' - '+c+'</div><div style="font-size:22px;font-weight:900;margin:10px 0;color:'+(a>c?'var(--ok)':a===c?'var(--gold)':'var(--bad)')+'">'+(a>c?'YOU WIN!':a===c?'Tie game':'CPU wins')+'</div><div style="display:grid;gap:8px"><button class="btn" data-a="start">Play again</button><button class="btn g" data-a="title">Menu</button></div></div></div>';return}
+ if(g.turn>=g.pl.length-1){g.turn=0;g.fr++}else g.turn++
+ if(g.fr>9){g.over=true;const a=scoreRolls(g.pl[0].rolls).slice(-1)[0].c||0,c=g.pl[1]?scoreRolls(g.pl[1].rolls).slice(-1)[0].c||0:-1;g.fs=[a,c];if(a>sv.best)sv.best=a;if(a>c&&c>=0)sv.wins++;let extra='';if(sv.mode===2){if(a>c)sv.lg.w++;else sv.lg.l++;if(sv.lg.r>=4){const t=sv.lg.w>=4;if(t)sv.titles=(sv.titles||0)+1;extra='<div style="margin:8px 0;font-weight:800">League over: '+sv.lg.w+'-'+sv.lg.l+(t?' — CHAMPION!':'')+'</div>'}else extra='<div style="margin:8px 0">Record '+sv.lg.w+'-'+sv.lg.l+'. Next: '+PROS[sv.lg.r+1][0]+'</div><button class="btn" data-a="lnext">Next match</button>'}save();refreshSB();$('#ovl').innerHTML='<div class="ovl"><div class="box"><h2>Game over</h2><div class="big">'+(c<0?a:a+' - '+c)+'</div><div style="font-size:22px;font-weight:900;margin:10px 0;color:'+(a>c?'var(--ok)':a===c?'var(--gold)':'var(--bad)')+'">'+(c<0?'Final score':a>c?'YOU WIN!':a===c?'Tie game':PROS[g.opi][0]+' wins')+'</div>'+extra+'<div style="display:grid;gap:8px">'+(sv.mode===2&&!(sv.lg&&sv.lg.r>=4)?'':'<button class="btn" data-a="start">Play again</button>')+'<button class="btn g" data-a="title">Menu</button></div></div></div>';return}
  startTurn()}
 /* ---------- input */
 function action(){const g=G;if(!g||g.over||!g.pl[g.turn].human)return;ac();
@@ -271,11 +273,12 @@ function drawScene(x,g){
  for(let k=0;k<6;k++){const y0=-200+k*400;line3(x,[-120,y0,260],[120,y0,260],k%2?'#38e1ff':'#ff4fd8',5)}
  // aim guide
  if((g.ph==='aim'||g.ph==='power'||g.ph==='spin')&&g.pl[g.turn].human){const a=g.ang*Math.PI/180;for(let y=40;y<1100;y+=60){const px=g.aimX+Math.tan(a)*y;poly3(x,[[px-2.2,y-4,.5],[px+2.2,y-4,.5],[px+2.2,y+4,.5],[px-2.2,y+4,.5]],'rgba(255,79,216,'+(.8-y/1500)+')')}}
+ g.trail.forEach((t,i)=>{if(i%2)poly3(x,[[t[0]-3,t[1]-3,3],[t[0]+3,t[1]-3,3],[t[0]+3,t[1]+3,3],[t[0]-3,t[1]+3,3]],'rgba(190,120,255,'+(i/g.trail.length*.45)+')')});
  // entities
  const ents=g.pins.filter(p=>!p.gone).map(p=>({d:cs(p.x,p.y,0)[2],p}));ents.push({d:cs(g.ball.x,g.ball.y,0)[2]-1,ball:1});
  ents.sort((a,b)=>b.d-a.d).forEach(e=>e.ball?(g.ball.y<PITY+20&&drawBall(x,g.ball)):drawPin(x,e.p));
  if(fl){x.fillStyle='rgba(255,255,255,.08)';x.fillRect(0,0,1000,560)}}
-function drawHud(x,g){const pl=g.pl[g.turn];x.fillStyle='rgba(8,5,18,.88)';x.beginPath();x.roundRect(260,6,480,44,12);x.fill();x.textAlign='center';x.fillStyle='#ffd23f';x.font='800 18px system-ui';x.fillText(pl.n+'  -  Frame '+(g.fr+1)+'  -  Ball '+(g.b+1),500,24);
+function drawHud(x,g){g.conf.forEach(p=>{x.globalAlpha=Math.max(0,p.l);x.fillStyle=p.c;x.fillRect(p.x,p.y,6,6)});x.globalAlpha=1;const pl=g.pl[g.turn];x.fillStyle='rgba(8,5,18,.88)';x.beginPath();x.roundRect(260,6,480,44,12);x.fill();x.textAlign='center';x.fillStyle='#ffd23f';x.font='800 18px system-ui';x.fillText(pl.n+'  -  Frame '+(g.fr+1)+'  -  Ball '+(g.b+1),500,24);
  const pins=g.pins.filter(p=>p.on&&!p.down).length;x.fillStyle='#a79bc8';x.font='700 13px system-ui';x.fillText('Pins standing: '+(g.ph==='result'||g.ph==='roll'?pins:g.standing.reduce((a,v)=>a+v,0)),500,42);
  if(g.t-g.msgT<1.8&&g.msg&&g.ph==='result'){x.font='900 56px system-ui';x.lineWidth=9;x.strokeStyle='rgba(0,0,0,.7)';x.strokeText(g.msg,500,190);x.fillStyle=/STRIKE|SPARE/.test(g.msg)?'#ffd23f':'#fff';x.fillText(g.msg,500,190)}
  if(g.pl[g.turn].human&&(g.ph==='power'||g.ph==='spin')){const bx=300,by=500,w=400,h=26;x.fillStyle='rgba(8,5,18,.9)';x.beginPath();x.roundRect(bx-12,by-34,w+24,78,12);x.fill();x.fillStyle='#fff';x.font='800 13px system-ui';x.fillText(g.ph==='power'?'POWER: press Space':'SPIN: press Space (center = straight)',500,by-16);

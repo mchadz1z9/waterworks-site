@@ -129,29 +129,31 @@ function ath(x,X,Y,H,o){o=o||{};const f=o.f||1,sk=o.skin||'#e0ad82',sh=o.shirt||
  x.fillStyle='#fff';x.beginPath();x.arc(hx+U*.38,hy-U*.05,U*.2,0,7);x.fill();x.fillStyle='#222';x.beginPath();x.arc(hx+U*.45,hy-U*.05,U*.1,0,7);x.fill();
  x.restore();return {hand:[X+(f*(hf?hf[0]+sx*.3:0)),Y+(hf?hf[1]:0)]}}
 function shade(c,k){let m;if(c[0]==='#'){const v=[1,3,5].map(i=>parseInt(c.slice(i,i+2),16));return 'rgb('+v.map(q=>Math.max(0,Math.min(255,Math.round(q*k)))).join(',')+')'}if(m=c.match(/rgba?\(([^)]+)\)/)){const v=m[1].split(',').map(Number);return 'rgb('+[0,1,2].map(i=>Math.max(0,Math.min(255,Math.round(v[i]*k)))).join(',')+')'}return c}
+
 const KEYS={};
 const OPP=[{n:'Danny "Glass Jaw"',hp:60,sp:.55,dm:6,col:'#5aa0e0'},{n:'Rico Ramirez',hp:90,sp:.8,dm:8,col:'#e05a5a'},{n:'Iron Mike T.',hp:120,sp:1.05,dm:10,col:'#9a5ae0'},{n:'The Champ',hp:150,sp:1.25,dm:12,col:'#e0b020'}];
 let sv=ld('bx1',{wins:0,lv:0,diff:1,ko:0});
 let V='title',G=null,raf=0;
 function render(){cancelAnimationFrame(raf);let h='<div class="top"><div><h1>Knockout Boxing</h1><div class="sub">Jab, hook, block and dodge your way up four opponents.</div></div></div>';
- if(V==='title')h+='<div class="hero"><div class="card"><h2>Fight</h2><div style="display:grid;gap:8px"><button class="btn" data-a="go">Fight '+OPP[sv.lv%4].n+'</button><button class="btn g" data-a="lv">Opponent: '+(sv.lv%4+1)+'/4</button><button class="btn g" data-a="diff">Difficulty: '+['Easy','Normal','Hard'][sv.diff]+'</button></div><div class="tip" style="margin-top:10px">Wins: <b style="color:var(--gold)">'+sv.wins+'</b> · KOs: <b style="color:var(--gold)">'+sv.ko+'</b></div></div><div class="card"><h2>Controls</h2><table><tr><td>Jab</td><td>J or Left click (fast, light)</td></tr><tr><td>Hook</td><td>K or Right click (slow, heavy)</td></tr><tr><td>Block</td><td>Hold Space (take 80% less, drains stamina)</td></tr><tr><td>Dodge</td><td>A / D to lean, dodge a punch when it lands</td></tr><tr><td>Tip</td><td>Counter right after a dodge for a bonus. Stamina refills when you rest</td></tr></table></div></div>';
+ if(V==='title')h+='<div class="hero"><div class="card"><h2>Fight</h2><div style="display:grid;gap:8px"><button class="btn" data-a="go">Fight '+OPP[sv.lv%4].n+'</button><button class="btn g" data-a="lv">Opponent: '+(sv.lv%4+1)+'/4</button><button class="btn g" data-a="diff">Difficulty: '+['Easy','Normal','Hard'][sv.diff]+'</button></div><div class="tip" style="margin-top:10px">Wins: <b style="color:var(--gold)">'+sv.wins+'</b> · KOs: <b style="color:var(--gold)">'+sv.ko+'</b></div></div><div class="card"><h2>Controls</h2><table><tr><td>Jab</td><td>J or Left click (fast, light)</td></tr><tr><td>Hook</td><td>K or Right click (slow, heavy)</td></tr><tr><td>Block</td><td>Hold Space (take 80% less, drains stamina)</td></tr><tr><td>Dodge</td><td>Tap A or D right as the punch lands. A fresh tap dodges and costs stamina; holding a lean does not</td></tr><tr><td>Tip</td><td>Counter right after a dodge for a bonus. Stamina refills when you rest</td></tr></table></div></div>';
  else h+='<canvas id="cv" width="1000" height="560"></canvas><div id="ovl"></div>';
  $('#app').innerHTML=h;if(V==='game')loop()}
 document.addEventListener('click',e=>{const b=e.target.closest('[data-a]');if(!b)return;ac();const a=b.dataset.a;if(a==='go')newG();else if(a==='lv'){sv.lv=(sv.lv+1)%4;sv_('bx1',sv);render()}else if(a==='diff'){sv.diff=(sv.diff+1)%3;sv_('bx1',sv);render()}else if(a==='title'){V='title';render()}});
 function newG(){const o=OPP[sv.lv%4];const dm=[.7,1,1.3][sv.diff];G={o,php:100,ohp:o.hp,pst:100,rd:1,rt:90,t:0,pa:null,pt:0,oa:null,ot:0,ocd:1.2,lean:0,blk:false,msg:'',msgT:-9,sp:[],over:false,dm,sh:0,combo:0,dodged:0,pf:0,of:0}; V='game';render()}
-function jab(){const g=G;if(!g||g.over||g.pa||g.pst<8)return;g.pa='jab';g.pt=.28;g.pst-=8;g.pf=1}
-function hook(){const g=G;if(!g||g.over||g.pa||g.pst<18)return;g.pa='hook';g.pt=.55;g.pst-=18;g.pf=1}
+function jab(){const g=G;if(!g||g.over||g.pa||g.pst<8)return;g.pa='jab';g.pt=.28;g.pst-=8;g.pf=1;oppGuard()}
+function hook(){const g=G;if(!g||g.over||g.pa||g.pst<18)return;g.pa='hook';g.pt=.55;g.pst-=18;g.pf=1;oppGuard()}
+function oppGuard(){const g=G;if(g.oa===null&&Math.random()<[.2,.32,.45,.55][Math.min(3,sv.lv||0)]){g.oa='blk';g.ot=.5}}
 function hurtO(d){const g=G;const bl=g.oa==='blk';g.ohp-=bl?d*.2:d;g.sh=6;beep(bl?160:100,.1,'square',.08);for(let i=0;i<8;i++)g.sp.push({x:610,y:240,vx:rnd(-3,3),vy:rnd(-3,2),l:1});if(g.ohp<=0)fin(true)}
 function hurtP(d){const g=G;const x=g.blk?d*.2:d;g.php-=x*G.dm;g.sh=g.blk?3:9;beep(90,.15,'sawtooth',.09);if(g.php<=0)fin(false)}
 function fin(w){const g=G;g.over=true;if(w){sv.wins++;sv.ko++;sv.lv=Math.min(sv.lv+1,3)}sv_('bx1',sv);$('#ovl').innerHTML='<div class="ovl"><div class="box"><h2>'+(w?'KNOCKOUT!':'You were knocked out')+'</h2><div class="big" style="font-size:40px">'+(w?'YOU WIN':'TRY AGAIN')+'</div><div style="display:grid;gap:8px;margin-top:10px"><button class="btn" data-a="go">'+(w?'Next fight':'Rematch')+'</button><button class="btn g" data-a="title">Menu</button></div></div></div>'}
 function step(dt){const g=G;if(!g||g.over)return;g.t+=dt;if(g.sh>0)g.sh-=dt*30;g.sp=g.sp.filter(p=>(p.l-=dt*2)>0);g.sp.forEach(p=>{p.x+=p.vx;p.y+=p.vy;p.vy+=.12});
  if(g.msgT>g.t)g.msgT=-9;
  g.blk=!!(KEYS.Space)&&g.pst>0&&!g.pa;if(g.blk)g.pst-=dt*10;else g.pst=Math.min(100,g.pst+dt*(g.pa?4:16));
- g.lean=KEYS.KeyA||KEYS.ArrowLeft?-1:KEYS.KeyD||KEYS.ArrowRight?1:0;
+ const ln=KEYS.KeyA||KEYS.ArrowLeft?-1:KEYS.KeyD||KEYS.ArrowRight?1:0;g.leanT=ln&&ln===g.lean?(g.leanT||0)+dt:0;g.lean=ln;if(g.oa==='blk'){g.ot-=dt;if(g.ot<=0){g.oa=null;g.ocd=rnd(.15,.5)}}
  if(g.pa){g.pt-=dt;const hitAt=g.pa==='jab'?.14:.28;if(g.pf&&g.pt<=hitAt){g.pf=0;const d=g.pa==='jab'?5:13;const cb=g.oa==='stag';hurtO(cb?d*1.8:d);g.combo++;}if(g.pt<=0)g.pa=null}
  const sp=g.o.sp*[.8,1,1.2][sv.diff];
  if(g.oa===null){g.ocd-=dt*sp;if(g.ocd<=0){g.oa=Math.random()<.35?'hook':'jab';g.ot=g.oa==='jab'?.5:.8;g.of=1;g.tell=.3}}
- else if(g.oa==='jab'||g.oa==='hook'){g.ot-=dt;const hitAt=g.oa==='jab'?.2:.28;if(g.of&&g.ot<=hitAt){g.of=0;const dodged=g.lean!==0&&g.lean!==g.dlean;if(g.lean!==0){g.msg='DODGE!';g.msgT=g.t+1;g.dodged++;g.oa='stag';g.ot=.7;g.pf=0}else{hurtP(g.o.dm*(g.oa==='hook'?1.6:1));g.msg='';}}
+ else if(g.oa==='jab'||g.oa==='hook'){g.ot-=dt;const hitAt=g.oa==='jab'?.2:.28;if(g.of&&g.ot<=hitAt){g.of=0;const fresh=g.lean!==0&&g.leanT<.5&&g.pst>=10;if(fresh){g.pst-=10;g.msg='DODGE!';g.msgT=g.t+1;g.dodged++;g.oa='stag';g.ot=.7;g.pf=0}else{hurtP(g.o.dm*(g.oa==='hook'?1.6:1));g.msg='';}}
   if(g.oa!=='stag'&&g.ot<=0){g.oa=null;g.ocd=rnd(.8,1.8)}}
  else if(g.oa==='stag'){g.ot-=dt;if(g.ot<=0){g.oa=null;g.ocd=rnd(.7,1.5)}}
  g.rt-=dt;if(g.rt<=0){const w=g.php/100>g.ohp/g.o.hp;fin(w)}}

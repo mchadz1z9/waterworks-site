@@ -105,7 +105,7 @@ let AC=null;function ac(){if(!AC)try{AC=new (window.AudioContext||window.webkitA
 function beep(f,d,type,v,sl){const a=ac();if(!a)return;const o=a.createOscillator(),g=a.createGain();o.type=type||'sine';o.frequency.value=f;if(sl)o.frequency.exponentialRampToValueAtTime(sl,a.currentTime+d);g.gain.value=v||.15;g.gain.exponentialRampToValueAtTime(.001,a.currentTime+d);o.connect(g);g.connect(a.destination);o.start();o.stop(a.currentTime+d)}
 function noise(d,v,fq){const a=ac();if(!a)return;const n=a.sampleRate*d,b=a.createBuffer(1,n,a.sampleRate),k=b.getChannelData(0);for(let i=0;i<n;i++)k[i]=(Math.random()*2-1)*(1-i/n);const s=a.createBufferSource();s.buffer=b;const f=a.createBiquadFilter();f.type='lowpass';f.frequency.value=fq||1800;const g=a.createGain();g.gain.value=v;s.connect(f);f.connect(g);g.connect(a.destination);s.start()}
 const G={l:250,r:750,t:130,b:300},SPOT={x:500,y:510};
-const TEAMS=[{n:'Arsenal',c:'#e23a3a',r:1,k:'Keeper David Raya'},{n:'Manchester City',c:'#6cabdd',r:2,k:'Keeper Ederson'},{n:'Bayern Munich',c:'#dc052d',r:3,k:'Keeper Manuel Neuer'},{n:'Real Madrid',c:'#e8e8ee',r:4,k:'Keeper Thibaut Courtois'}];
+const TEAMS=[{n:'Arsenal',c:'#e23a3a',r:1,k:'Keeper David Raya'},{n:'Liverpool',c:'#c8102e',r:1,k:'Keeper Alisson Becker'},{n:'Manchester City',c:'#6cabdd',r:2,k:'Keeper Ederson'},{n:'Paris Saint-Germain',c:'#1b3a8a',r:2,k:'Keeper Gianluigi Donnarumma'},{n:'Barcelona',c:'#a50044',r:3,k:'Keeper Marc-Andre ter Stegen'},{n:'Bayern Munich',c:'#dc052d',r:3,k:'Keeper Manuel Neuer'},{n:'Inter Milan',c:'#0a4aa0',r:4,k:'Keeper Yann Sommer'},{n:'Real Madrid',c:'#e8e8ee',r:4,k:'Keeper Thibaut Courtois'}];
 let opp=TEAMS[0],cup=false,cupI=0,cupWins=+(localStorage.cw||0);
 let mode='menu',turn='shoot',phase='idle',T=0,last=0,level=1,score=0,lives=3,streak=0,best={},msg='',msgT=0,msgC='#fff',shake=0,flash=0,ripple=null,parts=[];
 try{best=JSON.parse(localStorage.pb3||'{}')}catch(e){best={}}
@@ -118,7 +118,7 @@ function sc(y){return 1-clamp((510-y)/260,0,1)*.6}
 function pt(e){const r=cv.getBoundingClientRect(),d=cv.width/r.width;return{x:((e.clientX-r.left)*d-OX)/S,y:((e.clientY-r.top)*d-OY)/S}}
 /* ---------- flow ---------- */
 function startCup(){cup=true;cupI=0;opp=TEAMS[0];startMode('match')}
-function startQuick(){cup=false;opp=TEAMS[Math.floor(Math.random()*4)];startMode('match')}
+function startQuick(){cup=false;opp=TEAMS[Math.floor(Math.random()*TEAMS.length)];startMode('match')}
 function startMode(m){mode=m;level=(m==='match')?1+opp.r:1;if(m!=='match'){cup=false;opp=TEAMS[1]}score=0;lives=3;streak=0;M.you=[];M.cpu=[];M.sd=false;overTxt=null;parts=[];msg='';turn='shoot';beginTurn()}
 function bestKey(){return mode}
 function beginTurn(){shot=null;dive=null;drawing=false;path=[];K.x=500;K.y=262;K.dive=false;K.hx=500;K.hy=240;ripple=null;runup=null;kick=null;cpuPlan=null;
@@ -132,7 +132,7 @@ function after(res){ // res 'goal'|'save'|'miss'
  setTimeout(()=>{
   if(mode==='match'){const g=res==='goal';(turn==='shoot'?M.you:M.cpu).push(g);
    if(turn==='keep'||false){ }
-   if(matchDecided()){const p=M.you.filter(Boolean).length,c=M.cpu.filter(Boolean).length;phase='over';const win=p>c;let l=['Shootout vs '+opp.n+' finished '+p+' – '+c+'.'];let a=win?'You win!':'You lose';if(cup&&win){if(cupI>=3){a='CUP WINNER!';l.push('You beat all four teams.');cupWins++;try{localStorage.cw=cupWins}catch(e){}}else l.push('Next up: '+TEAMS[cupI+1].n)}overTxt={a,l,win};return}
+   if(matchDecided()){const p=M.you.filter(Boolean).length,c=M.cpu.filter(Boolean).length;phase='over';const win=p>c;let l=['Shootout vs '+opp.n+' finished '+p+' – '+c+'.'];let a=win?'You win!':'You lose';if(cup&&win){if(cupI>=TEAMS.length-1){a='CUP WINNER!';l.push('You beat all '+TEAMS.length+' teams.');cupWins++;try{localStorage.cw=cupWins}catch(e){}}else l.push('Next up: '+TEAMS[cupI+1].n)}overTxt={a,l,win};return}
    turn=turn==='shoot'?'keep':'shoot';beginTurn();return}
   if(mode==='shoot'){if(res==='goal'){goals();} else {streak=0;lives--}
    if(lives<=0){finish('Shooting practice','You scored '+score+' points.')}else beginTurn();return}
@@ -187,7 +187,7 @@ function resolve(){
 /* ---------- input ---------- */
 addEventListener('pointerdown',e=>{ac();const p=pt(e);
  if(mode==='menu'){const b=menuBtns();for(const k of b)if(p.x>k.x&&p.x<k.x+k.w&&p.y>k.y&&p.y<k.y+k.h){k.m==='cup'?startCup():k.m==='match'?startQuick():startMode(k.m);return}return}
- if(phase==='over'){if(cup&&overTxt&&overTxt.win&&cupI<3){cupI++;opp=TEAMS[cupI];startMode('match');return}mode='menu';phase='idle';return}
+ if(phase==='over'){if(cup&&overTxt&&overTxt.win&&cupI<TEAMS.length-1){cupI++;opp=TEAMS[cupI];startMode('match');return}mode='menu';phase='idle';return}
  if(phase==='aim'&&Math.hypot(p.x-SPOT.x,p.y-SPOT.y)<110){drawing=true;path=[{x:SPOT.x,y:SPOT.y}];drawT0=T;return}
  if((phase==='cpurun'||phase==='fly')&&turn==='keep'&&!dive){drawing=true;path=[p];return}});
 addEventListener('pointermove',e=>{if(!drawing)return;const p=pt(e);const l=path[path.length-1];if(!l||Math.hypot(p.x-l.x,p.y-l.y)>5)path.push(p)});
@@ -195,7 +195,7 @@ addEventListener('pointerup',e=>{if(!drawing)return;drawing=false;const p=pt(e);
  if(phase==='aim'){path.push(p);if(!shootFromPath()){path=[];say('Draw a line from the ball to the goal','#fff')}}
  else if(turn==='keep'&&(phase==='cpurun'||phase==='fly')&&!dive){const tx=clamp(p.x,290,710),ty=clamp(p.y,185,285);dive={t:T,x:tx,y:ty,fx:K.x,fy:K.y};beep(300,.1,'triangle',.15,200)}
  path=[]});
-function menuBtns(){return[{m:'cup',t:'Cup: 4 teams',s:'Beat Arsenal, Man City, Bayern and Real Madrid. Cups won: '+cupWins,x:300,y:215,w:400,h:68},{m:'match',t:'Quick shootout',s:'Five penalties each against a random team',x:300,y:295,w:400,h:68},{m:'shoot',t:'Shooting practice',s:'Draw your shot. 3 misses and you are out',x:300,y:375,w:400,h:68},{m:'keep',t:'Goalkeeper practice',s:'Drag where to dive. Let in 3 and you are out',x:300,y:455,w:400,h:68}]}
+function menuBtns(){return[{m:'cup',t:'Cup: 8 teams',s:'Win 8 shootouts in a row, Arsenal up to Real Madrid. Cups won: '+cupWins,x:300,y:215,w:400,h:68},{m:'match',t:'Quick shootout',s:'Five penalties each against a random team',x:300,y:295,w:400,h:68},{m:'shoot',t:'Shooting practice',s:'Draw your shot. 3 misses and you are out',x:300,y:375,w:400,h:68},{m:'keep',t:'Goalkeeper practice',s:'Drag where to dive. Let in 3 and you are out',x:300,y:455,w:400,h:68}]}
 /* ---------- drawing ---------- */
 function stick(px,py,s,col,sw,run,ph){ // player figure from behind
  x.save();x.translate(px,py);x.scale(s,s);
@@ -267,7 +267,7 @@ function dots(arr,px,py,dir){for(let i=0;i<Math.max(5,arr.length);i++){x.fillSty
 function hud(){
  x.textAlign='left';x.fillStyle='#fff';
  if(mode==='match'){const p=M.you.filter(Boolean).length,c=M.cpu.filter(Boolean).length;x.font='800 28px system-ui';x.fillText('YOU '+p+' – '+c+' '+opp.n.toUpperCase(),24,46);x.font='600 15px system-ui';x.fillStyle='#bfe3cd';x.fillText('You',24,74);dots(M.you,70,69,1);x.fillText(opp.n.split(' ')[0],24,98);dots(M.cpu,70,93,1);
-  x.textAlign='right';x.font='700 18px system-ui';x.fillStyle='#fff';x.fillText((cup?'Cup round '+(cupI+1)+' of 4  ·  ':'')+(turn==='shoot'?'Shooting vs '+opp.k:'You are in goal'),976,40)}
+  x.textAlign='right';x.font='700 18px system-ui';x.fillStyle='#fff';x.fillText((cup?'Cup round '+(cupI+1)+' of '+TEAMS.length+'  ·  ':'')+(turn==='shoot'?'Shooting vs '+opp.k:'You are in goal'),976,40)}
  else{x.font='800 34px system-ui';x.fillText('Score '+score,24,48);x.font='600 17px system-ui';x.fillStyle='#bfe3cd';x.fillText('Level '+level+(streak>1?'  ·  Streak ×'+streak:''),24,74);x.textAlign='right';x.fillText('Best '+(best[mode]||0),976,40);for(let i=0;i<3;i++){x.fillStyle=i<lives?'#ff5a5a':'rgba(255,255,255,.2)';x.beginPath();x.arc(950-i*30,66,10,0,7);x.fill()}}
  x.textAlign='center';x.fillStyle='rgba(255,255,255,.92)';x.font='700 20px system-ui';
  if(phase==='aim'&&!drawing)x.fillText('Draw a line from the ball to where you want it to go. Fast swipes are harder to control.',500,585);
