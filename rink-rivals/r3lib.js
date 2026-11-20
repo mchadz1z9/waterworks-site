@@ -57,7 +57,7 @@ function makeR3(glc,stage){
 uniform mat4 uVP,uM;uniform vec3 uTint;uniform float uTime,uCheer;
 varying vec3 vCol;varying vec3 vN;varying vec3 vW;varying float vMat;
 void main(){vec3 p=aPos;vMat=0.0;if(aPh>0.0){p.y+=abs(sin(uTime*9.0+aPh))*uCheer*6.0+sin(uTime*1.7+aPh)*0.5;}else if(aPh<0.0){vMat=-aPh;if(vMat>6.5&&vMat<7.5){p.y+=sin(uTime*1.5+p.x*0.05+p.z*0.04)*1.3+sin(uTime*2.3+p.x*0.08)*0.6;}}
-vec4 w=uM*vec4(p,1.0);vW=w.xyz;vN=mat3(uM)*aNor;vCol=aCol*uTint;gl_Position=uVP*w;}`,
+vec4 w=uM*vec4(p,1.0);vW=w.xyz;vN=mat3(uM)*aNor;vCol=aCol*2.0*uTint;gl_Position=uVP*w;}`,
 `#ifdef GL_FRAGMENT_PRECISION_HIGH
 precision highp float;
 #else
@@ -139,8 +139,13 @@ void main(){vec4 t=texture2D(uTex,vUV*uUVR.zw+uUVR.xy);if(t.a<0.04)discard;gl_Fr
     }
   }
   function upload(g){
-    const mk=(arr)=>{ const b=gl.createBuffer(); gl.bindBuffer(gl.ARRAY_BUFFER,b); gl.bufferData(gl.ARRAY_BUFFER,new Float32Array(arr),gl.STATIC_DRAW); return b; };
-    return {pos:mk(g.p),nor:mk(g.n),col:mk(g.c),ph:mk(g.ph),n:g.p.length/3};
+    /* positions and phases stay as floats; normals and colours are packed into bytes (about 45% less GPU memory, same look).
+       Colours are stored halved so values up to 2 (bright glows) still fit; the shader doubles them back. */
+    const mk=(a)=>{ const b=gl.createBuffer(); gl.bindBuffer(gl.ARRAY_BUFFER,b); gl.bufferData(gl.ARRAY_BUFFER,a,gl.STATIC_DRAW); return b; };
+    const N=new Int8Array(g.n.length), C=new Uint8Array(g.c.length);
+    for(let i=0;i<g.n.length;i++){ const v=g.n[i]; N[i]=v>=1?127:v<=-1?-127:Math.round(v*127); }
+    for(let i=0;i<g.c.length;i++){ const v=g.c[i]*127.5; C[i]=v>=255?255:v<=0?0:Math.round(v); }
+    return {pos:mk(new Float32Array(g.p)),nor:mk(N),col:mk(C),ph:mk(new Float32Array(g.ph)),n:g.p.length/3};
   }
   function freeMesh(m){ if(!m) return; for(const k of ['pos','nor','col','ph']) gl.deleteBuffer(m[k]); }
   const unit=pr=>{ const g=new Geo(); g.add(pr,I(),[1,1,1]); return upload(g); };
@@ -179,8 +184,8 @@ void main(){vec4 t=texture2D(uTex,vUV*uUVR.zw+uUVR.xy);if(t.a<0.04)discard;gl_Fr
   let LAVA=0, VP=I(), eye=[0,400,800], sky=[.04,.06,.12], bright=1, fogN=1500, fogF=2600;
   function bindC(m){
     gl.bindBuffer(gl.ARRAY_BUFFER,m.pos); gl.vertexAttribPointer(PC.a.aPos,3,gl.FLOAT,false,0,0);
-    gl.bindBuffer(gl.ARRAY_BUFFER,m.nor); gl.vertexAttribPointer(PC.a.aNor,3,gl.FLOAT,false,0,0);
-    gl.bindBuffer(gl.ARRAY_BUFFER,m.col); gl.vertexAttribPointer(PC.a.aCol,3,gl.FLOAT,false,0,0);
+    gl.bindBuffer(gl.ARRAY_BUFFER,m.nor); gl.vertexAttribPointer(PC.a.aNor,3,gl.BYTE,true,0,0);
+    gl.bindBuffer(gl.ARRAY_BUFFER,m.col); gl.vertexAttribPointer(PC.a.aCol,3,gl.UNSIGNED_BYTE,true,0,0);
     gl.bindBuffer(gl.ARRAY_BUFFER,m.ph); gl.vertexAttribPointer(PC.a.aPh,1,gl.FLOAT,false,0,0);
   }
   let curMesh=null;

@@ -7,7 +7,7 @@
   const J=(k,d)=>{ try{ return JSON.parse(ls.get(k)||'null')||d; }catch(e){ return d; } };
   const isOwner=()=>{ if(ls.get('rrOwner')==='1'||/\bowner\b/.test(String(ls.get('rrMyTag')||'').toLowerCase())) return true; try{ return sessionStorage.getItem('rrRole')==='full'; }catch(e){ return false; } };
   const PAGE=(location.pathname.split('/').pop()||'').replace(/\.html$/,'')||'index';
-  const NOGAME=['','index','clips','about','hq-owa9rwwt9kplpdbu','sports-arcade','launch','admin','hub'];
+  const NOGAME=['','index','clips','about','hq-src','sports-arcade','launch','admin','hub']; if(/^hq/.test(PAGE)) NOGAME.push(PAGE);
   const today=()=>new Date().toDateString();
   let bal=Math.max(0,+ls.get('rrCoins')||0); const inv=J('rrInv',{}), eq=J('rrEquip',{});
   let D=J('rrCoinDay',{}); if(D.d!==today()) D={d:today(),earned:0,play:0,res:0};
@@ -405,7 +405,7 @@
       b.innerHTML=`<div>⭐ <b>Game of the day:</b> ${FEAT[1]} — <b>2× coins</b> today<br><span style="opacity:.85">${EVENT.ic} This week: <b>${EVENT.n}</b> — ${EVENT.d}${WEEKEND?' · 🎉 Weekend bonus: +50% coins':''}<br>🗺️ Map of the week: <a href="${MAPWEEK[0]}" style="color:#fde047">${MAPWEEK[2]}</a> (+100 🪙 for a win there)${SEASONNOW?` · ${SEASONS[SEASONNOW].ic} ${SEASONS[SEASONNOW].n} Crate is out!`:''}</span></div><a href="${FEAT[0]}" style="background:#facc15;color:#1c1917;font-weight:800;padding:9px 18px;border-radius:999px;text-decoration:none">Play ${FEAT[1]} ▶</a>`;
       const m=document.querySelector('main')||document.body; m.insertBefore(b,m.firstChild); }
     else if(PAGE===FEAT[0]){ b.style.cssText='position:fixed;top:0;left:50%;transform:translateX(-50%);z-index:2147482400;background:linear-gradient(90deg,#ca8a04,#facc15);color:#1c1917;font:800 13px system-ui,sans-serif;padding:4px 14px;border-radius:0 0 12px 12px;pointer-events:none'; b.textContent=`⭐ GAME OF THE DAY — 2× COINS${WEEKEND?' · WEEKEND +50%':''}${EVENT.k==='x2'?' · DOUBLE COINS WEEK':''}`; document.body.appendChild(b); } }catch(e){} }
-  function mount(){ banners(); setTimeout(gcRender,1500); if(PAGE==='hq-owa9rwwt9kplpdbu'||window.RR_ADMIN||document.getElementById('rrCoin')) return; css(); pill=document.createElement('button'); pill.id='rrCoin'; pill.title='Arcade Coins — open the shop'; pill.onclick=()=>open(); document.body.appendChild(pill); render(); }
+  function mount(){ banners(); setTimeout(gcRender,1500); if(/^hq/.test(PAGE)||window.RR_ADMIN||document.getElementById('rrCoin')) return; css(); pill=document.createElement('button'); pill.id='rrCoin'; pill.title='Arcade Coins — open the shop'; pill.onclick=()=>open(); document.body.appendChild(pill); render(); }
   if(document.readyState==='loading') addEventListener('DOMContentLoaded',mount); else mount();
   addEventListener('storage',e=>{ if(e.key==='rrCoins'){ bal=Math.max(0,+e.newValue||0); render(); } });
   window.RRCOIN={ pirate:why=>pirateStart(why), pirateLeft:()=>Math.max(0,pirateEnd()-Date.now()), tradeable:()=>ITEMS.filter(i=>!i.many&&!i.buy).map(i=>({k:i.k,ic:i.ic,n:i.n,rar:i.rar||0,own:!!inv[i.k]||isOwner()})), itemName:k=>{ const i=ITEMS.find(x=>x.k===k); return i?`${i.ic} ${i.n}`:k; },

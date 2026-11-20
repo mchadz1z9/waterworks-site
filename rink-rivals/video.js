@@ -6,7 +6,7 @@
   /* don't run the call line inside an embedded game (same account would clash with the page that embeds it) */
   try{ if(window.top!==window.self) return; }catch(e){ return; }
   const PAGE=(location.pathname.split('/').pop()||'').replace(/\.html$/,'');
-  const ADMIN=(PAGE==='hq-owa9rwwt9kplpdbu'||!!window.RR_ADMIN);
+  const ADMIN=(/^hq/.test(PAGE)||!!window.RR_ADMIN);
   const ROOM='arcriv-vc-', USER='arcrivu-', ABC='ABCDEFGHJKMNPQRSTUVWXYZ23456789';
   /* relay servers: STUN finds your address, TURN relays the video when two networks can't connect directly
      (phone data ↔ home wifi, strict school/office routers). Without these, calls freeze or never connect. */

@@ -7,7 +7,7 @@
   const qs=new URLSearchParams(location.search);
   const SERVER=(qs.get('server')||((()=>{ try{ if(localStorage.getItem('rrSrv')==='relay') return location.origin+'/rr'; }catch(e){} return 'https://rink-rivals-rooms.mitchellchad2026.workers.dev'; })())).replace(/^ws/,'http');
   const PAGE=(location.pathname.split('/').pop()||'').replace(/\.html$/,'');
-  if(PAGE==='hq-owa9rwwt9kplpdbu'||window.RR_ADMIN) return;
+  if(/^hq/.test(PAGE)||window.RR_ADMIN) return;
   /* what follows you between devices: every game save. What doesn't: device settings and anything to do with admin or security */
   const DENY=new Set(['rrSrv','rrSw','rrGfx','rrAcct','rrOwner','rrOwnerStr','rrMyTag','rrAdmUrl','rrAdmG','rrPid','rrKicked','rrBanned','rrSiteGate','rrSiteCfgCache','rrServerOv','rrSiteEvents','rrSiteAt','rrMute','rrPin','rrParty','rrLast','rrStreakPend','rrMT']);
   const syncable=k=>!!k&&!DENY.has(k)&&/^(rr|rinkRivals|sa[A-Z]|pk1$)/.test(k);

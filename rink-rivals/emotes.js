@@ -2,7 +2,7 @@
    plus seasonal weather over the whole site (snow in winter, petals in spring, sunbeams in summer, leaves in the spooky season). */
 (function(){ if(window.RREMOTES) return;
   const PAGE=(location.pathname.split('/').pop()||'').replace(/\.html$/,'');
-  if(PAGE==='hq-owa9rwwt9kplpdbu'||window.RR_ADMIN) return;
+  if(/^hq/.test(PAGE)||window.RR_ADMIN) return;
   const EM=[{k:'wave',ic:'👋',n:'Wave'},{k:'cheer',ic:'🙌',n:'Cheer'},{k:'dance',ic:'💃',n:'Dance'},{k:'flex',ic:'💪',n:'Flex'},{k:'robot',ic:'🤖',n:'Robot',item:'em_robot'},{k:'spin',ic:'🌀',n:'Spin',item:'em_spin'},
     {k:'salute',ic:'🫡',n:'Salute',item:'em_salute'},{k:'jacks',ic:'🤸',n:'Jumping jacks',item:'em_jacks'},{k:'swing',ic:'🕺',n:'Arm swing',item:'em_swing'},{k:'laugh',ic:'😂',n:'Laugh',item:'em_laugh'},
     {k:'bow',ic:'🙇',n:'Bow'},{k:'heart',ic:'🫶',n:'Heart'},{k:'crew',ic:'✊',n:'Crew salute',crew:1},{k:'facepalm',ic:'🤦',n:'Facepalm',item:'em_facepalm'},{k:'shrug',ic:'🤷',n:'Shrug',item:'em_shrug'},{k:'champ',ic:'🏆',n:'Champion',item:'em_champ'},{k:'clap',ic:'👏',n:'Clap',item:'em_clap'},{k:'moon',ic:'🌙',n:'Moonwalk',item:'em_moon',pass:1},{k:'flip',ic:'🤸',n:'Backflip',item:'em_flip',pass:1}];
