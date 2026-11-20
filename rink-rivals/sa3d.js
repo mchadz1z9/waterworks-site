@@ -29,16 +29,16 @@ window.SA3D=function(opt){
       if(ax==='z'){ const nx=x*c-y*s, ny=x*s+y*c; x=nx; y=ny; } else if(ax==='x'){ const ny=y*c-z*s, nz=y*s+z*c; y=ny; z=nz; } else { const nx=x*c+z*s, nz=-x*s+z*c; x=nx; z=nz; }
       J[k]=[x+pivot[0],y+pivot[1],z+pivot[2]]; } }
   /* ---- static scenery (built once) ---- */
-  function setStatic(fn,chunk){ R3.setStatic((g,c,Pp)=>{ const {primBox,primCyl,T:Tm,S:Sm,mm:M,RY:Ry,RX:Rx,RZ:Rz}=Pp, B=primBox(), CY=primCyl(24);
+  function setStatic(fn,chunk){ R3.setStatic((g,c,Pp)=>{ const {primBox,primCyl,primSphere,T:Tm,S:Sm,mm:M,RY:Ry,RX:Rx,RZ:Rz}=Pp, B=primBox(), CY=primCyl(24), FTb=primCyl(9,.7), FHb=primSphere(6,9);
     const sb=(x,y,z,w,h,d,col,ry)=>g.add(B,ry?M(Tm(x*K,y*K,z*K),Ry(ry),Sm(w*K,h*K,d*K)):M(Tm(x*K,y*K,z*K),Sm(w*K,h*K,d*K)),col);
     const sc=(x,y,z,r,h,col)=>g.add(CY,M(Tm(x*K,y*K,z*K),Sm(r*K,h*K,r*K)),col);
     const sbR=(x,y,z,w,h,d,col,ry,rx,rz)=>g.add(B,M(Tm(x*K,y*K,z*K),Ry(ry||0),Rx(rx||0),Rz(rz||0),Sm(w*K,h*K,d*K)),col);
-    /* a crowd: stepped stand along a line, fans as little coloured blocks */
+    /* a crowd: stepped stand along a line, fans with rounded bodies and heads */
     const FAN=['#ef4444','#f8fafc','#2563eb','#facc15','#22c55e','#111827','#f97316','#a855f7','#e5e7eb','#0ea5e9'];
     const stand=(x0,z0,x1,z1,rows,y0,face,col)=>{ const L=Math.hypot(x1-x0,z1-z0), n=Math.max(2,Math.floor(L/.75)), ry=Math.atan2(x1-x0,z1-z0)+PI/2;
       for(let r=0;r<rows;r++){ const off=r*.85, y=y0+r*.5, ox=Math.cos(face)*off, oz=Math.sin(face)*off;
         sbR((x0+x1)/2+ox,y-.25,(z0+z1)/2+oz,L,.5+r*0,.85,col||'#334155',ry);
-        for(let i=0;i<n;i++){ if(Math.random()<.12) continue; const t=(i+.5)/n, fx=x0+(x1-x0)*t+ox, fz=z0+(z1-z0)*t+oz; sb(fx,y+.35,fz,.38,.6,.32,FAN[(i*7+r*3+Math.floor(Math.random()*3))%FAN.length]); sb(fx,y+.78,fz,.22,.24,.22,['#e0b48f','#c68e63','#8d5a3b','#f1c7a1'][(i+r)%4]); } } };
+        for(let i=0;i<n;i++){ if(Math.random()<.12) continue; const t=(i+.5)/n, fx=x0+(x1-x0)*t+ox, fz=z0+(z1-z0)*t+oz; g.add(FTb,M(Tm(fx*K,(y+.33)*K,fz*K),Sm(.18*K,.58*K,.15*K)),FAN[(i*7+r*3+Math.floor(Math.random()*3))%FAN.length]); g.add(FHb,M(Tm(fx*K,(y+.78)*K,fz*K),Sm(.12*K,.135*K,.12*K)),['#e0b48f','#c68e63','#8d5a3b','#f1c7a1','#a9724d'][(i+r)%5]); } } };
     fn({sb,sc,sbR,stand,g,B,CY,M,Tm,Sm,Ry,Rx,Rz,K}); },chunk?{chunk:chunk*K}:undefined); }
   /* ---- camera maths (same as r3lib's lookAt + perspective) so we can map the old 2D screen onto the 3D world ---- */
   const sub=(a,b)=>[a[0]-b[0],a[1]-b[1],a[2]-b[2]], nrm=a=>{ const l=Math.hypot(a[0],a[1],a[2])||1; return [a[0]/l,a[1]/l,a[2]/l]; }, crs=(a,b)=>[a[1]*b[2]-a[2]*b[1],a[2]*b[0]-a[0]*b[2],a[0]*b[1]-a[1]*b[0]];
