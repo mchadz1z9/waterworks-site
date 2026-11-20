@@ -760,6 +760,8 @@ void main(){vec4 t=texture2D(uTex,vUV*uUVR.zw+uUVR.xy);if(t.a<0.04)discard;gl_Fr
   let curMesh=null;
   function part(mesh,m,col){ if(curMesh!==mesh){ bindC(mesh); curMesh=mesh; } gl.uniformMatrix4fv(PC.u.uM,false,m); gl.uniform3fv(PC.u.uTint,typeof col==='string'?rgb(col):col); gl.drawArrays(gl.TRIANGLES,0,mesh.n); }
   function partE(mesh,m,col){ gl.uniform1f(PC.u.uEm,1); part(mesh,m,col); gl.uniform1f(PC.u.uEm,0); }
+  /* glowing see-through surfaces (the storm wall): blended, not written to depth */
+  function partT(mesh,m,col,a){ gl.enable(gl.BLEND); gl.blendFunc(gl.SRC_ALPHA,gl.ONE_MINUS_SRC_ALPHA); gl.depthMask(false); gl.uniform1f(PC.u.uAlpha,a); partE(mesh,m,col); gl.uniform1f(PC.u.uAlpha,1); gl.depthMask(true); gl.disable(gl.BLEND); }
   let cheer=0, FOGC=[.04,.06,.12];
   function useC(){
     gl.useProgram(PC.p); curMesh=null;
@@ -916,7 +918,7 @@ void main(){vec4 t=texture2D(uTex,vUV*uUVR.zw+uUVR.xy);if(t.a<0.04)discard;gl_Fr
   function unproject(u,v){ const M=inv(VP), x=u*2-1, y=1-v*2, P=(z)=>{ const r=[M[0]*x+M[4]*y+M[8]*z+M[12],M[1]*x+M[5]*y+M[9]*z+M[13],M[2]*x+M[6]*y+M[10]*z+M[14],M[3]*x+M[7]*y+M[11]*z+M[15]]; return [r[0]/r[3],r[1]/r[3],r[2]/r[3]]; }; const a=P(-1), b=P(1); const t=a[1]/(a[1]-b[1]); return [a[0]+(b[0]-a[0])*t,a[2]+(b[2]-a[2])*t]; }
   const ball=(x,y,z,r,col)=>part(US,mm(T(x,y,z),S(r,r,r)),col);
   const shadow=(x,z,s)=>shadows.push([x,z,s]);
-  return {ok:true,partE,setGround,setStatic,crowdRow,frame,part,athlete,ball,shadow,proj,unproject,UB,UC,US,T,S,RX,RY,RZ,mm,beam,I};
+  return {ok:true,partE,partT,setGround,setStatic,crowdRow,frame,part,athlete,ball,shadow,proj,unproject,UB,UC,US,T,S,RX,RY,RZ,mm,beam,I};
 }
 
 /* ---------- HUD ---------- */
@@ -985,10 +987,19 @@ const mixC=(a,b,t)=>[lerp(a[0],b[0],t),lerp(a[1],b[1],t),lerp(a[2],b[2],t)];
 function build3(){ if(built3||!R3.ok||!WORLD) return; built3=true; const K=K3, rng=mulberry32(3);
   R3.setStatic((G0,cr,P)=>{ const {primBox,primCyl,T,S,mm,RY}=P, Bx=primBox(), V=(x,y,z)=>[x*K,y*K,z*K];
     /* the island from the height grid, coloured by height and slope */ const st=2, c=ISL.cell*st;
-    for(let i=0;i<HN-st;i+=st) for(let j=0;j<HN-st;j+=st){ const x=-ISL.half+i*ISL.cell, z=-ISL.half+j*ISL.cell, h=[HG[i*HN+j],HG[(i+st)*HN+j],HG[(i+st)*HN+j+st],HG[i*HN+j+st]]; if(Math.max(...h)<-3) continue;
-      const hm=(h[0]+h[1]+h[2]+h[3])/4, sl=Math.max(...h)-Math.min(...h), n=rng()*.05, town=TOWNS.some(t=>Math.hypot(t.x-x,t.z-z)<t.r*.85);
-      const col=hm<1.4?[.86,.79,.6]:sl>4.5||hm>30?mixC([.45,.43,.4],[.6,.6,.62],clamp((hm-30)/20,0,1)):town?[.5+n,.47+n,.38]:[.3+n,.52+n*2,.22+n];
-      G0.quad(V(x,h[0],z),V(x,h[3],z+c),V(x+c,h[2],z+c),V(x+c,h[1],z),col,0); }
+    /* smooth shading: each grid point gets a normal from its neighbours' heights and a colour blended from height, slope and towns */
+    const Hg=(i,j)=>HG[Math.max(0,Math.min(HN-1,i))*HN+Math.max(0,Math.min(HN-1,j))], VC=new Map();
+    const vert=(i,j)=>{ const k=i*HN+j; let v=VC.get(k); if(v) return v; const x=-ISL.half+i*ISL.cell, z=-ISL.half+j*ISL.cell, h=Hg(i,j);
+      const dx=(Hg(i+st,j)-Hg(i-st,j))/(2*c), dz=(Hg(i,j+st)-Hg(i,j-st))/(2*c), L=Math.hypot(dx,1,dz), n=[-dx/L,1/L,-dz/L], sl=1-n[1];
+      const hs=Math.sin(i*12.9898+j*78.233)*43758.5453, nz=(hs-Math.floor(hs))*.04, big=Math.sin(x*.021)*Math.cos(z*.017)*.05;
+      let col=[.29+nz+big*.6,.53+nz*1.6+big,.22+nz]; const town=TOWNS.some(t=>Math.hypot(t.x-x,t.z-z)<t.r*.85);
+      if(town) col=mixC(col,[.52+nz,.49+nz,.4],.85);
+      col=mixC(col,mixC([.47,.45,.42],[.62,.62,.64],clamp((h-30)/20,0,1)),clamp(Math.max((sl-.18)/.2,(h-26)/8),0,1));
+      col=mixC([.87,.8,.6],col,clamp((h-1.0)/.9,0,1));
+      v={p:[x*K,h*K,z*K],n,c:col}; VC.set(k,v); return v; };
+    for(let i=0;i<HN-st;i+=st) for(let j=0;j<HN-st;j+=st){ if(Math.max(Hg(i,j),Hg(i+st,j),Hg(i+st,j+st),Hg(i,j+st))<-3) continue;
+      const A=vert(i,j), B=vert(i,j+st), C=vert(i+st,j+st), D=vert(i+st,j);
+      for(const q of [A,B,C,A,C,D]){ G0.p.push(...q.p); G0.n.push(...q.n); G0.c.push(...q.c); G0.ph.push(0); } }
     /* the sea */ G0.quad(V(-3000,WATER-.15,-3000),V(-3000,WATER-.15,3000),V(3000,WATER-.15,3000),V(3000,WATER-.15,-3000),[.1,.42,.62],0);
     /* buildings */ for(const b of WORLD.B) G0.add(Bx,mm(T((b.x0+b.x1)/2*K,(b.y0+b.y1)/2*K,(b.z0+b.z1)/2*K),S((b.x1-b.x0)*K,(b.y1-b.y0)*K,(b.z1-b.z0)*K)),hx3(b.col),0);
   }); }
@@ -1038,21 +1049,21 @@ function drawWorld(eye,range){ const K=K3, {T,S,RY,mm,UB,UC,US}=R3, cone=R3.UCT|
     if(T0.type==='ramp'){ const lo=T0.dir===0?[[x0,y0,z0],[x1,y0,z0]]:T0.dir===2?[[x0,y0,z1],[x1,y0,z1]]:T0.dir===1?[[x0,y0,z0],[x0,y0,z1]]:[[x1,y0,z0],[x1,y0,z1]], hi=T0.dir===0?[[x0,y1,z1],[x1,y1,z1]]:T0.dir===2?[[x0,y1,z0],[x1,y1,z0]]:T0.dir===1?[[x1,y1,z0],[x1,y1,z1]]:[[x0,y1,z0],[x0,y1,z1]];
       ed(lo[0],lo[1]); ed(hi[0],hi[1]); ed(lo[0],hi[0]); ed(lo[1],hi[1]); ed(lo[0],hi[1]); }
     else for(const [a,b] of [[0,1],[1,2],[2,3],[3,0],[4,5],[5,6],[6,7],[7,4],[0,4],[1,5],[2,6],[3,7]]) if(len(sub(C[a],C[b]))>.3) ed(C[a],C[b]); } }
-function drawStorm(eye){ const S=BR.storm; if(S.ph<0) return; const K=K3, em=R3.partE||R3.part, n=160, r=Math.max(1,S.r);
+function drawStorm(eye){ const S=BR.storm; if(S.ph<0) return; const K=K3, n=160, r=Math.max(1,S.r), em=R3.partT?((m,M,c)=>R3.partT(m,M,c,M[13]>60*K?.32:.5)):(R3.partE||R3.part);
   for(let i=0;i<n;i++){ const a=i/n*Math.PI*2, x=S.c[0]+Math.cos(a)*r, z=S.c[1]+Math.sin(a)*r; if(Math.hypot(x-eye[0],z-eye[2])>700) continue; const t=BR.t, sw=.5+.5*Math.sin(a*9+t*1.7)*Math.sin(a*4-t*.9), w=(2*Math.PI*r/n*1.04)*K; em(R3.UB,R3.mm(R3.T(x*K,30*K,z*K),R3.RY(-a),R3.S(.4*K,60*K,w)),[.42+.22*sw,.16+.1*sw,.72+.2*sw]); em(R3.UB,R3.mm(R3.T(x*K,90*K,z*K),R3.RY(-a),R3.S(.4*K,60*K,w)),[.5+.2*(1-sw),.22+.08*sw,.84+.1*sw]); }
   /* lightning inside the storm wall */ const L=Math.floor(BR.t*1.4), ph=BR.t*1.4-L; if(ph<.12){ const h=Math.sin(L*127.1)*43758.5, a=(h-Math.floor(h))*Math.PI*2, x=S.c[0]+Math.cos(a)*(r+2), z=S.c[1]+Math.sin(a)*(r+2); if(Math.hypot(x-eye[0],z-eye[2])<700){ let px=x, py=150, pz=z; for(let k=0;k<7;k++){ const nx=x+Math.sin(L*3.1+k*1.7)*4, nz=z+Math.cos(L*2.3+k*2.1)*4, ny=py-21; em(R3.UB,R3.beam([px*K,py*K,pz*K],[nx*K,ny*K,nz*K],.5*K,.5*K),[3,2.6,3.4]); px=nx; py=ny; pz=nz; } } } }
 function drawBus(){ if(BR.bus.t>BR.bus.dur+2) return; const K=K3, b=busPos(BR.bus.t), yaw=Math.atan2(BR.bus.x1-BR.bus.x0,BR.bus.z1-BR.bus.z0), M=R3.mm(R3.T(b[0]*K,b[1]*K,b[2]*K),R3.RY(yaw));
   R3.part(R3.UB,R3.mm(M,R3.S(3*K,3*K,9*K)),[.15,.45,.95]); R3.part(R3.UB,R3.mm(M,R3.T(0,.5*K,4.6*K),R3.S(2.8*K,1.2*K,.2*K)),[.75,.9,1]); R3.part(R3.US,R3.mm(M,R3.T(0,9*K,0),R3.S(6*K,6*K,6*K)),[.95,.3,.4]); for(const s of [-1,1]) R3.part(R3.UB,R3.mm(M,R3.T(s*1.2*K,5*K,0),R3.S(.08*K,6*K,.08*K)),[.3,.3,.3]); }
 /* a player: a blocky character in their outfit, with the gun they hold; skydiving flat, or hanging under a glider */
-function drawChar(e){ const K=K3, {T,S,RX,RY,RZ,mm,UB,US}=R3, sk=e.skin, c1=hx3(sk[0]), c2=hx3(sk[1]), c3=hx3(sk[2]), skin=hx3('#e0b48f'), fall=e.state==='fall', glide=e.state==='glide';
+function drawChar(e){ const K=K3, {T,S,RX,RY,RZ,mm,UB,US}=R3, UC=R3.UC, sk=e.skin, c1=hx3(sk[0]), c2=hx3(sk[1]), c3=hx3(sk[2]), skin=hx3('#e0b48f'), fall=e.state==='fall', glide=e.state==='glide';
   let M=mm(T(e.x*K,e.y*K,e.z*K),RY(e.yaw)); if(fall) M=mm(M,T(0,1*K,0),RX(1.25),T(0,-1*K,0)); if(e.down) M=mm(M,T(0,.22*K,0),RX(1.35),T(0,-.2*K,0));
   const sw=Math.sin(e.ph)*(e.on?.6:.1), cr=e.crouch?.35:0, P=(x,y,z,sx,sy,sz,c,ex)=>R3.part(UB,ex?mm(M,T(x*K,y*K,z*K),ex,S(sx*K,sy*K,sz*K)):mm(M,T(x*K,y*K,z*K),S(sx*K,sy*K,sz*K)),c);
-  for(const s of [-1,1]){ P(s*.13,.42-cr*.3,0,.17,.82-cr,.2,c2,RX(s*sw*.7)); P(s*.13,.05,.05,.18,.1,.3,[.1,.1,.12]); }
-  P(0,1.12-cr,0,.5,.62,.3,c1); P(0,.85-cr,0,.52,.14,.32,c3); R3.part(US,mm(M,T(0,(1.62-cr)*K,0),S(.19*K,.2*K,.19*K)),skin); P(0,1.76-cr,-.02,.36,.12,.38,c3);
+  for(const s of [-1,1]){ R3.part(UC,mm(M,T(s*.13*K,(.42-cr*.3)*K,0),RX(s*sw*.7),S(.09*K,(.82-cr)*K,.1*K)),c2); R3.part(US,mm(M,T(s*.13*K,.06*K,.06*K),S(.1*K,.07*K,.17*K)),[.1,.1,.12]); }
+  R3.part(UC,mm(M,T(0,(1.12-cr)*K,0),S(.25*K,.62*K,.16*K)),c1); R3.part(US,mm(M,T(0,(1.38-cr)*K,0),S(.27*K,.12*K,.16*K)),c1); R3.part(UC,mm(M,T(0,(.85-cr)*K,0),S(.26*K,.14*K,.165*K)),c3); R3.part(US,mm(M,T(0,(1.62-cr)*K,0),S(.19*K,.2*K,.19*K)),skin); R3.part(US,mm(M,T(0,(1.7-cr)*K,-.01*K),S(.2*K,.11*K,.2*K)),c3); P(0,1.68-cr,.17,.3,.03,.16,c3);
   const g=gunOf(e); if(fall||glide){ for(const s of [-1,1]) P(s*.42,1.4,0,.12,.12,.55,c1,RZ(s*1.2)); }
   else { P(.28,1.08-cr,.25,.12,.12,.5,c1,RX(-1.2)); P(-.2,1.08-cr,.28,.12,.12,.45,c1,RX(-1.25)); if(g){ const L=g.g==='sniper'?1.3:g.g==='pistol'?.35:.85; P(.06,1.12-cr,.55,.08,.13,L,[.12,.12,.14]); P(.06,1.2-cr,.55,.085,.04,L*.6,hx3(RAR[g.rar].c)); }
     else if(e.sel<0){ const a=e.swing>0?-1.5+e.swing*6:-.4; P(.3,1.25-cr,.35,.06,.06,.9,[.55,.4,.25],RX(a)); P(.3,1.25-cr+Math.cos(a)*.45,.35+Math.sin(-a)*.45,.5,.08,.08,[.7,.72,.78],RX(a)); } }
-  if(glide){ const Mg=mm(T(e.x*K,(e.y+3.4)*K,e.z*K),RY(e.yaw),RZ(Math.sin((BR?BR.t:0)*2)*.08)); R3.part(UB,mm(Mg,S(3.6*K,.08*K,1.2*K)),c1); R3.part(UB,mm(Mg,T(0,.06*K,0),S(3.4*K,.08*K,.5*K)),c3); for(const s of [-1,1]) R3.part(UB,R3.beam(mxp(Mg,[s*1.5*K,0,0]),[e.x*K,(e.y+1.5)*K,e.z*K],.03*K,.03*K),[.2,.2,.2]); } }
+  if(glide){ const Mg=mm(T(e.x*K,(e.y+3.4)*K,e.z*K),RY(e.yaw),RZ(Math.sin((BR?BR.t:0)*2)*.08)); for(let i=0;i<9;i++){ const u=(i-4)/4, x=u*1.75, y=-u*u*.55; R3.part(UB,mm(Mg,T(x*K,y*K,0),RZ(-u*.5),S(.42*K,.07*K,1.3*K)),i%2?c3:c1); R3.part(UB,mm(Mg,T(x*K,(y-.04)*K,.62*K),RZ(-u*.5),S(.42*K,.05*K,.08*K)),[.15,.15,.18]); } for(const s of [-1,1]) for(const z of [-.4,.4]) R3.part(UB,R3.beam(mxp(Mg,[s*1.6*K,-.4*K,z*K]),[e.x*K,(e.y+1.5)*K,e.z*K],.025*K,.025*K),[.2,.2,.2]); } }
 
 /* ---------- board, toasts ---------- */
 let toastT=0, bannerT=0;
