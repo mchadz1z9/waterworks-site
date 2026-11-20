@@ -165,7 +165,7 @@ export default {
       return env.CHAT.get(env.CHAT.idFromName('SITE')).fetch(req);
     }
     /* site owner tools: clean leaderboards and chat. Needs the ADMIN_KEY secret. */
-    const ad=url.pathname.match(/^\/admin\/(lb|chat|site|sec)(?:\/([a-z0-9]{2,16}))?$/);
+    const ad=url.pathname.match(/^\/admin\/(lb|chat|site|sec|who)(?:\/([a-z0-9]{2,16}))?$/);
     /* admin sign-in: the password is only ever checked here, on the server (it's a Cloudflare secret, never in the page).
        Wrong guesses are rate-limited per IP; a right one is swapped for a random session token that expires. */
     if(url.pathname==='/admin/login'){ if(req.method==='OPTIONS') return new Response(null,{headers:CORS}); if(req.method!=='POST') return J({err:'method'},405);
@@ -184,6 +184,7 @@ export default {
       if(tok){ try{ const d=await call({op:'tok',token:tok,ua}); if(d&&d.role) role=d.role; }catch(e){} }
       else if(pid){ try{ const ar=await chat.fetch(new Request('https://do/authpid',{method:'POST',headers:{'content-type':'application/json'},body:JSON.stringify({op:'authpid',pid})})); const d=await ar.json(); if(d&&d.lvl) role=d.lvl; }catch(e){} }
       if(!role) return J({err:'forbidden'},403);
+      if(ad[1]==='who') return J({role,how:tok?'password':'device'});   /* lets the /hq gate check that this device or sign-in is the owner's */
       if((role==='arcade'||role==='news')&&ad[1]!=='site'&&ad[1]!=='chat') return J({err:'forbidden'},403);
       const body=await req.text(); const u=new URL(req.url); u.pathname='/admin';
       /* the security centre needs a real password sign-in (not just an approved device), and a password change re-checks the old one */
@@ -264,8 +265,9 @@ export class Lobby {
 /* Leaderboards: one Durable Object per game, a SQLite table of each player's record on each board */
 /* where the admin page lives. Not linked anywhere public: the chat only shows it to people the server has granted access. */
 /* bump this to make the server forget any password set from the admin page and go back to the ADMIN_KEY secret */
-const PW_RESET='2026-11-03';
-const ADMIN_URL='/hq-owa9rwwt9kplpdbu';
+const PW_RESET='2026-11-20b';
+/* the admin page's address changes every hour; /hq is the stable entry that forwards owner devices to the current one */
+const ADMIN_URL='/hq';
 const CORS={'Access-Control-Allow-Origin':'*','Access-Control-Allow-Methods':'GET,POST,OPTIONS','Access-Control-Allow-Headers':'content-type,x-admin-token,x-admin-pid,x-pid,x-name,x-cap,x-fp','Access-Control-Expose-Headers':'content-length,content-range,accept-ranges,x-sources'};
 /* SHA-256 as hex, and a comparison that takes the same time whether the guess is close or not */
 async function sha(x){ const b=await crypto.subtle.digest('SHA-256',new TextEncoder().encode(String(x))); return [...new Uint8Array(b)].map(v=>v.toString(16).padStart(2,'0')).join(''); }
