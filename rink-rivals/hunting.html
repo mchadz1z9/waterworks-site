@@ -719,6 +719,10 @@ void main(){vec4 t=texture2D(uTex,vUV*uUVR.zw+uUVR.xy);if(t.a<0.04)discard;gl_Fr
       const k=typeof col==='string'?rgb(col):col, nn=nrm(cross(sub(b,a),sub(c,a)));
       for(const q of [a,b,c,a,c,d]){ this.p.push(...q); this.n.push(...nn); this.c.push(...k); this.ph.push(ph); }
     }
+    /* smooth everything added since index `from`: shared corners get one averaged normal (and, with blend, one averaged colour), so hills look rounded, not faceted */
+    smooth(from,blend){ const P=this.p, N=this.n, C=this.c, m=new Map(), key=i=>P[i].toFixed(2)+','+P[i+1].toFixed(2)+','+P[i+2].toFixed(2);
+      for(let i=from;i<P.length;i+=3){ const k=key(i); let a=m.get(k); if(!a){ a=[0,0,0,0,0,0,0]; m.set(k,a); } a[0]+=N[i]; a[1]+=N[i+1]; a[2]+=N[i+2]; a[3]+=C[i]; a[4]+=C[i+1]; a[5]+=C[i+2]; a[6]++; }
+      for(let i=from;i<P.length;i+=3){ const a=m.get(key(i)), l=Math.hypot(a[0],a[1],a[2])||1; N[i]=a[0]/l; N[i+1]=a[1]/l; N[i+2]=a[2]/l; if(blend){ C[i]=a[3]/a[6]; C[i+1]=a[4]/a[6]; C[i+2]=a[5]/a[6]; } } }
   }
   function upload(g){
     const mk=(arr)=>{ const b=gl.createBuffer(); gl.bindBuffer(gl.ARRAY_BUFFER,b); gl.bufferData(gl.ARRAY_BUFFER,new Float32Array(arr),gl.STATIC_DRAW); return b; };
@@ -1026,9 +1030,9 @@ function groundCol(x,z,h,n){ const R=RES[resI], v=vegAt(x,z), sl=slopeAt(x,z), w
   if(R.id==='sc'){ if(sl>.85||h-WL>58) return [.5,.49,.47].map(q=>q+n); const heather=p>-.05, c=mixC(heather?[.42,.3,.36]:[.47,.5,.3],[.27,.32,.2],sstep(.15,.5,v)); return (wet<3?mixC([.3,.24,.18],c,wet/3):c).map(q=>q+n); }
   if(h>170) return [.92,.93,.96]; if(sl>.9||h>110) return [.5,.48,.46].map(q=>q+n); const c=mixC(p>.15?[.62,.4,.24]:p<-.2?[.6,.55,.32]:[.5,.48,.28],[.32,.33,.22],sstep(.15,.5,v)); return c.map(q=>q+n); }
 function build3(){ if(!R3.ok||!WORLD||builtRi===WORLD.ri) return; builtRi=WORLD.ri; mapImg=null; const K=K3, rng=mulberry32(5+WORLD.ri), R=RES[resI];
-  R3.setStatic((G0,cr,P)=>{ const {primBox,primCyl,primSphere,T,S,mm,RY,RX,RZ}=P, Bx=primBox(), Cy=primCyl(4), Co=primCyl(5,0), Sp=primSphere(3,5), Sp2=primSphere(2,5), V=(x,y,z)=>[x*K,y*K,z*K];
-    /* the land */ const c=WD.cell; for(let i=0;i<HN-1;i++) for(let j=0;j<HN-1;j++){ const x=-WD.half+i*c, z=-WD.half+j*c, h=[HG[i*HN+j],HG[(i+1)*HN+j],HG[(i+1)*HN+j+1],HG[i*HN+j+1]]; const hm=(h[0]+h[1]+h[2]+h[3])/4;
-      G0.quad(V(x,h[0],z),V(x,h[3],z+c),V(x+c,h[2],z+c),V(x+c,h[1],z),groundCol(x+c/2,z+c/2,hm,(rng()-.5)*.035),0); }
+  R3.setStatic((G0,cr,P)=>{ const {primBox,primCyl,primSphere,T,S,mm,RY,RX,RZ}=P, Bx=primBox(), Cy=primCyl(9), Co=primCyl(11,0), Sp=primSphere(7,10), Sp2=primSphere(5,8), V=(x,y,z)=>[x*K,y*K,z*K];
+    /* the land */ const c=WD.cell, s0=G0.p.length; for(let i=0;i<HN-1;i++) for(let j=0;j<HN-1;j++){ const x=-WD.half+i*c, z=-WD.half+j*c, h=[HG[i*HN+j],HG[(i+1)*HN+j],HG[(i+1)*HN+j+1],HG[i*HN+j+1]]; const hm=(h[0]+h[1]+h[2]+h[3])/4;
+      G0.quad(V(x,h[0],z),V(x,h[3],z+c),V(x+c,h[2],z+c),V(x+c,h[1],z),groundCol(x+c/2,z+c/2,hm,(rng()-.5)*.035),0); } G0.smooth(s0,true);
     /* beyond the fence: the land runs on into the haze */ const fc=R.id==='co'?[.45,.47,.4]:R.id==='ak'?[.5,.47,.33]:R.id==='sc'?[.4,.33,.34]:[.45,.42,.25]; for(const [a,b] of [[[-3000,-3000],[3000,-WD.half]],[[-3000,WD.half],[3000,3000]],[[-3000,-WD.half],[-WD.half,WD.half]],[[WD.half,-WD.half],[3000,WD.half]]]){ const y=R.id==='co'?150:R.id==='ak'?20:8; G0.quad(V(a[0],y,a[1]),V(a[0],y,b[1]),V(b[0],y,b[1]),V(b[0],y,a[1]),fc,0); }
     /* water */ G0.quad(V(-WD.half,WL,-WD.half),V(-WD.half,WL,WD.half),V(WD.half,WL,WD.half),V(WD.half,WL,-WD.half),R.id==='ak'?[.2,.32,.38]:[.24,.36,.38],0);
     /* trees */ const AUT=[[.78,.38,.1],[.7,.22,.1],[.85,.6,.15],[.55,.4,.15],[.4,.45,.18],[.62,.5,.2]];

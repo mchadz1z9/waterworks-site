@@ -831,6 +831,10 @@ void main(){vec4 t=texture2D(uTex,vUV*uUVR.zw+uUVR.xy);if(t.a<0.04)discard;gl_Fr
       const k=typeof col==='string'?rgb(col):col, nn=nrm(cross(sub(b,a),sub(c,a)));
       for(const q of [a,b,c,a,c,d]){ this.p.push(...q); this.n.push(...nn); this.c.push(...k); this.ph.push(ph); }
     }
+    /* smooth everything added since index `from`: shared corners get one averaged normal (and, with blend, one averaged colour), so hills look rounded, not faceted */
+    smooth(from,blend){ const P=this.p, N=this.n, C=this.c, m=new Map(), key=i=>P[i].toFixed(2)+','+P[i+1].toFixed(2)+','+P[i+2].toFixed(2);
+      for(let i=from;i<P.length;i+=3){ const k=key(i); let a=m.get(k); if(!a){ a=[0,0,0,0,0,0,0]; m.set(k,a); } a[0]+=N[i]; a[1]+=N[i+1]; a[2]+=N[i+2]; a[3]+=C[i]; a[4]+=C[i+1]; a[5]+=C[i+2]; a[6]++; }
+      for(let i=from;i<P.length;i+=3){ const a=m.get(key(i)), l=Math.hypot(a[0],a[1],a[2])||1; N[i]=a[0]/l; N[i+1]=a[1]/l; N[i+2]=a[2]/l; if(blend){ C[i]=a[3]/a[6]; C[i+1]=a[4]/a[6]; C[i+2]=a[5]/a[6]; } } }
   }
   function upload(g){
     const mk=(arr)=>{ const b=gl.createBuffer(); gl.bindBuffer(gl.ARRAY_BUFFER,b); gl.bufferData(gl.ARRAY_BUFFER,new Float32Array(arr),gl.STATIC_DRAW); return b; };
@@ -1066,9 +1070,10 @@ function build3(){ if(built3||!R3.ok||!TRK) return; built3=true; if(builtKey===T
     /* the land around the track: a 2-3 m grid, sunk a little where the track ribbon covers it */
     const st0=key==='valley'||LK.tape?3:2, [bx0,bz0,bx1,bz1]=TK.box, nx=Math.ceil((bx1-bx0)/st0), nz=Math.ceil((bz1-bz0)/st0), sx=(bx1-bx0)/nx, sz=(bz1-bz0)/nz, Hh=new Float32Array((nx+1)*(nz+1)), Dd=new Float32Array((nx+1)*(nz+1));
     for(let i=0;i<=nx;i++) for(let j=0;j<=nz;j++){ const x=bx0+i*sx, z=bz0+j*sz, q=nearT(x,z), d=q?q.d:1e9, k=i*(nz+1)+j; Dd[k]=d; Hh[k]=groundH(x,z)-(d<hw+5.5?.4:0); }
+    const s0=G0.p.length;
     for(let i=0;i<nx;i++) for(let j=0;j<nz;j++){ const k=i*(nz+1)+j, ks=[k,k+1,k+nz+2,k+nz+1]; if(ks.every(q=>Dd[q]<hw+4.5)) continue;
       const x=bx0+i*sx, z=bz0+j*sz, dmin=Math.min(...ks.map(q=>Dd[q])), n=rng(), c=mixC([GRASS[0]+n*.05,GRASS[1]+n*.06,GRASS[2]+n*.03],DIRT,dmin<hw+9?.45:dmin<hw+16?.15:0);
-      G0.quad(V(x,Hh[k],z),V(x,Hh[k+1],z+sz),V(x+sx,Hh[k+nz+2],z+sz),V(x+sx,Hh[k+nz+1],z),c,0); }
+      G0.quad(V(x,Hh[k],z),V(x,Hh[k+1],z+sz),V(x+sx,Hh[k+nz+2],z+sz),V(x+sx,Hh[k+nz+1],z),c,0); } G0.smooth(s0,true);
     /* the country beyond, out to the horizon, on lines that meet the grid's edge */
     const so=25, R=700, lines=(a0,a1)=>{ const L=[]; for(let v=a0-R;v<a0-1;v+=so) L.push(v); const n=Math.ceil((a1-a0)/so); for(let i=0;i<=n;i++) L.push(a0+(a1-a0)*i/n); for(let v=a1+so;v<=a1+R;v+=so) L.push(v); return L; };
     const XL=lines(bx0,bx1), ZL=lines(bz0,bz1), hB=(x,z)=>baseH(x,z)-.05;
