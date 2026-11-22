@@ -37,7 +37,7 @@
   .akStat b{display:block;font-size:22px} .akStat span{font-size:12px;color:var(--akmute);text-transform:uppercase;letter-spacing:.06em}
   .akNew{display:inline-block;background:#fbbf24;color:#1f1300;border-radius:999px;padding:3px 12px;font-weight:800;font-size:14px;margin-bottom:6px;animation:akPop .5s ease}
   @keyframes akPop{0%{transform:scale(.4)}70%{transform:scale(1.15)}100%{transform:scale(1)}}
-  #akToast{position:absolute;left:50%;top:14px;transform:translateX(-50%);z-index:6;background:rgba(10,14,30,.9);border:1px solid var(--akline);border-radius:999px;padding:8px 18px;font-weight:700;opacity:0;transition:opacity .25s;pointer-events:none;white-space:nowrap}
+  #akToast{position:absolute;left:50%;top:14px;transform:translateX(-50%);z-index:6;background:rgba(10,14,30,.9);border:1px solid var(--akline);border-radius:999px;padding:8px 18px;font-weight:700;opacity:0;transition:opacity .25s;pointer-events:none;max-width:88vw;text-align:center;font-size:15px;line-height:1.3}
   /* the site's floating buttons: lined up in the strip under the game instead of over it */
   #rrCoin{left:10px!important;right:auto!important;top:auto!important;bottom:12px!important}
   #rrAcctB{left:122px!important;right:auto!important;top:auto!important;bottom:14px!important}

@@ -1,0 +1,135 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
+<title>Arcade Rivals - Snake Arena</title>
+<link href="https://fonts.googleapis.com/css2?family=Fredoka:wght@500;600;700&display=swap" rel="stylesheet">
+</head>
+<body>
+<script src="arcadekit.js"></script>
+<script>
+/* Snake Arena: grid snake with smooth sliding movement and three modes.
+   Classic: solo, eat to grow, the game speeds up. Maze: walls and portal pairs, a new layout every 10 apples.
+   Arena: you and three computer snakes; hitting any body ends a snake, and a fallen snake becomes food.
+   Controls: arrows / WASD, swipe on touch. Turns are queued so quick double-turns work. */
+(function(){
+const W=960, H=540, CS=24, GW=40, GH=21, OY=H-GH*CS;   /* 40x21 grid under a 36px header */
+const {rr,text,rand,clamp,lerp}=AK;
+const DIRS={ArrowUp:[0,-1],KeyW:[0,-1],ArrowDown:[0,1],KeyS:[0,1],ArrowLeft:[-1,0],KeyA:[-1,0],ArrowRight:[1,0],KeyD:[1,0]};
+const SNAKE_COL=[['#4ade80','#16a34a'],['#f472b6','#be185d'],['#60a5fa','#1d4ed8'],['#facc15','#a16207']];
+const CPU_N=['Viper','Noodle','Zippy'];
+let G=null, swipe=null;
+
+function key(x,y){ return x+','+y; }
+function mkSnake(x,y,dx,dy,ci,cpu,name){ const body=[]; for(let i=0;i<4;i++) body.push([x-dx*i,y-dy*i]); return {body,dir:[dx,dy],q:[],ci,cpu,name,alive:true,grow:0,score:0,eaten:0}; }
+function mazeLayout(n){ const walls=new Set(), por=[]; const add=(x,y)=>{ if(x>=0&&y>=0&&x<GW&&y<GH) walls.add(key(x,y)); };
+  const L=n%4; if(L===0){ for(let x=8;x<32;x++){ add(x,6); add(x,14); } }
+  else if(L===1){ for(let y=3;y<18;y++){ add(12,y); add(27,y); } for(let x=12;x<28;x++){ if(x<17||x>22) add(x,10); } }
+  else if(L===2){ for(let i=0;i<4;i++){ const cx=8+i*8; for(let y=4;y<17;y++) if((i%2===0&&y<13)||(i%2===1&&y>7)) add(cx,y); } }
+  else { for(let x=4;x<36;x++){ if(x<18||x>21){ add(x,4); add(x,16); } } for(let y=4;y<17;y++){ if(y<9||y>11){ add(4,y); add(35,y); } } }
+  por.push([[1,1],[GW-2,GH-2]],[[GW-2,1],[1,GH-2]]); return {walls,por}; }
+
+function newGame(mode){ G={ mode, t:0, step:0, speed:mode==='arena'?.105:.13, acc:0, snakes:[], food:[], fx:[], texts:[], over:false, maze:null, level:0, shake:0 };
+  G.snakes.push(mkSnake(8,10,1,0,0,false,'You'));
+  if(mode==='arena'){ G.snakes.push(mkSnake(31,4,-1,0,1,true,CPU_N[0]),mkSnake(31,16,-1,0,2,true,CPU_N[1]),mkSnake(20,18,0,-1,3,true,CPU_N[2])); }
+  if(mode==='maze') G.maze=mazeLayout(0);
+  for(let i=0;i<(mode==='arena'?6:1);i++) placeFood(); AK.toast({classic:'Eat the apples · don\'t bite yourself or the walls',maze:'Walls and portals · a new maze every 10 apples',arena:'Out-eat the 3 CPU snakes · don\'t hit their bodies'}[mode],2400); }
+function occupied(x,y){ if(G.maze&&G.maze.walls.has(key(x,y))) return true; for(const s of G.snakes) if(s.alive) for(const [a,b] of s.body) if(a===x&&b===y) return true; for(const f of G.food) if(f.x===x&&f.y===y) return true; return false; }
+function placeFood(kind){ for(let n=0;n<400;n++){ const x=Math.floor(Math.random()*GW), y=Math.floor(Math.random()*GH); if(occupied(x,y)) continue; if(G.maze&&G.maze.por.some(p=>p.some(q=>q[0]===x&&q[1]===y))) continue;
+    const k=kind||(Math.random()<.08?'gold':Math.random()<.06&&G.mode!=='arena'?'slow':'apple'); G.food.push({x,y,k,t:0,life:k==='gold'?8:k==='slow'?10:1e9}); return; } }
+
+/* ---------- CPU: head toward the nearest reachable food while avoiding anything solid (flood-fill safety) ---------- */
+function solid(x,y,me){ if(G.mode!=='arena'&&(x<0||y<0||x>=GW||y>=GH)) return true; [x,y]=wrapXY(x,y); if(G.maze&&G.maze.walls.has(key(x,y))) return true; for(const s of G.snakes){ if(!s.alive) continue; const n=s.body.length-(s.grow>0?0:1); for(let i=0;i<n;i++){ const [a,b]=s.body[i]; if(a===x&&b===y) return true; } } return false; }
+function wrapXY(x,y){ if(G.mode==='arena'||G.mode==='maze') return [(x+GW)%GW,(y+GH)%GH]; return [x,y]; }
+function space(x,y,limit){ const seen=new Set([key(x,y)]), q=[[x,y]]; let n=0; while(q.length&&n<limit){ const [a,b]=q.shift(); n++; for(const [dx,dy] of [[1,0],[-1,0],[0,1],[0,-1]]){ let [c,d]=wrapXY(a+dx,b+dy); if(G.mode==='classic'&&(c<0||d<0||c>=GW||d>=GH)) continue; const k=key(c,d); if(seen.has(k)||solid(c,d)) continue; seen.add(k); q.push([c,d]); } } return n; }
+/* real walking distance from every cell to the nearest food (one breadth-first search from all food at once) */
+function foodField(){ const D=new Int16Array(GW*GH).fill(-1), q=[]; for(const f of G.food){ const i=f.y*GW+f.x; if(D[i]<0){ D[i]=f.k==='gold'?0:2; q.push([f.x,f.y]); } }
+  q.sort((a,b)=>D[a[1]*GW+a[0]]-D[b[1]*GW+b[0]]);
+  for(let h=0;h<q.length;h++){ const [a,b]=q[h], d=D[b*GW+a]; for(const [dx,dy] of [[1,0],[-1,0],[0,1],[0,-1]]){ let [c,e]=wrapXY(a+dx,b+dy); if(c<0||e<0||c>=GW||e>=GH) continue; const i=e*GW+c; if(D[i]>=0||solid(c,e)) continue; D[i]=d+1; q.push([c,e]); } }
+  /* portals: stepping onto one comes out of its partner */
+  return D; }
+function cpuThink(s){ const [hx,hy]=s.body[0]; if(!G._ff||G._ffStep!==G.step){ G._ff=foodField(); G._ffStep=G.step; } const D=G._ff; let tgt=null;
+  const opts=[]; for(const d of [[1,0],[-1,0],[0,1],[0,-1]]){ if(d[0]===-s.dir[0]&&d[1]===-s.dir[1]) continue; const [nx,ny]=wrapXY(hx+d[0],hy+d[1]); if(solid(nx,ny)) continue; const room=space(nx,ny,s.body.length+20);
+    const fd=D[ny*GW+nx], dist=fd>=0?fd:200; opts.push({d,score:(room<s.body.length+4?-1000+room*10:0)-dist*3+(d[0]===s.dir[0]&&d[1]===s.dir[1]?1:0)+Math.random()*2}); }
+  if(!opts.length) return; opts.sort((a,b)=>b.score-a.score); s.dir=opts[0].d; }
+
+/* ---------- one grid step ---------- */
+function stepAll(){ G.step++; const moves=[];
+  for(const s of G.snakes){ if(!s.alive) continue; if(s.cpu) cpuThink(s); else if(s.q.length){ const d=s.q.shift(); if(!(d[0]===-s.dir[0]&&d[1]===-s.dir[1])) s.dir=d; }
+    let [nx,ny]=[s.body[0][0]+s.dir[0],s.body[0][1]+s.dir[1]];
+    if(G.mode==='classic'){ if(nx<0||ny<0||nx>=GW||ny>=GH){ kill(s,'Hit the wall'); continue; } } else [nx,ny]=wrapXY(nx,ny);
+    if(G.maze){ for(const pr of G.maze.por){ for(let k=0;k<2;k++){ if(pr[k][0]===nx&&pr[k][1]===ny){ const o=pr[1-k]; nx=(o[0]+s.dir[0]+GW)%GW; ny=(o[1]+s.dir[1]+GH)%GH; AK.tone(900,.08,'sine',.06,300); } } } }
+    moves.push([s,nx,ny]); }
+  /* collisions are checked against where everyone will be, so head-on crashes count for both */
+  for(const [s,nx,ny] of moves){ s.next=[nx,ny]; }
+  for(const [s,nx,ny] of moves){ if(!s.alive) continue;
+    if(G.maze&&G.maze.walls.has(key(nx,ny))){ kill(s,'Hit a wall'); continue; }
+    for(const o of G.snakes){ if(!o.alive&&o!==s) continue; const n=o.body.length-(o.grow>0?0:1); for(let i=0;i<n;i++){ const [a,b]=o.body[i]; if(a===nx&&b===ny){ kill(s,o===s?'Bit yourself':`Ran into ${o.name}`); break; } } if(!s.alive) break;
+      if(o!==s&&o.alive&&o.next&&o.next[0]===nx&&o.next[1]===ny){ kill(s,`Head-on with ${o.name}`); kill(o,`Head-on with ${s.name}`); } } }
+  for(const [s,nx,ny] of moves){ if(!s.alive) continue; s.body.unshift([nx,ny]); if(s.grow>0) s.grow--; else s.body.pop();
+    const fi=G.food.findIndex(f=>f.x===nx&&f.y===ny); if(fi>=0){ const f=G.food[fi]; G.food.splice(fi,1); eat(s,f); } }
+  const me=G.snakes[0]; if(!me.alive&&!G.over) endGame();
+  if(G.mode==='arena'&&!G.over&&G.snakes.slice(1).every(s=>!s.alive)){ G.snakes[0].score+=500; G.texts.push({x:W/2,y:H/2,t:'Last snake standing! +500',life:2}); setTimeout(()=>{ if(G&&!G.over){ G.over=true; endGame(true); } },1200); } }
+function eat(s,f){ const pts=f.k==='gold'?50:f.k==='bits'?5:10; s.score+=pts; s.eaten++; s.grow+=f.k==='gold'?3:f.k==='bits'?0:1; if(f.k==='bits') s.grow+=(Math.random()<.5?1:0);
+  const x=f.x*CS+CS/2, y=OY+f.y*CS+CS/2, c=f.k==='gold'?'#fde047':f.k==='slow'?'#67e8f9':'#f87171'; for(let i=0;i<8;i++) G.fx.push({x,y,vx:rand(-90,90),vy:rand(-90,90),t:.4,c,s:rand(2,4)});
+  if(!s.cpu){ AK.sfx(f.k==='gold'?'coin':'pop'); G.texts.push({x,y,t:'+'+pts,life:.7}); if(f.k==='slow'){ G.slowT=5; AK.sfx('freeze'); } if(G.mode!=='arena') G.speed=Math.max(.055,G.speed-.0022); }
+  if(f.k!=='bits') placeFood(); if(G.mode==='arena'&&G.food.length<6) placeFood();
+  if(G.mode==='maze'&&!s.cpu&&s.eaten%10===0){ G.level++; G.maze=mazeLayout(G.level); G.food=G.food.filter(q=>!G.maze.walls.has(key(q.x,q.y))); for(const [a,b] of s.body) G.maze.walls.delete(key(a,b)); AK.sfx('power'); G.texts.push({x:W/2,y:H/2,t:`Maze ${G.level+1}!`,life:1.5}); if(!G.food.length) placeFood(); } }
+function kill(s,why){ if(!s.alive) return; s.alive=false; s.why=why; G.shake=s.cpu?.15:.4; AK.sfx(s.cpu?'hit':'boom');
+  for(const [a,b] of s.body){ for(let i=0;i<2;i++) G.fx.push({x:a*CS+CS/2,y:OY+b*CS+CS/2,vx:rand(-120,120),vy:rand(-120,120),t:rand(.4,.8),c:SNAKE_COL[s.ci][0],s:rand(3,6)}); }
+  if(G.mode==='arena'){ for(let i=0;i<s.body.length;i+=2){ const [a,b]=s.body[i]; if(!G.food.some(f=>f.x===a&&f.y===b)) G.food.push({x:a,y:b,k:'bits',t:0,life:14}); } if(s.cpu) G.texts.push({x:s.body[0][0]*CS,y:OY+s.body[0][1]*CS,t:`${s.name} is out!`,life:1.4}); } }
+function endGame(win){ G.over=true; const me=G.snakes[0], rank=G.mode==='arena'?1+G.snakes.slice(1).filter(s=>s.score>me.score).length:0;
+  const res={score:me.score,win:!!win||rank===1,board:G.mode,title:me.alive?(rank===1?'You win the arena!':'Arena over'):me.why,txt:G.mode==='arena'?`#${rank} of 4`:`length ${me.body.length}`,stats:G.mode==='arena'?[['Place','#'+rank+' of 4'],['Length',me.body.length],['Apples',me.eaten]]:[['Length',me.body.length],['Apples',me.eaten],G.mode==='maze'?['Maze',G.level+1]:['Speed',Math.round(.13/G.speed*100)+'%']]}; setTimeout(()=>{ if(G&&G.over) AK.over(res); },me.alive?0:700); }
+
+function update(dt){ G.t+=dt; G.shake=Math.max(0,G.shake-dt); if(G.slowT>0) G.slowT-=dt; const sp=G.speed*(G.slowT>0?1.6:1);
+  if(!G.over){ G.acc+=dt; while(G.acc>=sp){ G.acc-=sp; stepAll(); if(G.over) break; } G.frac=G.acc/sp; }
+  for(const f of G.food){ f.t+=dt; if(f.life<1e8){ f.life-=dt; } } G.food=G.food.filter(f=>f.life>0||f.k==='apple'); if(G.mode!=='arena'&&!G.food.some(f=>f.k==='apple')) placeFood('apple');
+  for(const f of G.fx){ f.t-=dt; f.x+=f.vx*dt; f.y+=f.vy*dt; f.vx*=.92; f.vy*=.92; } G.fx=G.fx.filter(f=>f.t>0);
+  for(const t of G.texts){ t.life-=dt; t.y-=dt*25; } G.texts=G.texts.filter(t=>t.life>0); }
+
+/* ---------- drawing: segments slide between cells for smooth motion ---------- */
+function segPos(s,i){ const k=G.over||!s.alive?1:(G.frac||0); const cur=s.body[i], prev=s.body[i+1]||cur; let px=prev[0], py=prev[1];
+  if(Math.abs(cur[0]-px)>1) px=cur[0]; if(Math.abs(cur[1]-py)>1) py=cur[1];   /* wrapped or ported: don't slide across the screen */
+  const t=i===0?k:k; return [lerp(px,cur[0],t)*CS+CS/2, OY+lerp(py,cur[1],t)*CS+CS/2]; }
+function drawSnake(g,s){ const [c1,c2]=SNAKE_COL[s.ci], n=s.body.length; g.save(); if(!s.alive) g.globalAlpha=.25;
+  for(let i=n-1;i>=0;i--){ const [x,y]=segPos(s,i), r=CS*.46*(i===0?1.05:lerp(.95,.62,i/n)); g.fillStyle=i%2?c1:c2; g.beginPath(); g.arc(x,y,r,0,7); g.fill(); }
+  const [hx,hy]=segPos(s,0), d=s.dir, px=-d[1], py=d[0];
+  g.fillStyle='#fff'; for(const k of [-1,1]){ g.beginPath(); g.arc(hx+d[0]*4+px*k*5,hy+d[1]*4+py*k*5,4,0,7); g.fill(); } g.fillStyle='#111'; for(const k of [-1,1]){ g.beginPath(); g.arc(hx+d[0]*5.5+px*k*5,hy+d[1]*5.5+py*k*5,2,0,7); g.fill(); }
+  if(s.alive&&Math.floor(G.t*3)%4===0){ g.strokeStyle='#ef4444'; g.lineWidth=2; g.beginPath(); g.moveTo(hx+d[0]*11,hy+d[1]*11); g.lineTo(hx+d[0]*17,hy+d[1]*17); g.stroke(); }
+  if(G.mode==='arena'){ text(s.name,hx,hy-18,13,c1,'center',700); }
+  g.restore(); }
+function draw(g){ g.fillStyle='#0b1324'; g.fillRect(0,0,W,H); if(!G){ for(let y=0;y<GH;y++) for(let x=0;x<GW;x++){ g.fillStyle=(x+y)%2?'#12203a':'#0f1b33'; g.fillRect(x*CS,OY+y*CS,CS,CS); } return; }
+  g.save(); if(G.shake>0) g.translate(rand(-4,4)*G.shake*2,rand(-4,4)*G.shake*2);
+  for(let y=0;y<GH;y++) for(let x=0;x<GW;x++){ g.fillStyle=(x+y)%2?'#14233f':'#112038'; g.fillRect(x*CS,OY+y*CS,CS,CS); }
+  if(G.mode==='classic'){ g.strokeStyle='#ef4444'; g.lineWidth=3; g.strokeRect(1.5,OY+1.5,W-3,GH*CS-3); }
+  if(G.maze){ for(const k of G.maze.walls){ const [x,y]=k.split(',').map(Number); g.fillStyle='#475569'; rr(x*CS+1,OY+y*CS+1,CS-2,CS-2,5); g.fill(); g.fillStyle='#64748b'; rr(x*CS+3,OY+y*CS+2,CS-6,8,4); g.fill(); }
+    G.maze.por.forEach((pr,i)=>{ for(const [x,y] of pr){ const cx=x*CS+CS/2, cy=OY+y*CS+CS/2; g.save(); g.translate(cx,cy); g.rotate(G.t*3*(i?1:-1)); g.strokeStyle=i?'#c084fc':'#22d3ee'; g.lineWidth=3; for(let k=0;k<3;k++){ g.beginPath(); g.arc(0,0,4+k*3.5,k,k+4); g.stroke(); } g.restore(); } }); }
+  for(const f of G.food){ const x=f.x*CS+CS/2, y=OY+f.y*CS+CS/2, b=Math.sin(f.t*5)*1.5; if(f.life<3&&Math.floor(f.t*8)%2) continue;
+    if(f.k==='bits'){ g.fillStyle='#fde68a'; g.beginPath(); g.arc(x,y,4,0,7); g.fill(); continue; }
+    const c=f.k==='gold'?'#facc15':f.k==='slow'?'#22d3ee':'#ef4444'; g.shadowColor=c; g.shadowBlur=10; g.fillStyle=c; g.beginPath(); g.arc(x,y+1,CS*.38+b*.3,0,7); g.fill(); g.shadowBlur=0;
+    g.fillStyle='rgba(255,255,255,.45)'; g.beginPath(); g.arc(x-3,y-3,3,0,7); g.fill(); g.fillStyle='#16a34a'; g.beginPath(); g.ellipse(x+3,y-9,4,2,-.5,0,7); g.fill(); g.strokeStyle='#713f12'; g.lineWidth=2; g.beginPath(); g.moveTo(x,y-6); g.lineTo(x+1,y-10); g.stroke(); }
+  for(const s of G.snakes) if(!s.alive) drawSnake(g,s); for(const s of G.snakes) if(s.alive) drawSnake(g,s);
+  for(const f of G.fx){ g.globalAlpha=Math.min(1,f.t*2.5); g.fillStyle=f.c; g.beginPath(); g.arc(f.x,f.y,f.s,0,7); g.fill(); g.globalAlpha=1; }
+  for(const t of G.texts){ g.globalAlpha=Math.min(1,t.life*2); text(t.t,t.x,t.y,18,'#fff','center',700); g.globalAlpha=1; }
+  g.restore();
+  g.fillStyle='#0a1222'; g.fillRect(0,0,W,OY); const me=G.snakes[0];
+  if(G.mode==='arena'){ const sorted=G.snakes.slice().sort((a,b)=>b.score-a.score); sorted.forEach((s,i)=>{ const x=14+i*236; g.fillStyle=SNAKE_COL[s.ci][0]; g.globalAlpha=s.alive?1:.4; g.beginPath(); g.arc(x+8,OY/2,7,0,7); g.fill(); text(`${i+1}. ${s.name}  ${s.score}`,x+22,OY/2,16,s.cpu?'#cbd5e1':'#fff','left',700,false); g.globalAlpha=1; }); }
+  else { text('🍎 '+me.score,14,OY/2,20,'#fff','left',800,false); text('Length '+me.body.length,150,OY/2,16,'#94a3b8','left',600,false); text(G.mode==='maze'?`Maze ${G.level+1} · next in ${10-me.eaten%10}`:`Speed ${Math.round(.13/G.speed*100)}%`,W-14,OY/2,16,'#94a3b8','right',600,false); if(G.slowT>0) text('🐢 slow '+Math.ceil(G.slowT),W/2,OY/2,16,'#67e8f9','center',700,false); } }
+
+AK.init({ id:'snake', title:'Snake Arena', icon:'🐍', sub:'The classic snake game, done smooth — plus a maze mode with portals, and an arena where you race three computer snakes for the most apples.', accent:'#4ade80', grad:'linear-gradient(90deg,#4ade80,#facc15)',
+  modes:[{k:'classic',n:'Classic',d:'Solo · walls are deadly'},{k:'maze',n:'Maze',d:'Walls, portals, new maze every 10'},{k:'arena',n:'Arena',d:'vs 3 CPU snakes'}],
+  how:'<b>Turn:</b> arrows or WASD (you can queue two quick turns). <b>Touch:</b> swipe.<br>🍎 +10 and grow · 🟡 golden +50 and grow 3 (disappears soon) · 🔵 slows time for 5 s.<br>In the Arena the edges wrap around, and when a snake crashes it turns into food for everyone.',
+  boards:[{id:'classic',name:'Classic high score',mode:'max'},{id:'maze',name:'Maze high score',mode:'max'},{id:'arena',name:'Arena high score',mode:'max'}],
+  onStart:m=>newGame(m), onQuit:()=>{ G=null; },
+  onKey:(code,down)=>{ if(!down||!G) return; const d=DIRS[code]; if(!d) return; const s=G.snakes[0]; const last=s.q.length?s.q[s.q.length-1]:s.dir; if((d[0]===last[0]&&d[1]===last[1])||(d[0]===-last[0]&&d[1]===-last[1])) return; if(s.q.length<2) s.q.push(d); },
+  onPointer:(type,pt)=>{ if(!G) return; if(type==='down') swipe=pt; else if(type==='up'||type==='move'&&swipe){ if(!swipe) return; const dx=pt.x-swipe.x, dy=pt.y-swipe.y; if(Math.hypot(dx,dy)<24) { if(type==='up') swipe=null; return; } const code=Math.abs(dx)>Math.abs(dy)?(dx>0?'ArrowRight':'ArrowLeft'):(dy>0?'ArrowDown':'ArrowUp'); const d=DIRS[code], s=G.snakes[0], last=s.q.length?s.q[s.q.length-1]:s.dir; if(!(d[0]===last[0]&&d[1]===last[1])&&!(d[0]===-last[0]&&d[1]===-last[1])&&s.q.length<2) s.q.push(d); swipe=type==='up'?null:pt; } } });
+AK.loop(dt=>{ if(G) update(dt); }, draw);
+if(/[?&]test\b/.test(location.search)) window.__SN={ get G(){ return G; }, cpuThink };
+})();
+</script>
+<script src="online.js"></script>
+<script src="site.js"></script>
+<script src="chat.js"></script>
+</body>
+</html>

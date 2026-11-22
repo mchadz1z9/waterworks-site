@@ -1,0 +1,134 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
+<title>Arcade Rivals - Brick Blitz</title>
+<link href="https://fonts.googleapis.com/css2?family=Fredoka:wght@500;600;700&display=swap" rel="stylesheet">
+</head>
+<body>
+<script src="arcadekit.js"></script>
+<script>
+/* Brick Blitz: an original paddle-and-ball brick breaker with 24 designed levels.
+   Move the paddle with the mouse / finger / arrows, launch with Space or a tap.
+   Bricks: normal (1 hit), tough (2-3 hits, cracks), steel (unbreakable), explosive (clears neighbours).
+   Power-ups fall from bricks: wide paddle, multi-ball, laser, sticky, slow ball, fireball, extra life (and a few bad ones). */
+(function(){
+const W=960, H=540, COLS=13, BW=64, BH=24, BX=(W-COLS*BW)/2, BY=70;
+const {rr,text,rand,clamp,lerp}=AK;
+const PAL=['#f87171','#fb923c','#facc15','#4ade80','#38bdf8','#818cf8','#e879f9','#f472b6'];
+/* level maps: one string per row, 13 chars: . empty, 1-8 colour (1 hit), T tough (3 hits), S steel, X explosive */
+const LV=[
+ ['.............','.............','1111111111111','2222222222222','3333333333333','4444444444444','5555555555555'],
+ ['......X......','.....111.....','....22222....','...3333333...','..444444444..','.55555555555.','6666666666666'],
+ ['1.2.3.4.5.6.7','.............','7.6.5.4.3.2.1','.............','1.2.3.4.5.6.7','.............','TTTTTTTTTTTTT'],
+ ['SS.........SS','S.111111111.S','..2XXXXXXX2..','..333333333..','S.444444444.S','SS.........SS'],
+ ['..TT.....TT..','.T11T...T11T.','.T11T...T11T.','..TT..X..TT..','.....555.....','....66666....','...7777777...'],
+ ['8888888888888','7.....S.....7','6.TTT.S.TTT.6','5.....S.....5','4XXXXXXXXXXX4','3.....S.....3','2222222222222'],
+ ['.1.2.3.4.5.6.','2.3.4.5.6.7.8','.3.4.5.6.7.8.','4.5.6.7.8.1.2','.5.6.7.8.1.2.','SSSS.....SSSS'],
+ ['......S......','.....STS.....','....S1X1S....','...S22222S...','..S3333333S..','.S444444444S.','S55555555555S'],
+ ['TTTTTTTTTTTTT','T...........T','T.XXX...XXX.T','T.X1X...X2X.T','T.XXX...XXX.T','T...........T','TTTTTTTTTTTTT'],
+ ['1234567812345','S.S.S.S.S.S.S','8765432187654','.S.S.S.S.S.S.','1234567812345','XXXXXXXXXXXXX'],
+];
+function levelMap(i){ if(i<LV.length) return LV[i];
+  /* later levels: generated symmetric patterns that get tougher */
+  let seed=i*7919+17; const rnd=()=>{ seed=(seed*16807)%2147483647; return seed/2147483647; }; const rows=6+Math.min(3,Math.floor(i/6)), out=[];
+  for(let r=0;r<rows;r++){ let half=''; for(let c=0;c<7;c++){ const x=rnd(); half+=x<.12?'.':x<.12+Math.min(.25,i*.012)?'T':x<.19+Math.min(.3,i*.014)&&r>0?'S':x<.24?'X':String(1+((r+c)%8)); } out.push(half+half.slice(0,6).split('').reverse().join('')); } return out; }
+const PU={ wide:{c:'#22c55e',ic:'↔',good:1}, multi:{c:'#38bdf8',ic:'⁂',good:1}, laser:{c:'#ef4444',ic:'⚡',good:1}, sticky:{c:'#a855f7',ic:'◎',good:1}, slow:{c:'#14b8a6',ic:'🐢',good:1}, fire:{c:'#f97316',ic:'🔥',good:1}, life:{c:'#ec4899',ic:'♥',good:1}, small:{c:'#64748b',ic:'⇥',good:0}, fast:{c:'#78716c',ic:'»',good:0} };
+const PU_W=[['wide',16],['multi',14],['laser',10],['sticky',8],['slow',10],['fire',5],['life',3],['small',7],['fast',7]];
+let G=null, mouseX=null;
+
+function newGame(mode){ G={ mode, lv:0, score:0, lives:3, over:false, t:0, fx:[], texts:[], shake:0 }; loadLevel(0); }
+function loadLevel(i){ const m=levelMap(i); G.lv=i; G.bricks=[]; m.forEach((row,r)=>{ for(let c=0;c<COLS;c++){ const ch=row[c]; if(!ch||ch==='.') continue; const b={r,c,x:BX+c*BW,y:BY+r*BH,ch,hp:1,max:1,col:PAL[(r+c)%8]};
+    if(ch==='T'){ b.hp=b.max=3; b.col='#94a3b8'; } else if(ch==='S'){ b.hp=b.max=1e9; b.col='#475569'; } else if(ch==='X'){ b.col='#f43f5e'; } else b.col=PAL[(+ch-1)%8]; G.bricks.push(b); } });
+  resetPaddle(); G.pus=[]; G.lasers=[]; G.lvT=2; G.timers={}; }
+function resetPaddle(){ G.pad={x:W/2,w:110,y:H-36,vx:0}; G.balls=[{x:W/2,y:H-50,vx:0,vy:0,r:8,stuck:true,off:0,trail:[]}]; G.timers=G.timers||{}; G.timers.laser=0; G.timers.sticky=0; G.timers.fire=0; G.timers.slow=0; G.timers.wide=0; G.timers.small=0; G.timers.fast=0; }
+function baseSpeed(){ return (390+G.lv*9)*(G.timers.slow>0?.68:1)*(G.timers.fast>0?1.25:1); }
+function launch(){ for(const b of G.balls) if(b.stuck){ const a=-Math.PI/2+clamp(b.off/ (G.pad.w/2),-1,1)*.6+rand(-.05,.05); const s=baseSpeed(); b.vx=Math.cos(a)*s; b.vy=Math.sin(a)*s; b.stuck=false; AK.sfx('jump'); } }
+
+function hitBrick(b,ball,fromLaser){ if(b.ch==='S'){ AK.tone(1400,.04,'square',.03); if(!(ball&&G.timers.fire>0)) return false; }
+  b.hp-=ball&&G.timers.fire>0?99:1; b.hit=.12;
+  if(b.hp<=0||b.ch==='S'&&G.timers.fire>0){ b.dead=true; G.score+=b.ch==='T'?60:b.ch==='S'?100:b.ch==='X'?40:20+G.lv*2; burst(b.x+BW/2,b.y+BH/2,b.col,12); AK.sfx('pop');
+    if(b.ch==='X'){ AK.sfx('boom'); G.shake=.2; G.fx.push({ring:true,x:b.x+BW/2,y:b.y+BH/2,R:BW*1.6,t:.35}); for(const o of G.bricks) if(!o.dead&&o!==b&&Math.abs(o.r-b.r)<=1&&Math.abs(o.c-b.c)<=1&&o.ch!=='S') hitBrick(o,null); }
+    if(Math.random()<.15){ let tot=PU_W.reduce((a,x)=>a+x[1],0), r=Math.random()*tot, k='wide'; for(const [n,w] of PU_W){ if((r-=w)<0){ k=n; break; } } G.pus.push({k,x:b.x+BW/2,y:b.y+BH/2,vy:140}); } }
+  else AK.tone(500+b.hp*120,.05,'triangle',.06); return true; }
+function burst(x,y,c,n){ for(let i=0;i<n;i++) G.fx.push({x,y,vx:rand(-160,160),vy:rand(-160,100),t:rand(.3,.7),c,s:rand(2,5)}); }
+function applyPU(k){ const T=G.timers, p=G.pad; AK.sfx(PU[k].good?'power':'hit'); G.texts.push({x:p.x,y:p.y-30,t:{wide:'Wide paddle',multi:'Multi-ball',laser:'Lasers!',sticky:'Sticky paddle',slow:'Slow ball',fire:'Fireball!',life:'+1 life',small:'Tiny paddle',fast:'Fast ball'}[k],life:1,c:PU[k].c});
+  if(k==='wide'){ T.wide=15; T.small=0; } else if(k==='small'){ T.small=10; T.wide=0; } else if(k==='laser') T.laser=10; else if(k==='sticky') T.sticky=12; else if(k==='slow'){ T.slow=10; T.fast=0; } else if(k==='fast'){ T.fast=8; T.slow=0; } else if(k==='fire') T.fire=7; else if(k==='life') G.lives=Math.min(6,G.lives+1);
+  else if(k==='multi'){ const src=G.balls.filter(b=>!b.stuck); const base=src.length?src:G.balls; const add=[]; for(const b of base.slice(0,3)) for(const da of [-.35,.35]){ const s=Math.hypot(b.vx,b.vy)||baseSpeed(), a=(b.stuck?-Math.PI/2:Math.atan2(b.vy,b.vx))+da; add.push({x:b.x,y:b.y,vx:Math.cos(a)*s,vy:Math.sin(a)*s,r:8,stuck:false,trail:[]}); } G.balls.push(...add); }
+  for(const b of G.balls) if(!b.stuck){ const s=Math.hypot(b.vx,b.vy)||1, want=baseSpeed(); b.vx*=want/s; b.vy*=want/s; } }
+
+function update(dt){ G.t+=dt; G.shake=Math.max(0,G.shake-dt); if(G.lvT>0) G.lvT-=dt; const T=G.timers; for(const k in T) T[k]=Math.max(0,T[k]-dt);
+  const p=G.pad; p.w=lerp(p.w,T.wide>0?170:T.small>0?70:110,Math.min(1,dt*8));
+  const K=AK.keys; let dir=0; if(K.has('ArrowLeft')||K.has('KeyA')) dir-=1; if(K.has('ArrowRight')||K.has('KeyD')) dir+=1;
+  const ox=p.x; if(dir) { p.x+=dir*620*dt; mouseX=null; } else if(mouseX!=null) p.x=lerp(p.x,mouseX,Math.min(1,dt*22)); p.x=clamp(p.x,p.w/2+6,W-p.w/2-6); p.vx=(p.x-ox)/Math.max(dt,1e-3);
+  if(T.laser>0&&(K.has('Space')||G.autoFire)){ G.laserCd=(G.laserCd||0)-dt; if(G.laserCd<=0){ G.laserCd=.28; for(const s of [-1,1]) G.lasers.push({x:p.x+s*(p.w/2-8),y:p.y-8}); AK.sfx('laser'); } }
+  for(const l of G.lasers){ l.y-=760*dt; for(const b of G.bricks){ if(!b.dead&&l.x>b.x&&l.x<b.x+BW&&l.y>b.y&&l.y<b.y+BH){ hitBrick(b,null,true); l.dead=true; break; } } } G.lasers=G.lasers.filter(l=>!l.dead&&l.y>0);
+  /* balls: move in small steps so fast balls never tunnel through bricks */
+  for(const ball of G.balls){ ball.trail.push({x:ball.x,y:ball.y}); if(ball.trail.length>8) ball.trail.shift();
+    if(ball.stuck){ ball.x=p.x+ball.off; ball.y=p.y-ball.r-7; continue; }
+    const steps=Math.ceil(Math.hypot(ball.vx,ball.vy)*dt/5); for(let s=0;s<steps;s++){ const h=dt/steps; ball.x+=ball.vx*h; ball.y+=ball.vy*h;
+      if(ball.x<ball.r){ ball.x=ball.r; ball.vx=Math.abs(ball.vx); AK.sfx('step'); } if(ball.x>W-ball.r){ ball.x=W-ball.r; ball.vx=-Math.abs(ball.vx); AK.sfx('step'); } if(ball.y<ball.r+50){ ball.y=ball.r+50; ball.vy=Math.abs(ball.vy); AK.sfx('step'); }
+      /* paddle: bounce angle depends on where it hits */
+      if(ball.vy>0&&ball.y+ball.r>=p.y-6&&ball.y+ball.r<=p.y+10&&ball.x>p.x-p.w/2-ball.r&&ball.x<p.x+p.w/2+ball.r){ const k=clamp((ball.x-p.x)/(p.w/2),-1,1), a=-Math.PI/2+k*1.05, sp=Math.hypot(ball.vx,ball.vy);
+        if(T.sticky>0){ ball.stuck=true; ball.off=ball.x-p.x; ball.vx=ball.vy=0; AK.tone(300,.06,'sine',.08); break; }
+        ball.vx=Math.cos(a)*sp+p.vx*.08; ball.vy=Math.sin(a)*sp; const s2=Math.hypot(ball.vx,ball.vy); ball.vx*=sp/s2; ball.vy*=sp/s2; /* never straight up: keep at least a small sideways angle so the ball can't loop in an empty column */ const minX=sp*.2; if(Math.abs(ball.vx)<minX){ const dir=Math.abs(ball.vx)>1?Math.sign(ball.vx):(ball.x<p.x?-1:1); ball.vx=dir*minX; ball.vy=-Math.sqrt(sp*sp-minX*minX); } ball.y=p.y-6-ball.r; AK.tone(260+Math.abs(k)*120,.06,'square',.06); G.combo=0; }
+      /* bricks */
+      for(const b of G.bricks){ if(b.dead) continue; const cx=clamp(ball.x,b.x,b.x+BW), cy=clamp(ball.y,b.y,b.y+BH), dx=ball.x-cx, dy=ball.y-cy; if(dx*dx+dy*dy>ball.r*ball.r) continue;
+        const pierce=T.fire>0&&b.ch!=='S'; hitBrick(b,ball); G.combo=(G.combo||0)+1; if(G.combo>2) G.score+=G.combo*5;
+        if(!pierce){ if(Math.abs(dx)>Math.abs(dy)){ ball.vx=Math.sign(dx||ball.vx*-1)*Math.abs(ball.vx); ball.x=cx+Math.sign(dx||1)*ball.r; } else { ball.vy=Math.sign(dy||ball.vy*-1)*Math.abs(ball.vy); ball.y=cy+Math.sign(dy||1)*ball.r; } }
+        /* never get stuck bouncing perfectly flat */ if(Math.abs(ball.vy)<60){ ball.vy=ball.vy<0?-90:90; }
+        break; }
+      if(ball.y>H+20){ ball.lost=true; break; } } }
+  G.balls=G.balls.filter(b=>!b.lost);
+  if(!G.balls.length&&!G.over){ G.lives--; AK.sfx('lose'); G.shake=.3; if(G.lives<=0){ G.over=true; setTimeout(()=>AK.over({score:G.score,title:`Out of balls on level ${G.lv+1}`,txt:`level ${G.lv+1}`,stats:[['Level',G.lv+1],['Score',G.score.toLocaleString()]]}),600); } else { resetPaddle(); G.texts.push({x:W/2,y:H/2,t:G.lives+(G.lives>1?' balls':' ball')+' left',life:1.3,c:'#fca5a5'}); } }
+  for(const u of G.pus){ u.y+=u.vy*dt; if(u.y>p.y-12&&u.y<p.y+12&&Math.abs(u.x-p.x)<p.w/2+14){ u.dead=true; applyPU(u.k); } } G.pus=G.pus.filter(u=>!u.dead&&u.y<H+20);
+  for(const f of G.fx){ f.t-=dt; if(!f.ring){ f.x+=f.vx*dt; f.y+=f.vy*dt; f.vy+=400*dt; } } G.fx=G.fx.filter(f=>f.t>0);
+  for(const t of G.texts){ t.life-=dt; t.y-=dt*25; } G.texts=G.texts.filter(t=>t.life>0);
+  for(const b of G.bricks) if(b.hit>0) b.hit-=dt;
+  /* level clear: everything breakable is gone */
+  if(!G.over&&!G.bricks.some(b=>!b.dead&&b.ch!=='S')){ const bonus=500+G.lv*100+G.lives*100; G.score+=bonus; AK.sfx('win'); G.texts.push({x:W/2,y:H/2-20,t:`Level ${G.lv+1} clear! +${bonus}`,life:1.8,c:'#86efac',big:1});
+    if(G.lv+1>=24){ G.over=true; setTimeout(()=>AK.over({score:G.score,win:true,title:'All 24 levels cleared!',txt:'all 24 levels',stats:[['Lives left',G.lives],['Score',G.score.toLocaleString()]]}),900); }
+    else loadLevel(G.lv+1); } }
+
+function draw(g){ const bg=g.createLinearGradient(0,0,0,H); bg.addColorStop(0,'#0f172a'); bg.addColorStop(1,['#1e3a8a','#4c1d95','#831843','#064e3b','#7c2d12'][G?G.lv%5:0]); g.fillStyle=bg; g.fillRect(0,0,W,H);
+  g.strokeStyle='rgba(255,255,255,.04)'; g.lineWidth=1; for(let x=0;x<W;x+=40){ g.beginPath(); g.moveTo(x,50); g.lineTo(x,H); g.stroke(); } for(let y=50;y<H;y+=40){ g.beginPath(); g.moveTo(0,y); g.lineTo(W,y); g.stroke(); }
+  if(!G) return;
+  g.save(); if(G.shake>0) g.translate(rand(-5,5)*G.shake*2,rand(-5,5)*G.shake*2);
+  for(const b of G.bricks){ if(b.dead) continue; const x=b.x+2, y=b.y+2, w=BW-4, h=BH-4;
+    g.fillStyle=b.hit>0?'#fff':b.col; rr(x,y,w,h,6); g.fill(); g.fillStyle='rgba(255,255,255,.28)'; rr(x+3,y+2,w-6,h*.38,4); g.fill(); g.fillStyle='rgba(0,0,0,.18)'; g.fillRect(x+3,y+h-4,w-6,3);
+    if(b.ch==='T'){ g.strokeStyle='rgba(15,23,42,.7)'; g.lineWidth=1.5; if(b.hp<=2){ g.beginPath(); g.moveTo(x+w*.3,y); g.lineTo(x+w*.4,y+h*.6); g.lineTo(x+w*.33,y+h); g.stroke(); } if(b.hp<=1){ g.beginPath(); g.moveTo(x+w*.7,y); g.lineTo(x+w*.62,y+h*.5); g.lineTo(x+w*.75,y+h); g.stroke(); } }
+    if(b.ch==='S'){ g.fillStyle='#94a3b8'; for(const [dx,dy] of [[6,6],[w-6,6],[6,h-6],[w-6,h-6]]){ g.beginPath(); g.arc(x+dx,y+dy,2,0,7); g.fill(); } }
+    if(b.ch==='X'){ text('✸',x+w/2,y+h/2+1,15,'#fff','center',800,false); } }
+  for(const u of G.pus){ const P=PU[u.k]; g.fillStyle=P.c; rr(u.x-18,u.y-10,36,20,10); g.fill(); g.strokeStyle='rgba(255,255,255,.6)'; g.lineWidth=2; rr(u.x-18,u.y-10,36,20,10); g.stroke(); text(P.ic,u.x,u.y+1,14,'#fff','center',800,false); }
+  for(const l of G.lasers){ g.fillStyle='#fca5a5'; g.fillRect(l.x-2,l.y-10,4,14); }
+  const p=G.pad, T=G.timers; g.fillStyle=T.sticky>0?'#c084fc':'#e2e8f0'; rr(p.x-p.w/2,p.y-7,p.w,14,7); g.fill(); g.fillStyle=T.laser>0?'#ef4444':'#38bdf8'; rr(p.x-p.w/2,p.y-7,14,14,7); g.fill(); rr(p.x+p.w/2-14,p.y-7,14,14,7); g.fill(); g.fillStyle='rgba(255,255,255,.4)'; g.fillRect(p.x-p.w/2+14,p.y-5,p.w-28,3);
+  for(const ball of G.balls){ const fire=T.fire>0; ball.trail.forEach((q,i)=>{ g.fillStyle=fire?`rgba(251,146,60,${i/16})`:`rgba(186,230,253,${i/20})`; g.beginPath(); g.arc(q.x,q.y,ball.r*i/8,0,7); g.fill(); });
+    g.shadowColor=fire?'#f97316':'#7dd3fc'; g.shadowBlur=14; g.fillStyle=fire?'#fed7aa':'#fff'; g.beginPath(); g.arc(ball.x,ball.y,ball.r,0,7); g.fill(); g.shadowBlur=0;
+    if(ball.stuck){ g.strokeStyle='rgba(255,255,255,.35)'; g.setLineDash([4,6]); g.beginPath(); g.moveTo(ball.x,ball.y); const a=-Math.PI/2+clamp(ball.off/(p.w/2),-1,1)*.6; g.lineTo(ball.x+Math.cos(a)*90,ball.y+Math.sin(a)*90); g.stroke(); g.setLineDash([]); } }
+  for(const f of G.fx){ if(f.ring){ g.strokeStyle=`rgba(253,186,116,${f.t/.35})`; g.lineWidth=5; g.beginPath(); g.arc(f.x,f.y,f.R*(1-f.t/.35)+8,0,7); g.stroke(); } else { g.globalAlpha=Math.min(1,f.t*2); g.fillStyle=f.c; g.fillRect(f.x,f.y,f.s,f.s); g.globalAlpha=1; } }
+  for(const t of G.texts){ g.globalAlpha=Math.min(1,t.life*2); text(t.t,t.x,t.y,t.big?30:18,t.c||'#fff','center',800); g.globalAlpha=1; }
+  g.restore();
+  g.fillStyle='rgba(2,6,23,.65)'; g.fillRect(0,0,W,50); text(G.score.toLocaleString(),20,26,24,'#fff','left',800); text(`Level ${G.lv+1}`,W/2,26,20,'#cbd5e1','center',700); for(let i=0;i<Math.min(6,G.lives);i++){ g.fillStyle='#fff'; g.beginPath(); g.arc(W-24-i*22,26,7,0,7); g.fill(); }
+  const act=Object.entries(T).filter(([k,v])=>v>0&&PU[k]); let tx=W/2-act.length*32; for(const [k,v] of act){ g.globalAlpha=.9; g.fillStyle=PU[k].c; rr(tx,H-22,58,18,8); g.fill(); g.globalAlpha=1; text(PU[k].ic+' '+Math.ceil(v),tx+29,H-13,12,'#fff','center',700,false); tx+=64; }
+  if(G.balls.some(b=>b.stuck)&&!G.over) text('Space / click to launch',W/2,H-80,18,'rgba(255,255,255,.75)','center',600);
+  if(G.lvT>0){ g.globalAlpha=Math.min(1,G.lvT); text(`LEVEL ${G.lv+1}`,W/2,H/2+40,44,'#fff','center',800); g.globalAlpha=1; } }
+
+AK.init({ id:'bricks', title:'Brick Blitz', icon:'🧱', sub:'Smash through 24 levels of bricks. Catch power-ups for lasers, multi-ball, fireballs and wide paddles — but watch out for the bad ones.', accent:'#f472b6', grad:'linear-gradient(90deg,#f472b6,#fb923c)',
+  modes:[{k:'play',n:'Play',d:'24 levels · 3 balls'}],
+  how:'<b>Move:</b> mouse / finger, or ← →. <b>Launch:</b> Space or click. Where the ball hits the paddle sets its angle.<br>Grey bricks take 3 hits, dark steel ones only break with a 🔥 fireball, red ✸ bricks explode.<br>With ⚡ lasers, hold Space (or touch) to fire. Avoid grey ⇥ and » power-ups.',
+  boards:[{id:'best',name:'High score',mode:'max'}], fmt:v=>Number(v).toLocaleString(),
+  onStart:m=>newGame(m), onQuit:()=>{ G=null; },
+  onKey:(code,down)=>{ if(down&&code==='Space'&&G) launch(); },
+  onPointer:(type,pt)=>{ if(!G) return; mouseX=pt.x; if(type==='down'){ launch(); G.autoFire=true; } if(type==='up') G.autoFire=false; } });
+/* the mouse moves the paddle even without a click */
+addEventListener('pointermove',e=>{ if(!G||!AK.canvas) return; const r=AK.canvas.getBoundingClientRect(); if(e.clientY<r.top-80||e.clientY>r.bottom+80) return; mouseX=(e.clientX-r.left)/r.width*W; });
+AK.loop(dt=>{ if(G) update(dt); }, draw);
+if(/[?&]test\b/.test(location.search)) window.__BR={ get G(){ return G; }, loadLevel, applyPU };
+})();
+</script>
+<script src="online.js"></script>
+<script src="site.js"></script>
+<script src="chat.js"></script>
+</body>
+</html>
