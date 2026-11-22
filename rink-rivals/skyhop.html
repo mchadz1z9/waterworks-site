@@ -1,0 +1,129 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
+<title>Arcade Rivals - Sky Hopper</title>
+<link href="https://fonts.googleapis.com/css2?family=Fredoka:wght@500;600;700&display=swap" rel="stylesheet">
+</head>
+<body>
+<script src="arcadekit.js"></script>
+<script>
+/* Sky Hopper: an original endless jumper. A little bouncy hero hops up from cloud to cloud on its own;
+   you steer left and right (keys, tilt-free touch halves, or mouse). Springs, jetpacks and balloons boost you,
+   some clouds move, crumble or vanish, and birds and storm clouds get in the way. The sky changes as you climb. */
+(function(){
+const W=540, H=860;  /* a tall play area: the kit letterboxes it on wide screens */
+const {rr,text,rand,clamp,lerp}=AK;
+const SKINS=[{n:'Bounce',body:'#fb7185',belly:'#ffe4e6',need:0},{n:'Sprout',body:'#4ade80',belly:'#dcfce7',need:2000},{n:'Splash',body:'#38bdf8',belly:'#e0f2fe',need:5000},{n:'Ember',body:'#fb923c',belly:'#ffedd5',need:9000},{n:'Royal',body:'#a78bfa',belly:'#ede9fe',need:15000},{n:'Gold',body:'#facc15',belly:'#fef9c3',need:25000}];
+let G=null, steer=0, ptr=null;
+
+function unlocked(){ const b=AK.best(); return SKINS.filter(s=>b>=s.need); }
+function newGame(){ const sk=unlocked().slice(-1)[0];
+  G={ cam:0, top:0, score:0, coins:0, maxY:0, over:false, t:0, skin:sk, plats:[], items:[], foes:[], fx:[], texts:[],
+    p:{x:W/2,y:H-120,vx:0,vy:-900,face:1,squash:0,jet:0,balloon:0,shield:0,dead:false} };
+  G.plats.push({x:W/2-60,y:H-60,w:120,k:'n'}); let y=H-60; while(y>-H*2) y=addRow(y);
+  AK.toast(`Playing as ${sk.n} · steer with ← → or touch the sides`,2200); }
+function diff(){ return clamp(G.maxY/12000,0,1); }
+function addRow(y){ const d=diff(), gap=lerp(70,150,d)+rand(-12,18); y-=gap; const w=lerp(96,66,d)+rand(-8,8), x=rand(14,W-w-14);
+  const r=Math.random(); let k='n'; if(r<.12+d*.2) k='move'; else if(r<.18+d*.3) k='crumble'; else if(r<.21+d*.32&&G.plats.length>4) k='ghost';
+  const P={x,y,w,k,vx:k==='move'?rand(60,120)*(Math.random()<.5?-1:1)*(1+d):0}; G.plats.push(P);
+  const it=Math.random(); if(k!=='ghost'&&k!=='crumble'){ if(it<.07) G.items.push({k:'spring',p:P,ox:rand(10,w-26)}); else if(it<.085) G.items.push({k:'jet',x:x+w/2,y:y-30}); else if(it<.1) G.items.push({k:'balloon',x:x+w/2,y:y-36}); else if(it<.12) G.items.push({k:'shield',x:x+w/2,y:y-30}); }
+  if(Math.random()<.35) G.items.push({k:'coin',x:rand(30,W-30),y:y-rand(30,70)});
+  if(G.maxY>1500&&Math.random()<.05+d*.12) G.foes.push(Math.random()<.6?{k:'bird',x:rand(40,W-40),y:y-60,vx:rand(70,140)*(Math.random()<.5?-1:1),t:0}:{k:'storm',x:rand(60,W-60),y:y-70,t:0});
+  return y; }
+
+function update(dt){ const p=G.p; G.t+=dt;
+  /* steering: keys, or hold a side of the screen / follow the pointer */
+  let ax=0; const K=AK.keys; if(K.has('ArrowLeft')||K.has('KeyA')) ax-=1; if(K.has('ArrowRight')||K.has('KeyD')) ax+=1;
+  if(ptr){ const dx=ptr.x-p.x; ax=Math.abs(dx)>12?Math.sign(dx)*Math.min(1,Math.abs(dx)/80):0; }
+  p.vx=lerp(p.vx,ax*430,Math.min(1,dt*9)); if(ax) p.face=Math.sign(ax);
+  if(p.jet>0){ p.jet-=dt; p.vy=-1250; G.fx.push({x:p.x-p.face*4,y:p.y+24,vx:rand(-30,30),vy:rand(140,260),t:.35,c:Math.random()<.5?'#fb923c':'#fde047',s:rand(4,8)}); }
+  else if(p.balloon>0){ p.balloon-=dt; p.vy=Math.max(p.vy-1600*dt,-520); }
+  else p.vy+=1650*dt;
+  p.x+=p.vx*dt; p.y+=p.vy*dt; if(p.x<-20) p.x=W+20; if(p.x>W+20) p.x=-20; p.squash=Math.max(0,p.squash-dt*4); p.shield=Math.max(0,p.shield-dt);
+  for(const P of G.plats){ if(P.k==='move'){ P.x+=P.vx*dt; if(P.x<6||P.x+P.w>W-6) P.vx*=-1; } if(P.fall){ P.vy=(P.vy||0)+1400*dt; P.y+=P.vy*dt; } }
+  /* landing: only while falling, feet crossing the top of a platform */
+  if(p.vy>0&&!p.dead&&p.jet<=0){ for(const P of G.plats){ if(P.fall||P.gone) continue; const top=P.y, prev=p.y-p.vy*dt; if(prev+22<=top+2&&p.y+22>=top&&p.x>P.x-12&&p.x<P.x+P.w+12){
+      let jump=-900; const sp=G.items.find(i=>i.k==='spring'&&i.p===P&&Math.abs(p.x-(P.x+i.ox+8))<26); if(sp){ jump=-1500; sp.used=.3; AK.sfx('jump'); AK.tone(700,.2,'triangle',.1,1400); } else AK.sfx('step');
+      p.vy=jump; p.y=top-22; p.squash=1; for(let i=0;i<6;i++) G.fx.push({x:p.x+rand(-14,14),y:top,vx:rand(-60,60),vy:rand(-80,-20),t:.35,c:'#fff',s:rand(3,6)});
+      if(P.k==='crumble'){ P.fall=true; AK.sfx('hit'); } if(P.k==='ghost'){ P.gone=true; } break; } } }
+  /* items */
+  for(const i of G.items){ const ix=i.p?i.p.x+i.ox+8:i.x, iy=i.p?i.p.y-8:i.y; if(i.used) i.used-=dt; if(i.k==='spring'||i.taken) continue; if(Math.hypot(ix-p.x,iy-p.y)<30){ i.taken=true;
+      if(i.k==='coin'){ G.coins++; G.score+=25; AK.sfx('coin'); G.texts.push({x:ix,y:iy,t:'+25',life:.7}); }
+      else if(i.k==='jet'){ p.jet=2.2; AK.sfx('power'); G.texts.push({x:ix,y:iy,t:'Jetpack!',life:1}); }
+      else if(i.k==='balloon'){ p.balloon=3; AK.sfx('power'); G.texts.push({x:ix,y:iy,t:'Balloon!',life:1}); }
+      else if(i.k==='shield'){ p.shield=8; AK.sfx('freeze'); G.texts.push({x:ix,y:iy,t:'Bubble shield',life:1}); } } }
+  G.items=G.items.filter(i=>!i.taken);
+  /* foes: birds fly across, storm clouds zap; stomp a bird from above for points */
+  for(const f of G.foes){ f.t+=dt; if(f.k==='bird'){ f.x+=f.vx*dt; if(f.x<20||f.x>W-20) f.vx*=-1; f.fy=f.y+Math.sin(f.t*5)*8; } else f.fy=f.y+Math.sin(f.t*1.5)*6;
+    if(f.dead||p.dead) continue; const dx=p.x-f.x, dy=p.y-f.fy, R=f.k==='storm'?44:26;
+    if(Math.hypot(dx,dy)<R){ if(p.jet>0||p.shield>0){ f.dead=true; G.score+=150; AK.sfx('pop'); continue; }
+      if(f.k==='bird'&&p.vy>0&&dy<-6){ f.dead=true; p.vy=-1000; G.score+=150; AK.sfx('pop'); G.texts.push({x:f.x,y:f.fy,t:'Stomp +150',life:.9}); for(let k=0;k<10;k++) G.fx.push({x:f.x,y:f.fy,vx:rand(-120,120),vy:rand(-120,60),t:.6,c:'#f8fafc',s:rand(3,6)}); }
+      else { die(f.k==='storm'?'Zapped by a storm cloud':'Knocked out by a bird'); } } }
+  G.foes=G.foes.filter(f=>!f.dead&&f.y-G.cam<H+200);
+  /* camera follows upward only; score is the height reached */
+  const target=p.y-H*.42; if(target<G.cam) G.cam=lerp(G.cam,target,Math.min(1,dt*10)); G.maxY=Math.max(G.maxY,H-120-p.y); G.score=Math.max(G.score,Math.floor(G.maxY/10)+G.coins*25);
+  while(G.plats.length&&Math.min(...G.plats.map(q=>q.y))>G.cam-H) addRow(Math.min(...G.plats.map(q=>q.y)));
+  G.plats=G.plats.filter(q=>q.y-G.cam<H+120); G.items=G.items.filter(i=>(i.p?i.p.y:i.y)-G.cam<H+120);
+  for(const f of G.fx){ f.t-=dt; f.x+=f.vx*dt; f.y+=f.vy*dt; } G.fx=G.fx.filter(f=>f.t>0);
+  for(const t of G.texts){ t.life-=dt; t.y-=dt*40; } G.texts=G.texts.filter(t=>t.life>0);
+  if(!p.dead&&p.y-G.cam>H+40) die('Fell out of the sky');
+  if(p.dead){ p.deadT-=dt; if(p.deadT<=0&&!G.over){ G.over=true; const sc=G.score, nextSkin=SKINS.find(s=>s.need>AK.best()&&sc>=s.need);
+      AK.over({score:sc,title:p.why,txt:`${Math.floor(G.maxY/10)} m`,stats:[['Height',Math.floor(G.maxY/10)+' m'],['Coins',G.coins],[nextSkin?'Unlocked':'Hero',nextSkin?nextSkin.n+'!':G.skin.n]]}); } } }
+function die(why){ const p=G.p; if(p.dead) return; p.dead=true; p.why=why; p.deadT=1.1; p.vy=-500; AK.sfx('lose'); }
+
+/* ---------- drawing ---------- */
+function skyCol(h){ const stops=[[0,'#7dd3fc','#e0f2fe'],[3000,'#fca5a5','#fde68a'],[7000,'#818cf8','#f0abfc'],[12000,'#1e1b4b','#4c1d95'],[20000,'#020617','#1e1b4b']]; let a=stops[0],b=stops[stops.length-1];
+  for(let i=0;i<stops.length-1;i++) if(h>=stops[i][0]&&h<stops[i+1][0]){ a=stops[i]; b=stops[i+1]; break; } const k=b[0]===a[0]?0:clamp((h-a[0])/(b[0]-a[0]),0,1); const mix=(x,y)=>{ const p=s=>[1,3,5].map(i=>parseInt(s.slice(i,i+2),16)); const A=p(x),B=p(y); return `rgb(${A.map((v,i)=>Math.round(lerp(v,B[i],k))).join(',')})`; }; return [mix(a[1],b[1]),mix(a[2],b[2])]; }
+function hero(g,x,y,p,sk){ g.save(); g.translate(x,y); const sq=p.squash||0; g.scale(1+sq*.25,1-sq*.25); if(p.dead) g.rotate(G.t*8);
+  if(p.balloon>0){ g.strokeStyle='#64748b'; g.lineWidth=1.5; g.beginPath(); g.moveTo(0,-18); g.lineTo(0,-50); g.stroke(); g.fillStyle='#f43f5e'; g.beginPath(); g.ellipse(0,-66,16,20,0,0,7); g.fill(); g.fillStyle='rgba(255,255,255,.4)'; g.beginPath(); g.ellipse(-5,-72,4,7,0,0,7); g.fill(); }
+  if(p.jet>0){ g.fillStyle='#64748b'; rr(-p.face*18-6,-10,12,24,4); g.fill(); }
+  g.fillStyle='rgba(0,0,0,.12)'; g.beginPath(); g.ellipse(0,22,16,4,0,0,7); g.fill();
+  g.fillStyle=sk.body; g.beginPath(); g.ellipse(0,0,21,23,0,0,7); g.fill(); g.fillStyle=sk.belly; g.beginPath(); g.ellipse(p.face*3,6,12,13,0,0,7); g.fill();
+  g.fillStyle=sk.body; for(const s of [-1,1]){ g.beginPath(); g.ellipse(s*10,20,7,5,0,0,7); g.fill(); }
+  g.fillStyle='#fff'; for(const s of [-1,1]){ g.beginPath(); g.ellipse(p.face*6+s*7,-6,6,7,0,0,7); g.fill(); } g.fillStyle='#1e293b'; for(const s of [-1,1]){ g.beginPath(); g.arc(p.face*8+s*7,-5+(p.vy<0?-1:1),3.2,0,7); g.fill(); }
+  g.fillStyle='rgba(244,63,94,.35)'; for(const s of [-1,1]){ g.beginPath(); g.ellipse(p.face*6+s*13,3,4,2.5,0,0,7); g.fill(); }
+  g.strokeStyle='#1e293b'; g.lineWidth=2; g.beginPath(); g.arc(p.face*7,4,4,.2,Math.PI-.2); g.stroke();
+  if(p.shield>0){ g.strokeStyle=`rgba(125,211,252,${.5+.3*Math.sin(G.t*10)})`; g.lineWidth=3; g.beginPath(); g.arc(0,0,32,0,7); g.stroke(); g.fillStyle='rgba(186,230,253,.18)'; g.fill(); }
+  g.restore(); }
+function cloudPlat(g,P,y){ const x=P.x, w=P.w; if(P.gone) return; g.save(); if(P.k==='ghost') g.globalAlpha=.45+.2*Math.sin(G.t*4);
+  const col=P.k==='crumble'?'#d6d3d1':P.k==='move'?'#e0f2fe':'#ffffff', sh=P.k==='crumble'?'#a8a29e':P.k==='move'?'#93c5fd':'#cbd5e1';
+  g.fillStyle=sh; rr(x,y+4,w,16,8); g.fill(); g.fillStyle=col; rr(x,y,w,16,8); g.fill(); for(let i=0;i<Math.floor(w/24);i++){ g.beginPath(); g.arc(x+14+i*24,y+2,11,Math.PI,0); g.fill(); }
+  if(P.k==='crumble'){ g.strokeStyle='#78716c'; g.lineWidth=1.5; g.beginPath(); g.moveTo(x+w*.3,y+2); g.lineTo(x+w*.4,y+12); g.lineTo(x+w*.35,y+16); g.moveTo(x+w*.7,y+3); g.lineTo(x+w*.62,y+14); g.stroke(); }
+  if(P.k==='move'){ g.fillStyle='#60a5fa'; for(const s of [6,w-14]){ g.beginPath(); g.moveTo(x+s,y+8); g.lineTo(x+s+8,y+4); g.lineTo(x+s+8,y+12); g.fill(); } }
+  g.restore(); }
+function draw(g){ const h=G?G.maxY:0, [c1,c2]=skyCol(h), bg=g.createLinearGradient(0,0,0,H); bg.addColorStop(0,c1); bg.addColorStop(1,c2); g.fillStyle=bg; g.fillRect(0,0,W,H);
+  const cam=G?G.cam:0; if(h>9000){ for(let i=0;i<60;i++){ const sx=(i*97)%W, sy=((i*53-cam*.05)%H+H)%H; g.fillStyle=`rgba(255,255,255,${clamp((h-9000)/6000,0,1)*(.3+(i%3)*.2)})`; g.fillRect(sx,sy,2,2); } }
+  for(let i=0;i<7;i++){ const by=((i*170-cam*.25)%(H+200)+H+200)%(H+200)-100, bx=(i*131)%W; g.fillStyle='rgba(255,255,255,.35)'; for(const [dx,r] of [[0,34],[30,26],[-30,24],[14,30]]){ g.beginPath(); g.arc(bx+dx,by,r,0,7); g.fill(); } }
+  if(!G){ hero(g,W/2,H*.6+Math.sin(AK.t*4)*30,{face:1,vy:Math.cos(AK.t*4)},SKINS[0]); return; }
+  g.save(); g.translate(0,-cam);
+  for(const P of G.plats) cloudPlat(g,P,P.y);
+  for(const i of G.items){ const x=i.p?i.p.x+i.ox:i.x, y=i.p?i.p.y-10:i.y;
+    if(i.k==='spring'){ const c=i.used>0?.4:1; g.fillStyle='#94a3b8'; for(let k=0;k<3;k++) g.fillRect(x+2,y+8-k*4*c,12,2); g.fillStyle='#ef4444'; rr(x-2,y-6+(1-c)*8,20,6,3); g.fill(); }
+    else if(i.k==='coin'){ const s=Math.abs(Math.sin(G.t*3+x)); g.fillStyle='#facc15'; g.beginPath(); g.ellipse(x,y,9*s+1,9,0,0,7); g.fill(); g.fillStyle='#fde68a'; g.beginPath(); g.ellipse(x,y,5*s+.5,5,0,0,7); g.fill(); }
+    else { const em={jet:'🚀',balloon:'🎈',shield:'🫧'}[i.k]; g.fillStyle='rgba(255,255,255,.6)'; g.beginPath(); g.arc(x,y,20+Math.sin(G.t*5)*2,0,7); g.fill(); text(em,x,y+1,24,'#000','center',700,false); } }
+  for(const f of G.foes){ if(f.k==='bird'){ g.save(); g.translate(f.x,f.fy); g.scale(f.vx>0?1:-1,1); const fl=Math.sin(f.t*14)*.6; g.fillStyle='#1e293b'; g.beginPath(); g.ellipse(0,0,16,10,0,0,7); g.fill(); g.fillStyle='#334155'; g.beginPath(); g.moveTo(-4,0); g.lineTo(-14,-14*fl-4); g.lineTo(6,-2); g.fill(); g.fillStyle='#f59e0b'; g.beginPath(); g.moveTo(14,-2); g.lineTo(24,1); g.lineTo(14,4); g.fill(); g.fillStyle='#fff'; g.beginPath(); g.arc(8,-3,3,0,7); g.fill(); g.restore(); }
+    else { g.fillStyle='#475569'; for(const [dx,dy,r] of [[0,0,30],[-26,6,22],[26,6,22],[0,-14,22]]){ g.beginPath(); g.arc(f.x+dx,f.fy+dy,r,0,7); g.fill(); } if(Math.sin(f.t*6)>.6){ g.strokeStyle='#fde047'; g.lineWidth=3; g.beginPath(); g.moveTo(f.x-6,f.fy+20); g.lineTo(f.x+4,f.fy+38); g.lineTo(f.x-4,f.fy+40); g.lineTo(f.x+6,f.fy+60); g.stroke(); } g.fillStyle='#fff'; for(const s of [-1,1]){ g.beginPath(); g.arc(f.x+s*10,f.fy-2,4,0,7); g.fill(); } } }
+  for(const f of G.fx){ g.globalAlpha=Math.min(1,f.t*3); g.fillStyle=f.c; g.beginPath(); g.arc(f.x,f.y,f.s,0,7); g.fill(); g.globalAlpha=1; }
+  hero(g,G.p.x,G.p.y,G.p,G.skin);
+  for(const t of G.texts){ g.globalAlpha=Math.min(1,t.life*2); text(t.t,t.x,t.y,18,'#fff','center',700); g.globalAlpha=1; }
+  g.restore();
+  g.fillStyle='rgba(15,23,42,.45)'; rr(10,10,W-20,44,14); g.fill(); text(Math.floor(G.maxY/10)+' m',24,32,24,'#fff','left',800); text('🪙 '+G.coins,W/2,32,20,'#fde047','center',700); text(G.score.toLocaleString(),W-24,32,20,'#fff','right',700);
+  if(G.p.jet>0||G.p.balloon>0||G.p.shield>0){ const v=G.p.jet>0?G.p.jet/2.2:G.p.balloon>0?G.p.balloon/3:G.p.shield/8; g.fillStyle='rgba(255,255,255,.3)'; rr(W/2-60,62,120,8,4); g.fill(); g.fillStyle='#fde047'; rr(W/2-60,62,120*v,8,4); g.fill(); } }
+
+AK.init({ id:'skyhop', title:'Sky Hopper', icon:'☁️', W, H, sub:'Bounce up through the clouds as high as you can. Grab springs, jetpacks and balloons, stomp birds, dodge storms — and unlock new heroes as your best height grows.', accent:'#7dd3fc', grad:'linear-gradient(90deg,#7dd3fc,#f9a8d4)',
+  modes:[{k:'play',n:'Hop!',d:'Endless · unlock 6 heroes'}],
+  how:'<b>Steer:</b> ← → or A D. <b>Touch / mouse:</b> hold where you want to go.<br>You bounce automatically. White clouds are safe, <b>grey ones crumble</b>, <b>faint ones vanish</b>, blue ones move.<br>Land on a bird from above to stomp it. Heroes unlock at 2,000 / 5,000 / 9,000 / 15,000 / 25,000 points.',
+  boards:[{id:'best',name:'Highest score',mode:'max'}], fmt:v=>Number(v).toLocaleString(),
+  onStart:()=>newGame(), onQuit:()=>{ G=null; ptr=null; },
+  onPointer:(type,pt)=>{ if(type==='down'||type==='move'&&ptr) ptr=pt; else if(type==='up') ptr=null; } });
+AK.loop(dt=>{ if(G) update(dt); }, draw);
+if(/[?&]test\b/.test(location.search)) window.__SKY={ get G(){ return G; } };
+})();
+</script>
+<script src="online.js"></script>
+<script src="site.js"></script>
+<script src="chat.js"></script>
+</body>
+</html>
