@@ -180,7 +180,7 @@ export default {
     if(url.pathname==='/ai'){ if(req.method==='OPTIONS') return new Response(null,{headers:CORS}); if(req.method!=='POST') return J({err:'method'},405); return rrAI(req,env,RCF); }
     if(url.pathname==='/acct'){ if(req.method==='OPTIONS') return new Response(null,{headers:CORS}); return env.ACCT.get(env.ACCT.idFromName('ACCT')).fetch(req); }
     if(url.pathname==='/site'){ if(req.method==='OPTIONS') return new Response(null,{headers:CORS}); return env.SITE.get(env.SITE.idFromName('SITE')).fetch(req); }
-    if(url.pathname==='/tourney'||url.pathname==='/play'||url.pathname==='/daily'||url.pathname==='/like'||url.pathname==='/review'||url.pathname==='/vote'||url.pathname==='/namecheck'||url.pathname.startsWith('/feed/')){ if(req.method==='OPTIONS') return new Response(null,{headers:CORS}); const cf=RCF||req.cf||{}, h=new Headers(req.headers); h.set('x-rr-asn',String(cf.asn||'')); h.set('x-rr-aso',String(cf.asOrganization||'').slice(0,80)); h.set('x-rr-cc',String(cf.country||'')); return env.SITE.get(env.SITE.idFromName('SITE')).fetch(new Request(req,{headers:h})); }
+    if(url.pathname==='/tourney'||url.pathname==='/play'||url.pathname==='/popular'||url.pathname==='/daily'||url.pathname==='/like'||url.pathname==='/review'||url.pathname==='/vote'||url.pathname==='/namecheck'||url.pathname.startsWith('/feed/')){ if(req.method==='OPTIONS') return new Response(null,{headers:CORS}); const cf=RCF||req.cf||{}, h=new Headers(req.headers); h.set('x-rr-asn',String(cf.asn||'')); h.set('x-rr-aso',String(cf.asOrganization||'').slice(0,80)); h.set('x-rr-cc',String(cf.country||'')); return env.SITE.get(env.SITE.idFromName('SITE')).fetch(new Request(req,{headers:h})); }
     const lb=url.pathname.match(/^\/lb\/([a-z0-9]{2,16})$/);
     if(lb){ if(req.method==='OPTIONS') return new Response(null,{headers:CORS}); return env.BOARDS.get(env.BOARDS.idFromName(lb[1])).fetch(req); }
     const pm=url.pathname.match(/^\/party\/([A-Z0-9]{4,8})$/);
@@ -629,6 +629,10 @@ export class Site {
       if(url.pathname==='/feed/report'){ this.sql.exec('INSERT OR IGNORE INTO frep(id,pid,ts) VALUES(?,?,?)',id,pid,now); const n=this.sql.exec('SELECT COUNT(*) n FROM frep WHERE id=?',id).one().n;
         /* two reports and a player's post is hidden until an admin looks at it */ if(id.startsWith('p:')&&n>=2) this.sql.exec("UPDATE fpost SET st='hidden' WHERE id=? AND st='ok'",+id.slice(2)); return J({ok:true}); }
       return J({err:'unknown'},404); }
+    /* how popular each game is: visits in the last 14 days that played it (cached 10 minutes) */
+    if(url.pathname==='/popular'){ if(req.method==='OPTIONS') return new Response(null,{headers:CORS});
+      const now=Date.now(); if(!this.popIx){ try{ this.sql.exec('CREATE INDEX IF NOT EXISTS visit_last ON visit(last)'); }catch(e){} this.popIx=1; } if(!this.popC||now-this.popC.t>600000){ const cnt={}; for(const r of this.sql.exec('SELECT games FROM visit WHERE last>?',now-14*86400000)) for(const g of String(r.games||'').split(',')){ if(g&&g!=='home'&&/^[a-z0-9-]{1,24}$/.test(g)) cnt[g]=(cnt[g]||0)+1; } this.popC={t:now,g:cnt}; }
+      return new Response(JSON.stringify({ok:true,days:14,g:this.popC.g}),{headers:{...CORS,'content-type':'application/json','cache-control':'public, max-age=300'}}); }
     if(url.pathname==='/play'){ let m={}; try{ m=await req.json(); }catch(e){}
       const pid=cleanPid(m.pid), name=cleanName(m.name); if(pid.length<8) return J({err:'bad'},400);
       const now0=Date.now(), iph=(await sha('rr-ip:'+(req.headers.get('cf-connecting-ip')||'?'))).slice(0,24), game=String(m.game||'').replace(/[^a-z0-9-]/g,'').slice(0,24);
