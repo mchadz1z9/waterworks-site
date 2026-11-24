@@ -61,5 +61,18 @@ window.SA3DCV=function(opt){
   V.batter=function(x,z,s,look){ V.person(x,z,Math.PI/2,look,'stand',0,J=>{ J.hand1=[.1,1.15,.25]; J['hand-1']=[0,1.12,.25]; J.elb1=[.28,1.25,.05]; J['elb-1']=[-.22,1.2,.08]; for(const k of ['knee-1','knee1']) J[k]=[J[k][0]*1.5,J[k][1]-.05,J[k][2]]; });
     const th=s*Math.PI*1.15, d=[Math.sin(th),(1-Math.min(1,s*1.6))*.75,Math.cos(th)], h=[x+.25,1.13,z+.05], L=Math.hypot(d[0],d[1],d[2]), tip=[h[0]+d[0]/L*.9,h[1]+d[1]/L*.9,h[2]+d[2]/L*.9];
     V.beam(h,tip,.06,'#d8b078'); };
+  /* a football stadium: the ball sits at the origin, play goes toward -z; yard lines every 5 yards */
+  V.gridiron=function(){ V.setStatic(({sb,sbR,sc,stand})=>{
+    sb(0,-.12,-50,120,.1,200,'#1b5e2c');
+    for(let i=0;i<26;i++) sb(0,-.06,10-i*4.572-2.286,48.8,.04,4.572,i%2?'#1c7c36':'#17702f');
+    for(let i=0;i<26;i++){ const z=10-i*4.572; sb(0,-.035,z,48.8,.01,.12,'#f1f5f9'); for(const sx of [-1,1]) for(let k=1;k<5;k++) sb(sx*6.2,-.035,z-k*.914,.6,.01,.08,'#f1f5f9'); }
+    sb(-24.4,-.035,-50,.15,.01,130,'#f8fafc'); sb(24.4,-.035,-50,.15,.01,130,'#f8fafc');
+    sb(0,.5,-50,52,1,.1,'#0f172a');
+    for(const sx of [-1,1]){ stand(sx*29,12,sx*29,-112,12,.5,sx<0?Math.PI:0,'#334155'); sb(sx*40,8,-50,.6,16,130,'#1e293b'); }
+    for(const [lx,lz] of [[-34,-10],[34,-10],[-34,-80],[34,-80]]){ sc(lx,16,lz,.45,32,'#94a3b8'); sb(lx,32.5,lz,6,2.6,.6,'#fffbe0'); }
+  },25); };
+  V.goalpost=function(z,x0){ x0=x0||0; const Y='#facc15'; V.box(x0,1.6,z+1,.25,3.2,.25,Y); V.box(x0,3.1,z+.5,.18,.18,1.1,Y); V.box(x0,3.05,z,5.64,.15,.15,Y); V.box(x0-2.82,6.5,z,.12,7,.12,Y); V.box(x0+2.82,6.5,z,.12,7,.12,Y);
+    V.box(x0-2.82,10.2,z,.25,.5,.04,'#ef4444'); V.box(x0+2.82,10.2,z,.25,.5,.04,'#ef4444'); };
+  V.football=function(p,ang){ V.boxR(p[0],p[1],p[2],.17,.17,.28,'#7a3e14',0,ang||0,0); V.boxR(p[0],p[1]+.085,p[2],.03,.01,.14,'#f8fafc',0,ang||0,0); };
   return V;
 };
