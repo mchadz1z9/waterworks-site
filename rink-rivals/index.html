@@ -218,6 +218,11 @@ a.card:hover::before{ opacity:1; } a.card:hover{ transform:translateY(-4px) scal
 .pk a.card .lb,.pk a.card .nw{display:none!important}
 .pk a.card.fresh::before{content:'✨ NEW';position:absolute;left:8px;top:8px;z-index:3;font:800 10px/1 system-ui;letter-spacing:.06em;background:rgba(34,197,94,.92);color:#fff;border-radius:999px;padding:5px 7px}
 .pk a.card.big::after{content:'🔥 POPULAR';position:absolute;right:10px;top:10px;font:800 10px/1 system-ui;letter-spacing:.08em;background:rgba(239,68,68,.9);color:#fff;border-radius:999px;padding:5px 8px}
+
+.pks{margin:14px 0 6px;background:rgba(8,12,28,.78);border:1px solid rgba(255,255,255,.1);border-radius:18px;padding:12px 12px 14px;backdrop-filter:blur(4px)}.pks h2{color:#fff!important;text-shadow:0 2px 10px rgba(0,0,0,.5)}.pks h2 small{color:#cbd5e1!important}.pks h2{display:flex;align-items:center;gap:10px;margin:0 2px 10px;font:900 26px/1 var(--font,system-ui);letter-spacing:.01em}
+.pks h2 small{font:600 13px system-ui;color:var(--muted,#94a3b8);letter-spacing:0}
+.pks .more{margin-left:auto;font:700 13px system-ui;background:rgba(255,255,255,.08);border:1px solid rgba(255,255,255,.18);color:#fff;border-radius:999px;padding:6px 12px;cursor:pointer}
+.pks .pk{margin:0}.pks .pk.clip{max-height:254px;overflow:hidden}@media(max-width:700px){.pks .pk.clip{max-height:202px}}
 </style>
 </head>
 <body>
@@ -245,7 +250,8 @@ a.card:hover::before{ opacity:1; } a.card:hover{ transform:translateY(-4px) scal
     <div class="chips" id="games">
       <button class="f on" data-f="all">🕹️ All</button><button class="f" data-f="team">🏟️ Team</button><button class="f" data-f="racing">🏁 Racing</button><button class="f" data-f="action">⚔️ Action</button><button class="f" data-f="extreme">🔥 Extreme</button><button class="f" data-f="water">🌊 Water</button><button class="f" data-f="racket">🎾 Racket</button><button class="f" data-f="puzzle">🧩 Classics</button><button class="f" data-f="skill">🎯 Skill</button><button class="f" data-f="free">🌍 Free</button>
     </div>
-    <div class="pk" id="pk"></div>
+    <div id="pkSecs"></div>
+    <div class="pk" id="pk" style="display:none"></div>
     <div class="stats" id="stats"><div><b id="stGames">63</b><span>games</span></div><div><b id="stOn">–</b><span>online now</span></div><div><b id="stPlayed">0</b><span>you've tried</span></div><div><b id="stFav">0</b><span>favorites</span></div></div>
     <section class="sec" id="mine" style="display:none"></section>
     <section class="sec" id="worlds"><div class="sh"><span class="si">🌍</span><h2>Open Worlds</h2><span class="lv">LIVE</span><p>Huge worlds you can live in — build, survive, drive, work and explore.</p></div><div class="fgrid">
@@ -416,9 +422,30 @@ pool.remove();
       const pop=cnt?Math.log1p(plays)/Math.log1p(maxP):(i>=0?1-i/BASE.length:0), age=m?(NOW-m[0])/86400:365, fresh=Math.exp(-age/14), work=m?(m[2]?.25:Math.log1p(m[1])/Math.log1p(ownKb)):.3;
       return .5*pop+.25*fresh+.25*work; };
     arr.forEach(a=>{ const m=META[a.getAttribute('href')]; a.classList.toggle('fresh',!!m&&NOW-m[0]<7*86400); });
-    arr.sort((x,y)=>sc(y)-sc(x)); arr.forEach((a,i)=>{ a.classList.toggle('big',i<8); PK.appendChild(a); }); };
+    arr.sort((x,y)=>sc(y)-sc(x)); arr.forEach((a,i)=>{ a.classList.toggle('big',i<8); PK.appendChild(a); }); secs(cnt); };
+  /* sections: popular, new, hidden gems, then by kind. Each card is copied into its sections; the plain wall is used for filters and search */
+  const SHOOT=['br','airsoft','paintball','hunting','starfighter','oss/invaderz/','oss/asteroids/','oss/space-huggers/','oss/radius-raid/','oss/bounce-back/'];
+  const SOLO=['golf','bowling','archery','curling','darts','discgolf','minigolf','athletics','ski','surf','skate','ufc','karate','fencing','skydive','weightlifting','powerlifting','bodybuilding','armwrestling','fishing','kayak','sailing','jetski','rodeo','axe','82-0','84-up','packs'];
+  function secs(cnt){ const box=document.getElementById('pkSecs'); if(!box) return; const all=[...PK.querySelectorAll('a.card')], hr=a=>a.getAttribute('href'), plays=a=>(cnt&&cnt[hr(a)])||0, age=a=>{ const m=META[hr(a)]; return m?(NOW-m[0])/86400:999; }, cat=a=>(a.dataset.cat||'').split(' ');
+    const byPlays=l=>l.slice().sort((x,y)=>plays(y)-plays(x));
+    const S=[['🔥','Popular','what everyone is playing most',byPlays(all).slice(0,16),4],
+      ['✨','New','just added',all.filter(a=>age(a)<21).sort((x,y)=>age(x)-age(y)),0],
+      ['🎯','Shooters','aim, blast, survive',byPlays(all.filter(a=>SHOOT.includes(hr(a)))),0],
+      ['🏟️','Sports','team games, rackets and solo sports',byPlays(all.filter(a=>cat(a).some(c=>['team','racket'].includes(c))||SOLO.includes(hr(a)))),0],
+      ['🏁','Racing & stunts','cars, bikes, boats and big air',byPlays(all.filter(a=>cat(a).some(c=>['racing','extreme'].includes(c)))),0],
+      ['🧩','Puzzles & classics','quick to learn, hard to put down',byPlays(all.filter(a=>cat(a).includes('puzzle'))),0],
+      ['🃏','Cards, strategy & skill','',byPlays(all.filter(a=>cat(a).includes('skill')&&!SOLO.includes(hr(a)))),0],
+      ['💎','Hidden gems','great games fewer people have tried',all.filter(a=>age(a)>=21).sort((x,y)=>plays(x)-plays(y)).slice(0,16),0],
+      ['🌍','Free classics','open-source games shared by their creators',byPlays(all.filter(a=>cat(a).includes('free'))),0]];
+    box.innerHTML='';
+    for(const [ic,t,sub,list,big] of S){ if(!list.length) continue; const sec=document.createElement('section'); sec.className='pks';
+      sec.innerHTML=`<h2>${ic} ${t}${sub?` <small>${sub}</small>`:''}${list.length>8?`<button class="more" type="button">Show all ${list.length}</button>`:''}</h2><div class="pk${list.length>8?' clip':''}"></div>`;
+      const g=sec.querySelector('.pk'); list.forEach((a,i)=>{ const c=a.cloneNode(true); c.classList.toggle('big',i<big); c.classList.remove('hide'); g.appendChild(c); });
+      const m=sec.querySelector('.more'); if(m) m.onclick=()=>{ const on=g.classList.toggle('clip'); m.textContent=on?`Show all ${list.length}`:'Show less'; };
+      box.appendChild(sec); } }
   let old=null; try{ old=JSON.parse(localStorage.getItem('rrPop')||'null'); }catch(e){} lay(old&&old.g);
   const SRV=(()=>{ try{ if(localStorage.getItem('rrSrv')==='relay') return location.origin+'/rr'; }catch(e){} return 'https://rink-rivals-rooms.mitchellchad2026.workers.dev'; })();
+  window.__pkLay=lay;
   if(!old||Date.now()-old.t>600000) fetch(SRV+'/popular').then(r=>r.json()).then(d=>{ if(d&&d.g){ try{ localStorage.setItem('rrPop',JSON.stringify({t:Date.now(),g:d.g})); }catch(e){} lay(d.g); } }).catch(()=>{}); }
 /* new game drop + today's featured ticket */
 const DROP=[['br','Drop. Loot. Survive.'],['weightlifting','Lift. Grow. Dominate.']];
@@ -429,10 +456,10 @@ const TICK=[['football','Call. Snap. Score.'],['hockey','Deke. Shoot. Score.'],[
 document.getElementById('partyBtn').addEventListener('click',()=>{ if(window.RRPARTY) RRPARTY.open(); });
 document.getElementById('chatBtn').addEventListener('click',()=>{ const d=document.getElementById('chatDock'); if(d&&getComputedStyle(d).display!=='none') d.scrollIntoView({behavior:'smooth',block:'nearest'}); else if(window.RRC) RRC.toggle(true); });
 
-const cards=[...document.querySelectorAll('a.card')], NAMES=Object.fromEntries(cards.map(a=>[a.getAttribute('href'),a.querySelector('b').textContent]));
+const cards=[...document.querySelectorAll('#pk a.card')], NAMES=Object.fromEntries(cards.map(a=>[a.getAttribute('href'),a.querySelector('b').textContent]));
 /* filters and search */
 let cat='all';
-function apply(){ const q=document.getElementById('q').value.trim().toLowerCase(); let n=0; for(const a of cards){ const ok=(cat==='all'||a.dataset.cat.split(' ').includes(cat))&&(!q||a.dataset.name.includes(q)); a.classList.toggle('hide',!ok); if(ok) n++; }
+function apply(){ const q=document.getElementById('q').value.trim().toLowerCase(); let n=0; { const plain=cat!=='all'||!!q; const W=document.getElementById('pk'), X=document.getElementById('pkSecs'); if(W) W.style.display=plain?'':'none'; if(X) X.style.display=plain?'none':''; } for(const a of cards){ const ok=(cat==='all'||a.dataset.cat.split(' ').includes(cat))&&(!q||a.dataset.name.includes(q)); a.classList.toggle('hide',!ok); if(ok) n++; }
   for(const s of document.querySelectorAll('section.sec[data-sec]')) s.style.display=s.querySelector('a.card:not(.hide)')?'':'none';
   document.getElementById('drop').style.display=(cat==='all'&&!q)?'':'none'; document.getElementById('worlds').style.display=(cat==='all'&&!q)?'':'none'; { const m=document.getElementById('mine'); m.style.display=(cat==='all'&&!q&&m.dataset.has)?'':'none'; } document.getElementById('none').style.display=n?'none':'block'; }
 for(const b of document.querySelectorAll('.f')) b.addEventListener('click',()=>{ cat=b.dataset.f; for(const x of document.querySelectorAll('.f')) x.classList.toggle('on',x===b); apply(); });
