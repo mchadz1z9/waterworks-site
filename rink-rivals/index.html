@@ -216,6 +216,7 @@ a.card:hover::before{ opacity:1; } a.card:hover{ transform:translateY(-4px) scal
 .pk a.card.big .lb small{display:-webkit-box!important;font-size:12px;margin-top:4px}
 .pk a.card.big .on{font-size:12px!important;top:10px!important}
 .pk a.card .lb,.pk a.card .nw{display:none!important}
+.pk a.card.fresh::before{content:'✨ NEW';position:absolute;left:8px;top:8px;z-index:3;font:800 10px/1 system-ui;letter-spacing:.06em;background:rgba(34,197,94,.92);color:#fff;border-radius:999px;padding:5px 7px}
 .pk a.card.big::after{content:'🔥 POPULAR';position:absolute;right:10px;top:10px;font:800 10px/1 system-ui;letter-spacing:.08em;background:rgba(239,68,68,.9);color:#fff;border-radius:999px;padding:5px 8px}
 </style>
 </head>
@@ -287,6 +288,8 @@ a.card:hover::before{ opacity:1; } a.card:hover{ transform:translateY(-4px) scal
     <a class="card" href="oss/tomgames/snake/index.html" style="--c:linear-gradient(135deg,#4d7c0f,#1a2e05)" data-cat="free" data-name="retro snake old-phone-style snake with levels open source free classic"><span class="bg">🐍</span><em class="new">NEW</em><span class="ico">🐍</span><span class="tx"><b>Retro Snake</b><small>Old-phone-style snake with levels · by Tomás Malbrán</small></span></a>
     <a class="card" href="oss/tomgames/spider/index.html" style="--c:linear-gradient(135deg,#be185d,#500724)" data-cat="free" data-name="spider solitaire the card game: build suits from king to ace open source free classic"><span class="bg">🕷️</span><em class="new">NEW</em><span class="ico">🕷️</span><span class="tx"><b>Spider Solitaire</b><small>The card game: build suits from King to Ace · by Tomás Malbrán</small></span></a>
     <a class="card" href="free-games" style="--c:linear-gradient(135deg,#334155,#0f172a)" data-cat="free" data-name="credits licenses open source free classics"><span class="bg">📜</span><span class="ico">📜</span><span class="tx"><b>Credits</b><small>Who made the Free Classics, and their licenses</small></span></a>
+    <a class="card" href="packs" style="--c:linear-gradient(135deg,#f59e0b,#be123c)" data-cat="skill" data-name="pack rip packs opener cards collection sports players hockey football basketball baseball soccer"><span class="bg">🎴</span><em class="new">NEW</em><span class="ico">🎴</span><span class="tx"><b>Pack Rip</b><small>Open sports packs, pull real stars and legends</small></span></a>
+    <a class="card" href="elements" style="--c:linear-gradient(135deg,#7c3aed,#0f172a)" data-cat="puzzle" data-name="element lab alchemy combine mix discover elements crafting"><span class="bg">🧪</span><em class="new">NEW</em><span class="ico">🧪</span><span class="tx"><b>Element Lab</b><small>Mix water, fire, earth and air to discover 147 things</small></span></a>
     <a class="card" href="deepdive" style="--c:linear-gradient(135deg,#0369a1,#0f172a)" data-cat="puzzle" data-name="deep dive trivia quiz ocean submarine daily water krill"><span class="bg">🌊</span><em class="new">NEW</em><span class="ico">🤿</span><span class="tx"><b>Deep Dive</b><small>Daily trivia · every right answer sinks your sub deeper</small></span></a>
     <a class="card" href="snake" style="--c:linear-gradient(135deg,#15803d,#ca8a04)" data-cat="puzzle" data-name="snake classic arena io worm"><span class="bg">🐍</span><em class="new">NEW</em><span class="ico">🐍</span><span class="tx"><b>Snake Arena</b><small>Snake · classic, maze with portals, and an arena vs 3 CPU snakes</small></span></a>
     <a class="card" href="blockverse" style="--c:linear-gradient(135deg,#3f9f46,#6e4e2c)" data-cat="skill" data-name="blockverse voxel sandbox blocks build mine craft creative world survival cube 3d explore minecraft"><span class="bg">🟩</span><em class="new">NEW</em><span class="ico">🟩</span><span class="tx"><b>Blockverse</b><small>Open voxel world · mine and build with 20 block types, trees, water, caves and a day-night sky</small></span><span class="on"></span></a>
@@ -380,6 +383,7 @@ a.card:hover::before{ opacity:1; } a.card:hover{ transform:translateY(-4px) scal
 <script src="online.js"></script>
 <script src="site.js"></script>
 <script src="daily.js"></script>
+<script src="games-meta.js"></script>
 <script src="chat.js"></script>
 <script>
 const esc=s=>String(s==null?'':s).replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
@@ -399,7 +403,13 @@ pool.remove();
 /* order the wall by popularity: plays in the last 14 days (server), then a starter list; the top 8 are big tiles */
 { const PK=document.getElementById('pk'), BASE=['city','blockverse','br','f1','hockey','kart','drift','football','basketball','soccer','monster','flight','obby','poker','chess','deepdive','fishing','moto','nascar','golf','skate','ufc'];
   PK.querySelectorAll('.cv svg').forEach(v=>v.setAttribute('preserveAspectRatio','xMidYMid slice'));
-  const lay=cnt=>{ const arr=[...PK.querySelectorAll('a.card')], sc=a=>{ const g=a.getAttribute('href'), i=BASE.indexOf(g); return ((cnt&&cnt[g])||0)*100+(i>=0?BASE.length-i:0); };
+  /* score = 50% popularity (plays in 14 days) + 25% how new it is + 25% how much work went into it (code size of our own games) */
+  const META=window.GAMEMETA||{}, NOW=Date.now()/1000, ownKb=Math.max(1,...Object.values(META).filter(m=>!m[2]).map(m=>m[1]));
+  const lay=cnt=>{ const arr=[...PK.querySelectorAll('a.card')], maxP=Math.max(1,...arr.map(a=>(cnt&&cnt[a.getAttribute('href')])||0));
+    const sc=a=>{ const g=a.getAttribute('href'), m=META[g], i=BASE.indexOf(g), plays=(cnt&&cnt[g])||0;
+      const pop=cnt?Math.log1p(plays)/Math.log1p(maxP):(i>=0?1-i/BASE.length:0), age=m?(NOW-m[0])/86400:365, fresh=Math.exp(-age/14), work=m?(m[2]?.25:Math.log1p(m[1])/Math.log1p(ownKb)):.3;
+      return .5*pop+.25*fresh+.25*work; };
+    arr.forEach(a=>{ const m=META[a.getAttribute('href')]; a.classList.toggle('fresh',!!m&&NOW-m[0]<7*86400); });
     arr.sort((x,y)=>sc(y)-sc(x)); arr.forEach((a,i)=>{ a.classList.toggle('big',i<8); PK.appendChild(a); }); };
   let old=null; try{ old=JSON.parse(localStorage.getItem('rrPop')||'null'); }catch(e){} lay(old&&old.g);
   const SRV=(()=>{ try{ if(localStorage.getItem('rrSrv')==='relay') return location.origin+'/rr'; }catch(e){} return 'https://rink-rivals-rooms.mitchellchad2026.workers.dev'; })();

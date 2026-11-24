@@ -1,0 +1,103 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
+<title>Arcade Rivals - Element Lab</title>
+<link href="https://fonts.googleapis.com/css2?family=Fredoka:wght@500;600;700&display=swap" rel="stylesheet">
+<style>
+:root{--bg:#0d1020;--panel:#151a33;--line:#2a3260;--tx:#eef2ff;--mut:#9aa4d6;--acc:#a78bfa;--gold:#fde047}
+*{box-sizing:border-box}html,body{margin:0;height:100%;background:var(--bg);color:var(--tx);font-family:Fredoka,system-ui,sans-serif;overflow:hidden;user-select:none;-webkit-user-select:none}
+#app{display:grid;grid-template-columns:1fr 340px;height:100%}
+@media(max-width:760px){#app{grid-template-columns:1fr;grid-template-rows:1fr 42%}}
+#board{position:relative;overflow:hidden;background:radial-gradient(circle at 30% 20%,#1d2450,#0d1020 70%);touch-action:none}
+#board::before{content:'';position:absolute;inset:0;background-image:radial-gradient(rgba(255,255,255,.06) 1px,transparent 1px);background-size:26px 26px}
+#side{background:var(--panel);border-left:1px solid var(--line);display:flex;flex-direction:column;min-height:0}
+.top{display:flex;align-items:center;gap:8px;padding:10px 12px;border-bottom:1px solid var(--line)}
+.top b{font-size:22px}.top .n{margin-left:auto;color:var(--gold);font-weight:700}
+#q{margin:10px 12px 6px;padding:9px 12px;border-radius:12px;border:1px solid var(--line);background:#0e1330;color:var(--tx);font:500 15px Fredoka}
+#lib{flex:1;overflow:auto;padding:6px 10px 12px;display:grid;grid-template-columns:repeat(auto-fill,minmax(92px,1fr));gap:7px;align-content:start}
+.el{display:flex;flex-direction:column;align-items:center;gap:2px;padding:7px 4px;border-radius:12px;background:#1b2147;border:1px solid var(--line);cursor:grab;font-size:12.5px;text-align:center;line-height:1.1}
+.el i{font-style:normal;font-size:28px;line-height:1}
+.el:hover{border-color:var(--acc);background:#232a5c}
+.el.fin{border-color:#f59e0b}
+.tok{position:absolute;display:flex;flex-direction:column;align-items:center;width:84px;padding:6px 2px;border-radius:14px;background:rgba(27,33,71,.92);border:1px solid var(--line);cursor:grab;font-size:12.5px;text-align:center;line-height:1.1;box-shadow:0 8px 20px rgba(0,0,0,.35);transition:transform .12s}
+.tok i{font-style:normal;font-size:34px;line-height:1.05}
+.tok.drag{cursor:grabbing;transform:scale(1.12);z-index:50;border-color:var(--acc)}
+.tok.over{border-color:var(--gold);box-shadow:0 0 0 3px rgba(253,224,71,.45)}
+.tok.pop{animation:pop .45s}
+@keyframes pop{0%{transform:scale(.3)}60%{transform:scale(1.25)}100%{transform:scale(1)}}
+.tok.no{animation:no .35s}@keyframes no{25%{transform:translateX(-6px)}75%{transform:translateX(6px)}}
+.tools{position:absolute;right:12px;bottom:12px;display:flex;gap:8px;z-index:60}
+.btn{border:1px solid var(--line);background:#1b2147;color:var(--tx);border-radius:12px;padding:9px 13px;font:600 14px Fredoka;cursor:pointer}
+.btn:hover{border-color:var(--acc)}
+#toast{position:absolute;left:50%;top:18px;transform:translateX(-50%);background:rgba(10,14,35,.92);border:1px solid var(--gold);color:var(--gold);padding:10px 18px;border-radius:999px;font-size:18px;font-weight:700;opacity:0;transition:opacity .25s;pointer-events:none;z-index:80;white-space:nowrap}
+#help{position:absolute;inset:0;display:flex;align-items:center;justify-content:center;pointer-events:none;color:var(--mut);text-align:center;font-size:18px;line-height:1.5;padding:30px}
+#back{position:fixed;left:10px;top:10px;z-index:90;background:rgba(15,23,42,.88);color:#fff;border:1px solid rgba(255,255,255,.25);border-radius:999px;padding:7px 13px;font:700 13px system-ui;text-decoration:none}
+</style>
+</head>
+<body>
+<a id="back" href="./">← Arcade</a>
+<div id="app">
+  <div id="board"><div id="help">Drag an element from the list onto the board,<br>then drop one element on top of another to mix them.<br><small>Double-click an element to copy it · tap two on a phone</small></div>
+    <div class="tools"><button class="btn" id="clear">🧹 Clear board</button><button class="btn" id="hint">💡 Hint</button><button class="btn" id="reset">↺ New game</button></div><div id="toast"></div></div>
+  <div id="side"><div class="top"><b>🧪 Element Lab</b><span class="n" id="count"></span></div><input id="q" placeholder="Search your elements…"><div id="lib"></div></div>
+</div>
+<script>
+/* Element Lab: an original combine-to-discover game for Arcade Rivals. Start with water, fire, earth and air; mix two things to find something new. */
+(function(){
+const E={water:'💧 Water',fire:'🔥 Fire',earth:'🌍 Earth',air:'💨 Air',steam:'♨️ Steam',lava:'🌋 Lava',mud:'🟤 Mud',dust:'🌫️ Dust',energy:'⚡ Energy',stone:'🪨 Stone',sea:'🌊 Sea',rain:'🌧️ Rain',cloud:'☁️ Cloud',pressure:'🗜️ Pressure',smoke:'💨 Smoke',sand:'⏳ Sand',glass:'🪟 Glass',metal:'🔩 Metal',plant:'🌱 Plant',life:'🧬 Life',tree:'🌳 Tree',wood:'🪵 Wood',forest:'🌲 Forest',swamp:'🐸 Swamp',bacteria:'🦠 Bacteria',fish:'🐟 Fish',bird:'🐦 Bird',egg:'🥚 Egg',animal:'🐾 Animal',human:'🧍 Human',tool:'🔨 Tool',wheel:'🛞 Wheel',car:'🚗 Car',boat:'⛵ Boat',plane:'✈️ Plane',rocket:'🚀 Rocket',space:'🌌 Space',moon:'🌙 Moon',sun:'☀️ Sun',star:'⭐ Star',planet:'🪐 Planet',ice:'🧊 Ice',snow:'❄️ Snow',snowman:'⛄ Snowman',cold:'🥶 Cold',wind:'🌬️ Wind',storm:'⛈️ Storm',lightning:'🌩️ Lightning',electricity:'🔌 Electricity',light:'💡 Light',computer:'💻 Computer',internet:'🌐 Internet',game:'🎮 Video game',robot:'🤖 Robot',mountain:'⛰️ Mountain',volcano:'🌋 Volcano',island:'🏝️ Island',beach:'🏖️ Beach',desert:'🏜️ Desert',cactus:'🌵 Cactus',flower:'🌸 Flower',bee:'🐝 Bee',honey:'🍯 Honey',fruit:'🍎 Fruit',juice:'🧃 Juice',bread:'🍞 Bread',flour:'🌾 Wheat',farm:'🚜 Farm',cow:'🐄 Cow',milk:'🥛 Milk',cheese:'🧀 Cheese',pizza:'🍕 Pizza',chicken:'🐔 Chicken',dinosaur:'🦖 Dinosaur',fossil:'🦴 Fossil',time:'⏰ Time',clock:'🕰️ Clock',house:'🏠 House',city:'🏙️ City',brick:'🧱 Brick',wall:'🧱 Wall',castle:'🏰 Castle',king:'👑 King',dragon:'🐉 Dragon',dog:'🐶 Dog',cat:'🐱 Cat',wolf:'🐺 Wolf',horse:'🐴 Horse',unicorn:'🦄 Unicorn',rainbow:'🌈 Rainbow',music:'🎵 Music',guitar:'🎸 Guitar',ball:'⚽ Ball',sport:'🏅 Sport',hockey:'🏒 Hockey',rink:'⛸️ Ice rink',trophy:'🏆 Trophy',paper:'📄 Paper',book:'📖 Book',school:'🏫 School',idea:'💭 Idea',coin:'🪙 Coin',bank:'🏦 Bank',gold:'🥇 Gold',diamond:'💎 Diamond',sword:'🗡️ Sword',hero:'🦸 Hero',shark:'🦈 Shark',whale:'🐋 Whale',octopus:'🐙 Octopus',turtle:'🐢 Turtle',penguin:'🐧 Penguin',frog:'🐸 Frog',butterfly:'🦋 Butterfly',caterpillar:'🐛 Caterpillar',spider:'🕷️ Spider',web:'🕸️ Web',oil:'🛢️ Oil',plastic:'🧴 Plastic',toy:'🧸 Toy',cookie:'🍪 Cookie',sugar:'🍬 Sugar',cake:'🎂 Cake',party:'🎉 Party',firework:'🎆 Firework',gun:'',train:'🚂 Train',rail:'🛤️ Rails',bridge:'🌉 Bridge',river:'🏞️ River',lake:'💦 Lake',waterfall:'🏞️ Waterfall',hurricane:'🌀 Hurricane',tornado:'🌪️ Tornado',earthquake:'🫨 Earthquake',map:'🗺️ Map',pirate:'🏴‍☠️ Pirate',treasure:'💰 Treasure',ghost:'👻 Ghost',alien:'👽 Alien',ufo:'🛸 UFO',astronaut:'👨‍🚀 Astronaut',telescope:'🔭 Telescope',camera:'📷 Camera',phone:'📱 Phone',video:'📹 Video',youtube:'▶️ Video star',arcade:'🕹️ Arcade'};
+delete E.gun;
+const BASE=['water','fire','earth','air'];
+const R=`water+fire=steam fire+earth=lava water+earth=mud earth+air=dust fire+air=energy lava+water=stone water+water=sea air+water=rain steam+air=cloud air+air=pressure earth+pressure=stone fire+wood=smoke stone+air=sand fire+sand=glass stone+fire=metal rain+earth=plant sea+energy=life mud+life=bacteria plant+plant=tree tree+tool=wood tree+tree=forest mud+plant=swamp life+sea=fish life+air=bird bird+bird=egg life+earth=animal animal+tool=human life+stone=egg metal+stone=tool human+stone=tool tool+wood=wheel wheel+metal=car wood+sea=boat metal+bird=plane plane+fire=rocket rocket+air=space space+stone=moon space+fire=sun sun+space=star space+earth=planet water+cold=ice ice+air=snow snow+snow=snowman snow+human=snowman wind+mountain=cold ice+fire=water air+energy=wind wind+cloud=storm storm+energy=lightning lightning+metal=electricity electricity+glass=light electricity+metal=computer computer+computer=internet computer+energy=game computer+human=robot earth+earth=mountain mountain+lava=volcano sea+earth=island island+sand=beach sand+sand=desert desert+plant=cactus plant+sun=flower flower+bird=bee bee+flower=honey tree+flower=fruit fruit+pressure=juice flour+fire=bread plant+earth=flour flour+human=farm farm+animal=cow cow+human=milk milk+time=cheese bread+cheese=pizza farm+bird=chicken animal+time=dinosaur dinosaur+earth=fossil sand+glass=time time+metal=clock wood+human=house house+house=city mud+fire=brick brick+brick=wall wall+wall=castle castle+human=king lava+bird=dragon dinosaur+fire=dragon animal+human=dog dog+tree=cat dog+forest=wolf animal+mountain=horse horse+rainbow=unicorn rain+sun=rainbow air+wood=music music+wood=guitar human+energy=sport sport+air=ball sport+ball=hockey hockey+ice=rink sport+gold=trophy wood+water=paper paper+paper=book book+house=school human+light=idea metal+gold=coin coin+house=bank metal+sun=gold stone+pressure=diamond metal+tool=sword human+sword=hero fish+sword=shark fish+sea=whale fish+water=octopus animal+sea=turtle bird+ice=penguin swamp+animal=frog caterpillar+time=butterfly plant+life=caterpillar animal+bacteria=spider spider+tool=web fossil+pressure=oil oil+pressure=plastic plastic+human=toy flour+sugar=cookie plant+energy=sugar cookie+milk=cake cake+human=party party+fire=firework metal+wood=rail rail+car=train wood+river=bridge water+mountain=river river+river=lake river+mountain=waterfall storm+sea=hurricane wind+wind=tornado earth+energy=earthquake paper+earth=map boat+human=pirate pirate+map=treasure cloud+human=ghost life+space=alien alien+plane=ufo human+space=astronaut glass+star=telescope light+glass=camera computer+music=phone camera+time=video video+internet=youtube game+game=arcade hockey+game=arcade snowman+fire=water moon+sea=island`.split(' ');
+/* recipes whose parts don't exist get dropped (keeps the list honest) */
+const REC={}; for(const r of R){ const [ab,c]=r.split('='), [a,b]=ab.split('+'); if(!E[a]||!E[b]||!E[c]) continue; REC[[a,b].sort().join('+')]=c; }
+const FINAL=new Set(Object.keys(E).filter(k=>!Object.keys(REC).some(x=>x.split('+').includes(k))));
+const ALL=new Set([...BASE,...Object.values(REC)]);
+const $=s=>document.querySelector(s), board=$('#board');
+let have=new Set(BASE); try{ const v=JSON.parse(localStorage.getItem('elab')||'null'); if(Array.isArray(v)) v.forEach(x=>E[x]&&have.add(x)); }catch(e){}
+const save=()=>{ try{ localStorage.setItem('elab',JSON.stringify([...have])); }catch(e){} };
+const ico=k=>E[k].split(' ')[0], nm=k=>E[k].split(' ').slice(1).join(' ');
+function lib(){ const q=$('#q').value.trim().toLowerCase(); const l=[...have].sort((a,b)=>nm(a).localeCompare(nm(b))).filter(k=>!q||nm(k).toLowerCase().includes(q));
+  $('#lib').innerHTML=l.map(k=>`<div class="el${FINAL.has(k)?' fin':''}" data-k="${k}"><i>${ico(k)}</i>${nm(k)}</div>`).join('');
+  $('#count').textContent=have.size+' / '+ALL.size; $('#help').style.display=board.querySelector('.tok')?'none':'flex'; }
+function toast(t){ const e=$('#toast'); e.textContent=t; e.style.opacity=1; clearTimeout(toast.t); toast.t=setTimeout(()=>e.style.opacity=0,1600); }
+let AC=null; function snd(f,d){ try{ AC=AC||new (window.AudioContext||window.webkitAudioContext)(); const o=AC.createOscillator(),g=AC.createGain(); o.frequency.value=f; o.type='triangle'; g.gain.setValueAtTime(.1,AC.currentTime); g.gain.exponentialRampToValueAtTime(.001,AC.currentTime+d); o.connect(g); g.connect(AC.destination); o.start(); o.stop(AC.currentTime+d); }catch(e){} }
+function token(k,x,y,anim){ const t=document.createElement('div'); t.className='tok'+(anim?' pop':''); t.dataset.k=k; t.innerHTML=`<i>${ico(k)}</i>${nm(k)}`; const r=board.getBoundingClientRect(); t.style.left=Math.max(4,Math.min(r.width-90,x-42))+'px'; t.style.top=Math.max(4,Math.min(r.height-80,y-34))+'px'; board.appendChild(t); $('#help').style.display='none'; return t; }
+function overlap(a,b){ const p=a.getBoundingClientRect(), q=b.getBoundingClientRect(); return !(p.right<q.left+16||p.left>q.right-16||p.bottom<q.top+16||p.top>q.bottom-16); }
+function mix(a,b){ const k=[a.dataset.k,b.dataset.k].sort().join('+'), c=REC[k];
+  if(!c){ a.classList.remove('no'); void a.offsetWidth; a.classList.add('no'); snd(160,.15); return false; }
+  const x=(parseFloat(a.style.left)+parseFloat(b.style.left))/2+42, y=(parseFloat(a.style.top)+parseFloat(b.style.top))/2+34; a.remove(); b.remove(); token(c,x,y,true);
+  if(!have.has(c)){ have.add(c); save(); lib(); toast('New! '+ico(c)+' '+nm(c)); snd(660,.12); setTimeout(()=>snd(990,.2),110);
+    try{ if(window.RRL) RRL.post('found',have.size,have.size+' elements'); }catch(e){} if(have.size===ALL.size) toast('🏆 You found every element!'); }
+  else snd(440,.1); return true; }
+/* dragging: from the list (makes a token) or a token on the board */
+let drag=null, sel=null;
+function start(e,t,fresh){ e.preventDefault(); const r=board.getBoundingClientRect(); drag={t,dx:fresh?42:e.clientX-r.left-parseFloat(t.style.left),dy:fresh?34:e.clientY-r.top-parseFloat(t.style.top),moved:fresh,sx:e.clientX,sy:e.clientY}; t.classList.add('drag'); }
+$('#lib').addEventListener('pointerdown',e=>{ const el=e.target.closest('.el'); if(!el) return; const r=board.getBoundingClientRect();
+  const inBoard=e.clientX<r.right&&e.clientY<r.bottom&&e.clientX>r.left&&e.clientY>r.top; const x=inBoard?e.clientX-r.left:r.width*(.25+Math.random()*.5), y=inBoard?e.clientY-r.top:r.height*(.25+Math.random()*.5);
+  const t=token(el.dataset.k,x,y,true); start(e,t,true); drag.fromLib=true; });
+board.addEventListener('pointerdown',e=>{ const t=e.target.closest('.tok'); if(!t) return; start(e,t,false); });
+addEventListener('pointermove',e=>{ if(!drag) return; const r=board.getBoundingClientRect(); if(Math.hypot(e.clientX-drag.sx,e.clientY-drag.sy)>5) drag.moved=true;
+  drag.t.style.left=(e.clientX-r.left-drag.dx)+'px'; drag.t.style.top=(e.clientY-r.top-drag.dy)+'px';
+  board.querySelectorAll('.tok').forEach(o=>o.classList.toggle('over',o!==drag.t&&overlap(o,drag.t))); });
+addEventListener('pointerup',e=>{ if(!drag) return; const t=drag.t; t.classList.remove('drag'); const r=board.getBoundingClientRect();
+  if(e.clientX>r.right||e.clientY>r.bottom){ if(!drag.fromLib) t.remove(); else { t.style.left=(r.width*.4)+'px'; t.style.top=(r.height*.4)+'px'; } drag=null; return; }
+  const tgt=[...board.querySelectorAll('.tok')].find(o=>o!==t&&o.classList.contains('over')); board.querySelectorAll('.over').forEach(o=>o.classList.remove('over'));
+  if(tgt) mix(t,tgt);
+  else if(!drag.moved){ /* tap-to-mix for phones: tap one, then another */ if(sel&&sel!==t&&sel.isConnected){ sel.classList.remove('over'); mix(sel,t); sel=null; } else { sel=t; t.classList.add('over'); } }
+  drag=null; lib(); });
+board.addEventListener('dblclick',e=>{ const t=e.target.closest('.tok'); if(t) token(t.dataset.k,parseFloat(t.style.left)+60,parseFloat(t.style.top)+60,true); });
+$('#q').addEventListener('input',lib);
+$('#clear').onclick=()=>{ board.querySelectorAll('.tok').forEach(t=>t.remove()); lib(); };
+$('#reset').onclick=()=>{ if(!confirm('Start over with just the 4 basic elements?')) return; have=new Set(BASE); save(); board.querySelectorAll('.tok').forEach(t=>t.remove()); lib(); };
+$('#hint').onclick=()=>{ const opts=Object.entries(REC).filter(([k,c])=>!have.has(c)&&k.split('+').every(x=>have.has(x))); if(!opts.length){ toast('No hints left!'); return; } const [k,c]=opts[Math.floor(Math.random()*opts.length)], [a,b]=k.split('+'); toast('💡 Try mixing '+ico(a)+' '+nm(a)+' with something…'); };
+lib(); BASE.forEach((k,i)=>{ const r=board.getBoundingClientRect(); token(k,r.width*(.25+.17*i),r.height*.45,true); });
+try{ window.RRL&&RRL.boards('elements',[{id:'found',name:'Elements found',mode:'max'}]); }catch(e){}
+})();
+</script>
+<script src="online.js"></script>
+<script src="site.js"></script>
+<script src="chat.js"></script>
+</body>
+</html>
