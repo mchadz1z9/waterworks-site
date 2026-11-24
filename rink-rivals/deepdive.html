@@ -1,0 +1,400 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
+<title>Arcade Rivals - Deep Dive</title>
+<link href="https://fonts.googleapis.com/css2?family=Fredoka:wght@500;600;700&display=swap" rel="stylesheet">
+<style>
+:root{--tx:#eaf6ff;--mut:#9cc3dd;--acc:#22d3ee;--gold:#fde047;--ok:#4ade80;--bad:#fb7185;--card:rgba(6,22,40,.78);--line:rgba(125,211,252,.28)}
+*{box-sizing:border-box}html,body{margin:0;height:100%;background:#03111f;color:var(--tx);font-family:Fredoka,system-ui,sans-serif;overflow:hidden}
+#sea{position:fixed;inset:0;width:100%;height:100%;display:block}
+#ui{position:fixed;inset:0;display:flex;flex-direction:column;align-items:center;pointer-events:none;padding:62px 16px 16px}
+#ui>*{pointer-events:auto}
+.top{display:flex;gap:10px;align-items:center;justify-content:center;flex-wrap:wrap;margin-bottom:10px}
+.pill{background:var(--card);border:1px solid var(--line);border-radius:999px;padding:6px 14px;font-weight:600;font-size:15px;backdrop-filter:blur(4px)}
+.pill b{color:var(--gold);font-size:20px}
+.card{background:var(--card);border:1px solid var(--line);border-radius:20px;padding:20px;max-width:620px;width:100%;backdrop-filter:blur(6px);box-shadow:0 18px 50px rgba(0,0,0,.45)}
+h1{margin:0 0 4px;font-size:44px;letter-spacing:.5px;text-align:center;color:#a5f3fc;text-shadow:0 4px 22px rgba(34,211,238,.5)}
+.sub{color:var(--mut);text-align:center;margin:0 0 16px;font-size:17px;line-height:1.35}
+.btn{display:block;width:100%;border:0;border-radius:14px;padding:14px 16px;font:600 19px Fredoka,system-ui;cursor:pointer;color:#032030;background:linear-gradient(180deg,#67e8f9,#06b6d4);margin-top:10px;transition:transform .1s,filter .15s}
+.btn:hover{filter:brightness(1.08)}.btn:active{transform:translateY(1px)}
+.btn.g{background:rgba(255,255,255,.08);color:var(--tx);border:1px solid var(--line)}
+.btn:disabled{opacity:.5;cursor:default}
+.q{font-size:23px;font-weight:600;line-height:1.3;margin:4px 0 14px;text-align:center}
+.qn{color:var(--mut);font-size:14px;text-align:center;letter-spacing:1px;text-transform:uppercase}
+.opts{display:grid;grid-template-columns:1fr 1fr;gap:10px}
+@media(max-width:560px){.opts{grid-template-columns:1fr}h1{font-size:34px}.q{font-size:20px}}
+.opt{border:1px solid var(--line);background:rgba(255,255,255,.06);color:var(--tx);border-radius:14px;padding:14px;font:600 18px Fredoka,system-ui;cursor:pointer;text-align:left;transition:background .15s,transform .1s}
+.opt:hover:not(:disabled){background:rgba(34,211,238,.18)}
+.opt.ok{background:rgba(74,222,128,.32);border-color:#4ade80}.opt.no{background:rgba(251,113,133,.3);border-color:#fb7185}
+.opt kbd{display:inline-block;min-width:22px;text-align:center;margin-right:8px;color:var(--mut);font:600 13px system-ui;border:1px solid var(--line);border-radius:6px;padding:1px 4px}
+.timer{height:8px;border-radius:99px;background:rgba(255,255,255,.1);overflow:hidden;margin:0 0 14px}
+.timer i{display:block;height:100%;background:linear-gradient(90deg,#4ade80,#fde047,#fb7185);transform-origin:left}
+.fact{margin-top:12px;color:#bae6fd;font-size:15px;text-align:center;min-height:20px}
+.big{font-size:64px;font-weight:700;text-align:center;color:var(--gold);line-height:1;margin:6px 0}
+.row{display:flex;gap:10px}.row .btn{flex:1}
+.zone{text-align:center;color:#a5f3fc;font-size:18px;margin-bottom:6px}
+.tip{color:var(--mut);font-size:14px;text-align:center;margin-top:10px}
+.hide{display:none!important}
+#pop{position:fixed;left:50%;top:42%;transform:translate(-50%,-50%);font:700 40px Fredoka;color:var(--gold);text-shadow:0 4px 18px rgba(0,0,0,.6);pointer-events:none;opacity:0;transition:opacity .2s}
+</style>
+</head>
+<body>
+<canvas id="sea"></canvas>
+<div id="ui">
+  <div class="top hide" id="hud"><span class="pill">Depth <b id="hDepth">0</b> m</span><span class="pill" id="hAir">🫧🫧🫧</span><span class="pill" id="hStreak">Streak 0</span><span class="pill" id="hQ">1 / 12</span></div>
+  <div class="card" id="scr"></div>
+</div>
+<div id="pop"></div>
+<script>
+/* Deep Dive: an original deep-sea trivia game for Arcade Rivals.
+   Every right answer sinks your sub deeper (10 m, plus speed and streak bonuses). Wrong answers or running out of time cost an air tank.
+   The Daily Dive is the same 12 questions for everyone that day; Free Dive goes until your air runs out. */
+(function(){
+const $=s=>document.querySelector(s);
+/* ---------- questions: [question, right answer, wrong, wrong, wrong, fun fact] ---------- */
+const QB=[
+['Which ocean is the largest?','Pacific','Atlantic','Indian','Arctic','The Pacific covers about a third of Earth’s surface.'],
+['What is the deepest known point in the ocean?','Challenger Deep','Puerto Rico Trench','Java Trench','Tonga Trench','It’s in the Mariana Trench, almost 11,000 m down.'],
+['What do baleen whales mostly eat?','Krill and tiny fish','Sharks','Seaweed','Squid only','A blue whale can eat around 4 tonnes of krill a day.'],
+['What is the largest animal that has ever lived?','Blue whale','Megalodon','Argentinosaurus','Whale shark','Blue whales can be about 30 m long.'],
+['How many arms does an octopus have?','8','6','10','12','Octopuses also have three hearts!'],
+['How many hearts does an octopus have?','3','1','2','4','Two pump blood to the gills, one to the rest of the body.'],
+['What is the largest fish in the sea?','Whale shark','Great white shark','Blue whale','Manta ray','Whale sharks eat plankton and are gentle giants.'],
+['Which animal has the biggest eyes in the world?','Colossal squid','Blue whale','Ostrich','Owl','Its eyes are about the size of a dinner plate.'],
+['What do you call a group of fish swimming together?','A school','A pod','A herd','A pride','Fish in a school move together to stay safe.'],
+['What do you call a group of dolphins?','A pod','A school','A flock','A pack','Dolphins in a pod talk with clicks and whistles.'],
+['Which sea creature has no brain, no heart and no bones?','Jellyfish','Starfish','Crab','Seahorse','Jellyfish have been around for over 500 million years.'],
+['In seahorses, who carries the babies?','The dad','The mom','Both','Neither','Male seahorses carry eggs in a pouch.'],
+['What gas do fish take from the water with their gills?','Oxygen','Carbon dioxide','Helium','Nitrogen','Gills pull dissolved oxygen out of the water.'],
+['Coral reefs are made by tiny animals called...','Polyps','Plankton','Krill','Barnacles','Polyps build hard skeletons that grow into reefs.'],
+['What is the largest coral reef system in the world?','Great Barrier Reef','Belize Barrier Reef','Red Sea Reef','Florida Reef','It’s off Australia and can be seen from space.'],
+['Which deep-sea fish uses a glowing lure to catch prey?','Anglerfish','Clownfish','Tuna','Salmon','The glow comes from bacteria living in the lure.'],
+['Light made by living things is called...','Bioluminescence','Photosynthesis','Reflection','Static','Most deep-sea animals can make their own light.'],
+['About how much of Earth’s surface is covered by ocean?','About 71%','About 40%','About 55%','About 90%','That’s why Earth is called the Blue Planet.'],
+['Which ocean is the smallest?','Arctic','Indian','Southern','Atlantic','The Arctic Ocean is mostly covered by sea ice.'],
+['What is the saltiest of these bodies of water?','Dead Sea','Pacific Ocean','Lake Superior','Mediterranean Sea','The Dead Sea is so salty you float easily.'],
+['A sea turtle’s shell is called a...','Carapace','Scute plate','Fin','Exoskeleton','Sea turtles can’t pull their heads into their shells.'],
+['Which of these is a mammal?','Dolphin','Shark','Tuna','Stingray','Dolphins breathe air through a blowhole.'],
+['What does a starfish do if it loses an arm?','Grows it back','Dies','Swims faster','Changes color','Some sea stars can regrow almost the whole body.'],
+['Which animal is the fastest fish?','Sailfish','Goldfish','Clownfish','Pufferfish','Sailfish can burst to around 100 km/h.'],
+['What does a pufferfish do when scared?','Puffs up with water','Changes color','Hides in sand','Squirts ink','Many pufferfish are also poisonous.'],
+['Which sea animal squirts ink to escape?','Squid','Crab','Seal','Sea urchin','The ink cloud confuses predators.'],
+['Clownfish live safely among which stinging animal?','Sea anemone','Jellyfish','Fire coral','Sea urchin','A slimy coat protects clownfish from stings.'],
+['What is the name of the layer of the ocean with no sunlight?','Midnight zone','Sunlight zone','Splash zone','Tide zone','Below about 1,000 m it’s completely dark.'],
+['What causes ocean tides?','The Moon’s gravity','Wind','Whales','Earthquakes','The Sun helps too, but the Moon matters most.'],
+['How long does it take light from the Sun to reach Earth?','About 8 minutes','About 8 seconds','About 1 hour','About 1 day','Sunlight you see left the Sun 8 minutes ago.'],
+['Which planet is known as the Red Planet?','Mars','Jupiter','Venus','Mercury','Rusty iron in the dust makes Mars red.'],
+['Which is the largest planet in our solar system?','Jupiter','Saturn','Neptune','Earth','More than 1,300 Earths could fit inside Jupiter.'],
+['Which planet has the most famous rings?','Saturn','Mars','Venus','Mercury','The rings are made of ice and rock.'],
+['What is the closest star to Earth?','The Sun','Polaris','Sirius','Alpha Centauri','The next closest is Proxima Centauri.'],
+['Who was the first person to walk on the Moon?','Neil Armstrong','Buzz Aldrin','Yuri Gagarin','Sally Ride','It happened in July 1969.'],
+['What is the hottest planet in our solar system?','Venus','Mercury','Mars','Jupiter','Thick clouds trap heat on Venus.'],
+['How many planets are in our solar system?','8','7','9','10','Pluto was reclassified as a dwarf planet in 2006.'],
+['What is frozen water called?','Ice','Steam','Dew','Mist','Water freezes at 0 °C (32 °F).'],
+['At what temperature does water boil at sea level?','100 °C','50 °C','80 °C','150 °C','That’s 212 °F.'],
+['What gas do plants take in from the air?','Carbon dioxide','Oxygen','Helium','Hydrogen','Plants give back oxygen that we breathe.'],
+['What is the center of an atom called?','Nucleus','Shell','Core','Crust','Protons and neutrons live in the nucleus.'],
+['What force pulls things toward the ground?','Gravity','Magnetism','Friction','Wind','Gravity also keeps the Moon orbiting Earth.'],
+['What is the hardest natural material?','Diamond','Gold','Iron','Quartz','Diamonds are made of carbon squeezed deep underground.'],
+['Which organ pumps blood around your body?','Heart','Lungs','Liver','Brain','An adult heart beats about 100,000 times a day.'],
+['How many bones are in an adult human body?','206','106','300','156','Babies are born with around 300 that fuse together.'],
+['What is the largest organ of the human body?','Skin','Liver','Heart','Lungs','Your skin is constantly renewing itself.'],
+['Which part of the body helps you breathe?','Lungs','Stomach','Kidneys','Heart','You breathe around 20,000 times a day.'],
+['What color do you get by mixing blue and yellow?','Green','Purple','Orange','Brown','Blue and red make purple.'],
+['How many colors are in a rainbow?','7','5','6','9','Red, orange, yellow, green, blue, indigo, violet.'],
+['What is the tallest animal in the world?','Giraffe','Elephant','Moose','Camel','A giraffe’s neck has 7 bones, same as ours.'],
+['What is the fastest land animal?','Cheetah','Lion','Horse','Pronghorn','Cheetahs can sprint about 110 km/h.'],
+['What is a baby kangaroo called?','Joey','Cub','Kit','Calf','Joeys live in the mother’s pouch.'],
+['What is a baby frog called?','Tadpole','Froglet only','Pup','Larva fish','Tadpoles breathe with gills at first.'],
+['What do bees make?','Honey','Milk','Silk','Wax paper','Bees also make beeswax for their combs.'],
+['Which bird can fly backwards?','Hummingbird','Eagle','Penguin','Owl','Hummingbirds can hover like tiny helicopters.'],
+['Which bird cannot fly but is a great swimmer?','Penguin','Puffin','Pelican','Seagull','Penguins “fly” underwater with their flippers.'],
+['How many legs does a spider have?','8','6','10','12','Insects have 6 legs, so spiders aren’t insects.'],
+['How many legs does an insect have?','6','8','4','10','Insects also have three body parts.'],
+['What is the largest land animal?','African elephant','Rhino','Hippo','Giraffe','Elephants can weigh over 6 tonnes.'],
+['Which animal is known as the King of the Jungle?','Lion','Tiger','Gorilla','Elephant','Lions actually live mostly on grasslands.'],
+['Which mammal can truly fly?','Bat','Flying squirrel','Sugar glider','Flying lemur','The others only glide.'],
+['What do pandas mostly eat?','Bamboo','Fish','Berries','Insects','A panda can eat for 12 hours a day.'],
+['Which animal sleeps standing up?','Horse','Dog','Cat','Rabbit','Horses lock their legs so they don’t fall over.'],
+['What is the largest continent?','Asia','Africa','North America','Europe','Asia has more than half the world’s people.'],
+['Which is the longest river in Africa?','Nile','Congo','Niger','Zambezi','The Nile flows north into the Mediterranean.'],
+['What is the capital of Canada?','Ottawa','Toronto','Vancouver','Montreal','Ottawa is in the province of Ontario.'],
+['What is the capital of France?','Paris','Lyon','Marseille','Nice','The Eiffel Tower opened in 1889.'],
+['What is the capital of Japan?','Tokyo','Kyoto','Osaka','Seoul','Tokyo is one of the biggest cities on Earth.'],
+['What is the capital of Australia?','Canberra','Sydney','Melbourne','Perth','Canberra was built to be the capital.'],
+['What is the capital of the United States?','Washington, D.C.','New York City','Philadelphia','Boston','D.C. stands for District of Columbia.'],
+['Which country is shaped like a boot?','Italy','Spain','Greece','Portugal','Italy kicks a “ball”: the island of Sicily.'],
+['What is the tallest mountain above sea level?','Mount Everest','K2','Kilimanjaro','Denali','Everest is about 8,849 m tall.'],
+['What is the largest desert in the world?','Antarctica','Sahara','Gobi','Arabian','A desert is any place with very little rain or snow.'],
+['What is the largest hot desert?','Sahara','Kalahari','Mojave','Gobi','The Sahara is about the size of the USA.'],
+['Which country has the most people?','India','USA','Russia','Brazil','India passed China in 2023.'],
+['On which continent is Egypt?','Africa','Asia','Europe','South America','Egypt’s pyramids are over 4,000 years old.'],
+['Which is the longest river in South America?','Amazon','Paraná','Orinoco','Magdalena','The Amazon carries more water than any other river.'],
+['How many continents are there?','7','5','6','8','Africa, Antarctica, Asia, Australia, Europe, N. and S. America.'],
+['How many players are on the ice for one hockey team (normally)?','6','5','7','11','5 skaters plus a goalie.'],
+['How many players does a soccer team have on the field?','11','9','10','12','Including the goalkeeper.'],
+['How many points is a touchdown worth in American football?','6','3','7','2','The extra point can make it 7.'],
+['How many points is a three-pointer worth in basketball?','3','2','4','1','The NBA line is about 7.24 m from the hoop.'],
+['In tennis, what is a score of zero called?','Love','Nil','Duck','Zip','Nobody knows for sure where “love” came from.'],
+['How many holes are in a standard round of golf?','18','9','12','20','A par-72 course is common.'],
+['What sport uses a puck?','Hockey','Lacrosse','Polo','Curling','A hockey puck is frozen before games so it slides better.'],
+['How often are the Summer Olympics held?','Every 4 years','Every 2 years','Every year','Every 5 years','The Winter Olympics are every 4 years too.'],
+['How many rings are on the Olympic flag?','5','4','6','7','They stand for the continents taking part.'],
+['In baseball, how many strikes make an out?','3','2','4','5','Four balls is a walk.'],
+['What is the trophy for the NHL champion called?','Stanley Cup','Lombardi Trophy','Larry O’Brien Trophy','Grey Cup','Each winning player gets a day with the Cup.'],
+['What is the NFL championship game called?','Super Bowl','World Series','Stanley Cup Final','Final Four','It’s one of the most-watched TV events.'],
+['In which sport would you do a slam dunk?','Basketball','Volleyball','Tennis','Baseball','The rim is 10 feet (3.05 m) high.'],
+['How many sides does a hexagon have?','6','5','7','8','Honeycomb cells are hexagons.'],
+['How many sides does an octagon have?','8','6','10','12','A stop sign is an octagon.'],
+['What is 12 × 12?','144','124','132','154','A dozen dozens is called a gross.'],
+['What is 9 × 8?','72','63','81','64','8 × 9 = 72 too.'],
+['What is 15 + 27?','42','32','41','52','42 is also said to be the answer to everything.'],
+['What is half of 250?','125','150','100','115','Half of 25 is 12.5.'],
+['How many minutes are in an hour?','60','100','30','90','And 3,600 seconds.'],
+['How many days are in a leap year?','366','365','364','360','February gets a 29th day.'],
+['What is the next prime number after 7?','11','9','8','10','9 = 3 × 3, so it’s not prime.'],
+['How many degrees are in a right angle?','90','45','180','360','Two right angles make a straight line.'],
+['What is the square root of 81?','9','8','7','27','9 × 9 = 81.'],
+['How many centimetres are in a metre?','100','10','1,000','60','And 1,000 metres make a kilometre.'],
+['Which shape has three sides?','Triangle','Square','Circle','Pentagon','The angles in a triangle add up to 180°.'],
+['Who painted the Mona Lisa?','Leonardo da Vinci','Picasso','Van Gogh','Michelangelo','It hangs in the Louvre in Paris.'],
+['Which instrument has 88 keys?','Piano','Guitar','Violin','Trumpet','52 white keys and 36 black keys.'],
+['How many strings does a standard guitar have?','6','4','5','8','A bass guitar usually has 4.'],
+['What is a word that means the opposite of another word?','Antonym','Synonym','Homonym','Acronym','Hot and cold are antonyms.'],
+['What is a word that means the same as another word?','Synonym','Antonym','Pronoun','Verb','Big and large are synonyms.'],
+['How many letters are in the English alphabet?','26','24','28','30','The most used letter is E.'],
+['What do you call a word that describes a noun?','Adjective','Verb','Adverb','Noun','“Blue” in “blue whale” is an adjective.'],
+['Which is a renewable energy source?','Wind','Coal','Oil','Natural gas','Sun, wind and water power keep on coming.'],
+['What do caterpillars turn into?','Butterflies or moths','Bees','Beetles','Dragonflies','The change is called metamorphosis.'],
+['What is the biggest bone in your body?','Femur (thigh bone)','Skull','Spine','Shin bone','It’s also the strongest bone.'],
+['What is the smallest bone in your body?','Stapes (in the ear)','Pinky toe bone','Finger bone','Tooth','It’s about 3 mm long.'],
+['Which vitamin does sunlight help your body make?','Vitamin D','Vitamin C','Vitamin A','Vitamin K','Vitamin D helps keep bones strong.'],
+['What do we call animals that eat only plants?','Herbivores','Carnivores','Omnivores','Insectivores','Cows, deer and pandas are herbivores.'],
+['What do we call animals that eat plants and meat?','Omnivores','Herbivores','Carnivores','Scavengers','Bears and humans are omnivores.'],
+['Where do polar bears live?','The Arctic','Antarctica','The Amazon','The Sahara','Penguins live at the other end: Antarctica.'],
+['What color is a polar bear’s skin?','Black','White','Pink','Grey','Its fur is see-through and looks white.'],
+['How do dolphins sleep?','Half their brain at a time','Upside down','On the sea floor','They never sleep','One half stays awake to breathe.'],
+['What is a shark’s skeleton made of?','Cartilage','Bone','Shell','Wood-like fiber','Like the bendy part of your ears and nose.'],
+['How many teeth can a shark lose in a lifetime?','Thousands','About 10','None','Exactly 32','New teeth keep rolling forward like a conveyor belt.'],
+['Which animal is known for building dams?','Beaver','Otter','Muskrat','Platypus','Beaver teeth never stop growing.'],
+['Which animal lays the biggest eggs?','Ostrich','Eagle','Chicken','Emu','One ostrich egg equals about 24 chicken eggs.'],
+['Sea otters hold hands while sleeping to...','Not drift apart','Stay warm','Find food','Hide from sharks','A group of resting otters is called a raft.'],
+['What does a hermit crab use as a home?','An empty shell','A coral cave','A sponge','A rock it digs','It moves into bigger shells as it grows.'],
+['Which of these is NOT a fish?','Whale','Tuna','Eel','Seahorse','Whales are mammals and breathe air.'],
+['A narwhal’s long tusk is actually a...','Tooth','Horn','Bone spike','Nose','It can grow over 2.5 m long.'],
+['What is the name of the frozen continent at the South Pole?','Antarctica','Arctica','Greenland','Siberia','It holds about 70% of Earth’s fresh water.'],
+['Which is the biggest island in the world?','Greenland','Australia','Madagascar','Iceland','Australia counts as a continent.'],
+['What is the name of the scientist who explores the ocean?','Oceanographer','Astronomer','Geologist','Botanist','Marine biologists study ocean life.'],
+['What vehicle do scientists use to visit the deep ocean?','Submersible','Hovercraft','Blimp','Jet ski','Only a few have reached the bottom of Challenger Deep.'],
+['As you dive deeper, water pressure...','Increases','Decreases','Stays the same','Disappears','It goes up about 1 atmosphere every 10 m.'],
+['What is the name for a giant ocean wave caused by an earthquake?','Tsunami','Hurricane','Monsoon','Whirlpool','Tsunami means “harbour wave” in Japanese.'],
+['What is the main gas in the air we breathe?','Nitrogen','Oxygen','Carbon dioxide','Helium','Air is about 78% nitrogen.'],
+['What kind of animal is a Komodo dragon?','Lizard','Snake','Dinosaur','Crocodile','It’s the largest lizard alive.'],
+['Which dinosaur had three horns on its face?','Triceratops','Stegosaurus','T. rex','Velociraptor','Its name means “three-horned face”.'],
+['Which dinosaur had plates on its back?','Stegosaurus','Triceratops','Brachiosaurus','Raptor','Its brain was about the size of a walnut.'],
+['What is the study of dinosaurs and fossils called?','Paleontology','Zoology','Astronomy','Ecology','Fossils can be millions of years old.'],
+['What is the name of Earth’s natural satellite?','The Moon','Phobos','Titan','Europa','The Moon is slowly moving away from Earth.'],
+['What do we call a scientist who studies space?','Astronomer','Astrologer','Geologist','Meteorologist','Astronauts are the ones who travel there.'],
+['Which planet spins on its side?','Uranus','Neptune','Mars','Earth','Something huge probably knocked it over long ago.'],
+['What is a shooting star really?','A meteor','A falling star','A comet’s tail','A planet','It’s a space rock burning up in our air.'],
+['What do you call molten rock that comes out of a volcano?','Lava','Magma','Ash','Basalt','It’s called magma while still underground.'],
+['Which layer of Earth do we live on?','Crust','Mantle','Outer core','Inner core','The crust is thinnest under the ocean.'],
+['Which part of your body do you mostly taste with?','Tongue','Lips','Cheeks','Teeth','Your tongue has thousands of taste buds.'],
+['How many teeth does an adult usually have?','32','28','20','36','Kids have 20 baby teeth.'],
+['What is H₂O?','Water','Salt','Oxygen','Sugar','Two hydrogen atoms and one oxygen atom.'],
+['What is NaCl better known as?','Table salt','Sugar','Baking soda','Chalk','Sea water is about 3.5% salt.'],
+['Which metal is liquid at room temperature?','Mercury','Iron','Gold','Aluminium','Mercury was used in old thermometers.'],
+['What do magnets attract?','Iron','Plastic','Wood','Glass','Nickel and cobalt are magnetic too.'],
+['Sound travels fastest through...','Solids','Air','Space','Fog','Sound can’t travel through empty space at all.'],
+['Sound travels about how much faster in water than in air?','About 4 times','About the same','Twice as slow','100 times','That’s why whale songs travel so far.'],
+['Which whale is famous for long, beautiful songs?','Humpback whale','Sperm whale','Orca','Beluga','Their songs can last for hours.'],
+['An orca is also called a...','Killer whale','Sea cow','Sea lion','Blue whale','Orcas are actually the biggest kind of dolphin.'],
+['Which animal is called the “sea cow”?','Manatee','Walrus','Seal','Dugong only','Manatees munch on sea grass.'],
+['What do walruses use their tusks for?','Pulling onto ice','Catching fish','Digging tunnels','Flying','Both males and females have tusks.'],
+['Which sea creature has a shell and walks sideways?','Crab','Lobster','Shrimp','Clam','Crabs walk sideways because of how their legs bend.'],
+['Which ocean animal can change color to hide?','Cuttlefish','Clam','Starfish','Sea cucumber','Cuttlefish do it in less than a second.'],
+['What are baby sharks called?','Pups','Calves','Kits','Fry','Some shark pups hatch from egg cases.'],
+['Which of these lives in fresh water?','Trout','Tuna','Swordfish','Marlin','Salmon live in both salt and fresh water.'],
+['What is the largest planet’s famous storm called?','Great Red Spot','Big Blue Eye','Red Tornado','Giant Swirl','It’s bigger than Earth.'],
+['How long does Earth take to go around the Sun?','About 365 days','About 30 days','24 hours','About 100 days','One trip around is one year.'],
+['How long does Earth take to spin once?','About 24 hours','About 1 week','About 1 year','About 12 hours','That gives us day and night.'],
+['Which way does the Sun rise?','East','West','North','South','And it sets in the west.'],
+['What is the freezing point of water in Fahrenheit?','32 °F','0 °F','100 °F','212 °F','That’s 0 °C.'],
+['What do you call an animal that is active at night?','Nocturnal','Diurnal','Hibernating','Migrating','Owls and bats are nocturnal.'],
+['What do you call it when animals sleep all winter?','Hibernation','Migration','Camouflage','Molting','Bears and some bats hibernate.'],
+['Why do many birds fly south for winter?','Warmer weather and food','To see the ocean','To lay eggs in snow','To escape the sun','This trip is called migration.'],
+['Which planet is closest to the Sun?','Mercury','Venus','Earth','Mars','A year on Mercury is only 88 days.'],
+['Which famous ship sank in 1912 after hitting an iceberg?','Titanic','Lusitania','Mayflower','Queen Mary','The wreck lies about 3,800 m deep.'],
+['About how deep is the Titanic wreck?','About 3,800 m','About 100 m','About 500 m','About 10,000 m','It wasn’t found until 1985.'],
+['How deep is Challenger Deep, roughly?','About 11,000 m','About 3,000 m','About 1,000 m','About 25,000 m','Mount Everest would fit inside with room to spare.'],
+['Which is the biggest country by area?','Russia','Canada','China','USA','It spans 11 time zones.'],
+['Which country is home to the kangaroo?','Australia','South Africa','Brazil','India','There are more kangaroos than people there.'],
+['Which country gave the USA the Statue of Liberty?','France','England','Spain','Italy','It was a gift in 1886.'],
+['What is the largest state in the USA?','Alaska','Texas','California','Montana','Alaska is over twice as big as Texas.'],
+['Which language has the most native speakers?','Mandarin Chinese','English','Spanish','Hindi','Spanish is second.'],
+['Which famous wall can be found in China?','Great Wall','Hadrian’s Wall','Berlin Wall','Wailing Wall','It’s thousands of kilometres long.'],
+['What do you call a person who writes books?','Author','Editor','Printer','Narrator','An illustrator draws the pictures.'],
+['What is the largest bird in the world?','Ostrich','Albatross','Condor','Eagle','The albatross has the widest wingspan.'],
+['Which bird has the widest wingspan?','Wandering albatross','Bald eagle','Ostrich','Pelican','Over 3 m from tip to tip!'],
+['Which animal has black and white stripes?','Zebra','Panda','Skunk','Tiger','Every zebra’s stripes are unique.'],
+['A group of owls is called a...','Parliament','Hoot','Club','Team','Owls can turn their heads about 270 degrees.'],
+['What is a female deer called?','Doe','Hen','Mare','Ewe','A male is a buck or stag.'],
+['How many weeks are in a year?','52','48','50','56','Plus one or two extra days.'],
+['Which month has the fewest days?','February','April','June','November','28 days, or 29 in a leap year.'],
+['What is 7 × 7?','49','42','56','47','7 squared is 49.'],
+['What is 100 ÷ 4?','25','20','40','24','A quarter of 100.'],
+['What is 3 cubed (3 × 3 × 3)?','27','9','18','30','A Rubik’s Cube has 26 visible pieces.'],
+['Which number is a Roman numeral X?','10','5','50','100','V is 5, L is 50 and C is 100.'],
+['What is the Roman numeral for 50?','L','C','D','V','D is 500 and M is 1,000.'],
+['Which is heavier: a kilogram of feathers or a kilogram of rocks?','They weigh the same','Rocks','Feathers','Depends on the wind','A kilogram is a kilogram!'],
+['If you face north and turn right, which way are you facing?','East','West','South','North','Never Eat Soggy Waffles: N, E, S, W.'],
+['What do you call the line around the middle of the Earth?','Equator','Prime meridian','Tropic','Pole line','It’s about 40,000 km around.'],
+['What color is chlorophyll, the stuff that makes plants green?','Green','Red','Blue','Yellow','It soaks up sunlight to make food.'],
+['Which planet is famous for having a day longer than its year?','Venus','Mars','Jupiter','Earth','Venus spins very slowly, and backwards!'],
+['How many moons does Earth have?','1','2','0','4','Mars has two tiny ones.'],
+['Which invention lets you talk to people far away?','Telephone','Telescope','Microscope','Thermometer','Alexander Graham Bell got the patent in 1876.'],
+['Which tool lets you see very tiny things?','Microscope','Telescope','Periscope','Stethoscope','Submarines use periscopes to peek above water.'],
+['A submarine looks above water with a...','Periscope','Telescope','Kaleidoscope','Microscope','It uses mirrors or prisms.'],
+['What makes a submarine sink or rise?','Filling tanks with water or air','Its propeller only','Magnets','Heavy anchors','These are called ballast tanks.'],
+['What is the name of the special suit divers use in very deep water?','Atmospheric diving suit','Wetsuit','Spacesuit','Raincoat','It keeps the pressure inside like on the surface.'],
+['What do scuba divers breathe from?','Air tanks','Snorkel only','Gills','Bubbles in the water','SCUBA stands for Self-Contained Underwater Breathing Apparatus.'],
+['Which animal has the longest lifespan on this list?','Greenland shark','Dog','Horse','Elephant','Some may live over 250 years.'],
+['Which ocean lies between Africa and Australia?','Indian Ocean','Pacific Ocean','Atlantic Ocean','Arctic Ocean','It’s the warmest ocean.'],
+['Which ocean lies between the Americas and Europe/Africa?','Atlantic','Pacific','Indian','Southern','Columbus crossed it in 1492.'],
+['What is plankton?','Tiny drifting living things','A kind of whale','Sea rocks','Ocean salt','Some plankton make much of the oxygen we breathe.'],
+['Which tiny shrimp-like animals swarm by the trillions in the ocean?','Krill','Shrimp','Sea monkeys','Barnacles','Krill feed whales, penguins and seals.'],
+['What do penguins mostly eat?','Fish, squid and krill','Seaweed','Polar bears','Berries','Emperor penguins can dive over 500 m deep.'],
+['Which is the biggest penguin?','Emperor penguin','King penguin','Little blue penguin','Gentoo penguin','Emperors stand over 1 m tall.'],
+['Which famous scientist came up with the theory of relativity?','Albert Einstein','Isaac Newton','Galileo','Marie Curie','E = mc² is his most famous equation.'],
+['Who is famous for discovering gravity after an apple fell?','Isaac Newton','Einstein','Edison','Darwin','The apple story may be a bit exaggerated.'],
+['Who invented the light bulb that became widely used?','Thomas Edison','Nikola Tesla','Benjamin Franklin','Albert Einstein','Many inventors worked on light bulbs.'],
+];
+/* ---------- daily set ---------- */
+const today=new Date(), DAY=today.getFullYear()+'-'+String(today.getMonth()+1).padStart(2,'0')+'-'+String(today.getDate()).padStart(2,'0');
+function rng(seed){ let h=2166136261; for(const c of seed){ h^=c.charCodeAt(0); h=Math.imul(h,16777619); } return ()=>{ h+=0x6D2B79F5; let t=h; t=Math.imul(t^t>>>15,t|1); t^=t+Math.imul(t^t>>>7,t|61); return ((t^t>>>14)>>>0)/4294967296; }; }
+function pickSet(seed,n){ const r=rng(seed), idx=[...QB.keys()]; for(let i=idx.length-1;i>0;i--){ const j=Math.floor(r()*(i+1)); [idx[i],idx[j]]=[idx[j],idx[i]]; } return idx.slice(0,n); }
+const ls={get(k,d){ try{ const v=localStorage.getItem(k); return v==null?d:JSON.parse(v); }catch(e){ return d; } },set(k,v){ try{ localStorage.setItem(k,JSON.stringify(v)); }catch(e){} }};
+const ZONES=[[0,'☀️ Sunlight zone'],[200,'🌅 Twilight zone'],[1000,'🌑 Midnight zone'],[4000,'🕳️ The Abyss'],[6000,'🔱 The Trench']];
+const zoneOf=d=>ZONES.filter(z=>d>=z[0]).pop()[1];
+/* ---------- game state ---------- */
+let G=null, viewDepth=0, timer=null;
+const QT=15;   /* seconds per question */
+function start(mode){
+  const daily=mode==='daily', order=daily?pickSet(DAY,12):pickSet(String(Math.random()),QB.length);
+  G={mode,order,i:0,depth:0,air:3,streak:0,best:0,right:0,log:[],done:false};
+  $('#hud').classList.remove('hide'); ask();
+}
+function ask(){
+  if(G.air<=0||(G.mode==='daily'&&G.i>=G.order.length)) return finish();
+  const q=QB[G.order[G.i%G.order.length]], r=rng(DAY+G.i+q[0]), opts=[q[1],q[2],q[3],q[4]];
+  for(let i=3;i>0;i--){ const j=Math.floor(r()*(i+1)); [opts[i],opts[j]]=[opts[j],opts[i]]; }
+  G.cur={q,opts,t0:performance.now(),answered:false};
+  $('#scr').innerHTML=`<div class="zone">${zoneOf(G.depth)}</div><div class="qn">Question ${G.i+1}${G.mode==='daily'?' of '+G.order.length:''}</div><div class="q">${q[0]}</div><div class="timer"><i id="tb"></i></div><div class="opts">${opts.map((o,k)=>`<button class="opt" data-k="${k}"><kbd>${k+1}</kbd>${o}</button>`).join('')}</div><div class="fact" id="fact"></div>`;
+  hud(); clearInterval(timer);
+  timer=setInterval(()=>{ const left=QT-(performance.now()-G.cur.t0)/1000; const tb=$('#tb'); if(tb) tb.style.transform=`scaleX(${Math.max(0,left/QT)})`; if(left<=0) answer(-1); },50);
+}
+function answer(k){
+  const c=G.cur; if(!c||c.answered) return; c.answered=true; clearInterval(timer);
+  const right=c.opts.indexOf(c.q[1]), ok=k===right, secs=(performance.now()-c.t0)/1000;
+  document.querySelectorAll('.opt').forEach((b,i)=>{ b.disabled=true; if(i===right) b.classList.add('ok'); else if(i===k) b.classList.add('no'); });
+  let gain=0;
+  if(ok){ G.streak++; G.best=Math.max(G.best,G.streak); G.right++;
+    const speed=Math.round(Math.max(0,QT-secs)/QT*10), streak=Math.min(G.streak-1,5)*4; gain=10+speed+streak;
+    /* the daily dive goes much deeper: a perfect run reaches the trench */
+    if(G.mode==='daily') gain*=G.i<4?8:G.i<8?20:40;
+    else gain*=1+Math.floor(G.i/5);
+    G.depth+=gain; pop('+'+gain+' m'); sfx(1);
+  } else { G.streak=0; G.air--; pop(k<0?'⏱️ Out of time!':'🫧 Lost an air tank'); sfx(0); }
+  G.log.push(ok?'🟦':'🟥');
+  $('#fact').textContent=(ok?'✅ ':'❌ The answer: '+c.q[1]+'. ')+c.q[5];
+  hud(); G.i++;
+  setTimeout(ask,ok?1500:2600);
+}
+function finish(){
+  clearInterval(timer); G.done=true; const d=Math.round(G.depth);
+  if(G.mode==='daily'){ const prev=ls.get('dd_daily',null); if(!prev||prev.day!==DAY) ls.set('dd_daily',{day:DAY,depth:d,log:G.log.join('')}); }
+  const bestKey=G.mode==='daily'?'dd_bestDaily':'dd_bestFree', best=Math.max(ls.get(bestKey,0),d); ls.set(bestKey,best);
+  try{ if(window.RRL) RRL.post(G.mode==='daily'?'daily':'free',d,`${d.toLocaleString()} m deep`); }catch(e){}
+  try{ window.RRCOIN&&RRCOIN.add&&RRCOIN.add(Math.min(60,Math.round(d/100)),'Deep Dive'); }catch(e){}
+  const share=`Deep Dive ${DAY}\n${G.log.join('')}\n${d.toLocaleString()} m · ${zoneOf(d)}`;
+  $('#scr').innerHTML=`<h1>${G.air>0?'Dive complete!':'Out of air!'}</h1><div class="big">${d.toLocaleString()} m</div><div class="zone">Deepest zone: ${zoneOf(d)}</div>
+   <p class="sub">${G.right} right · best streak ${G.best} · personal best ${best.toLocaleString()} m</p><div class="sub" style="font-size:22px;letter-spacing:2px">${G.log.join('')}</div>
+   <div class="row"><button class="btn" data-a="share">📋 Copy result</button><button class="btn g" data-a="menu">Menu</button></div>
+   ${G.mode==='free'?'<button class="btn g" data-a="free">Dive again</button>':''}<div class="tip" id="shareMsg"></div>`;
+  $('#scr').dataset.share=share;
+}
+function menu(){
+  G=null; clearInterval(timer); $('#hud').classList.add('hide');
+  const done=ls.get('dd_daily',null), doneToday=done&&done.day===DAY;
+  $('#scr').innerHTML=`<h1>🌊 Deep Dive</h1><p class="sub">Answer trivia to sink your submarine deeper and deeper. Fast answers and streaks dive extra deep. Wrong answers cost an air tank 🫧, and you only have three.</p>
+   ${doneToday?`<div class="zone">Today’s dive: <b style="color:var(--gold)">${done.depth.toLocaleString()} m</b> ${done.log}</div><button class="btn" disabled>Daily Dive done, come back tomorrow</button>`:`<button class="btn" data-a="daily">🤿 Today’s Daily Dive (12 questions)</button>`}
+   <button class="btn g" data-a="free">🐠 Free Dive (until your air runs out)</button>
+   <div class="tip">Everyone gets the same Daily Dive questions each day. Best free dive: ${ls.get('dd_bestFree',0).toLocaleString()} m · Keys 1-4 to answer.</div>`;
+}
+function hud(){ $('#hDepth').textContent=Math.round(G.depth).toLocaleString(); $('#hAir').textContent='🫧'.repeat(Math.max(0,G.air))+'⚫'.repeat(3-Math.max(0,G.air)); $('#hStreak').textContent='Streak '+G.streak; $('#hQ').textContent=G.mode==='daily'?Math.min(G.i+1,G.order.length)+' / '+G.order.length:'Q '+(G.i+1); }
+function pop(t){ const p=$('#pop'); p.textContent=t; p.style.opacity=1; clearTimeout(pop.t); pop.t=setTimeout(()=>p.style.opacity=0,900); }
+let AC=null; function sfx(ok){ try{ AC=AC||new (window.AudioContext||window.webkitAudioContext)(); const o=AC.createOscillator(),g=AC.createGain(); o.type='sine'; o.frequency.setValueAtTime(ok?520:220,AC.currentTime); o.frequency.exponentialRampToValueAtTime(ok?880:110,AC.currentTime+.25); g.gain.setValueAtTime(.12,AC.currentTime); g.gain.exponentialRampToValueAtTime(.001,AC.currentTime+.35); o.connect(g); g.connect(AC.destination); o.start(); o.stop(AC.currentTime+.4); }catch(e){} }
+document.addEventListener('click',e=>{ const o=e.target.closest('.opt'); if(o&&G&&!G.done){ answer(+o.dataset.k); return; }
+  const b=e.target.closest('[data-a]'); if(!b) return; const a=b.dataset.a;
+  if(a==='daily'||a==='free') start(a); else if(a==='menu') menu();
+  else if(a==='share'){ const t=$('#scr').dataset.share; (navigator.clipboard?navigator.clipboard.writeText(t):Promise.reject()).then(()=>$('#shareMsg').textContent='Copied! Paste it in chat.',()=>$('#shareMsg').textContent=t); } });
+addEventListener('keydown',e=>{ if(G&&!G.done&&/^Digit[1-4]$/.test(e.code)) answer(+e.code.slice(5)-1); });
+/* ---------- the ocean: gets darker as you sink, with creatures for each zone ---------- */
+const cv=$('#sea'), x=cv.getContext('2d'); let W=0,H=0;
+function fit(){ const d=Math.min(devicePixelRatio||1,2); W=innerWidth; H=innerHeight; cv.width=W*d; cv.height=H*d; x.setTransform(d,0,0,d,0,0); }
+addEventListener('resize',fit); fit();
+const mix=(a,b,t)=>a.map((v,i)=>Math.round(v+(b[i]-v)*t));
+const SKY=[[0,[56,189,248],[3,105,161]],[200,[14,116,144],[8,47,73]],[1000,[8,47,73],[2,6,23]],[4000,[2,6,23],[1,2,10]],[11000,[1,2,10],[0,0,4]]];
+function colAt(d){ for(let i=0;i<SKY.length-1;i++){ const a=SKY[i],b=SKY[i+1]; if(d<=b[0]){ const t=(d-a[0])/(b[0]-a[0]); return [mix(a[1],b[1],t),mix(a[2],b[2],t)]; } } return [SKY[4][1],SKY[4][2]]; }
+const R=rng('sea'), bubbles=Array.from({length:60},()=>({x:R(),y:R(),r:1+R()*3,s:.3+R()*.8})), snow=Array.from({length:120},()=>({x:R(),y:R(),s:.1+R()*.3}));
+/* creatures placed at real depths: [depth (m), kind, x (0..1), size] */
+const LIFE=[];for(let i=0;i<90;i++){ const d=Math.pow(R(),1.6)*11000; LIFE.push([d,d<200?(R()<.5?'fish':'turtle'):d<1000?(R()<.5?'jelly':'squid'):d<4000?(R()<.5?'angler':'jelly'):'glow',.1+R()*.8,.6+R()*.8,R()*6]); }
+LIFE.push([3800,'wreck',.72,1.4,0],[60,'whale',.25,2.2,0],[900,'whale',.8,1.6,1],[10900,'floor',.5,1,0]);
+const PX=6;   /* pixels per metre of depth near the sub */
+function draw(t){
+  const target=G?G.depth:0; viewDepth+=(target-viewDepth)*.04;
+  const [c1,c2]=colAt(viewDepth), g=x.createLinearGradient(0,0,0,H); g.addColorStop(0,`rgb(${c1})`); g.addColorStop(1,`rgb(${c2})`); x.fillStyle=g; x.fillRect(0,0,W,H);
+  if(viewDepth<250){ x.globalAlpha=Math.max(0,1-viewDepth/250)*.25; for(let i=0;i<6;i++){ const bx=W*(.1+i*.17)+Math.sin(t/2000+i)*30; x.fillStyle='#e0f2fe'; x.beginPath(); x.moveTo(bx,0); x.lineTo(bx+60,0); x.lineTo(bx+160,H); x.lineTo(bx+40,H); x.fill(); } x.globalAlpha=1; }
+  /* marine snow drifts down in the dark */
+  x.fillStyle='rgba(226,232,240,.5)'; for(const s of snow){ const yy=((s.y*H+t*s.s*.03-viewDepth*PX*.2)%H+H)%H; if(viewDepth>150) x.fillRect(s.x*W,yy,1.5,1.5); }
+  const subY=H*.62;
+  for(const L of LIFE){ const sy=subY+(L[0]-viewDepth)*PX*.35; if(sy<-120||sy>H+120) continue; creature(L[1],L[2]*W+Math.sin(t/1400+L[4])*24,sy,L[3],t,L[4]); }
+  sub(W*.5,subY+Math.sin(t/600)*4,t);
+  x.fillStyle='rgba(186,230,253,.45)'; for(const b of bubbles){ const yy=((b.y*H-t*b.s*.06)%H+H)%H; x.beginPath(); x.arc(b.x*W+Math.sin(t/700+b.y*9)*6,yy,b.r,0,7); x.fill(); }
+  requestAnimationFrame(draw);
+}
+function creature(k,cx,cy,s,t,ph){
+  x.save(); x.translate(cx,cy); x.scale(s,s);
+  if(k==='fish'){ x.fillStyle=['#fb923c','#facc15','#38bdf8','#f472b6'][Math.floor(ph)%4]; x.beginPath(); x.ellipse(0,0,18,9,0,0,7); x.fill(); x.beginPath(); x.moveTo(-14,0); x.lineTo(-28,-9); x.lineTo(-28,9); x.fill(); x.fillStyle='#0f172a'; x.beginPath(); x.arc(9,-2,2,0,7); x.fill(); }
+  else if(k==='turtle'){ x.fillStyle='#65a30d'; x.beginPath(); x.ellipse(0,0,22,15,0,0,7); x.fill(); x.fillStyle='#a3e635'; x.beginPath(); x.arc(26,-2,7,0,7); x.fill(); const f=Math.sin(t/300+ph)*6; x.fillRect(-8,-20+f*.3,8,8); x.fillRect(-8,12-f*.3,8,8); }
+  else if(k==='jelly'){ x.globalAlpha=.75; x.fillStyle=ph%2<1?'#c084fc':'#f0abfc'; x.beginPath(); x.arc(0,0,16,Math.PI,0); x.fill(); x.strokeStyle=x.fillStyle; x.lineWidth=2; for(let i=-2;i<=2;i++){ x.beginPath(); x.moveTo(i*6,0); x.quadraticCurveTo(i*6+Math.sin(t/300+i)*6,16,i*6,30); x.stroke(); } x.globalAlpha=1; x.shadowBlur=0; }
+  else if(k==='squid'){ x.fillStyle='#fb7185'; x.beginPath(); x.ellipse(0,0,8,20,0,0,7); x.fill(); x.strokeStyle='#fb7185'; x.lineWidth=2; for(let i=-2;i<=2;i++){ x.beginPath(); x.moveTo(i*3,18); x.lineTo(i*4+Math.sin(t/250+i)*4,36); x.stroke(); } }
+  else if(k==='angler'){ x.fillStyle='#1e293b'; x.beginPath(); x.ellipse(0,0,24,18,0,0,7); x.fill(); x.strokeStyle='#475569'; x.lineWidth=2; x.beginPath(); x.moveTo(8,-16); x.quadraticCurveTo(20,-38,32,-22); x.stroke(); x.fillStyle='#fde68a'; x.shadowColor='#fde68a'; x.shadowBlur=20; x.beginPath(); x.arc(32,-22,4+Math.sin(t/200)*1,0,7); x.fill(); x.shadowBlur=0; x.fillStyle='#e2e8f0'; for(let i=0;i<5;i++){ x.beginPath(); x.moveTo(10+i*3,6); x.lineTo(11+i*3,12); x.lineTo(12+i*3,6); x.fill(); } }
+  else if(k==='glow'){ x.fillStyle=['#22d3ee','#a78bfa','#4ade80'][Math.floor(ph)%3]; x.shadowColor=x.fillStyle; x.shadowBlur=14; for(let i=0;i<6;i++){ x.beginPath(); x.arc(Math.cos(i+t/900)*10,Math.sin(i*1.7+t/700)*6,2,0,7); x.fill(); } x.shadowBlur=0; }
+  else if(k==='whale'){ x.fillStyle='#334e68'; x.beginPath(); x.ellipse(0,0,70,24,0,0,7); x.fill(); x.beginPath(); x.moveTo(-60,0); x.lineTo(-95,-18+Math.sin(t/600)*6); x.lineTo(-95,18+Math.sin(t/600)*6); x.fill(); x.fillStyle='#94a3b8'; x.beginPath(); x.ellipse(10,10,50,10,0,0,Math.PI); x.fill(); }
+  else if(k==='wreck'){ x.fillStyle='#3f2a1e'; x.beginPath(); x.moveTo(-90,0); x.lineTo(90,-10); x.lineTo(70,30); x.lineTo(-70,34); x.fill(); x.fillStyle='#2b1d15'; x.fillRect(-10,-60,8,62); x.fillRect(30,-48,6,44); x.fillStyle='#1c120c'; for(let i=0;i<5;i++) x.fillRect(-60+i*25,6,8,8); }
+  else if(k==='floor'){ x.fillStyle='#0b1220'; x.fillRect(-W,20,W*2,400); x.fillStyle='#0f1b2d'; for(let i=-10;i<10;i++){ x.beginPath(); x.arc(i*60,22,30,Math.PI,0); x.fill(); } }
+  x.restore();
+}
+function sub(cx,cy,t){
+  const deep=viewDepth>800;
+  if(deep){ const g=x.createRadialGradient(cx+40,cy,4,cx+180,cy+30,200); g.addColorStop(0,'rgba(254,249,195,.35)'); g.addColorStop(1,'rgba(254,249,195,0)'); x.fillStyle=g; x.beginPath(); x.moveTo(cx+36,cy-6); x.lineTo(cx+320,cy-110); x.lineTo(cx+320,cy+170); x.closePath(); x.fill(); }
+  x.save(); x.translate(cx,cy);
+  x.fillStyle='#facc15'; x.beginPath(); x.ellipse(0,0,46,22,0,0,7); x.fill(); x.fillStyle='#eab308'; x.fillRect(-14,-34,26,16); x.fillRect(-2,-46,4,14);
+  x.fillStyle='#0ea5e9'; for(const ox of [-18,0,18]){ x.beginPath(); x.arc(ox,-2,6,0,7); x.fill(); } x.fillStyle='rgba(255,255,255,.5)'; for(const ox of [-18,0,18]){ x.beginPath(); x.arc(ox-2,-4,2,0,7); x.fill(); }
+  x.fillStyle='#a16207'; x.save(); x.translate(-48,0); x.rotate(Math.sin(t/80)); x.fillRect(-2,-10,4,20); x.restore(); x.fillRect(-52,-3,8,6);
+  x.restore();
+}
+requestAnimationFrame(draw);
+menu();
+try{ window.RRL&&RRL.boards('deepdive',[{id:'daily',name:'Deepest Daily Dive (m)',mode:'max'},{id:'free',name:'Deepest Free Dive (m)',mode:'max'}]); }catch(e){}
+})();
+</script>
+<a id="saBack" href="./" style="position:fixed;left:10px;top:10px;z-index:50;background:rgba(15,23,42,.88);color:#fff;border:1px solid rgba(255,255,255,.25);border-radius:999px;padding:7px 13px;font:700 13px system-ui,sans-serif;text-decoration:none">← Arcade</a>
+<script src="online.js"></script>
+<script src="site.js"></script>
+<script src="chat.js"></script>
+</body>
+</html>
