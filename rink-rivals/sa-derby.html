@@ -32,6 +32,7 @@ h1{margin:0;font-size:30px;letter-spacing:-.5px}h2{margin:0 0 10px;font-size:13p
 .ovl{position:fixed;inset:0;background:rgba(0,0,0,.72);display:grid;place-items:center;z-index:10;padding:16px}.ovl .box{background:var(--card);border:1px solid var(--line);border-radius:16px;padding:22px;max-width:420px;width:100%;text-align:center}
 .big{font-size:54px;font-weight:900;line-height:1}table{width:100%;border-collapse:collapse;font-size:14px}td{padding:6px;border-top:1px solid var(--line)}.tip{font-size:12px;color:var(--mut)}
 </style></head><body><div class="wrap" id="app"></div>
+<script>window.SA3D_ON=true;</script>
 <script id="gfx-boost">
 /* Graphics boost: bloom, vignette, colour grade and soft shadows-of-light applied to the 2D game canvas. Auto-lowers quality if the device is slow. */
 (function(){if(window.__gfx)return;window.__gfx=1;
@@ -72,6 +73,7 @@ function layer(w,h){lay.width=w;lay.height=h;
  off.width=Math.max(8,w>>2);off.height=Math.max(8,h>>2)}
 let grade=null;
 function post(t){
+ if(window.SA3D_ON)return;
  if(!on||lvl<=0)return;
  if(!cv||!cv.offsetParent||!cv.isConnected){if(tries++%30===0)cv=findCanvas();if(cv)cx=cv.getContext('2d');if(!cv)return}
  const w=cv.width,h=cv.height;if(w!==lw||h!==lh){layer(w,h);grade=null}
@@ -94,6 +96,7 @@ window.requestAnimationFrame=function(fn){return raf(function(t){fn(t);if(t!==la
 const st=document.createElement('style');st.textContent='button,.btn,.tab{transition:transform .12s,box-shadow .15s,filter .15s}button:not(:disabled):hover{transform:translateY(-1px);filter:brightness(1.08)}button:not(:disabled):active{transform:translateY(1px)}canvas{border-radius:12px;box-shadow:0 10px 34px rgba(0,0,0,.45)}';document.head.appendChild(st);
 })();
 </script>
+<script src="r3lib.js"></script><script src="physique.js"></script><script src="sa3d.js"></script><script src="sa3dcv.js"></script>
 <script>
 const $=s=>document.querySelector(s),clamp=(v,a,b)=>Math.max(a,Math.min(b,v)),rnd=(a,b)=>a+Math.random()*(b-a),gauss=()=>(Math.random()+Math.random()+Math.random()+Math.random()-2)*1.2;
 let AC=null;function ac(){try{AC=AC||new(window.AudioContext||window.webkitAudioContext)()}catch(e){}return AC}
@@ -150,7 +153,19 @@ function step(dt){const g=G;if(!g||g.over)return;g.tt+=dt;g.sp=g.sp.filter(p=>(p
  else if(g.st==='fly'){g.ft+=dt;if(g.bl)g.bl.t=Math.min(1,g.ft/1.6);if(g.ft>1.8){g.bl=null;if(g.outs>=10){fin();return}g.st='wait';g.t=.6}}}
 function fin(){const g=G;g.over=true;sv.tot+=g.hr;sv.runs++;if(g.hr>sv.best)sv.best=g.hr;sv_('hd1',sv);const ti=g.hr>=SL[sv.diff][1]?'Champion!':'Round over';$('#ovl').innerHTML='<div class="ovl"><div class="box"><h2>'+ti+'</h2><div class="big" style="font-size:44px">'+g.hr+' HR</div><div class="tip" style="margin:10px 0">Longest: '+g.longest+' ft · Beat '+SL[sv.diff][0]+' ('+SL[sv.diff][1]+' HR)</div><div style="display:grid;gap:8px"><button class="btn" data-a="go">Play again</button><button class="btn g" data-a="title">Menu</button></div></div></div>'}
 addEventListener('keydown',e=>{if(e.code==='Space'&&V==='game'){e.preventDefault();swing()}});document.addEventListener('pointerdown',e=>{if(V==='game'&&e.target.id==='cv'){ac();swing()}});
+/* ---------- 3D ballpark: catcher's-eye view, the camera follows long balls ---------- */
+const V3=window.SA3DCV?SA3DCV({H:560,cam:{eye:[0,2.4,6],center:[0,1.3,-15],fov:40},sky:[.3,.55,.85],bright:1.1}):null;if(V3)V3.ballpark();let cC=[0,1.3,-15],last3=0;
+function draw3(x,g){const now=performance.now(),dt=Math.min(.05,(now-last3)/1000||.016);last3=now;let bp=null;
+ if(g.st==='pitch'){const p=g.p;bp=[.3-.3*Math.min(1,p),1.9-1.05*p,-17.4+17.4*p]}
+ if(g.bl){const b=g.bl,D=b.d*.3048,t=b.t,H=D*.3;bp=[Math.sin(b.a)*D*t,.9+4*H*t*(1-t)*(b.d>=300?1:.8)+(b.d>=300?0:0),-Math.cos(b.a)*D*t];if(b.d<300&&t>.95)bp[1]=.12}
+ const C=bp&&g.bl?[bp[0]*.8,Math.max(1.3,bp[1]*.7),bp[2]*.8-6]:[0,1.3,-15];cC=cC.map((v,i)=>v+(C[i]-v)*Math.min(1,dt*2.5));V3.cam.center=cC;V3.cam.eye=[0,2.4+(g.bl?2:0),6];
+ V3.frame(()=>{const swp=g.sw!==null?Math.min(1,g.swt):(g.st==='fly'&&g.bl?1:0);
+  V3.batter(-.95,.1,swp,{top:'#2f7fd0',legs:'#e8e8f0',me:true,buff:1.12});V3.shadow(-.95,.1,.4);
+  V3.person(0,-18.3,0,{top:'#e8e8f0',legs:'#cfcfd8',hair:'#d03a3a'},'stand',0,J=>{if(g.st==='pitch'){const k=Math.max(0,1-g.p*1.6);J.hand1=[.3,1.4+k*.7,-.3+(1-k)*.7];J.elb1=[.35,1.45,-.1]}},.25);
+  if(bp){V3.sph(bp[0],bp[1],bp[2],.06,'#ffffff');V3.shadow(bp[0],bp[2],.12)}},dt);
+ x.fillStyle='#ffd23f';g.sp.forEach(p=>{x.globalAlpha=Math.max(0,p.l);x.fillRect(p.x,p.y,4,4)});x.globalAlpha=1}
 function draw(){const cv=$('#cv');if(!cv||!G)return;const x=cv.getContext('2d'),g=G;
+ if(V3&&V3.begin(cv,x)){draw3(x,g);hud(x,g);return}
  const bg=x.createLinearGradient(0,0,0,560);bg.addColorStop(0,'#2a5aa0');bg.addColorStop(.5,'#8ec0e8');bg.addColorStop(1,'#d8e8f0');x.fillStyle=bg;x.fillRect(0,0,1000,560);
  x.fillStyle='#1a5a2a';x.fillRect(0,200,1000,360);for(let i=0;i<20;i++){x.fillStyle=i%2?'#1f6a30':'#1a5a2a';x.fillRect(i*50,200,50,360)}
  x.fillStyle='#2a3a50';x.fillRect(0,170,1000,40);for(let i=0;i<110;i++){x.fillStyle='hsl('+(i*47%360)+',50%,55%)';x.fillRect((i*9)%1000,176+(i%4)*8,5,5)}
@@ -164,7 +179,8 @@ function draw(){const cv=$('#cv');if(!cv||!G)return;const x=cv.getContext('2d'),
  if(g.st==='pitch'){const p=g.p;const bx=500-(500-430)*p,by=290+(450-290)*p,r=3+p*7;x.fillStyle='#fff';x.beginPath();x.arc(bx,by,r,0,7);x.fill()}
  if(g.bl){const b=g.bl,bx=430+Math.sin(b.a)*500*b.t,by=420-b.d*1.4*b.t+Math.pow(b.t,2)*150*(b.d>300?0:1);x.fillStyle='#fff';x.beginPath();x.arc(bx,by,6,0,7);x.fill()}
  x.fillStyle='#ffd23f';g.sp.forEach(p=>{x.globalAlpha=Math.max(0,p.l);x.fillRect(p.x,p.y,4,4)});x.globalAlpha=1;
- // meter
+ hud(x,g)}
+function hud(x,g){x.textAlign='center';
  if(g.st==='pitch'){x.fillStyle='rgba(8,5,26,.8)';x.beginPath();x.roundRect(350,522,300,24,8);x.fill();const win=[.1,.075,.055][sv.diff];x.fillStyle='#2a2a50';x.fillRect(360,530,280,8);x.fillStyle='#4be07a';x.fillRect(360+280*(.78-win),530,280*win*2,8);x.fillStyle='#fff';x.fillRect(360+280*Math.min(1,g.p/1.15)-2,526,4,16)}
  x.fillStyle='rgba(8,5,26,.85)';x.beginPath();x.roundRect(300,10,400,48,12);x.fill();x.textAlign='center';x.fillStyle='#ffd23f';x.font='900 24px system-ui';x.fillText(g.hr+' HR',390,43);x.fillStyle='#fff';x.font='800 18px system-ui';x.fillText('Outs '+g.outs+'/10',600,42);
  if(g.tt-g.msgT<1.4&&g.msg){x.font='900 40px system-ui';x.lineWidth=7;x.strokeStyle='rgba(0,0,0,.7)';x.strokeText(g.msg,500,140);x.fillStyle=g.msg[0]==='H'?'#ffd23f':'#ff6b5a';x.fillText(g.msg,500,140)}}

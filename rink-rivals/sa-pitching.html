@@ -32,6 +32,7 @@ h1{margin:0;font-size:30px;letter-spacing:-.5px}h2{margin:0 0 10px;font-size:13p
 .ovl{position:fixed;inset:0;background:rgba(0,0,0,.72);display:grid;place-items:center;z-index:10;padding:16px}.ovl .box{background:var(--card);border:1px solid var(--line);border-radius:16px;padding:22px;max-width:420px;width:100%;text-align:center}
 .big{font-size:54px;font-weight:900;line-height:1}table{width:100%;border-collapse:collapse;font-size:14px}td{padding:6px;border-top:1px solid var(--line)}.tip{font-size:12px;color:var(--mut)}
 </style></head><body><div class="wrap" id="app"></div>
+<script>window.SA3D_ON=true;</script>
 <script id="gfx-boost">
 /* Graphics boost: bloom, vignette, colour grade and soft shadows-of-light applied to the 2D game canvas. Auto-lowers quality if the device is slow. */
 (function(){if(window.__gfx)return;window.__gfx=1;
@@ -72,6 +73,7 @@ function layer(w,h){lay.width=w;lay.height=h;
  off.width=Math.max(8,w>>2);off.height=Math.max(8,h>>2)}
 let grade=null;
 function post(t){
+ if(window.SA3D_ON)return;
  if(!on||lvl<=0)return;
  if(!cv||!cv.offsetParent||!cv.isConnected){if(tries++%30===0)cv=findCanvas();if(cv)cx=cv.getContext('2d');if(!cv)return}
  const w=cv.width,h=cv.height;if(w!==lw||h!==lh){layer(w,h);grade=null}
@@ -94,6 +96,7 @@ window.requestAnimationFrame=function(fn){return raf(function(t){fn(t);if(t!==la
 const st=document.createElement('style');st.textContent='button,.btn,.tab{transition:transform .12s,box-shadow .15s,filter .15s}button:not(:disabled):hover{transform:translateY(-1px);filter:brightness(1.08)}button:not(:disabled):active{transform:translateY(1px)}canvas{border-radius:12px;box-shadow:0 10px 34px rgba(0,0,0,.45)}';document.head.appendChild(st);
 })();
 </script>
+<script src="r3lib.js"></script><script src="physique.js"></script><script src="sa3d.js"></script><script src="sa3dcv.js"></script>
 <script>
 const $=s=>document.querySelector(s),clamp=(v,a,b)=>Math.max(a,Math.min(b,v)),rnd=(a,b)=>a+Math.random()*(b-a),gauss=()=>(Math.random()+Math.random()+Math.random()+Math.random()-2)*1.2;
 let AC=null;function ac(){try{AC=AC||new(window.AudioContext||window.webkitAudioContext)()}catch(e){}return AC}
@@ -153,7 +156,16 @@ function fin(){const g=G;g.over=true;if(g.k>sv.best)sv.best=g.k;sv.runs++;sv_('p
 addEventListener('keydown',e=>{if(V!=='game'||!G)return;if(e.code==='Space'){e.preventDefault();pitch()}if(e.code>='Digit1'&&e.code<='Digit4')G.pt=+e.code.slice(5)-1});
 document.addEventListener('pointermove',e=>{const cv=$('#cv');if(!cv||!G)return;const r=cv.getBoundingClientRect();G.mx=(e.clientX-r.left)*1000/r.width;G.my=(e.clientY-r.top)*560/r.height});
 document.addEventListener('pointerdown',e=>{if(V==='game'&&e.target.id==='cv'){ac();pitch()}});
+/* ---------- 3D ballpark: you see the plate from behind the catcher; the strike zone and aim stay on screen ---------- */
+const V3=window.SA3DCV?SA3DCV({H:560,cam:{eye:[0,2.05,5.2],center:[0,1.15,-18],fov:30},sky:[.12,.22,.45],bright:1.05}):null;if(V3)V3.ballpark();let last3=0;
+function draw3(x,g){const now=performance.now(),dt=Math.min(.05,(now-last3)/1000||.016);last3=now;
+ V3.frame(()=>{V3.batter(-1.05,.15,0,{top:'#d03a3a',legs:'#eeeeee',buff:1.12});
+  const thr=g.ball?Math.max(0,1-g.ball.t*2.2):0;V3.person(0,-18.3,0,{top:'#2f7fd0',legs:'#2f7fd0',me:true},'stand',0,J=>{if(g.ball){J.hand1=[.3,1.4+thr*.7,-.3+(1-thr)*.7];J.elb1=[.35,1.45,-.1]}},.25);
+  if(g.ball){const b=g.ball,t=Math.min(1,b.t),E=V3.toPlane(b.tx,b.ty,'z',0),S=[.3,1.9,-17.4];V3.sph(S[0]+(E[0]-S[0])*t+Math.sin(t*Math.PI)*b.curve/260,S[1]+(E[1]-S[1])*t+Math.sin(t*Math.PI)*.25,S[2]+(E[2]-S[2])*t,.05,'#ffffff')}},dt);
+ x.strokeStyle='rgba(255,255,255,.85)';x.lineWidth=2;x.strokeRect(ZX0,ZY0,ZX1-ZX0,ZY1-ZY0);x.beginPath();for(let i=1;i<3;i++){x.moveTo(ZX0+(ZX1-ZX0)*i/3,ZY0);x.lineTo(ZX0+(ZX1-ZX0)*i/3,ZY1);x.moveTo(ZX0,ZY0+(ZY1-ZY0)*i/3);x.lineTo(ZX1,ZY0+(ZY1-ZY0)*i/3)}x.globalAlpha=.35;x.stroke();x.globalAlpha=1;
+ if(!g.ball){const wx=Math.sin(g.tt*3.1)*(26+sv.diff*8)+Math.sin(g.tt*7.7)*12,wy=Math.cos(g.tt*2.6)*(22+sv.diff*8)+Math.cos(g.tt*6.3)*10;x.strokeStyle='#ffd23f';x.lineWidth=2.5;x.beginPath();x.arc(g.mx+wx,g.my+wy,14,0,7);x.moveTo(g.mx+wx-22,g.my+wy);x.lineTo(g.mx+wx+22,g.my+wy);x.moveTo(g.mx+wx,g.my+wy-22);x.lineTo(g.mx+wx,g.my+wy+22);x.stroke()}}
 function draw(){const cv=$('#cv');if(!cv||!G)return;const x=cv.getContext('2d'),g=G;
+ if(V3&&V3.begin(cv,x)){draw3(x,g);hud(x,g);return}
  const bg=x.createLinearGradient(0,0,0,560);bg.addColorStop(0,'#14295a');bg.addColorStop(.45,'#3a6ab0');bg.addColorStop(.46,'#1a6a30');bg.addColorStop(1,'#124a22');x.fillStyle=bg;x.fillRect(0,0,1000,560);
  for(let i=0;i<110;i++){x.fillStyle='hsl('+(i*47%360)+',50%,50%)';x.fillRect((i*9)%1000,40+(i%5)*10,5,5)}
  x.fillStyle='#9a6a3a';x.beginPath();x.ellipse(500,460,200,60,0,0,7);x.fill();
@@ -167,7 +179,8 @@ function draw(){const cv=$('#cv');if(!cv||!G)return;const x=cv.getContext('2d'),
  else{const b=g.ball,t=b.t,bx=500+(b.tx-500)*t+Math.sin(t*Math.PI)*b.curve*1,by=150+(b.ty-150)*t,r=4+t*8;x.fillStyle='#fff';x.beginPath();x.arc(bx,by,r,0,7);x.fill()}
  // pitcher
  ath(x,500,152,52,{shirt:'#2f7fd0',cap:'#2f7fd0',f:1,la:g.ball?2.7*(1-Math.min(1,g.ball.t*2))+.3:.7,ra:-.4});
- // HUD
+ hud(x,g)}
+function hud(x,g){x.textAlign='center';
  x.fillStyle='rgba(8,5,26,.88)';x.beginPath();x.roundRect(220,10,560,56,12);x.fill();x.textAlign='center';x.fillStyle='#ffd23f';x.font='900 24px system-ui';x.fillText(g.k+' K',290,48);x.fillStyle='#fff';x.font='800 16px system-ui';x.fillText('Count '+g.b+'-'+g.s,410,42);x.fillText('Hits '+g.h+'/4 · Walks '+g.w+'/4',560,42);x.fillStyle='#a79bc8';x.font='700 14px system-ui';x.fillText(PT[g.pt][0]+' (1-4)',700,42);
  if(g.tt-g.msgT<1.1&&g.msg){x.font='900 40px system-ui';x.lineWidth=7;x.strokeStyle='rgba(0,0,0,.7)';x.strokeText(g.msg,500,440);x.fillStyle=g.msg[0]==='S'||g.msg==='Called strike'?'#4be07a':g.msg==='HIT!'||g.msg==='Walk'?'#ff6b5a':'#ffd23f';x.fillText(g.msg,500,440)}}
 function loop(){let last=performance.now();const f=now=>{const dt=Math.min(.03,(now-last)/1000||0);last=now;if(G){step(dt);draw()}if(V==='game')raf=requestAnimationFrame(f)};raf=requestAnimationFrame(f)}
