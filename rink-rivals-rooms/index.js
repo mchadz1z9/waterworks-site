@@ -137,6 +137,31 @@ export default {
           return {k:p.typeDescKey,p:(p.periodDescriptor||{}).number,t:p.timeInPeriod,x:x.xCoord,y:x.yCoord,tm:x.eventOwnerTeamId,who:pid?who[pid]||'':'',st:x.shotType||x.descKey||'',a1:x.assist1PlayerId?who[x.assist1PlayerId]||'':'',h:x.homeScore,a:x.awayScore}; });
         r=new Response(JSON.stringify({id:d.id,state:d.gameState,venue:(d.venue||{}).default||'',period:(d.periodDescriptor||{}).number||0,ptype:(d.periodDescriptor||{}).periodType||'',clock:(d.clock||{}).timeRemaining||'',inter:!!(d.clock||{}).inIntermission,away:T(d.awayTeam),home:T(d.homeTeam),tv:(d.tvBroadcasts||[]).map(b=>b.network).slice(0,6),plays}),{headers:{'content-type':'application/json','cache-control':'max-age=8'}}); await c.put(key,r.clone()); }
       const h=new Headers(r.headers); for(const k in CORS) h.set(k,CORS[k]); return new Response(r.body,{headers:h}); }
+    if(url.pathname==='/nfl/bucs'){ /* Buc Den: the Bucs' live schedule and scores plus every team's record, from ESPN's public feed (cached 10 min) */
+      const c=caches.default, key=new Request('https://nfl.cache/bucs-v1'); let r=url.searchParams.get('fresh')?null:await c.match(key);
+      if(!r){ const H={headers:{'user-agent':'ArcadeRivals/1.0'}};
+        const [su,st]=await Promise.all([fetch('https://site.api.espn.com/apis/site/v2/sports/football/nfl/teams/tb/schedule',H).catch(()=>null),fetch('https://site.api.espn.com/apis/v2/sports/football/nfl/standings',H).catch(()=>null)]);
+        if(!su||!su.ok||!st||!st.ok) return J({err:'nfl'},502);
+        const sd=await su.json(), sn=await st.json(), ET='America/New_York';
+        const short=t=>{ const loc=t.location||'', nm=t.name||t.shortDisplayName||t.nickname||String(t.displayName||'').split(' ').pop(); if(loc==='Los Angeles') return 'L.A. '+nm; if(loc==='New York') return 'N.Y. '+nm; return loc||t.displayName; };
+        const byWeek={};
+        for(const e of sd.events||[]){ const comp=(e.competitions||[])[0]; if(!comp) continue; const me=comp.competitors.find(x=>x.team&&x.team.abbreviation==='TB'), op=comp.competitors.find(x=>x!==me); if(!me||!op) continue;
+          const st2=(comp.status||{}).type||{}, done=st2.completed===true||st2.name==='STATUS_FINAL', sc=x=>{ const v=x.score; const n=v==null?null:+((typeof v==='object')?(v.value!=null?v.value:v.displayValue):v); return isFinite(n)?n:null; };
+          const d=new Date(e.date), tbd=!!e.timeValid===false&&e.timeValid!==undefined;
+          const day=d.toLocaleDateString('en-US',{timeZone:ET,month:'short',day:'numeric'}), time=tbd?'TBD':d.toLocaleTimeString('en-US',{timeZone:ET,hour:'numeric',minute:'2-digit'});
+          const tv=((comp.broadcasts||[])[0]||{}).media; const net=tv&&tv.shortName?tv.shortName.replace('Prime Video','Amazon').replace('Fox','FOX'):'TBD';
+          const ot=/OT/.test(st2.detail||st2.shortDetail||'')?' (OT)':'';
+          const live=!done&&st2.state==='in';
+          byWeek[(e.week||{}).number]=[(e.week||{}).number,day,me.homeAway==='home'?'vs':'at',short(op.team)+ot,done||live?sc(me):null,done||live?sc(op):null,time,net,e.date,live?(st2.shortDetail||'Live'):''];
+        }
+        const weeks=Object.keys(byWeek).map(Number).filter(Boolean), last=Math.max(18,...weeks), sch=[];
+        for(let w=1;w<=last;w++) sch.push(byWeek[w]||[w,'','','Bye']);
+        const lg={}; for(const conf of sn.children||[]) for(const en of (conf.standings||{}).entries||[]){ const S={}; for(const x of en.stats||[]) S[x.name]=x; const v=k=>+((S[k]||{}).value||0);
+          lg[en.team.displayName]=[v('wins'),v('losses'),v('ties'),v('pointsFor'),v('pointsAgainst'),(S.divisionRecord||{}).displayValue||'-']; }
+        const rec=((sd.team||{}).recordSummary)||'';
+        r=new Response(JSON.stringify({updated:Date.now(),season:(sd.season||{}).year,record:rec,sch,lg}),{headers:{'content-type':'application/json','cache-control':'max-age=300'}});
+        await c.put(key,r.clone()); }
+      const h=new Headers(r.headers); for(const k in CORS) h.set(k,CORS[k]); return new Response(r.body,{headers:h}); }
     if(url.pathname==='/nhl'){ /* live NHL scoreboard, passed through from the NHL's public score feed (cached 30 s) */
       const c=caches.default, key=new Request('https://nhl.cache/score-now'); let r=await c.match(key);
       if(!r){ const up=await fetch('https://api-web.nhle.com/v1/score/now',{headers:{'user-agent':'ArcadeRivals/1.0'}}).catch(()=>null); if(!up||!up.ok) return J({err:'nhl'},502);
