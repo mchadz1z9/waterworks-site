@@ -41,7 +41,7 @@
     return n; }
   /* login streak milestones: [coins, legendary crates] */
   const STREAKMILE={3:[300,0],14:[1500,1],30:[5000,2],50:[10000,3],75:[15000,3],100:[30000,5],200:[60000,8],365:[150000,15]};
-  function streakPop(st,day,saved,mile){ if(document.getElementById('rrStreak')) return; const el=document.createElement('div'); el.id='rrStreak'; el.style.cssText='position:fixed;inset:0;z-index:2147482800;display:flex;align-items:center;justify-content:center;background:rgba(2,6,23,.6);font-family:system-ui,sans-serif';
+  function streakPop(st,day,saved,mile){ if(PAGE!=='index') return; if(document.getElementById('rrStreak')) return; const el=document.createElement('div'); el.id='rrStreak'; el.style.cssText='position:fixed;inset:0;z-index:2147482800;display:flex;align-items:center;justify-content:center;background:rgba(2,6,23,.6);font-family:system-ui,sans-serif';
     const CAL=['50','75','100','150','200','300','🎁'], next=Object.keys(STREAKMILE).map(Number).find(n=>n>st.n);
     el.innerHTML=`<div style="background:linear-gradient(160deg,#1e1b4b,#0f172a);border:2px solid #f97316;border-radius:20px;padding:22px 24px;width:min(440px,92vw);color:#f1f5f9;text-align:center;box-shadow:0 20px 60px rgba(0,0,0,.6)">
       <div style="font-size:54px;line-height:1">🔥</div><div style="font:900 30px system-ui;margin:6px 0 2px">${st.n}-day streak!</div>
