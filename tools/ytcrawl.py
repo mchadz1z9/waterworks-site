@@ -26,6 +26,39 @@ TOPICS = {
  '🌍 World & travel': ['travel','geography facts','countries','history facts','world records','amazing places','nature','national parks','mountains','waterfalls','islands','cities','architecture','castles','museums'],
  '🎩 Magic & tricks': ['magic tricks','card tricks','illusions','life hacks','yo-yo tricks','skill toys','kendama','puzzles','riddles','brain teasers','escape room','speed cubing'],
 }
+
+MORE_TOPICS = {
+ '🔬 Science shorts': ['kids science channel','experiment shorts','science facts shorts','space shorts','chemistry for kids','engineering shorts','animal science','earth science','ocean science','weather shorts','planets for kids','dinosaur facts','bug facts','human body for kids','cool inventions','satisfying science','magnet shorts','bridge building','paper airplane','water rockets','rube goldberg','lego science','marble machine','gyroscope','slow motion camera'],
+ '🐾 Animal shorts': ['dog tricks','cat videos','baby animals','farm life','horse riding','goat videos','duck videos','penguin videos','otter videos','panda videos','elephant videos','dolphin videos','fish tank','aquascape','reptile channel','tortoise','guinea pig','hedgehog','corgi','golden retriever','husky','parrot tricks','bird feeder','wildlife camera','zoo keeper','animal sanctuary','pet care'],
+ '⚽ Sports shorts': ['soccer tricks','freestyle football','basketball tricks','dunk highlights','hockey skills','hockey goals','baseball skills','golf shots','tennis shots','volleyball highlights','skate tricks','scooter tricks','bmx tricks','trampoline tricks','cheerleading','dance team','martial arts kids','karate kids','taekwondo','swimming tricks','diving','track athletes','ultimate frisbee','pickleball','table tennis tricks','bowling strikes','snowboard tricks','ski tricks','surfing waves','skateboard park','olympic highlights','nba highlights shorts','nhl highlights shorts','mlb highlights shorts','premier league shorts','world cup highlights'],
+ '🎮 Gaming shorts': ['minecraft shorts','minecraft building tips','roblox shorts','roblox obby','fortnite creative','mario kart','smash bros','pokemon shorts','zelda shorts','splatoon','rocket league shorts','geometry dash shorts','sonic shorts','kirby shorts','stardew valley','terraria','animal crossing shorts','lego video games','gaming tips','speedrun shorts','nintendo shorts','retro games','indie games','game facts'],
+ '🧱 LEGO & builds': ['lego shorts','lego mocs','lego technic builds','lego city','lego star wars builds','brick building','domino shorts','cardboard builds','rc builds','3d printing shorts','woodworking shorts','model making','miniature builds','kinetic sculpture','paper models','origami shorts','rubik cube tricks','puzzle builds','marble run shorts','knex builds'],
+ '🎨 Art & DIY': ['drawing shorts','art challenge','painting shorts','sculpting','clay animation','cake art','latte art','sand art shorts','chalk drawing','spray paint art','calligraphy shorts','doodle','cartoon drawing','pixel art shorts','diy crafts shorts','slime shorts','sewing shorts','knitting shorts','perler beads','resin art','glass art','embroidery','crafts for kids','coloring'],
+ '🍳 Food shorts': ['cooking shorts','baking shorts','easy recipes','cake decorating shorts','candy shorts','chocolate shorts','pizza shorts','ice cream shorts','street food shorts','food art shorts','cookie decorating','bread shorts','pancake art','sushi shorts','smoothie','snack ideas','lunch ideas kids','fruit carving','donut shorts','cupcake shorts'],
+ '😂 Comedy shorts': ['funny animals','funny shorts clean','comedy shorts family','funny fails clean','sketch comedy kids','funny cartoons','animation shorts','funny dogs and cats','bloopers shorts','magic comedy shorts','funny sports moments','funny kids shorts'],
+ '✨ Satisfying': ['satisfying shorts','oddly satisfying shorts','satisfying cleaning','restoration shorts','satisfying factory','how its made shorts','satisfying sand','satisfying slime','satisfying cutting','satisfying machines','power washing shorts','carpet cleaning','satisfying art','satisfying cooking','satisfying lego'],
+ '🚗 Cars & machines': ['car shorts','supercar shorts','truck shorts','monster truck shorts','train shorts','airplane shorts','helicopter shorts','tractor shorts','excavator shorts','construction shorts','rocket launch shorts','boat shorts','motorcycle shorts','race car shorts','f1 shorts','nascar shorts','drone shorts','rc car shorts','car wash shorts','car detailing'],
+ '🎵 Music shorts': ['piano shorts','guitar shorts','drum shorts','singing shorts','beatbox shorts','dance shorts','a cappella shorts','music covers shorts','violin shorts','trumpet','marching band shorts','ukulele','music for kids','orchestra shorts'],
+ '🌍 World & travel': ['travel shorts','geography shorts','history shorts','world records shorts','amazing places shorts','nature shorts','national park shorts','mountain shorts','waterfall shorts','beach shorts','city shorts','architecture shorts','castle shorts','museum shorts','flags shorts','maps shorts'],
+ '🎩 Magic & tricks': ['magic shorts','card trick shorts','illusion shorts','life hacks shorts','yo-yo shorts','kendama shorts','juggling shorts','riddle shorts','brain teaser shorts','puzzle shorts','trick shot shorts','skill shots','paper tricks','coin tricks'],
+}
+
+SUBJ = {
+ '🔬 Science shorts': ['physics','chemistry','biology','astronomy','geology','robotics','coding for kids','electronics','inventions','experiments','volcanoes','solar system','black holes','microscope','optics','sound waves','fossils','rocks and minerals','weather','climate','energy','engineering','math'],
+ '🐾 Animal shorts': ['dogs','cats','puppies','kittens','horses','cows','pigs','sheep','chickens','ducks','rabbits','hamsters','birds','parrots','owls','eagles','sharks','whales','dolphins','octopus','turtles','frogs','lizards','snakes','spiders','bees','butterflies','elephants','lions','tigers','bears','monkeys','giraffes','zebras','kangaroos','koalas','pandas','penguins','seals','otters','foxes','wolves','deer','squirrels','raccoons'],
+ '⚽ Sports shorts': ['soccer','basketball','hockey','football','baseball','softball','volleyball','tennis','golf','bowling','skateboarding','surfing','snowboarding','skiing','bmx','motocross','gymnastics','swimming','diving','track','wrestling','karate','judo','fencing','archery','rowing','cycling','climbing','parkour','cheer','dance','frisbee','lacrosse','rugby','cricket','badminton','table tennis','pickleball','curling','figure skating'],
+ '🎮 Gaming shorts': ['minecraft','roblox','fortnite','mario','pokemon','zelda','sonic','kirby','splatoon','rocket league','geometry dash','terraria','stardew valley','animal crossing','lego games','smash bros','mario kart','retro gaming','gaming setup','speedrun'],
+ '🧱 LEGO & builds': ['lego','lego technic','lego city','lego ninjago','lego star wars','duplo','k nex','magnetic tiles','dominoes','marble run','cardboard','woodworking','3d printing','rc cars','model trains','miniatures','origami','paper craft','rubiks cube','puzzles'],
+ '🎨 Art & DIY': ['drawing','painting','watercolor','acrylic painting','sketching','cartoon drawing','anime drawing','clay','polymer clay','pottery','sculpture','slime','crafts','sewing','knitting','crochet','embroidery','beadwork','resin','calligraphy','graffiti','chalk art','pixel art','animation','stop motion','face painting','nail art','cake art'],
+ '🍳 Food shorts': ['cooking','baking','cake','cookies','cupcakes','bread','pizza','pasta','burgers','tacos','sushi','ramen','ice cream','chocolate','candy','donuts','pancakes','waffles','smoothies','fruit','vegetables','bbq','street food','snacks','lunchbox','breakfast'],
+ '✨ Satisfying': ['satisfying','asmr','restoration','cleaning','pressure washing','soap','kinetic sand','slicing','factory','machines','printing','painting walls','lawn mowing','carpet cleaning','car detailing','organizing'],
+ '🚗 Cars & machines': ['cars','supercars','classic cars','trucks','monster trucks','fire trucks','police cars','ambulance','tractors','excavators','cranes','bulldozers','trains','subway','planes','jets','helicopters','rockets','boats','ships','submarines','motorcycles','race cars','go karts','drones','robots'],
+ '🎵 Music shorts': ['piano','guitar','drums','violin','cello','flute','saxophone','trumpet','ukulele','harp','singing','choir','beatbox','dj','band','orchestra'],
+ '🌍 World & travel': ['travel','japan','italy','france','iceland','norway','canada','australia','new zealand','hawaii','alaska','egypt','greece','mexico','peru','national parks','mountains','beaches','islands','deserts','rainforest','caves','castles','skyscrapers','bridges','world records','history','flags','maps'],
+ '🎩 Magic & tricks': ['magic','card tricks','illusions','life hacks','juggling','yo-yo','kendama','spinning tops','riddles','brain teasers','trick shots','paper airplanes','balloon animals'],
+}
+MODS = ['shorts', 'for kids', 'tips']
+THIRD_TOPICS = {c: [w + ' ' + m for w in ws for m in MODS] for c, ws in SUBJ.items()}
 BLOCK = re.compile(r"(horror|scary|creepy|terrifying|haunted|\bghosts?\b|demon|murder|\bkill(s|ed|er|ing)?\b|\bdead\b|\bdeath|blood|gore\b|\bguns?\b|weapon|knife|\bwar\b|crime|police chase|arrest|prison|drunk|\bbeer|alcohol|\bvap(e|ing)\b|smok(e|ing)\b|\bdrugs?\b|\bweed\b|\bcbd\b|casino|gambl|\bbet(s|ting)?\b|sexy|\bsex|hot girl|bikini|onlyfans|18\+|nsfw|twerk|\bkiss|dating|girlfriend|boyfriend|\bcrush\b|prank|\bfight|brawl|knock ?out|injur|surgery|pimple|\bzits?\b|\bcurse|\bdamn|\bhell\b|wtf|stupid|idiot|shut up|politic|trump|biden|election|religio|conspiracy|\bscam|crypto|bitcoin|stock market|forex|money glitch|free robux|giveaway|mukbang|weight loss|gone wrong|\bdiet\b)", re.I)
 
 def get(url, tries=3):
@@ -102,15 +135,15 @@ def stage_channels():
                 if not c['id'] or c['subs'] < 50000 or BLOCK.search(c['title']) or not english(c['title']): continue
                 if c['id'] not in found: found[c['id']] = dict(c, cat=cat, q=q)
             if n % 25 == 0: print(n, '/', len(jobs), 'queries ·', len(found), 'channels', flush=True)
-    json.dump(list(found.values()), open(os.path.join(OUT, 'channels.json'), 'w'), indent=0)
+    json.dump(list(found.values()), open(os.path.join(OUT, CHFILE), 'w'), indent=0)
     print('channels:', len(found))
 
 def stage_shorts():
-    chans = json.load(open(os.path.join(OUT, 'channels.json')))
+    chans = json.load(open(os.path.join(OUT, CHFILE)))
     have = set()
     try:
-        old = open('/home/user/waterworks-site/rink-rivals/clips.html', encoding='utf-8').read()
-        have = set(re.findall(r'"yt":"([\w-]{11})"', old))
+        old = ''.join(open(f, encoding='utf-8').read() for f in ['/home/user/waterworks-site/rink-rivals/clips-data.js','/home/user/waterworks-site/rink-rivals/clips.html'] if os.path.exists(f))
+        have = set(re.findall(r'"([\w-]{11})"', old))
     except Exception: pass
     res = {}
     def one(ch):
@@ -123,11 +156,16 @@ def stage_shorts():
                 if not t or s['yt'] in have or BLOCK.search(t) or not english(t): continue
                 keep.append({'yt': s['yt'], 'title': t[:90]})
                 have.add(s['yt'])
-                if len(keep) >= 24: break
+                if len(keep) >= PER: break
             if len(keep) >= 6: res[ch['id']] = {'by': ch['title'], 'cat': ch['cat'], 'subs': ch['subs'], 'v': keep}
             if n % 50 == 0: print(n, '/', len(chans), 'channels ·', sum(len(r['v']) for r in res.values()), 'shorts', flush=True)
-    json.dump(res, open(os.path.join(OUT, 'shorts.json'), 'w'))
+    json.dump(res, open(os.path.join(OUT, SHFILE), 'w'))
     print('channels with shorts:', len(res), 'shorts:', sum(len(r['v']) for r in res.values()))
 
+PER = int(os.environ.get('PER', '24')); CHFILE = os.environ.get('CHFILE', 'channels.json'); SHFILE = os.environ.get('SHFILE', 'shorts.json')
+if os.environ.get('MORE'):
+    TOPICS = MORE_TOPICS
+if os.environ.get('THIRD'):
+    TOPICS = THIRD_TOPICS
 if __name__ == '__main__':
     {'channels': stage_channels, 'shorts': stage_shorts}[sys.argv[1]]()
