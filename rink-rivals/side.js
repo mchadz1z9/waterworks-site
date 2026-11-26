@@ -4,7 +4,7 @@
   try{ const pg=(location.pathname.split('/').pop()||'index').replace(/\.html$/,'')||'index';
     const SIDE_PAGES=['index','chat','messages','ai','browser','call','clips','sports-arcade']; if(window.top!==window) return;
     if(SIDE_PAGES.includes(pg)&&!document.getElementById('rrSide')&&!window.RR_NOSIDE){
-      const L=[['index','🏠','Home','./'],['games','🎮','Games','./#games'],['worlds','🌍','Worlds','./#worlds'],['messages','📨','Messages','messages'],['ai','🤖','AI','ai'],['browser','🌐','Browser','browser'],['clips','📱','Clips','clips'],['sports-arcade','🏟️','Arcade','sports-arcade'],['shop','🪙','Shop','#shop']];
+      const L=[['index','🏠','Home','./'],['games','🎮','Games','./#games'],['worlds','🌍','Worlds','./#worlds'],['messages','📨','Messages','messages'],['ai','🤖','AI','ai'],['browser','🌐','Browser','browser'],['rivalclips','📱','Clips','rivalclips'],['sports-arcade','🏟️','Arcade','sports-arcade'],['shop','🪙','Shop','#shop']];
       const css=document.createElement('style'); css.textContent=`
 #rrSide{position:fixed;left:0;top:0;bottom:0;width:76px;z-index:2147480500;display:flex;flex-direction:column;align-items:stretch;gap:4px;padding:12px 8px;background:linear-gradient(180deg,rgba(10,6,24,.92),rgba(5,4,14,.95));border-right:1px solid color-mix(in srgb,var(--v1,#ff2d95) 35%,transparent);box-shadow:4px 0 30px color-mix(in srgb,var(--v1,#ff2d95) 14%,transparent);backdrop-filter:blur(14px);transition:width .2s;overflow:hidden;font-family:system-ui,sans-serif}
 #rrSide:hover,#rrSide.open{width:210px}

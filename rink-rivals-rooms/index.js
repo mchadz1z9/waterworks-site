@@ -108,6 +108,26 @@ async function wsData(q0,frames){ const q=String(q0||'').trim().slice(0,120); if
   /* a quick answer from Wikipedia for the top of the results */
   let wiki=null; try{ const r=await fetch('https://en.wikipedia.org/w/api.php?action=query&list=search&format=json&srlimit=1&srsearch='+encodeURIComponent(q),{headers:{'user-agent':'ArcadeRivals/1.0 (games site)'}}); const j=await r.json(); const t=j.query&&j.query.search&&j.query.search[0]&&j.query.search[0].title; if(t){ const sr=await fetch('https://en.wikipedia.org/api/rest_v1/page/summary/'+encodeURIComponent(t.replace(/ /g,'_')),{headers:{'user-agent':'ArcadeRivals/1.0 (games site)'}}); const sj=await sr.json(); if(sj&&sj.extract&&sj.type!=='disambiguation'&&!WS_BAD.test(sj.extract)) wiki={t:sj.title,d:sj.extract.slice(0,600),u:(sj.content_urls&&sj.content_urls.desktop&&sj.content_urls.desktop.page)||('https://en.wikipedia.org/wiki/'+encodeURIComponent(t)),img:sj.thumbnail&&sj.thumbnail.source||''}; } }catch(e){}
   const res={results:out,src,wiki}; if(frames) await c.put(key,new Response(JSON.stringify(res),{headers:{'cache-control':'max-age=1800'}})); return res; }
+/* Rival Clips live search: YouTube's official search (strict safe search, embeddable videos only), then our own kid filter.
+   Each search is cached for a day so the daily allowance stretches across everyone on the site. Needs the YT_KEY secret. */
+const YT_BAD=/(offensive|flirt|abuse|stand ?up comedy|\bcomedian|hangover|\bbra\b|lingerie|swimsuit|bikini|\bthong|booty|\bbutt\b|\bass\b|\bpee\b|\bpoop|toilet|vomit|puke|rizz|gyat|skibidi|horny|\bnude|naked|\bstrip|pole dance|\bdies?\b|\bdied\b|suicid|self harm|depress|\bgun|\bshoot(ing|er)\b|knife|weapon|attack|\bwar\b|military|missile|bomb|politic|trump|biden|president|election|terror|accident|crash|\bdead\b|\bkill|murder|blood|gore|horror|scary|creepy|prank|\bsexy|\bsex\b|kiss|dating|drunk|beer|alcohol|vape|\bdrug|casino|gambl)/i;
+async function ytSearch(url,env){
+  const H={...CORS,'content-type':'application/json'};
+  const q=String(url.searchParams.get('q')||'').replace(/[\u0000-\u001f<>]/g,' ').replace(/\s+/g,' ').trim().slice(0,80), pt=String(url.searchParams.get('p')||'').replace(/[^A-Za-z0-9_-]/g,'').slice(0,40);
+  if(!q) return new Response(JSON.stringify({items:[]}),{headers:H});
+  if(YT_BAD.test(q)) return new Response(JSON.stringify({items:[],blocked:true}),{headers:H});
+  if(!env.YT_KEY) return new Response(JSON.stringify({items:[],err:'nokey'}),{headers:H});
+  const ck=new Request('https://yts.cache/'+encodeURIComponent(q.toLowerCase())+'?p='+pt), cache=caches.default;
+  const hit=await cache.match(ck); if(hit) return new Response(hit.body,{headers:{...H,'x-cache':'hit'}});
+  const api='https://www.googleapis.com/youtube/v3/search?part=snippet&type=video&maxResults=50&safeSearch=strict&videoEmbeddable=true&relevanceLanguage=en&regionCode=US&q='+encodeURIComponent(q)+(pt?'&pageToken='+pt:'');
+  let d; try{ const r=await fetch(api,{headers:{'X-Goog-Api-Key':env.YT_KEY}}); d=await r.json(); if(!r.ok){ const why=(((d.error||{}).errors||[])[0]||{}).reason||'err'; return new Response(JSON.stringify({items:[],err:why==='quotaExceeded'?'quota':'api'}),{headers:H}); } }catch(e){ return new Response(JSON.stringify({items:[],err:'net'}),{headers:H}); }
+  const dec=t=>String(t||'').replace(/&amp;/g,'&').replace(/&quot;/g,'"').replace(/&#39;/g,"'").replace(/&lt;/g,'<').replace(/&gt;/g,'>');
+  const items=(d.items||[]).filter(i=>i.id&&i.id.videoId&&i.snippet).map(i=>({yt:i.id.videoId,title:dec(i.snippet.title),by:dec(i.snippet.channelTitle),ts:Date.parse(i.snippet.publishedAt)||0,live:i.snippet.liveBroadcastContent==='live'})).filter(i=>!YT_BAD.test(i.title+' '+i.by));
+  const body=JSON.stringify({items,next:d.nextPageToken||''});
+  await cache.put(ck,new Response(body,{headers:{'content-type':'application/json','cache-control':'public,max-age=86400'}}));
+  return new Response(body,{headers:H});
+}
+
 export default {
   /* nightly chat wipe at 10 p.m. Toronto time. Cron runs at 02:00 and 03:00 UTC, and only the one that lands on 22:00 local (EST or EDT) clears */
   async scheduled(ev, env, ctx){
@@ -173,6 +193,7 @@ export default {
           if(vid&&/"isLiveNow":true|"isLive":true/.test(lh)){ const tt=(lh.match(/<meta name="title" content="([^"]{0,140})"/)||[])[1]||'NHL live'; yt={id:vid,title:tt.replace(/&amp;/g,'&').replace(/&#39;/g,"'").replace(/&quot;/g,'"')}; } }catch(e){}
         r=new Response(JSON.stringify({date:d.currentDate,games,yt}),{headers:{'content-type':'application/json','cache-control':'max-age=30'}}); await c.put(key,r.clone()); }
       const h=new Headers(r.headers); for(const k in CORS) h.set(k,CORS[k]); return new Response(r.body,{headers:h}); }
+    if(url.pathname==='/yts'){ if(req.method==='OPTIONS') return new Response(null,{headers:CORS}); return ytSearch(url,env); }
     if(url.pathname==='/ws'){ if(req.method==='OPTIONS') return new Response(null,{headers:CORS}); return webSearch(url); }
     if(url.pathname==='/itch'){ if(req.method==='OPTIONS') return new Response(null,{headers:CORS}); return itchList(url); }
     if(url.pathname==='/itchplay'){ if(req.method==='OPTIONS') return new Response(null,{headers:CORS}); return itchPlay(url); }
