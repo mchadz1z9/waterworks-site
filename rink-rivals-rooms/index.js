@@ -936,26 +936,66 @@ export class Site {
       return J({err:'nf'},404); }
     /* Rival Market: team "stocks" priced from real records and streaks; holdings kept here, coins move on the player's device */
     if(url.pathname.startsWith('/mkt/')){ const now=Date.now(), day=new Date(now).toISOString().slice(0,10);
-      if(!this.mkOk){ this.sql.exec('CREATE TABLE IF NOT EXISTS mkh(pid TEXT, name TEXT, sym TEXT, qty INTEGER, cost INTEGER, PRIMARY KEY(pid,sym))'); this.sql.exec('CREATE TABLE IF NOT EXISTS mkp(sym TEXT, day TEXT, price INTEGER, PRIMARY KEY(sym,day))'); this.mkOk=1; } if(!this.mkClean){ this.mkClean=1; try{ this.sql.exec("DELETE FROM mkh WHERE name IN ('MkTest','MkTest2') OR name GLOB 'Mk[0-9][0-9]*'"); this.sql.exec("DELETE FROM pick WHERE name='ScTest'"); }catch(e){} } /* remove test players left by setup checks */
-      const quotes=async()=>{ if(this.mkQ&&now-this.mkQ.t<600000) return this.mkQ.q; const q={};
+      if(!this.mkOk){ this.sql.exec('CREATE TABLE IF NOT EXISTS mkh(pid TEXT, name TEXT, sym TEXT, qty INTEGER, cost INTEGER, PRIMARY KEY(pid,sym))'); this.sql.exec('CREATE TABLE IF NOT EXISTS mkp(sym TEXT, day TEXT, price INTEGER, PRIMARY KEY(sym,day))');
+        try{ this.sql.exec('ALTER TABLE mkh ADD COLUMN dday TEXT'); }catch(e){}
+        this.sql.exec('CREATE TABLE IF NOT EXISTS mkc(id INTEGER PRIMARY KEY AUTOINCREMENT, pid TEXT, n INTEGER, why TEXT, ts INTEGER)'); this.sql.exec('CREATE TABLE IF NOT EXISTS mkn(id INTEGER PRIMARY KEY AUTOINCREMENT, ts INTEGER, txt TEXT)'); this.sql.exec('CREATE TABLE IF NOT EXISTS mko(sym TEXT PRIMARY KEY, safe INTEGER)');
+        /* shares are now capped at 500 per team: trim anyone holding more than that (only possible under the old rules) */ this.sql.exec('UPDATE mkh SET cost=CAST(cost*500.0/qty AS INTEGER), qty=500 WHERE qty>500'); this.mkOk=1; }
+      if(!this.mkClean){ this.mkClean=1; try{ this.sql.exec("DELETE FROM mkh WHERE name IN ('MkTest','MkTest2') OR name GLOB 'Mk[0-9][0-9]*'"); this.sql.exec("DELETE FROM pick WHERE name='ScTest'"); }catch(e){} } /* remove test players left by setup checks */
+      const SH=500, FEE=.02;
+      const unit=(base,k)=>Math.max(1,Math.round(base*(1+1.2*Math.pow(Math.max(0,k)/SH,1.5))));   /* price of the next share when k shares are already owned by players */
+      const costBuy=(base,held,n)=>{ let c=0; for(let k=held;k<held+n;k++) c+=unit(base,k); return c; }, gotSell=(base,held,n)=>{ let c=0; for(let k=held-1;k>=held-n;k--) c+=unit(base,k); return c; };
+      const claim=(p,n,why)=>{ if(n>0) this.sql.exec('INSERT INTO mkc(pid,n,why,ts) VALUES(?,?,?,?)',p,Math.round(n),why,now); };
+      const news=t=>{ this.sql.exec('INSERT INTO mkn(ts,txt) VALUES(?,?)',now,String(t).slice(0,160)); if(Math.random()<.1) this.sql.exec('DELETE FROM mkn WHERE id<(SELECT MAX(id)-60 FROM mkn)'); };
+      const base=async()=>{ if(this.mkQ&&now-this.mkQ.t<600000) return this.mkQ.q; const q={};
         for(const lg of ['nfl','nba','nhl','mlb']){ const st=await scStand(lg); if(!st) continue; for(const g of st.groups) for(const t of g.teams){ const w=+t.w||0, l=+t.l||0, x=+t.t||0, gp=w+l+x; if(!gp&&lg!=='mlb') continue;
           const pct=lg==='nhl'?((+t.pts||0)/Math.max(1,2*gp)):gp?(w+.5*x)/gp:.5; const sm=String(t.strk||'').match(/^([WL])(\d+)/), sk=sm?(sm[1]==='W'?1:-1)*Math.min(+sm[2],8):0;
-          q[lg+':'+t.ab]={sym:lg+':'+t.ab,lg,ab:t.ab,name:t.name,logo:t.logo,rec:w+'-'+l+(x?'-'+x:''),price:Math.max(5,Math.min(250,Math.round(10+190*pct+sk*3)))}; } }
-        if(Object.keys(q).length){ for(const k in q){ this.sql.exec('INSERT OR REPLACE INTO mkp(sym,day,price) VALUES(?,?,?)',k,day,q[k].price); const y=this.sql.exec('SELECT price FROM mkp WHERE sym=? AND day<? ORDER BY day DESC LIMIT 1',k,day).toArray()[0]; q[k].chg=y?q[k].price-y.price:0; }
-          if(Math.random()<.05) this.sql.exec('DELETE FROM mkp WHERE day<?',new Date(now-60*864e5).toISOString().slice(0,10)); this.mkQ={t:now,q}; }
-        return q; };
-      if(url.pathname==='/mkt/quotes'){ const q=await quotes(); return new Response(JSON.stringify({q:Object.values(q)}),{headers:{...CORS,'content-type':'application/json','cache-control':'public, max-age=120'}}); }
-      if(url.pathname==='/mkt/hist'){ const sym=String(url.searchParams.get('s')||'').slice(0,12); return J({h:this.sql.exec('SELECT day,price FROM mkp WHERE sym=? ORDER BY day DESC LIMIT 30',sym).toArray().reverse()}); }
+          q[lg+':'+t.ab]={sym:lg+':'+t.ab,lg,ab:t.ab,name:t.name,logo:t.logo,rec:w+'-'+l+(x?'-'+x:''),base:Math.max(5,Math.min(250,Math.round(10+190*pct+sk*3)))}; } }
+        if(Object.keys(q).length) this.mkQ={t:now,q}; else if(this.mkQ) return this.mkQ.q; return q; };
+      /* live quotes: performance price × demand from how many shares players own, plus who owns each team */
+      const quotes=async()=>{ const B=await base(), q={}; const held={}, top={};
+        for(const r of this.sql.exec('SELECT sym,SUM(qty) h FROM mkh WHERE qty>0 GROUP BY sym')) held[r.sym]=r.h;
+        for(const r of this.sql.exec('SELECT sym,pid,name,qty FROM mkh WHERE qty>250')) top[r.sym]=r;
+        for(const k in B){ const h=held[k]||0, o=top[k]; q[k]={...B[k],held:h,price:unit(B[k].base,h),owner:o?{name:o.name,qty:o.qty,full:o.qty>=SH}:null}; }
+        if(this.mkPD!==day+':'+Math.floor(now/3600000)){ this.mkPD=day+':'+Math.floor(now/3600000); for(const k in q) this.sql.exec('INSERT OR REPLACE INTO mkp(sym,day,price) VALUES(?,?,?)',k,day,q[k].price); if(Math.random()<.1) this.sql.exec('DELETE FROM mkp WHERE day<?',new Date(now-60*864e5).toISOString().slice(0,10)); }
+        const prev={}; for(const r of this.sql.exec('SELECT sym,price FROM mkp WHERE day=?',new Date(now-864e5).toISOString().slice(0,10))) prev[r.sym]=r.price;
+        for(const k in q) q[k].chg=prev[k]!=null?q[k].price-prev[k]:0; return q; };
+      if(url.pathname==='/mkt/quotes'){ const q=await quotes(); return new Response(JSON.stringify({q:Object.values(q),sh:SH,fee:FEE,news:this.sql.exec('SELECT ts,txt FROM mkn ORDER BY id DESC LIMIT 15').toArray()}),{headers:{...CORS,'content-type':'application/json','cache-control':'public, max-age=20'}}); }
+      if(url.pathname==='/mkt/hist'){ const sym=String(url.searchParams.get('s')||'').slice(0,12); return J({h:this.sql.exec('SELECT day,price FROM mkp WHERE sym=? ORDER BY day DESC LIMIT 30',sym).toArray().reverse(),holders:this.sql.exec('SELECT name,qty FROM mkh WHERE sym=? AND qty>0 ORDER BY qty DESC LIMIT 8',sym).toArray()}); }
       if(url.pathname==='/mkt/lb'){ const q=await quotes(); const by={}; for(const r of this.sql.exec('SELECT pid,name,sym,qty,cost FROM mkh WHERE qty>0')){ const v=(q[r.sym]?q[r.sym].price:0)*r.qty; const b=by[r.pid]||(by[r.pid]={name:r.name,value:0,cost:0}); b.value+=v; b.cost+=r.cost; b.name=r.name; }
-        const L=Object.values(by).map(b=>({name:b.name,value:b.value,profit:b.value-b.cost})); return J({rich:L.slice().sort((a,b)=>b.value-a.value).slice(0,25),best:L.filter(x=>x.profit>0).sort((a,b)=>b.profit-a.profit).slice(0,25)}); }
-      let m={}; try{ m=await req.json(); }catch(e){} const pid=cleanPid(m.pid); if(pid.length<8) return J({err:'bad'},400);
-      if(url.pathname==='/mkt/me'){ const q=await quotes(); return J({h:this.sql.exec('SELECT sym,qty,cost FROM mkh WHERE pid=? AND qty>0',pid).toArray().map(r=>({...r,price:q[r.sym]?q[r.sym].price:0}))}); }
-      const q=await quotes(), sym=String(m.sym||''), qt=q[sym], qty=Math.floor(+m.qty||0); if(!qt||qty<1||qty>500) return J({err:'bad'},400);
+        const L=Object.values(by).map(b=>({name:b.name,value:b.value,profit:b.value-b.cost}));
+        const own=Object.values(q).filter(x=>x.owner).map(x=>({name:x.owner.name,team:x.name,logo:x.logo,full:x.owner.full,qty:x.owner.qty})).sort((a,b)=>b.qty-a.qty);
+        return J({rich:L.slice().sort((a,b)=>b.value-a.value).slice(0,25),best:L.filter(x=>x.profit>0).sort((a,b)=>b.profit-a.profit).slice(0,25),owners:own.slice(0,40)}); }
+      let m={}; try{ m=await req.json(); }catch(e){} const pid=cleanPid(m.pid); if(pid.length<8) return J({err:'bad'},400); const nm=cleanName(m.name);
+      if(url.pathname==='/mkt/claims'){ const C=this.sql.exec('SELECT id,n,why FROM mkc WHERE pid=? ORDER BY id LIMIT 50',pid).toArray(); if(C.length) this.sql.exec('DELETE FROM mkc WHERE pid=? AND id<=?',pid,C[C.length-1].id); return J({claims:C}); }
+      if(url.pathname==='/mkt/me'){ const q=await quotes(); const H=this.sql.exec('SELECT sym,qty,cost,dday FROM mkh WHERE pid=? AND qty>0',pid).toArray(); let div=0; const lines=[];
+        /* daily dividends: 0.4% of the performance price per share per day (up to 7 days at a time); owners get 1.5×, full owners 2× */
+        for(const h of H){ const x=q[h.sym]; if(!x){ continue; } const last=h.dday||day; const days=Math.min(7,Math.max(0,Math.round((Date.parse(day)-Date.parse(last))/864e5))); if(!h.dday||days>0) this.sql.exec('UPDATE mkh SET dday=? WHERE pid=? AND sym=?',day,pid,h.sym);
+          if(days>0){ const mult=h.qty>=SH?2:h.qty>250?1.5:1; const d=Math.round(h.qty*x.base*.004*days*mult); if(d>0){ div+=d; lines.push(x.ab+' +'+d); } } }
+        return J({h:H.map(r=>({sym:r.sym,qty:r.qty,cost:r.cost,price:q[r.sym]?q[r.sym].price:0})),div,divWhy:lines.join(', ')}); }
+      const q=await quotes(), sym=String(m.sym||''), qt=q[sym]; if(!qt) return J({err:'bad'},400);
       const cur=this.sql.exec('SELECT qty,cost FROM mkh WHERE pid=? AND sym=?',pid,sym).toArray()[0]||{qty:0,cost:0};
-      if(url.pathname==='/mkt/buy'){ if(qt.price>(+m.max||0)) return J({err:'price',price:qt.price}); if(cur.qty+qty>1000) return J({err:'max'},400);
-        this.sql.exec('INSERT INTO mkh(pid,name,sym,qty,cost) VALUES(?,?,?,?,?) ON CONFLICT(pid,sym) DO UPDATE SET qty=qty+excluded.qty,cost=cost+excluded.cost,name=excluded.name',pid,cleanName(m.name),sym,qty,qty*qt.price); return J({ok:true,price:qt.price,paid:qty*qt.price}); }
-      if(url.pathname==='/mkt/sell'){ if(cur.qty<qty) return J({err:'qty'},400); const avg=cur.qty?cur.cost/cur.qty:0;
-        this.sql.exec('UPDATE mkh SET qty=qty-?,cost=? WHERE pid=? AND sym=?',qty,Math.round(cur.cost-avg*qty),pid,sym); return J({ok:true,price:qt.price,got:qty*qt.price}); }
+      const ownerRow=this.sql.exec('SELECT pid,name,qty FROM mkh WHERE sym=? AND qty>250',sym).toArray()[0];
+      const payOwner=(amt,who)=>{ if(ownerRow&&ownerRow.pid!==pid){ const f=Math.round(amt*FEE); if(f>0) claim(ownerRow.pid,f,`👑 ${f} owner fee: ${who} traded ${qt.ab}`); return f; } return 0; };
+      if(url.pathname==='/mkt/bquote'||url.pathname==='/mkt/buyout'){ const others=this.sql.exec('SELECT pid,name,qty FROM mkh WHERE sym=? AND qty>0 AND pid<>?',sym,pid).toArray(); const oth=others.reduce((t,r)=>t+r.qty,0);
+        const free=SH-qt.held, full=others.find(r=>r.qty>=SH), prem=full?1.5:1.25; const safe=this.sql.exec('SELECT safe FROM mko WHERE sym=?',sym).toArray()[0];
+        const fromMkt=costBuy(qt.base,qt.held,free), fromPl=others.map(r=>({...r,pay:Math.round(r.qty*qt.price*prem)})), total=fromMkt+fromPl.reduce((t,r)=>t+r.pay,0);
+        const info={free,fromMkt,players:fromPl.map(r=>({name:r.name,qty:r.qty,pay:r.pay})),premium:prem,total,mine:cur.qty,safeUntil:safe&&safe.safe>now&&full?safe.safe:0};
+        if(cur.qty>=SH) return J({...info,err:'own'});
+        if(url.pathname==='/mkt/bquote') return J(info);
+        if(info.safeUntil) return J({...info,err:'safe'},409); if(total>(+m.max||0)) return J({...info,err:'price'},409);
+        for(const r of fromPl){ claim(r.pid,r.pay,`💰 ${nm} bought out the ${qt.name}: your ${r.qty} share${r.qty>1?'s':''} sold for 🪙 ${r.pay.toLocaleString()}`); this.sql.exec('DELETE FROM mkh WHERE pid=? AND sym=?',r.pid,sym); }
+        this.sql.exec('INSERT INTO mkh(pid,name,sym,qty,cost,dday) VALUES(?,?,?,?,?,?) ON CONFLICT(pid,sym) DO UPDATE SET qty=?,cost=cost+?,name=excluded.name',pid,nm,sym,SH,total,day,SH,total);
+        this.sql.exec('INSERT OR REPLACE INTO mko(sym,safe) VALUES(?,?)',sym,now+12*3600000);
+        news(`🏆 ${nm} bought out the ${qt.name} for 🪙 ${total.toLocaleString()}${full?' (hostile takeover!)':''}`); return J({ok:true,paid:total}); }
+      const n=Math.floor(+m.qty||0); if(n<1||n>SH) return J({err:'bad'},400);
+      if(url.pathname==='/mkt/buy'){ if(qt.held+n>SH) return J({err:'left',left:SH-qt.held},409); const cost=costBuy(qt.base,qt.held,n); if(cost>(+m.max||0)) return J({err:'price',cost},409);
+        const wasOwner=cur.qty>250; this.sql.exec('INSERT INTO mkh(pid,name,sym,qty,cost,dday) VALUES(?,?,?,?,?,?) ON CONFLICT(pid,sym) DO UPDATE SET qty=qty+excluded.qty,cost=cost+excluded.cost,name=excluded.name',pid,nm,sym,n,cost,day); payOwner(cost,nm);
+        const nq=cur.qty+n; if(!wasOwner&&nq>250) news(`👑 ${nm} is now the majority owner of the ${qt.name}!`); else if(nq>=SH) news(`🏆 ${nm} owns 100% of the ${qt.name}!`); else if(n>=50) news(`📈 ${nm} bought ${n} shares of ${qt.ab}`);
+        return J({ok:true,paid:cost}); }
+      if(url.pathname==='/mkt/sell'){ if(cur.qty<n) return J({err:'qty'},400); const gross=gotSell(qt.base,qt.held,n), fee=payOwner(gross,nm), got=gross-fee; const avg=cur.qty?cur.cost/cur.qty:0;
+        if(cur.qty===n) this.sql.exec('DELETE FROM mkh WHERE pid=? AND sym=?',pid,sym); else this.sql.exec('UPDATE mkh SET qty=qty-?,cost=? WHERE pid=? AND sym=?',n,Math.round(cur.cost-avg*n),pid,sym);
+        if(cur.qty>250&&cur.qty-n<=250) news(`📉 ${nm} is no longer the owner of the ${qt.name}`); else if(n>=50) news(`📉 ${nm} sold ${n} shares of ${qt.ab}`);
+        return J({ok:true,got}); }
       return J({err:'nf'},404); }
     /* Game Day "who scores next?": votes for the current score; returns how everyone voted */
     if(url.pathname==='/gd/vote'){ let m={}; try{ m=await req.json(); }catch(e){} if(!this.gdOk){ this.sql.exec('CREATE TABLE IF NOT EXISTS gdvote(gid TEXT, state TEXT, pid TEXT, side TEXT, ts INTEGER, PRIMARY KEY(gid,state,pid))'); this.gdOk=1; }
