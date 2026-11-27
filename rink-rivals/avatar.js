@@ -85,4 +85,6 @@
     o.push('</svg>'); return o.join(''); }
   const mini=(c)=>svg(typeof c==='string'?c:(c||load()),false);
   window.RRAV={ load, save, code, decode, svg, mini, gearNow, SKIN, HAIRC, COL, BG, N, SLOTS, isSet:()=>{ try{ return localStorage.getItem('rrAvatarSet')==='1'; }catch(e){ return false; } } };
+  /* chat may connect before this file loads: send the avatar as soon as both are ready */
+  { let n=0; const push=()=>{ if(!window.RRAV.isSet()) return; if(window.RRC&&RRC.ready&&RRC.setAv){ RRC.setAv(code()); return; } if(++n<30) setTimeout(push,1000); }; setTimeout(push,800); }
 })();
