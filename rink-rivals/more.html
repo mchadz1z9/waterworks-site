@@ -35,7 +35,7 @@ h1{margin:0;font:900 36px/1 system-ui;letter-spacing:.01em}
 <body>
 <a id="back" href="./">← Arcade</a>
 <div class="wrap">
-  <div id="top"><h1>🎮 Games</h1><span id="cnt"></span><input id="q" placeholder="Search games…" autocomplete="off"></div>
+  <div id="top"><h1>🎮 Games</h1><span id="cnt"></span><input id="q" type="search" placeholder="Search 30,000+ games… (try “car”, “zombie”, “basketball”)" autocomplete="off" enterkeyhint="search"></div>
   <div class="chips" id="chips"></div>
   <div id="main"></div>
   <div class="note">Arcade Rivals originals are made by us. The other games come from the GameMonetize network, which shares its games with websites and shows ads inside them.</div>
@@ -43,40 +43,73 @@ h1{margin:0;font:900 36px/1 system-ui;letter-spacing:.01em}
 <script src="net-games.js"></script>
 <script>
 (function(){
-  const G=window.NETGAMES||[], $=s=>document.querySelector(s), esc=s=>String(s).replace(/[&<>"]/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;'}[c]));
+  const $=s=>document.querySelector(s), esc=s=>String(s).replace(/[&<>"]/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;'}[c]));
+  const FEAT=window.NETGAMES||[]; let G=FEAT.slice();
   const ICON={Racing:'🏁',Shooters:'🎯',Sports:'🏟️',Action:'⚔️',Adventure:'🗺️',Multiplayer:'🌐',Puzzle:'🧩',Arcade:'👾',Casual:'🎈'};
   const SECS=(window.NETSECS||Object.keys(ICON)).filter(s=>G.some(g=>g[3]===s));
   /* our own games, shown first */
-  const OURS=[['city','Rival City','🏙️','#1e293b,#f59e0b'],['br','Storm Royale','🌪️','#312e81,#db2777'],['blockverse','Blockverse','🧱','#3f9f46,#6e4e2c'],['skystunt','Sky Stunt','🚗','#0ea5e9,#f97316'],['football','Football','🏈','#14532d,#a16207'],['hockey','Hockey','🏒','#0c4a6e,#e2e8f0'],['packs','Pack Rip','🃏','#f59e0b,#be123c'],['elements','Element Lab','⚗️','#7c3aed,#0f172a'],['basketball','Basketball','🏀','#9a3412,#1e293b'],['f1','F1 Racing','🏎️','#991b1b,#111827'],['deepdive','Deep Dive','🤿','#0369a1,#0f172a'],['sports-arcade','Sports Arcade','🏆','#065f46,#1d4ed8']];
-  const tile=g=>`<a class="g" href="play?n=${g[0]}&id=${encodeURIComponent(g[1])}" title="${esc(g[6])}"><img loading="lazy" decoding="async" src="${esc(g[5])}" alt=""><b>${esc(g[2])}</b></a>`;
+  const OURS=[['city','Rival City','🏙️','#1e293b,#f59e0b','open world driving cars police city gta'],['br','Storm Royale','🌪️','#312e81,#db2777','battle royale shooter storm fortnite'],['blockverse','Blockverse','🧱','#3f9f46,#6e4e2c','blocks voxel sandbox build mine craft survival minecraft'],['skystunt','Sky Stunt','🚗','#0ea5e9,#f97316','car stunt racing jumps drift'],['football','Football','🏈','#14532d,#a16207','american football nfl sports'],['hockey','Hockey','🏒','#0c4a6e,#e2e8f0','ice hockey nhl sports'],['packs','Pack Rip','🃏','#f59e0b,#be123c','pack opener cards sports collect'],['elements','Element Lab','⚗️','#7c3aed,#0f172a','alchemy combine elements mix'],['basketball','Basketball','🏀','#9a3412,#1e293b','basketball nba hoops sports'],['f1','F1 Racing','🏎️','#991b1b,#111827','formula racing cars race'],['deepdive','Deep Dive','🤿','#0369a1,#0f172a','ocean trivia dive water'],['sports-arcade','Sports Arcade','🏆','#065f46,#1d4ed8','sports games arcade']];
+  const hashOf=g=>(String(g[4]).match(/\/([a-z0-9]{20,})\/?$/)||[])[1]||'';
+  const tile=g=>`<a class="g" href="play?n=${g[0]}&id=${encodeURIComponent(g[1])}&h=${hashOf(g)}&t=${encodeURIComponent(g[2])}" title="${esc(g[6])}"><img loading="lazy" decoding="async" src="${esc(g[5])}" alt=""><b>${esc(g[2])}</b></a>`;
   const ours=o=>`<a class="g o" href="${o[0]}" style="--c:linear-gradient(135deg,${o[3]})"><i>ORIGINAL</i><span>${o[2]}</span><b>${esc(o[1])}</b></a>`;
   const recent=()=>{ try{ return JSON.parse(localStorage.getItem('rrNetRecent')||'[]'); }catch(e){ return []; } };
-  const byKey=new Map(G.map(g=>[g[0]+':'+g[1],g]));
+  let byKey=new Map(G.map(g=>[g[0]+':'+g[1],g]));
   /* a fixed daily shuffle, so the featured games change each day but not on every reload */
   const day=Math.floor(Date.now()/864e5); const rnd=(i)=>{ let x=Math.sin((i+1)*9301+day*49297)*233280; return x-Math.floor(x); };
   const daily=L=>L.map((g,i)=>[rnd(i),g]).sort((a,b)=>a[0]-b[0]).map(x=>x[1]);
-  $('#cnt').textContent=(G.length+OURS.length).toLocaleString()+' games';
-  const qs=new URLSearchParams(location.search); let cat=qs.get('c')||'all', obs=null;
+  const count=()=>{ $('#cnt').textContent=(Math.max(G.length,window.NETTOTAL||0)+OURS.length).toLocaleString()+' games'; }; count();
+  const qs=new URLSearchParams(location.search); let cat=qs.get('c')||'all', obs=null; if(qs.get('q')) $('#q').value=qs.get('q');
+
+  /* ---------- search: titles + tags, typo-tolerant, related words, and never an empty page ---------- */
+  const norm=s=>String(s||'').toLowerCase().normalize('NFD').replace(/[̀-ͯ]/g,'').replace(/[^a-z0-9]+/g,' ').trim();
+  const SYN={car:'cars racing race drive driving drift parking traffic',race:'racing cars car drift moto bike',drive:'driving car cars truck bus parking',bike:'moto motorcycle bmx bicycle dirt',truck:'trucks driving monster cargo',gun:'shooter shooting fps sniper',shoot:'shooter shooting fps gun sniper',shooter:'shooting fps gun sniper',fps:'shooter shooting gun',fight:'fighting boxing stickman ninja karate battle',war:'battle army tank soldier',ball:'soccer basketball football golf pool',soccer:'football ball goal penalty',football:'soccer american ball',basketball:'hoops dunk ball nba',hoops:'basketball',baseball:'bat homerun',puzzle:'match logic brain jigsaw',match:'match3 puzzle jewels candy',zombie:'zombies undead survival',zombies:'zombie undead',run:'runner running endless',runner:'run running endless',jump:'platformer jumping parkour',parkour:'jump obby platformer',obby:'parkour platformer jump',craft:'build building blocks minecraft sandbox',block:'blocks blocky craft voxel cube',build:'building builder craft construction',io:'multiplayer online',online:'multiplayer io',multiplayer:'online io 2player',two:'2 player 2player',cook:'cooking chef food restaurant',food:'cooking restaurant',dress:'dressup fashion makeup',animal:'animals pet pets dog cat',dog:'dogs puppy pet animal',cat:'cats kitten pet animal',horse:'horses pony',dino:'dinosaur dinosaurs',fish:'fishing ocean sea',plane:'planes airplane flight flying',fly:'flying flight plane',space:'galaxy alien rocket planet',tower:'defense td',defense:'tower td',idle:'clicker tycoon',clicker:'idle tap',tycoon:'idle business simulator',sim:'simulator simulation',simulator:'simulation sim',escape:'room adventure',horror:'',scary:'',robot:'robots mech',mech:'robot robots',ninja:'samurai stickman',stick:'stickman',snake:'worm',pool:'billiards 8ball',golf:'minigolf putt',skate:'skateboard skating',ski:'skiing snow',snow:'winter christmas',hockey:'ice nhl',tennis:'racket',boxing:'fight punch',wrestling:'fight',battle:'war fight royale',royale:'battle',tank:'tanks war',police:'cop cops chase',city:'town open world',open:'world sandbox',world:'open sandbox',math:'numbers learning',word:'words letters spelling',quiz:'trivia questions',draw:'drawing paint',color:'coloring paint',bubble:'shooter pop',merge:'2048 combine',girl:'girls',boy:'boys',minecraft:'craft block blocks blocky voxel mine mining sandbox',roblox:'obby blox parkour',bloxd:'block blocks craft blocky',fortnite:'battle royale build shooter',among:'impostor imposter crewmate',amongus:'impostor imposter crewmate',mario:'platformer jump adventure',sonic:'runner speed run',subway:'runner surfer run endless',surfers:'runner run endless',slither:'snake worm io',geometry:'dash jump',pokemon:'monster monsters catch',gta:'city car driving open world',krunker:'fps shooter io',smash:'fight brawl',zelda:'adventure sword quest',pacman:'maze arcade',tetris:'blocks block puzzle',flappy:'bird fly tap',temple:'runner run',angry:'birds slingshot',retro:'classic arcade pixel',bowl:'bowling',fnaf:'',freddy:'',granny:'',skibidi:'toilet'.replace('toilet','')};
+  const lev=(a,b,max)=>{ if(Math.abs(a.length-b.length)>max) return max+1; let pp=null, p=Array.from({length:b.length+1},(_,i)=>i); for(let i=1;i<=a.length;i++){ const c=[i]; let lo=i; for(let j=1;j<=b.length;j++){ c[j]=Math.min(p[j]+1,c[j-1]+1,p[j-1]+(a[i-1]===b[j-1]?0:1)); if(i>1&&j>1&&a[i-1]===b[j-2]&&a[i-2]===b[j-1]) c[j]=Math.min(c[j],pp[j-2]+1); if(c[j]<lo) lo=c[j]; } if(lo>max) return max+1; pp=p; p=c; } return p[b.length]; };
+  let IX=null, VOC=null; const index=()=>{ VOC=new Map(); IX=G.map((g,i)=>{ const t=norm(g[2]); const x={g,i,t,tw:t.split(' '),tg:norm((g[7]||'')+' '+g[3]).split(' ').filter(Boolean),tc:t.replace(/ /g,'')}; for(const w of x.tw.concat(x.tg)) if(w.length>2) VOC.set(w,(VOC.get(w)||0)+1); return x; }); };
+  const fixWord=w=>{ if(w.length<4||VOC.has(w)||SYN[w]!==undefined) return w; const m=w.length>=7?2:1; let best=w, bd=m+1, bf=0; for(const [v,f] of [...Object.keys(SYN).filter(k=>k.length>3).map(k=>[k,1e6]),...VOC]){ if(Math.abs(v.length-w.length)>m) continue; const d=lev(w,v,m); if(d<bd||(d===bd&&f>bf)){ best=v; bd=d; bf=f; } } return bd<=m?best:w; };
+  function search(q){ if(!IX) index(); let qn=norm(q); if(!qn) return {L:[],close:false}; const fixed=qn.split(' ').map(fixWord).join(' '); const changed=fixed!==qn; qn=fixed; const W=qn.split(' ').filter(Boolean);
+    const qc=qn.replace(/ /g,''), syn=W.map(w=>new Set((SYN[w]||SYN[w.replace(/s$/,'')]||'').split(' ').filter(Boolean)));
+    const R=[];
+    for(const x of IX){ let sc=0, hit=0;
+      if(x.t===qn) sc+=100; else if(x.t.startsWith(qn)) sc+=60; else if(qn.length>2&&x.t.includes(qn)) sc+=40; else if(qc.length>3&&x.tc.includes(qc)) sc+=35;
+      W.forEach((w,k)=>{ let b=0;
+        for(const tw of x.tw){ if(tw===w){ b=Math.max(b,12); break; } if(w.length>1&&tw.startsWith(w)) b=Math.max(b,9); else if(w.length>=4&&tw.length>=4&&lev(w,tw,w.length>=7?2:1)<=(w.length>=7?2:1)) b=Math.max(b,6); }
+        if(b<8) for(const tg of x.tg){ if(tg===w){ b=Math.max(b,7); break; } if(w.length>2&&tg.startsWith(w)) b=Math.max(b,5); else if(w.length>=5&&tg.length>=5&&lev(w,tg,1)<=1) b=Math.max(b,4); }
+        if(b<4&&syn[k].size){ for(const tw of x.tw) if(syn[k].has(tw)){ b=Math.max(b,5); break; } if(b<4) for(const tg of x.tg) if(syn[k].has(tg)){ b=Math.max(b,3); break; } }
+        if(b){ hit++; sc+=b; } });
+      if(hit){ sc+=hit===W.length?15:0; R.push([hit,sc,x.i,x.g]); } }
+    R.sort((a,b)=>b[0]-a[0]||b[1]-a[1]||a[2]-b[2]);
+    if(R.length) return {L:R.map(r=>r[3]),close:R[0][0]<W.length,fixed:changed?qn:''};
+    /* nothing matched at all: the closest-sounding titles, then the most popular games */
+    const C=IX.map(x=>[Math.min(...W.map(w=>Math.min(...x.tw.map(tw=>lev(w,tw,3))))),x.i,x.g]).filter(r=>r[0]<=3).sort((a,b)=>a[0]-b[0]||a[1]-b[1]).slice(0,60).map(r=>r[2]);
+    return {L:C.length?C:FEAT.slice(0,60),close:true}; }
+
   function chips(){ $('#chips').innerHTML=[['all','🔥 Home']].concat([['ours','⭐ Originals']],SECS.map(s=>[s,ICON[s]+' '+s])).map(([k,t])=>`<button class="chip${k===cat?' on':''}" data-c="${k}">${t}</button>`).join(''); }
   function row(title,sub,list,more){ return `<section class="row"><h2>${title}${sub?` <small>${sub}</small>`:''}${more?`<button data-c="${more}">See all</button>`:''}</h2><div class="strip">${list.join('')}</div></section>`; }
   /* long lists are drawn 96 tiles at a time as you scroll, so the page stays fast */
   function grid(L,html){ const M=$('#main'); M.innerHTML=(html||'')+'<div class="grid" id="grid"></div><div id="sent"></div>'; let i=0; const gr=$('#grid');
     const more=()=>{ gr.insertAdjacentHTML('beforeend',L.slice(i,i+96).join('')); i+=96; if(i>=L.length&&obs){ obs.disconnect(); obs=null; } };
-    if(obs) obs.disconnect(); obs=null; more(); if(!L.length) gr.innerHTML='<div class="sub">No games match.</div>';
+    if(obs) obs.disconnect(); obs=null; more(); if(!L.length) gr.innerHTML='<div class="sub">No games here yet.</div>';
     if(i<L.length){ if('IntersectionObserver' in window){ obs=new IntersectionObserver(e=>{ if(e[0].isIntersecting) more(); },{rootMargin:'900px'}); obs.observe($('#sent')); } else { while(i<L.length) more(); } } }
-  function draw(){ chips(); const q=$('#q').value.trim().toLowerCase(); if(obs){ obs.disconnect(); obs=null; }
-    if(q){ const O=OURS.filter(o=>o[1].toLowerCase().includes(q)).map(ours); const L=G.filter(g=>(g[2]+' '+g[3]+' '+g[6]).toLowerCase().includes(q)).map(tile); grid(O.concat(L),`<div class="sub" style="margin-bottom:10px">${O.length+L.length} results</div>`); return; }
+  function draw(){ chips(); const q=$('#q').value.trim(); if(obs){ obs.disconnect(); obs=null; }
+    if(q){ const r=search(q), qn=r.fixed||norm(q), O=OURS.filter(o=>norm(o[1]+' '+o[4]).split(' ').some(w=>qn.split(' ').some(x=>w===x||(x.length>=4&&w.startsWith(x))))).map(ours); const n=O.length+r.L.length;
+      grid(O.concat(r.L.map(tile)),`<div class="sub" style="margin-bottom:10px">${r.fixed?`Showing results for “${esc(r.fixed)}” · `:''}${r.close?`No exact match for “${esc(q)}”. Here are the closest games${n?` (${n.toLocaleString()})`:''}:`:`${n.toLocaleString()} games for “${esc(q)}”`}${window.NETALL?'':' · loading all games…'}</div>`); return; }
     if(cat==='ours'){ grid(OURS.map(ours)); return; }
     if(cat!=='all'){ grid(G.filter(g=>g[3]===cat).map(tile)); return; }
-    const F=daily(G.slice(0,400)).slice(0,5), R=recent().map(k=>byKey.get(k)).filter(Boolean).slice(0,16);
+    const F=daily(FEAT.slice(0,400)).slice(0,5), R=recent().map(k=>byKey.get(k)).filter(Boolean).slice(0,16);
     let h=`<div id="hero">${F.map(tile).join('')}</div>`;
     h+=row('⭐ Arcade Rivals originals','made by us',OURS.map(ours),'ours');
     if(R.length) h+=row('🕘 Played recently','',R.map(tile));
     h+=row('🆕 New games','just added',G.slice().sort((a,b)=>b[1]-a[1]).slice(0,20).map(tile));
-    for(const s of SECS){ const L=G.filter(g=>g[3]===s); h+=row(ICON[s]+' '+s,L.length+' games',daily(L.slice(0,120)).slice(0,20).map(tile),s); }
+    for(const s of SECS){ const L=G.filter(g=>g[3]===s); h+=row(ICON[s]+' '+s,L.length.toLocaleString()+' games',daily(FEAT.filter(g=>g[3]===s).slice(0,120)).slice(0,20).map(tile),s); }
     $('#main').innerHTML=h; }
   document.addEventListener('click',e=>{ const b=e.target.closest('[data-c]'); if(!b) return; cat=b.dataset.c; $('#q').value=''; history.replaceState(null,'',cat==='all'?'more':'more?c='+encodeURIComponent(cat)); draw(); scrollTo(0,0); });
-  let t; $('#q').oninput=()=>{ clearTimeout(t); t=setTimeout(draw,150); }; draw();
+  let t; $('#q').oninput=()=>{ clearTimeout(t); t=setTimeout(()=>{ const q=$('#q').value.trim(); history.replaceState(null,'',q?'more?q='+encodeURIComponent(q):(cat==='all'?'more':'more?c='+encodeURIComponent(cat))); draw(); },180); };
+  $('#q').onkeydown=e=>{ if(e.key==='Enter'){ e.preventDefault(); const a=document.querySelector('#grid a'); if(a) location.href=a.href; } };
+  draw();
+  /* the full catalog loads after the page is up, then search and categories cover every game */
+  const s=document.createElement('script'); s.src='net-all.js'; s.async=true;
+  s.onload=()=>{ const A=window.NETALL||[], M=new Map(A.map(g=>[g[1],g])), f=new Set(FEAT.map(g=>g[1])); G=FEAT.map(g=>{ const x=M.get(g[1]); return x?[g[0],g[1],g[2],g[3],g[4],g[5],g[6],x[7]]:g; }).concat(A.filter(g=>!f.has(g[1]))); byKey=new Map(G.map(g=>[g[0]+':'+g[1],g])); IX=null; count(); if($('#q').value.trim()||cat!=='all') draw(); };
+  document.body.appendChild(s);
 })();
 </script>
 <script src="online.js"></script>
