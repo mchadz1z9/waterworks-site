@@ -205,6 +205,14 @@ function lgAdvance(L,now){ let ch=false;
   return ch; }
 
 function lgSwap(L,T){ const A=L.teams[T.from], B=L.teams[T.to]; A.roster=A.roster.filter(i=>!T.give.includes(i)).concat(T.get); B.roster=B.roster.filter(i=>!T.get.includes(i)).concat(T.give); for(const t of [A,B]) if(!t.line.every(i=>t.roster.includes(i))) t.line=lgAutoLine(t.roster); }
+/* Rival Esports: daily cups in the 2-player online games. Brackets fill in by themselves; players report results. */
+const ES_GAMES=[['cards','🃏','Rival Cards'],['chess','♟️','Chess'],['pool','🎱','Pool'],['darts','🎯','Darts'],['curling','🥌','Curling'],['football','🏈','Football'],['armwrestling','💪','Arm Wrestling'],['axe','🪓','Axe Throwing'],['protag','🏃','Pro Tag']];
+const ES_TIMES=[[16,0],[19,30]], ES_MAX=16, ES_REPORT=15*60000, ES_NOSHOW=40*60000;
+function esET(now,h,m,dayOff){ /* a clock time in New York on a given day, as a timestamp */ const d=new Date(now+dayOff*864e5); const ymd=d.toLocaleDateString('en-CA',{timeZone:'America/New_York'});
+  const guess=Date.parse(ymd+'T'+String(h).padStart(2,'0')+':'+String(m).padStart(2,'0')+':00Z'); const off=new Date(guess).toLocaleString('en-US',{timeZone:'America/New_York',hour:'numeric',hour12:false}); const diff=(+off%24)-h; return guess-(diff>12?diff-24:diff<-12?diff+24:diff)*3600000; }
+const esRoom=()=>'E'+Array.from({length:5},()=>'ABCDEFGHJKLMNPQRSTUVWXYZ23456789'[Math.floor(Math.random()*32)]).join('');
+function esRank(p){ return p>=1000?['Legend','👑']:p>=700?['Diamond','💎']:p>=450?['Platinum','🔷']:p>=250?['Gold','🥇']:p>=100?['Silver','🥈']:['Bronze','🥉']; }
+
 export default {
   /* nightly chat wipe at 10 p.m. Toronto time. Cron runs at 02:00 and 03:00 UTC, and only the one that lands on 22:00 local (EST or EDT) clears */
   async scheduled(ev, env, ctx){
@@ -283,7 +291,7 @@ export default {
     if(url.pathname==='/ai'){ if(req.method==='OPTIONS') return new Response(null,{headers:CORS}); if(req.method!=='POST') return J({err:'method'},405); return rrAI(req,env,RCF); }
     if(url.pathname==='/acct'){ if(req.method==='OPTIONS') return new Response(null,{headers:CORS}); return env.ACCT.get(env.ACCT.idFromName('ACCT')).fetch(req); }
     if(url.pathname==='/site'){ if(req.method==='OPTIONS') return new Response(null,{headers:CORS}); return env.SITE.get(env.SITE.idFromName('SITE')).fetch(req); }
-    if(url.pathname==='/tourney'||url.pathname==='/play'||url.pathname==='/popular'||url.pathname==='/daily'||url.pathname==='/like'||url.pathname==='/review'||url.pathname==='/vote'||url.pathname==='/namecheck'||url.pathname.startsWith('/feed/')||url.pathname.startsWith('/net/')||url.pathname==='/glitch'||url.pathname==='/sc/pick'||url.pathname==='/sc/my'||url.pathname==='/sc/lb'||url.pathname==='/gd/vote'||url.pathname.startsWith('/mkt/')||url.pathname.startsWith('/lg/')){ if(req.method==='OPTIONS') return new Response(null,{headers:CORS}); const cf=RCF||req.cf||{}, h=new Headers(req.headers); h.set('x-rr-asn',String(cf.asn||'')); h.set('x-rr-aso',String(cf.asOrganization||'').slice(0,80)); h.set('x-rr-cc',String(cf.country||'')); return env.SITE.get(env.SITE.idFromName('SITE')).fetch(new Request(req,{headers:h})); }
+    if(url.pathname==='/tourney'||url.pathname==='/play'||url.pathname==='/popular'||url.pathname==='/daily'||url.pathname==='/like'||url.pathname==='/review'||url.pathname==='/vote'||url.pathname==='/namecheck'||url.pathname.startsWith('/feed/')||url.pathname.startsWith('/net/')||url.pathname==='/glitch'||url.pathname==='/sc/pick'||url.pathname==='/sc/my'||url.pathname==='/sc/lb'||url.pathname==='/gd/vote'||url.pathname.startsWith('/mkt/')||url.pathname.startsWith('/lg/')||url.pathname.startsWith('/es/')){ if(req.method==='OPTIONS') return new Response(null,{headers:CORS}); const cf=RCF||req.cf||{}, h=new Headers(req.headers); h.set('x-rr-asn',String(cf.asn||'')); h.set('x-rr-aso',String(cf.asOrganization||'').slice(0,80)); h.set('x-rr-cc',String(cf.country||'')); return env.SITE.get(env.SITE.idFromName('SITE')).fetch(new Request(req,{headers:h})); }
     const lb=url.pathname.match(/^\/lb\/([a-z0-9]{2,16})$/);
     if(lb){ if(req.method==='OPTIONS') return new Response(null,{headers:CORS}); return env.BOARDS.get(env.BOARDS.idFromName(lb[1])).fetch(req); }
     const pm=url.pathname.match(/^\/party\/([A-Z0-9]{4,8})$/);
@@ -759,6 +767,49 @@ export class Site {
       if(url.pathname==='/net/vote'){ const v=Math.sign(+m.v||0); if(v) this.sql.exec('INSERT INTO netvote(id,pid,v) VALUES(?,?,?) ON CONFLICT(id,pid) DO UPDATE SET v=excluded.v',id,pid,v); else this.sql.exec('DELETE FROM netvote WHERE id=? AND pid=?',id,pid);
         const r=this.sql.exec('SELECT SUM(CASE WHEN v>0 THEN 1 ELSE 0 END) u,SUM(CASE WHEN v<0 THEN 1 ELSE 0 END) d FROM netvote WHERE id=?',id).one(); this.netC=null; return J({ok:true,u:r.u||0,d:r.d||0}); }
       if(url.pathname==='/net/report'){ this.sql.exec('INSERT OR IGNORE INTO netrep(id,pid,ts) VALUES(?,?,?)',id,pid,now); this.netC=null; return J({ok:true}); }
+      return J({err:'nf'},404); }
+    /* Rival Esports */
+    if(url.pathname.startsWith('/es/')){ const now=Date.now(), season=new Date(now).toISOString().slice(0,7);
+      if(!this.esOk){ this.sql.exec('CREATE TABLE IF NOT EXISTS es(id TEXT PRIMARY KEY, at INTEGER, data TEXT)'); this.sql.exec('CREATE TABLE IF NOT EXISTS esr(pid TEXT PRIMARY KEY, name TEXT, season TEXT, pts INTEGER, w INTEGER, l INTEGER, cups INTEGER)'); this.esOk=1; }
+      const getC=id=>{ const r=this.sql.exec('SELECT data FROM es WHERE id=?',String(id||'').slice(0,20)).toArray()[0]; return r?JSON.parse(r.data):null; }, putC=C=>this.sql.exec('INSERT OR REPLACE INTO es(id,at,data) VALUES(?,?,?)',C.id,C.at,JSON.stringify(C));
+      const rate=(pid,name,dw,dl,cup)=>{ const r=this.sql.exec('SELECT * FROM esr WHERE pid=?',pid).toArray()[0]; let pts=r&&r.season===season?r.pts:0, w=r&&r.season===season?r.w:0, l=r&&r.season===season?r.l:0; const cups=(r?r.cups:0)+(cup?1:0);
+        pts=Math.max(0,pts+dw*25-dl*10+(cup?100:0)); this.sql.exec('INSERT OR REPLACE INTO esr(pid,name,season,pts,w,l,cups) VALUES(?,?,?,?,?,?,?)',pid,name,season,pts,w+dw,l+dl,cups); };
+      const ptsOf=pid=>{ const r=this.sql.exec('SELECT pts,season FROM esr WHERE pid=?',pid).toArray()[0]; return r&&r.season===season?r.pts:0; };
+      /* make sure the next few cups exist */
+      if(!this.esSched||now-this.esSched>60000){ this.esSched=now; for(let d=0;d<2;d++) for(const [h,m] of ES_TIMES){ const at=esET(now,h,m,d); if(at<now-6*3600000) continue; const id='c'+at;
+          if(!getC(id)){ const k=Math.floor(at/(12*3600000))%ES_GAMES.length, g=ES_GAMES[k]; putC({id,at,game:g[0],icon:g[1],gname:g[2],name:g[2]+' Cup',st:'open',players:[],rounds:[]}); } } }
+      const step=C=>{ let ch=false;
+        if(C.st==='open'&&now>=C.at){ ch=true; if(C.players.length<2){ C.st='cancelled'; } else { const P=C.players.slice().sort((a,b)=>b.pts-a.pts); let n=1; while(n<P.length) n*=2; const seeds=[];
+            const order=(n)=>{ let o=[0]; while(o.length<n){ const m=o.length*2; o=o.flatMap(x=>[x,m-1-x]); } return o; }; for(const i of order(n)) seeds.push(P[i]||null);
+            const R0=[]; for(let i=0;i<n;i+=2) R0.push({a:seeds[i],b:seeds[i+1],room:esRoom(),open:now,rep:{}}); C.rounds=[R0]; C.st='live'; } }
+        if(C.st==='live'){ const R=C.rounds[C.rounds.length-1];
+          for(const m of R){ if(m.win) continue; if(!m.a||!m.b){ m.win=(m.a||m.b)?(m.a||m.b).pid:null; m.bye=1; ch=true; continue; }
+            const ra=m.rep[m.a.pid], rb=m.rep[m.b.pid];
+            const decide=w=>{ m.win=w; const W=w===m.a.pid?m.a:m.b, L=w===m.a.pid?m.b:m.a; rate(W.pid,W.name,1,0,false); rate(L.pid,L.name,0,1,false); ch=true; };
+            if(ra&&rb){ if(ra!==rb){ decide(ra==='w'?m.a.pid:m.b.pid); } else { m.rep={}; m.room=esRoom(); m.open=now; m.replays=(m.replays||0)+1; ch=true; if(m.replays>=3) decide(Math.random()<.5?m.a.pid:m.b.pid); } }
+            else if((ra||rb)&&now-(m.repAt||now)>ES_REPORT){ const who=ra?m.a:m.b, said=ra||rb; decide(said==='w'?who.pid:(who===m.a?m.b.pid:m.a.pid)); }
+            else if(!ra&&!rb&&now-m.open>ES_NOSHOW){ const ca=m.chk&&m.chk[m.a.pid], cb=m.chk&&m.chk[m.b.pid]; decide(ca&&!cb?m.a.pid:cb&&!ca?m.b.pid:(Math.random()<.5?m.a.pid:m.b.pid)); } }
+          if(R.every(m=>m.win!==undefined)){ const W=R.map(m=>m.win?(m.a&&m.a.pid===m.win?m.a:m.b):null);
+            if(R.length===1){ C.st='done'; C.champ=W[0]; if(W[0]){ rate(W[0].pid,W[0].name,0,0,true); const hof=JSON.parse((this.sql.exec("SELECT data FROM es WHERE id='hof'").toArray()[0]||{}).data||'[]'); hof.unshift({name:W[0].name,cup:C.name,icon:C.icon,at:C.at}); this.sql.exec("INSERT OR REPLACE INTO es(id,at,data) VALUES('hof',0,?)",JSON.stringify(hof.slice(0,60))); } }
+            else { const N=[]; for(let i=0;i<W.length;i+=2) N.push({a:W[i],b:W[i+1],room:esRoom(),open:now,rep:{}}); C.rounds.push(N); } ch=true; } }
+        return ch; };
+      const pub=C=>({id:C.id,at:C.at,game:C.game,icon:C.icon,gname:C.gname,name:C.name,st:C.st,n:C.players.length,max:ES_MAX,champ:C.champ?C.champ.name:''});
+      if(url.pathname==='/es/list'){ const pid=cleanPid(url.searchParams.get('pid')); const L=this.sql.exec("SELECT data FROM es WHERE id!='hof' AND at>? ORDER BY at LIMIT 12",now-3*864e5).toArray().map(r=>JSON.parse(r.data));
+        for(const C of L) if(step(C)) putC(C);
+        const me=pid?this.sql.exec('SELECT * FROM esr WHERE pid=?',pid).toArray()[0]:null; const mp=me&&me.season===season?me.pts:0;
+        return J({cups:L.map(C=>({...pub(C),in:!!(pid&&C.players.some(p=>p.pid===pid))})),me:me?{pts:mp,w:me.season===season?me.w:0,l:me.season===season?me.l:0,cups:me.cups,rank:esRank(mp)}:{pts:0,w:0,l:0,cups:0,rank:esRank(0)},season,now}); }
+      if(url.pathname==='/es/lb'){ const L=this.sql.exec('SELECT name,pts,w,l,cups FROM esr WHERE season=? ORDER BY pts DESC LIMIT 30',season).toArray().map(r=>({...r,rank:esRank(r.pts)})); const hof=JSON.parse((this.sql.exec("SELECT data FROM es WHERE id='hof'").toArray()[0]||{}).data||'[]'); return J({lb:L,hof,season}); }
+      if(url.pathname==='/es/cup'){ const C=getC(url.searchParams.get('id')); if(!C) return J({err:'nf'},404); if(step(C)) putC(C); const pid=cleanPid(url.searchParams.get('pid'));
+        const strip=p=>p?{name:p.name,pts:p.pts,me:p.pid===pid,id:p.pid===pid?p.pid:pubId(p.pid)}:null;
+        return J({...pub(C),players:C.players.map(strip),rounds:C.rounds.map(R=>R.map(m=>({a:strip(m.a),b:strip(m.b),win:m.win===undefined?undefined:m.win===null?null:(m.a&&m.win===m.a.pid?'a':'b'),bye:m.bye||0,room:(pid&&((m.a&&m.a.pid===pid)||(m.b&&m.b.pid===pid)))?m.room:'',mine:!!(pid&&((m.a&&m.a.pid===pid)||(m.b&&m.b.pid===pid))),myRep:pid?m.rep[pid]||'':'',theyRep:pid&&m.a&&m.b?(m.a.pid===pid?m.rep[m.b.pid]:m.rep[m.a.pid])||'':'',replays:m.replays||0}))),now}); }
+      let m={}; try{ m=await req.json(); }catch(e){} const pid=cleanPid(m.pid); if(pid.length<8) return J({err:'bad'},400); const C=getC(m.id); if(!C) return J({err:'nf'},404); step(C);
+      if(url.pathname==='/es/join'){ if(C.st!=='open') return J({err:'closed'},400); if(C.players.some(p=>p.pid===pid)){ putC(C); return J({ok:true}); } if(C.players.length>=ES_MAX) return J({err:'full'},400);
+        C.players.push({pid,name:cleanName(m.name),pts:ptsOf(pid)}); putC(C); return J({ok:true}); }
+      if(url.pathname==='/es/leave'){ if(C.st==='open') C.players=C.players.filter(p=>p.pid!==pid); putC(C); return J({ok:true}); }
+      const R=C.rounds[C.rounds.length-1]||[], mt=R.find(x=>x.win===undefined&&((x.a&&x.a.pid===pid)||(x.b&&x.b.pid===pid)));
+      if(!mt||C.st!=='live') return J({err:'nomatch'},400);
+      if(url.pathname==='/es/check'){ mt.chk=mt.chk||{}; mt.chk[pid]=1; putC(C); return J({ok:true,room:mt.room}); }
+      if(url.pathname==='/es/report'){ if(m.res!=='w'&&m.res!=='l') return J({err:'bad'},400); mt.rep[pid]=m.res; mt.repAt=mt.repAt||now; step(C); putC(C); return J({ok:true}); }
       return J({err:'nf'},404); }
     /* Rival League */
     if(url.pathname.startsWith('/lg/')){ const now=Date.now(); if(!this.lgOk){ this.sql.exec('CREATE TABLE IF NOT EXISTS lgs(code TEXT PRIMARY KEY, data TEXT, upd INTEGER)'); this.sql.exec('CREATE TABLE IF NOT EXISTS lgm(pid TEXT, code TEXT, PRIMARY KEY(pid,code))'); this.lgOk=1; }
