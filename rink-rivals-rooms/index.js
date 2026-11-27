@@ -247,7 +247,7 @@ export default {
     if(url.pathname==='/ai'){ if(req.method==='OPTIONS') return new Response(null,{headers:CORS}); if(req.method!=='POST') return J({err:'method'},405); return rrAI(req,env,RCF); }
     if(url.pathname==='/acct'){ if(req.method==='OPTIONS') return new Response(null,{headers:CORS}); return env.ACCT.get(env.ACCT.idFromName('ACCT')).fetch(req); }
     if(url.pathname==='/site'){ if(req.method==='OPTIONS') return new Response(null,{headers:CORS}); return env.SITE.get(env.SITE.idFromName('SITE')).fetch(req); }
-    if(url.pathname==='/tourney'||url.pathname==='/play'||url.pathname==='/popular'||url.pathname==='/daily'||url.pathname==='/like'||url.pathname==='/review'||url.pathname==='/vote'||url.pathname==='/namecheck'||url.pathname.startsWith('/feed/')||url.pathname.startsWith('/net/')||url.pathname==='/glitch'||url.pathname==='/sc/pick'||url.pathname==='/sc/my'||url.pathname==='/sc/lb'||url.pathname==='/gd/vote'){ if(req.method==='OPTIONS') return new Response(null,{headers:CORS}); const cf=RCF||req.cf||{}, h=new Headers(req.headers); h.set('x-rr-asn',String(cf.asn||'')); h.set('x-rr-aso',String(cf.asOrganization||'').slice(0,80)); h.set('x-rr-cc',String(cf.country||'')); return env.SITE.get(env.SITE.idFromName('SITE')).fetch(new Request(req,{headers:h})); }
+    if(url.pathname==='/tourney'||url.pathname==='/play'||url.pathname==='/popular'||url.pathname==='/daily'||url.pathname==='/like'||url.pathname==='/review'||url.pathname==='/vote'||url.pathname==='/namecheck'||url.pathname.startsWith('/feed/')||url.pathname.startsWith('/net/')||url.pathname==='/glitch'||url.pathname==='/sc/pick'||url.pathname==='/sc/my'||url.pathname==='/sc/lb'||url.pathname==='/gd/vote'||url.pathname.startsWith('/mkt/')){ if(req.method==='OPTIONS') return new Response(null,{headers:CORS}); const cf=RCF||req.cf||{}, h=new Headers(req.headers); h.set('x-rr-asn',String(cf.asn||'')); h.set('x-rr-aso',String(cf.asOrganization||'').slice(0,80)); h.set('x-rr-cc',String(cf.country||'')); return env.SITE.get(env.SITE.idFromName('SITE')).fetch(new Request(req,{headers:h})); }
     const lb=url.pathname.match(/^\/lb\/([a-z0-9]{2,16})$/);
     if(lb){ if(req.method==='OPTIONS') return new Response(null,{headers:CORS}); return env.BOARDS.get(env.BOARDS.idFromName(lb[1])).fetch(req); }
     const pm=url.pathname.match(/^\/party\/([A-Z0-9]{4,8})$/);
@@ -722,6 +722,29 @@ export class Site {
       if(url.pathname==='/net/vote'){ const v=Math.sign(+m.v||0); if(v) this.sql.exec('INSERT INTO netvote(id,pid,v) VALUES(?,?,?) ON CONFLICT(id,pid) DO UPDATE SET v=excluded.v',id,pid,v); else this.sql.exec('DELETE FROM netvote WHERE id=? AND pid=?',id,pid);
         const r=this.sql.exec('SELECT SUM(CASE WHEN v>0 THEN 1 ELSE 0 END) u,SUM(CASE WHEN v<0 THEN 1 ELSE 0 END) d FROM netvote WHERE id=?',id).one(); this.netC=null; return J({ok:true,u:r.u||0,d:r.d||0}); }
       if(url.pathname==='/net/report'){ this.sql.exec('INSERT OR IGNORE INTO netrep(id,pid,ts) VALUES(?,?,?)',id,pid,now); this.netC=null; return J({ok:true}); }
+      return J({err:'nf'},404); }
+    /* Rival Market: team "stocks" priced from real records and streaks; holdings kept here, coins move on the player's device */
+    if(url.pathname.startsWith('/mkt/')){ const now=Date.now(), day=new Date(now).toISOString().slice(0,10);
+      if(!this.mkOk){ this.sql.exec('CREATE TABLE IF NOT EXISTS mkh(pid TEXT, name TEXT, sym TEXT, qty INTEGER, cost INTEGER, PRIMARY KEY(pid,sym))'); this.sql.exec('CREATE TABLE IF NOT EXISTS mkp(sym TEXT, day TEXT, price INTEGER, PRIMARY KEY(sym,day))'); this.mkOk=1; } if(!this.mkClean){ this.mkClean=1; try{ this.sql.exec("DELETE FROM mkh WHERE name IN ('MkTest','MkTest2') OR name GLOB 'Mk[0-9][0-9]*'"); this.sql.exec("DELETE FROM pick WHERE name='ScTest'"); }catch(e){} } /* remove test players left by setup checks */
+      const quotes=async()=>{ if(this.mkQ&&now-this.mkQ.t<600000) return this.mkQ.q; const q={};
+        for(const lg of ['nfl','nba','nhl','mlb']){ const st=await scStand(lg); if(!st) continue; for(const g of st.groups) for(const t of g.teams){ const w=+t.w||0, l=+t.l||0, x=+t.t||0, gp=w+l+x; if(!gp&&lg!=='mlb') continue;
+          const pct=lg==='nhl'?((+t.pts||0)/Math.max(1,2*gp)):gp?(w+.5*x)/gp:.5; const sm=String(t.strk||'').match(/^([WL])(\d+)/), sk=sm?(sm[1]==='W'?1:-1)*Math.min(+sm[2],8):0;
+          q[lg+':'+t.ab]={sym:lg+':'+t.ab,lg,ab:t.ab,name:t.name,logo:t.logo,rec:w+'-'+l+(x?'-'+x:''),price:Math.max(5,Math.min(250,Math.round(10+190*pct+sk*3)))}; } }
+        if(Object.keys(q).length){ for(const k in q){ this.sql.exec('INSERT OR REPLACE INTO mkp(sym,day,price) VALUES(?,?,?)',k,day,q[k].price); const y=this.sql.exec('SELECT price FROM mkp WHERE sym=? AND day<? ORDER BY day DESC LIMIT 1',k,day).toArray()[0]; q[k].chg=y?q[k].price-y.price:0; }
+          if(Math.random()<.05) this.sql.exec('DELETE FROM mkp WHERE day<?',new Date(now-60*864e5).toISOString().slice(0,10)); this.mkQ={t:now,q}; }
+        return q; };
+      if(url.pathname==='/mkt/quotes'){ const q=await quotes(); return new Response(JSON.stringify({q:Object.values(q)}),{headers:{...CORS,'content-type':'application/json','cache-control':'public, max-age=120'}}); }
+      if(url.pathname==='/mkt/hist'){ const sym=String(url.searchParams.get('s')||'').slice(0,12); return J({h:this.sql.exec('SELECT day,price FROM mkp WHERE sym=? ORDER BY day DESC LIMIT 30',sym).toArray().reverse()}); }
+      if(url.pathname==='/mkt/lb'){ const q=await quotes(); const by={}; for(const r of this.sql.exec('SELECT pid,name,sym,qty,cost FROM mkh WHERE qty>0')){ const v=(q[r.sym]?q[r.sym].price:0)*r.qty; const b=by[r.pid]||(by[r.pid]={name:r.name,value:0,cost:0}); b.value+=v; b.cost+=r.cost; b.name=r.name; }
+        const L=Object.values(by).map(b=>({name:b.name,value:b.value,profit:b.value-b.cost})); return J({rich:L.slice().sort((a,b)=>b.value-a.value).slice(0,25),best:L.filter(x=>x.profit>0).sort((a,b)=>b.profit-a.profit).slice(0,25)}); }
+      let m={}; try{ m=await req.json(); }catch(e){} const pid=cleanPid(m.pid); if(pid.length<8) return J({err:'bad'},400);
+      if(url.pathname==='/mkt/me'){ const q=await quotes(); return J({h:this.sql.exec('SELECT sym,qty,cost FROM mkh WHERE pid=? AND qty>0',pid).toArray().map(r=>({...r,price:q[r.sym]?q[r.sym].price:0}))}); }
+      const q=await quotes(), sym=String(m.sym||''), qt=q[sym], qty=Math.floor(+m.qty||0); if(!qt||qty<1||qty>500) return J({err:'bad'},400);
+      const cur=this.sql.exec('SELECT qty,cost FROM mkh WHERE pid=? AND sym=?',pid,sym).toArray()[0]||{qty:0,cost:0};
+      if(url.pathname==='/mkt/buy'){ if(qt.price>(+m.max||0)) return J({err:'price',price:qt.price}); if(cur.qty+qty>1000) return J({err:'max'},400);
+        this.sql.exec('INSERT INTO mkh(pid,name,sym,qty,cost) VALUES(?,?,?,?,?) ON CONFLICT(pid,sym) DO UPDATE SET qty=qty+excluded.qty,cost=cost+excluded.cost,name=excluded.name',pid,cleanName(m.name),sym,qty,qty*qt.price); return J({ok:true,price:qt.price,paid:qty*qt.price}); }
+      if(url.pathname==='/mkt/sell'){ if(cur.qty<qty) return J({err:'qty'},400); const avg=cur.qty?cur.cost/cur.qty:0;
+        this.sql.exec('UPDATE mkh SET qty=qty-?,cost=? WHERE pid=? AND sym=?',qty,Math.round(cur.cost-avg*qty),pid,sym); return J({ok:true,price:qt.price,got:qty*qt.price}); }
       return J({err:'nf'},404); }
     /* Game Day "who scores next?": votes for the current score; returns how everyone voted */
     if(url.pathname==='/gd/vote'){ let m={}; try{ m=await req.json(); }catch(e){} if(!this.gdOk){ this.sql.exec('CREATE TABLE IF NOT EXISTS gdvote(gid TEXT, state TEXT, pid TEXT, side TEXT, ts INTEGER, PRIMARY KEY(gid,state,pid))'); this.gdOk=1; }
