@@ -1,0 +1,101 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
+<title>Rival Deflect</title>
+<style>
+:root{--bg:#04060d;--p1:#0c1222;--p2:#16203a;--line:#22304f;--tx:#eef4ff;--mut:#93a4c4;--acc:linear-gradient(135deg,#f97316,#ef4444 50%,#8b5cf6)}
+*{box-sizing:border-box}html,body{margin:0;background:var(--bg);color:var(--tx);font-family:system-ui,-apple-system,sans-serif;overflow:hidden;height:100%}
+a{color:inherit;text-decoration:none}button{font-family:inherit;cursor:pointer}
+.bk{position:fixed;left:12px;top:12px;z-index:5;display:grid;place-items:center;width:40px;height:40px;border-radius:50%;background:rgba(255,255,255,.12);color:#fff;font:800 19px system-ui}
+canvas{position:fixed;inset:0;width:100%;height:100%;touch-action:none}
+#hud{position:fixed;left:0;right:0;top:12px;text-align:center;font:900 18px system-ui;text-shadow:0 2px 6px #000;pointer-events:none;z-index:3}
+#menu{position:fixed;inset:0;display:flex;align-items:center;justify-content:center;z-index:4;background:radial-gradient(circle at 50% 40%,#1e1b4b,#04060d 70%)}
+.box{background:rgba(12,18,34,.92);border:1px solid var(--line);border-radius:20px;padding:24px;max-width:440px;width:92%;text-align:center}
+.box h1{margin:0 0 6px;font:900 36px system-ui;background:var(--acc);-webkit-background-clip:text;background-clip:text;color:transparent}
+.btn{border:0;border-radius:12px;padding:13px 18px;font:900 16px system-ui;background:var(--acc);color:#fff;width:100%;margin-top:10px}.btn.g{background:var(--p2);color:var(--tx)}
+.note{color:var(--mut);font-size:14px;line-height:1.4}
+#dbtn{position:fixed;right:24px;bottom:28px;z-index:3;width:96px;height:96px;border-radius:50%;border:0;background:var(--acc);color:#fff;font:900 16px system-ui;display:none;box-shadow:0 8px 30px #ef444466;touch-action:none}
+@media(pointer:coarse){#dbtn{display:block}}
+#btnKeys,#rrEmoB,#rrPhotoB,#rrGC,#rrTourBtn{display:none!important}
+</style>
+</head>
+<body>
+<a class="bk" href="./" title="Back" onclick="if(document.referrer.indexOf(location.origin)===0&&history.length>1){history.back();return false}">←</a>
+<canvas id="cv"></canvas><div id="hud"></div><button id="dbtn">DEFLECT</button>
+<div id="menu"><div class="box"><h1>⚔️ Rival Deflect</h1><p class="note">A glowing ball hunts one player at a time. When it's coming for <b>you</b> (it turns your color), hit <b>Space</b>, click or tap <b>DEFLECT</b> right before it reaches you. It flies at someone else, a little faster every time. Deflect too early and you're stuck for a moment. Last one standing wins!</p><p class="note">Move with WASD / arrows (on phones, drag the left side).</p>
+  <button class="btn" id="bots">🤖 Play vs bots</button><button class="btn g" id="online">🌐 Play friends online</button><p class="note" id="rec"></p></div></div>
+<script>
+let NET=null;
+(function(){
+  const cv=document.getElementById('cv'), x=cv.getContext('2d'), $=id=>document.getElementById(id);
+  const LS={get(k,d){ try{ return JSON.parse(localStorage.getItem(k))||d; }catch(e){ return d; } },set(k,v){ try{ localStorage.setItem(k,JSON.stringify(v)); }catch(e){} }};
+  const myName=()=>{ try{ return localStorage.getItem('rrOnlineName')||'You'; }catch(e){ return 'You'; } };
+  let W=0,H=0,DPR=1; const fit=()=>{ DPR=Math.min(2,window.devicePixelRatio||1); W=innerWidth; H=innerHeight; cv.width=W*DPR; cv.height=H*DPR; x.setTransform(DPR,0,0,DPR,0,0); }; fit(); addEventListener('resize',fit);
+  const COLORS=['#38bdf8','#f97316','#a3e635','#f472b6','#facc15','#c084fc','#2dd4bf','#fb7185'];
+  const R=300; /* arena radius in world units */
+  let G=null, mode='', mySeat=0, keys={}, lastSend=0, rec=LS.get('rrDefRec',{w:0,p:0});
+  $('rec').textContent=rec.p?`Your record: ${rec.w} wins in ${rec.p} games`:'';
+  function newGame(players){ return {players:players.map((p,i)=>({seat:p.seat,name:p.name,bot:!!p.bot,col:COLORS[i%8],x:Math.cos(i/players.length*Math.PI*2)*R*.6,y:Math.sin(i/players.length*Math.PI*2)*R*.6,alive:true,cd:0,flash:0,react:.12+Math.random()*.18})),
+      ball:{x:0,y:0,vx:0,vy:0,sp:220,t:-1,wait:1.5},round:1,over:false,msg:'Get ready…',hits:0}; }
+  const alive=()=>G.players.filter(p=>p.alive);
+  function pickTarget(from){ const A=alive().filter(p=>p!==from); if(!A.length) return null; if(from){ /* toward the player most in front of where 'from' is facing away from the center */ return A[Math.floor(Math.random()*A.length)]; } return A[Math.floor(Math.random()*A.length)]; }
+  function deflect(p){ const b=G.ball, t=G.players.find(q=>q.seat===b.t); if(!p.alive||p.cd>0) return; const d=Math.hypot(b.x-p.x,b.y-p.y);
+    if(t===p&&d<95){ const nt=pickTarget(p); if(!nt) return; b.t=nt.seat; b.sp=Math.min(1400,b.sp*1.09+12); G.hits++; const dx=nt.x-b.x, dy=nt.y-b.y, n=Math.hypot(dx,dy)||1; b.vx=dx/n*b.sp; b.vy=dy/n*b.sp; p.flash=.25; sfx(520+G.hits*8,.08); }
+    else { p.cd=.55; sfx(140,.06); } }
+  function hostStep(dt){ const b=G.ball;
+    if(b.wait>0){ b.wait-=dt; if(b.wait<=0){ const t=pickTarget(null); b.t=t.seat; b.sp=240; G.msg=''; } }
+    else { const t=G.players.find(p=>p.seat===b.t&&p.alive); if(!t){ const nt=pickTarget(null); if(nt) b.t=nt.seat; return; }
+      const dx=t.x-b.x, dy=t.y-b.y, d=Math.hypot(dx,dy)||1; const steer=Math.min(1,dt*(3+b.sp/300)); b.vx+=(dx/d*b.sp-b.vx)*steer; b.vy+=(dy/d*b.sp-b.vy)*steer; const n=Math.hypot(b.vx,b.vy)||1; b.vx=b.vx/n*b.sp; b.vy=b.vy/n*b.sp;
+      b.x+=b.vx*dt; b.y+=b.vy*dt; if(d<22){ t.alive=false; sfx(90,.3); G.msg=t.seat===mySeat&&mode==='bots'?'💥 You\'re out!':`💥 ${t.name} is out!`; b.wait=1.3; b.x=0; b.y=0; b.vx=b.vy=0; b.sp=240; G.hits=0;
+        const A=alive(); if(A.length<=1){ G.over=true; G.win=A[0]?A[0].seat:-1; G.msg=A[0]?`🏆 ${A[0].name} wins!`:'Draw!'; finish(); } } }
+    for(const p of G.players){ if(!p.alive) continue; p.cd=Math.max(0,p.cd-dt); p.flash=Math.max(0,p.flash-dt);
+      if(p.bot){ /* bots dodge around a little and deflect with a reaction time that gets harder as the ball speeds up */ p.wt=(p.wt||Math.random()*9)+dt; const ha=(p.seat/G.players.length)*Math.PI*2, hx=Math.cos(ha)*R*.55+Math.sin(p.wt*.9)*60, hy=Math.sin(ha)*R*.55+Math.cos(p.wt*.7)*60; p.x+=(hx-p.x)*Math.min(1,dt*1.5); p.y+=(hy-p.y)*Math.min(1,dt*1.5);
+        if(G.ball.t===p.seat&&G.ball.wait<=0){ const d=Math.hypot(G.ball.x-p.x,G.ball.y-p.y), eta=d/G.ball.sp; if(eta<p.react+.02&&eta>.03&&Math.random()<Math.max(.35,1-G.ball.sp/1700)*dt*60) deflect(p); } }
+      for(const q of G.players){ if(q===p||!q.alive) continue; const dx=p.x-q.x, dy=p.y-q.y, d=Math.hypot(dx,dy)||1; if(d<60){ p.x+=dx/d*(60-d)*.5; p.y+=dy/d*(60-d)*.5; } }
+      const r=Math.hypot(p.x,p.y); if(r>R-20){ p.x*=(R-20)/r; p.y*=(R-20)/r; } } }
+  function myMove(dt){ const me=G.players.find(p=>p.seat===mySeat); if(!me||!me.alive) return [0,0]; let mx=(keys.ArrowRight||keys.KeyD?1:0)-(keys.ArrowLeft||keys.KeyA?1:0), my=(keys.ArrowDown||keys.KeyS?1:0)-(keys.ArrowUp||keys.KeyW?1:0);
+    if(touch.on){ mx=touch.dx; my=touch.dy; } const n=Math.hypot(mx,my); if(n>1){ mx/=n; my/=n; } return [mx,my]; }
+  function finish(){ rec.p++; if(G.win===mySeat){ rec.w++; try{ window.RRCOIN&&RRCOIN.add(mode==='online'?40:20,'Rival Deflect win'); }catch(e){} } LS.set('rrDefRec',rec); setTimeout(()=>{ $('menu').style.display='flex'; $('rec').textContent=`${G.win===mySeat?'🏆 You won!':'Good game!'} Record: ${rec.w} wins in ${rec.p} games`; },2200); }
+  let AC=null; const sfx=(f,d)=>{ try{ AC=AC||new (window.AudioContext||window.webkitAudioContext)(); const o=AC.createOscillator(), g=AC.createGain(); o.type='triangle'; o.frequency.value=f; g.gain.setValueAtTime(.15,AC.currentTime); g.gain.exponentialRampToValueAtTime(.001,AC.currentTime+d); o.connect(g).connect(AC.destination); o.start(); o.stop(AC.currentTime+d+.02); }catch(e){} };
+  /* drawing */
+  function draw(){ const s=Math.min(W,H)/(R*2.3), cx=W/2, cy=H/2+10; x.fillStyle='#04060d'; x.fillRect(0,0,W,H);
+    const gr=x.createRadialGradient(cx,cy,10,cx,cy,R*s); gr.addColorStop(0,'#1e1b4b'); gr.addColorStop(1,'#0b1020'); x.fillStyle=gr; x.beginPath(); x.arc(cx,cy,R*s,0,7); x.fill(); x.strokeStyle='#8b5cf6'; x.lineWidth=4; x.stroke();
+    if(!G) return; const b=G.ball, tgt=G.players.find(p=>p.seat===b.t);
+    for(const p of G.players){ const px=cx+p.x*s, py=cy+p.y*s; x.globalAlpha=p.alive?1:.25; if(p.flash>0){ x.strokeStyle='#fff'; x.lineWidth=6; x.beginPath(); x.arc(px,py,(26+40*(1-p.flash*4))*s*1.5,0,7); x.stroke(); }
+      x.fillStyle=p.col; x.beginPath(); x.arc(px,py,20*s*1.4,0,7); x.fill(); if(p.cd>0){ x.strokeStyle='#64748b'; x.lineWidth=4; x.beginPath(); x.arc(px,py,26*s*1.4,0,7*(p.cd/.55)); x.stroke(); }
+      if(p===tgt&&p.alive){ x.strokeStyle=p.col; x.lineWidth=3; x.setLineDash([6,6]); x.beginPath(); x.arc(px,py,95*s,0,7); x.stroke(); x.setLineDash([]); }
+      x.fillStyle='#fff'; x.font='800 13px system-ui'; x.textAlign='center'; x.fillText((p.seat===mySeat?'⭐ ':'')+p.name,px,py-34*s*1.4); x.globalAlpha=1; }
+    if(b.wait<=0||b.t>=0){ const bx=cx+b.x*s, by=cy+b.y*s, col=tgt?tgt.col:'#fff'; x.shadowColor=col; x.shadowBlur=30; x.fillStyle=col; x.beginPath(); x.arc(bx,by,12*s*1.4,0,7); x.fill(); x.shadowBlur=0; }
+    const me=G.players.find(p=>p.seat===mySeat); $('hud').textContent=G.msg||(tgt===me&&me&&me.alive?'⚠️ IT\'S COMING FOR YOU! ⚠️':`Speed ${Math.round(b.sp)} · ${alive().length} left`); }
+  /* loop */
+  let last=performance.now();
+  function frame(now){ const dt=Math.min(.04,(now-last)/1000); last=now;
+    if(G&&!G.over){ const [mx,my]=myMove(dt);
+      if(mode==='bots'||(mode==='online'&&NET&&NET.isHost())){ const me=G.players.find(p=>p.seat===mySeat); if(me&&me.alive){ me.x+=mx*200*dt; me.y+=my*200*dt; } for(const p of G.players) if(p.inp){ p.x+=p.inp[0]*200*dt; p.y+=p.inp[1]*200*dt; } hostStep(dt);
+        if(mode==='online'&&now-lastSend>66){ lastSend=now; NET.send({t:'st',g:{players:G.players.map(p=>({seat:p.seat,name:p.name,col:p.col,x:Math.round(p.x),y:Math.round(p.y),alive:p.alive,cd:p.cd,flash:p.flash})),ball:G.ball,msg:G.msg,over:G.over,win:G.win,hits:G.hits}}); } }
+      else if(mode==='online'&&now-lastSend>50){ lastSend=now; NET.send({t:'in',s:mySeat,m:[mx,my]}); } }
+    draw(); requestAnimationFrame(frame); }
+  requestAnimationFrame(frame);
+  const doDeflect=()=>{ if(!G||G.over) return; const me=G.players.find(p=>p.seat===mySeat); if(!me) return; if(mode==='online'&&!NET.isHost()){ NET.send({t:'df',s:mySeat}); me.flash=.1; } else deflect(me); };
+  addEventListener('keydown',e=>{ keys[e.code]=true; if(e.code==='Space'){ e.preventDefault(); if(!e.repeat) doDeflect(); } }); addEventListener('keyup',e=>{ keys[e.code]=false; });
+  cv.addEventListener('pointerdown',e=>{ if(e.pointerType!=='touch') doDeflect(); });
+  $('dbtn').addEventListener('pointerdown',e=>{ e.preventDefault(); doDeflect(); });
+  const touch={on:false,dx:0,dy:0,sx:0,sy:0}; cv.addEventListener('touchstart',e=>{ const t=e.changedTouches[0]; if(t.clientX<W/2){ touch.on=true; touch.sx=t.clientX; touch.sy=t.clientY; } },{passive:true});
+  cv.addEventListener('touchmove',e=>{ const t=e.changedTouches[0]; if(touch.on){ touch.dx=Math.max(-1,Math.min(1,(t.clientX-touch.sx)/50)); touch.dy=Math.max(-1,Math.min(1,(t.clientY-touch.sy)/50)); } },{passive:true}); cv.addEventListener('touchend',()=>{ touch.on=false; touch.dx=touch.dy=0; });
+  $('bots').onclick=()=>{ mode='bots'; mySeat=0; const names=['Blaze','Nova','Turbo','Echo','Volt']; G=newGame([{seat:0,name:myName()}].concat(names.slice(0,4).map((n,i)=>({seat:i+1,name:'🤖 '+n,bot:true})))); $('menu').style.display='none'; };
+  $('online').onclick=()=>{ if(NET&&NET.open) NET.open(); };
+  /* online: the host runs the ball; everyone else sends movement and deflects */
+  function netInit(){ if(!window.RRO) return setTimeout(netInit,400);
+    NET=RRO.init({game:'deflect',maxPlayers:8,minPlayers:2,blurb:'Deflect the ball at your friends. Last one standing wins!',
+      onStart:()=>{ mode='online'; mySeat=NET.me.seat; $('menu').style.display='none'; if(NET.isHost()){ G=newGame(NET.all().map(p=>({seat:p.seat,name:p.name}))); } else G=newGame(NET.all().map(p=>({seat:p.seat,name:p.name}))); },
+      onMsg:m=>{ if(!G) return; if(NET.isHost()){ const p=G.players.find(q=>q.seat===m.s); if(!p) return; if(m.t==='in') p.inp=m.m; if(m.t==='df') deflect(p); }
+        else if(m.t==='st'){ const g=m.g; for(const q of g.players){ const p=G.players.find(z=>z.seat===q.seat); if(p) Object.assign(p,q); } G.ball=g.ball; G.msg=g.msg; G.hits=g.hits; if(g.over&&!G.over){ G.over=true; G.win=g.win; finish(); } } } }); }
+  netInit();
+})();
+</script>
+<script src="online.js"></script>
+<script src="site.js"></script>
+<script src="chat.js"></script>
+</body>
+</html>
