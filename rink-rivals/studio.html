@@ -1,0 +1,176 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
+<title>Rival Studio</title>
+<style>
+:root{--bg:#070b12;--p1:#0f1622;--p2:#182233;--line:#26334a;--tx:#eef4ff;--mut:#93a3bd;--acc:linear-gradient(135deg,#06b6d4,#8b5cf6)}
+*{box-sizing:border-box}html,body{margin:0;background:var(--bg);color:var(--tx);font-family:system-ui,-apple-system,sans-serif}
+a{color:inherit;text-decoration:none}button{font-family:inherit;cursor:pointer}
+.bk{display:grid;place-items:center;flex:none;width:38px;height:38px;border-radius:50%;background:rgba(255,255,255,.1);color:#fff;font:800 19px system-ui}
+#hd{display:flex;align-items:center;gap:12px;padding:10px 16px;border-bottom:1px solid var(--line);max-width:1200px;margin:0 auto;flex-wrap:wrap}
+#logo{display:flex;align-items:center;gap:8px;font:900 21px system-ui}#logo i{display:grid;place-items:center;width:34px;height:34px;border-radius:10px;background:var(--acc);font-style:normal}
+#hd .sp{flex:1}.tabs{display:flex;gap:6px}.tabs button{border:0;background:none;color:var(--mut);font:700 14px system-ui;padding:8px 12px;border-radius:10px}.tabs button.on{background:var(--p2);color:var(--tx)}
+main{max-width:1200px;margin:0 auto;padding:14px 16px 60px}
+.card{background:var(--p1);border:1px solid var(--line);border-radius:16px;padding:14px;margin-bottom:14px}.card h3{margin:0 0 10px;font:800 16px system-ui}
+.btn{border:0;border-radius:11px;padding:10px 14px;font:900 14px system-ui;background:var(--acc);color:#fff}.btn.g{background:var(--p2);color:var(--tx)}.btn.r{background:#dc2626}
+.note{color:var(--mut);font-size:13px}
+input,select{border:1px solid var(--line);background:#0a1019;color:var(--tx);border-radius:10px;padding:9px 11px;font-size:14px;min-width:0}
+.row{display:flex;gap:8px;flex-wrap:wrap;align-items:center}
+.ed{display:grid;grid-template-columns:250px minmax(0,1fr);gap:14px}
+.pal{display:grid;grid-template-columns:1fr 1fr;gap:6px}.pal button{display:flex;align-items:center;gap:6px;border:2px solid var(--line);background:var(--p2);color:var(--tx);border-radius:10px;padding:7px;font:700 12px system-ui;text-align:left}.pal button.on{border-color:#06b6d4}
+.pal button span{font-size:18px}
+.stage{position:relative;background:#000;border-radius:12px;overflow:hidden;border:1px solid var(--line)}
+canvas{display:block;width:100%;height:auto;touch-action:none;image-rendering:pixelated}
+#hud{position:absolute;left:10px;top:8px;font:900 15px system-ui;text-shadow:0 2px 4px #000;pointer-events:none}
+#over{position:absolute;inset:0;display:none;align-items:center;justify-content:center;flex-direction:column;gap:10px;background:rgba(0,0,0,.6);font:900 26px system-ui;text-align:center}
+.touch{display:none;justify-content:space-between;margin-top:8px}.touch div{display:flex;gap:8px}.touch button{width:58px;height:58px;border-radius:50%;border:0;background:var(--p2);color:#fff;font:900 22px system-ui;user-select:none;touch-action:none}
+.gal{display:grid;grid-template-columns:repeat(auto-fill,minmax(230px,1fr));gap:12px}
+.gc{background:var(--p1);border:1px solid var(--line);border-radius:14px;overflow:hidden}.gc canvas{background:#0b1220}.gc div{padding:10px}.gc b{display:block}.gc small{color:var(--mut)}
+.st{font:800 11px system-ui;border-radius:999px;padding:2px 8px}.st-wait{background:#eab30833;color:#fde047}.st-ok{background:#22c55e33;color:#86efac}.st-no{background:#ef444433;color:#fca5a5}
+#btnKeys,#rrEmoB,#rrPhotoB,#rrGC,#rrTourBtn{display:none!important}
+@media(max-width:820px){.ed{grid-template-columns:1fr}.pal{grid-template-columns:repeat(5,1fr)}.pal button{flex-direction:column;font-size:10px;padding:5px}.tabs{order:3;width:100%}}
+@media(pointer:coarse){.touch{display:flex}}
+</style>
+</head>
+<body>
+<i id="arena" hidden></i>
+<header id="hd"><a class="bk" href="./" title="Back" onclick="if(document.referrer.indexOf(location.origin)===0&&history.length>1){history.back();return false}">←</a><a id="logo" href="studio"><i>🛠️</i>Rival Studio</a><span class="sp"></span>
+  <nav class="tabs"><button data-t="make" class="on">✏️ Make</button><button data-t="mine">📁 My games</button><button data-t="gal">🎮 Made by players</button></nav></header>
+<main id="main"></main>
+<script>
+(function(){
+  const $=id=>document.getElementById(id), esc=s=>String(s==null?'':s).replace(/[&<>"]/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;'}[c]));
+  const SRV=(()=>{ try{ if(localStorage.getItem('rrSrv')==='relay') return location.origin+'/rr'; }catch(e){} return 'https://rink-rivals-rooms.mitchellchad2026.workers.dev'; })();
+  const pid=()=>{ try{ let p=localStorage.getItem('rrPid'); if(!p||p.length<8){ p=Math.random().toString(36).slice(2,14); localStorage.setItem('rrPid',p); } return p; }catch(e){ return ''; } };
+  const name=()=>{ try{ return localStorage.getItem('rrOnlineName')||'Player'; }catch(e){ return 'Player'; } };
+  const post=(u,b)=>fetch(SRV+u,{method:'POST',headers:{'content-type':'application/json'},body:JSON.stringify(Object.assign({pid:pid(),name:name()},b||{}))}).then(r=>r.json()).catch(()=>({err:'net'}));
+  const LS={get(k,d){ try{ return JSON.parse(localStorage.getItem(k))||d; }catch(e){ return d; } },set(k,v){ try{ localStorage.setItem(k,JSON.stringify(v)); }catch(e){} }};
+  const W=24, H=14, T=32;
+  const KINDS={platformer:['🏃','Platformer','Run and jump to the 🏁 flag. Stomp enemies, grab coins.'],obby:['🧗','Obby','Jump across. Lava and spikes send you back to the last ✅ checkpoint. Beat the clock!'],maze:['🌀','Maze','Top-down. Collect every coin, then the 🏁 door opens.'],shooter:['🎯','Shooter','Top-down arena. Space or click to shoot. Defeat every enemy.'],racer:['🏎️','Racer','Drive 3 laps: touch every ✅ checkpoint, then cross the 🏁 line.']};
+  const TILES=[['.','🧽','Eraser'],['#','🧱','Wall'],['=','🟫','Block'],['^','🔥','Lava/spikes'],['o','🪙','Coin'],['E','👾','Enemy'],['B','🟢','Bounce'],['C','✅','Checkpoint'],['S','🙂','Start'],['G','🏁','Goal']];
+  const THEMES={sky:['#7dd3fc','#0ea5e9','#78350f','#a16207'],night:['#0f172a','#312e81','#334155','#64748b'],candy:['#fbcfe8','#f472b6','#9d174d','#db2777'],lava:['#450a0a','#7c2d12','#3f3f46','#71717a'],forest:['#bbf7d0','#16a34a','#14532d','#166534'],space:['#020617','#1e1b4b','#475569','#94a3b8']};
+  const HEROES=['🙂','😎','🤖','🐱','🐸','🦊','👽','🥷','🐧','🦄'];
+  const blank=kind=>{ const m=[]; for(let y=0;y<H;y++){ let r=''; for(let x=0;x<W;x++) r+=(y===H-1||x===0||x===W-1)&&kind!=='racer'?'#':(kind==='racer'&&(y===0||y===H-1||x===0||x===W-1))?'#':'.'; m.push(r); }
+    const set=(x,y,c)=>{ m[y]=m[y].slice(0,x)+c+m[y].slice(x+1); };
+    if(kind==='racer'){ for(let y=4;y<10;y++) for(let x=5;x<19;x++) set(x,y,'#'); set(2,6,'S'); set(2,8,'G'); set(12,2,'C'); set(21,7,'C'); set(12,11,'C'); }
+    else if(kind==='maze'||kind==='shooter'){ for(let x=0;x<W;x++){ set(x,0,'#'); } set(2,2,'S'); if(kind==='maze'){ set(21,11,'G'); set(10,5,'o'); set(15,9,'o'); } else { set(18,4,'E'); set(18,10,'E'); } }
+    else { set(2,11,'S'); set(21,11,'G'); for(let x=6;x<10;x++) set(x,9,'='); set(8,8,'o'); }
+    return m; };
+  let G=LS.get('rrStudioCur',null)||{title:'',kind:'platformer',theme:'sky',hero:'🙂',map:blank('platformer')}, tool='#', tab='make', game=null, raf=0;
+  const save=()=>LS.set('rrStudioCur',G);
+  /* ---------- drawing ---------- */
+  function drawMap(cv,g,run){ const x=cv.getContext('2d'), th=THEMES[g.theme]||THEMES.sky; const sc=cv.width/(W*T); x.setTransform(sc,0,0,sc,0,0);
+    const top=g.kind==='maze'||g.kind==='shooter'||g.kind==='racer';
+    if(top){ x.fillStyle=g.kind==='racer'?'#3f3f46':th[0]; x.fillRect(0,0,W*T,H*T); } else { const gr=x.createLinearGradient(0,0,0,H*T); gr.addColorStop(0,th[0]); gr.addColorStop(1,th[1]); x.fillStyle=gr; x.fillRect(0,0,W*T,H*T); }
+    x.textAlign='center'; x.textBaseline='middle'; x.font='24px system-ui';
+    for(let y=0;y<H;y++) for(let i=0;i<W;i++){ const c=g.map[y][i], px=i*T, py=y*T;
+      if(c==='#'){ x.fillStyle=g.kind==='racer'?'#15803d':th[2]; x.fillRect(px,py,T,T); x.fillStyle='rgba(255,255,255,.08)'; x.fillRect(px,py,T,4); }
+      else if(c==='='){ x.fillStyle=th[3]; x.fillRect(px+1,py+1,T-2,T-2); x.strokeStyle='rgba(0,0,0,.3)'; x.strokeRect(px+1.5,py+1.5,T-3,T-3); }
+      else if(c==='^'){ x.fillStyle='#ef4444'; x.beginPath(); for(let k=0;k<4;k++){ x.moveTo(px+k*8,py+T); x.lineTo(px+k*8+4,py+T-14); x.lineTo(px+k*8+8,py+T); } x.fill(); x.fillStyle='#f97316'; x.fillRect(px,py+T-6,T,6); }
+      else if(c==='B'){ x.fillStyle='#22c55e'; x.fillRect(px+2,py+T-10,T-4,10); }
+      else if(c!=='.'&&!(run&&'oESC'.includes(c))){ const t=TILES.find(t=>t[0]===c); x.fillStyle='#000'; if(t) x.fillText(c==='S'?g.hero:t[1],px+T/2,py+T/2+1); }
+      if(run&&c==='C'){ x.fillStyle='#000'; x.globalAlpha=.6; x.fillText('✅',px+T/2,py+T/2); x.globalAlpha=1; } } }
+  /* ---------- the game engine ---------- */
+  function play(g,onEnd,opts){ opts=opts||{}; const cv=$('cv'), x=cv.getContext('2d'), top=g.kind==='maze'||g.kind==='shooter'||g.kind==='racer';
+    const M=g.map.map(r=>r.split('')); let sx=2,sy=2; const coins=[], enemies=[], checks=[];
+    for(let y=0;y<H;y++) for(let i=0;i<W;i++){ const c=M[y][i]; if(c==='S'){ sx=i; sy=y; M[y][i]='.'; } if(c==='o'){ coins.push({x:i*T+16,y:y*T+16,got:0}); M[y][i]='.'; } if(c==='E'){ enemies.push({x:i*T+4,y:y*T+4,w:24,h:24,vx:60,vy:top?40:0,hp:2,dead:0}); M[y][i]='.'; } if(c==='C') checks.push({i,y,hit:0}); }
+    const P={x:sx*T+4,y:sy*T+4,w:24,h:24,vx:0,vy:0,ang:0,sp:0,hp:3,dir:[1,0],cool:0,ground:0}; let spawn={x:P.x,y:P.y}, score=0, lives=g.kind==='platformer'?3:99, t0=performance.now(), done=false, lap=0, bullets=[], msg='';
+    const solid=(px,py)=>{ const i=Math.floor(px/T), y=Math.floor(py/T); if(i<0||y<0||i>=W||y>=H) return true; const c=M[y][i]; return c==='#'||c==='='; };
+    const tileAt=(px,py)=>{ const i=Math.floor(px/T), y=Math.floor(py/T); return (i<0||y<0||i>=W||y>=H)?'#':M[y][i]; };
+    const hitBox=(o,dx,dy)=>solid(o.x+dx,o.y+dy)||solid(o.x+o.w-1+dx,o.y+dy)||solid(o.x+dx,o.y+o.h-1+dy)||solid(o.x+o.w-1+dx,o.y+o.h-1+dy);
+    const move=(o,dx,dy)=>{ let hitX=false, hitY=false; const sx=Math.sign(dx); for(let k=0;k<Math.abs(dx);k+=1){ const st=Math.min(1,Math.abs(dx)-k)*sx; if(hitBox(o,st,0)){ hitX=true; break; } o.x+=st; } const sy=Math.sign(dy); for(let k=0;k<Math.abs(dy);k+=1){ const st=Math.min(1,Math.abs(dy)-k)*sy; if(hitBox(o,0,st)){ hitY=true; break; } o.y+=st; } return [hitX,hitY]; };
+    const K={}; const kd=e=>{ if(['ArrowLeft','ArrowRight','ArrowUp','ArrowDown','Space'].includes(e.code)) e.preventDefault(); K[e.code]=e.type==='keydown'; };
+    addEventListener('keydown',kd); addEventListener('keyup',kd);
+    const tb=document.querySelectorAll('[data-k]'); tb.forEach(b=>{ const k=b.dataset.k; b.onpointerdown=e=>{ e.preventDefault(); K[k]=true; }; b.onpointerup=b.onpointerleave=()=>{ K[k]=false; }; });
+    cv.onpointerdown=()=>{ if(g.kind==='shooter') K.Space=true; }; cv.onpointerup=()=>{ K.Space=false; };
+    const L=()=>K.ArrowLeft||K.KeyA, Rr=()=>K.ArrowRight||K.KeyD, U=()=>K.ArrowUp||K.KeyW, Dn=()=>K.ArrowDown||K.KeyS, J=()=>K.Space||K.ArrowUp||K.KeyW;
+    const die=()=>{ if(g.kind==='platformer'){ lives--; if(lives<=0) return end(false,'Out of lives!'); } P.x=spawn.x; P.y=spawn.y; P.vx=0; P.vy=0; P.sp=0; };
+    function end(win,text){ if(done) return; done=true; const secs=((performance.now()-t0)/1000).toFixed(1); $('over').style.display='flex';
+      $('over').innerHTML=`<div>${win?'🏆 You win!':'😵 '+esc(text||'Game over')}</div><div style="font-size:16px">${g.kind==='obby'||g.kind==='racer'?'Time: '+secs+'s · ':''}${score?'Score: '+score:''}</div><div class="row" style="justify-content:center"><button class="btn" id="again">Play again</button>${opts.back?`<button class="btn g" id="quit">${esc(opts.back)}</button>`:''}</div>`;
+      $('again').onclick=()=>{ $('over').style.display='none'; stop(); play(g,onEnd,opts); }; if(opts.back) $('quit').onclick=()=>{ stop(); onEnd&&onEnd(); }; }
+    function stop(){ cancelAnimationFrame(raf); removeEventListener('keydown',kd); removeEventListener('keyup',kd); }
+    game={stop};
+    let last=performance.now();
+    function frame(now){ const dt=Math.min(.033,(now-last)/1000); last=now; if(!done) step(dt); render(); raf=requestAnimationFrame(frame); }
+    function step(dt){ const sp=200;
+      if(g.kind==='platformer'||g.kind==='obby'){ const ice=0; P.vx=(Rr()?sp:0)-(L()?sp:0); if(P.vx) P.dir=[Math.sign(P.vx),0]; P.vy=Math.min(900,P.vy+1700*dt);
+        if(J()&&P.ground){ P.vy=-560; P.ground=0; } const [hx,hy]=move(P,P.vx*dt,P.vy*dt); if(hy){ if(P.vy>0) P.ground=1; P.vy=0; } else if(P.vy>0) P.ground=0;
+        const below=tileAt(P.x+P.w/2,P.y+P.h+1); if(below==='B'||tileAt(P.x+P.w/2,P.y+P.h-2)==='B'){ P.vy=-820; P.ground=0; } }
+      else if(g.kind==='racer'){ const turn=2.8; if(L()) P.ang-=turn*dt*(P.sp>20?1:.4); if(Rr()) P.ang+=turn*dt*(P.sp>20?1:.4); P.sp+=(U()?420:Dn()?-300:0)*dt; P.sp*=Math.pow(.6,dt); P.sp=Math.max(-120,Math.min(320,P.sp));
+        const [hx,hy]=move(P,Math.cos(P.ang)*P.sp*dt,Math.sin(P.ang)*P.sp*dt); if(hx||hy) P.sp*=.5; }
+      else { P.vx=(Rr()?1:0)-(L()?1:0); P.vy=(Dn()?1:0)-(U()?1:0); const n=Math.hypot(P.vx,P.vy)||1; if(P.vx||P.vy) P.dir=[P.vx/n,P.vy/n]; move(P,P.vx/n*170*dt,P.vy/n*170*dt);
+        if(g.kind==='shooter'){ P.cool-=dt; if(K.Space&&P.cool<=0){ P.cool=.28; bullets.push({x:P.x+12,y:P.y+12,vx:P.dir[0]*480,vy:P.dir[1]*480,t:1.2}); } } }
+      /* tiles under the player */
+      const cx=P.x+P.w/2, cy=P.y+P.h/2, here=tileAt(cx,cy);
+      if(here==='^'||tileAt(cx,P.y+P.h-2)==='^'){ if(g.kind==='racer') P.sp*=.9; else return die(); }
+      for(const c of checks){ if(Math.floor(cx/T)===c.i&&Math.floor(cy/T)===c.y&&!c.hit){ c.hit=1; if(g.kind==='obby'){ spawn={x:c.i*T+4,y:c.y*T+4}; msg='✅ Checkpoint!'; setTimeout(()=>msg='',1200); } } }
+      if(here==='G'){ if(g.kind==='maze'&&coins.some(c=>!c.got)){ msg='🪙 Collect every coin first!'; }
+        else if(g.kind==='racer'){ if(checks.every(c=>c.hit)){ lap++; checks.forEach(c=>c.hit=0); msg=lap>=3?'':'Lap '+(lap+1)+' of 3'; setTimeout(()=>msg='',1200); if(lap>=3) return end(true); } }
+        else if(g.kind!=='shooter') return end(true); }
+      for(const c of coins) if(!c.got&&Math.abs(c.x-cx)<20&&Math.abs(c.y-cy)<20){ c.got=1; score+=10; }
+      /* enemies */
+      for(const e of enemies){ if(e.dead) continue;
+        if(g.kind==='shooter'){ const dx=cx-(e.x+12), dy=cy-(e.y+12), d=Math.hypot(dx,dy)||1; move(e,dx/d*70*dt,dy/d*70*dt); }
+        else if(top){ const [hx,hy]=move(e,e.vx*dt,0); if(hx) e.vx*=-1; }
+        else { e.vy=Math.min(900,e.vy+1700*dt); const [hx,hy]=move(e,e.vx*dt,e.vy*dt); if(hy) e.vy=0; const ahead=!solid(e.x+(e.vx>0?e.w+2:-2),e.y+e.h+4); if(hx||ahead) e.vx*=-1; }
+        if(Math.abs(e.x+12-cx)<22&&Math.abs(e.y+12-cy)<22){ if((g.kind==='platformer'||g.kind==='obby')&&P.vy>60&&cy<e.y+6){ e.dead=1; P.vy=-420; score+=50; } else if(g.kind==='shooter'){ P.hp-=1; e.x-=(cx-e.x)*.8; if(P.hp<=0) return end(false,'You got caught!'); } else return die(); } }
+      for(const b of bullets){ b.x+=b.vx*dt; b.y+=b.vy*dt; b.t-=dt; if(solid(b.x,b.y)) b.t=0; for(const e of enemies) if(!e.dead&&b.t>0&&Math.abs(b.x-e.x-12)<16&&Math.abs(b.y-e.y-12)<16){ b.t=0; if(--e.hp<=0){ e.dead=1; score+=50; } } }
+      bullets=bullets.filter(b=>b.t>0); if(g.kind==='shooter'&&enemies.length&&enemies.every(e=>e.dead)) return end(true);
+      if(P.y>H*T) die(); }
+    function render(){ drawMap(cv,{...g,map:M.map(r=>r.join(''))},true); const sc=cv.width/(W*T); x.setTransform(sc,0,0,sc,0,0); x.font='24px system-ui'; x.textAlign='center'; x.textBaseline='middle'; x.fillStyle='#000';
+      for(const c of coins) if(!c.got) x.fillText('🪙',c.x,c.y+Math.sin(performance.now()/300+c.x)*2);
+      for(const e of enemies) if(!e.dead) x.fillText('👾',e.x+12,e.y+12);
+      x.fillStyle='#fde047'; for(const b of bullets){ x.beginPath(); x.arc(b.x,b.y,4,0,7); x.fill(); } x.fillStyle='#000';
+      if(g.kind==='racer'){ x.save(); x.translate(P.x+12,P.y+12); x.rotate(P.ang); x.fillStyle='#ef4444'; x.fillRect(-14,-9,28,18); x.fillStyle='#111827'; x.fillRect(4,-7,6,14); x.restore(); }
+      else x.fillText(g.hero,P.x+12,P.y+13);
+      const secs=((performance.now()-t0)/1000).toFixed(1);
+      $('hud').textContent=[g.kind==='platformer'?'❤️ '+lives:'',g.kind==='shooter'?'❤️ '+P.hp+' · 👾 '+enemies.filter(e=>!e.dead).length:'',g.kind==='racer'?'Lap '+Math.min(3,lap+1)+'/3':'',(g.kind==='obby'||g.kind==='racer')?'⏱ '+secs+'s':'',coins.length?'🪙 '+coins.filter(c=>c.got).length+'/'+coins.length:'',msg].filter(Boolean).join('   '); }
+    $('over').style.display='none'; raf=requestAnimationFrame(frame); }
+  const stage=()=>`<div class="stage"><canvas id="cv" width="${W*T}" height="${H*T}"></canvas><div id="hud"></div><div id="over"></div></div>
+    <div class="touch"><div><button data-k="ArrowLeft">◀</button><button data-k="ArrowRight">▶</button></div><div><button data-k="ArrowUp">▲</button><button data-k="ArrowDown">▼</button><button data-k="Space">●</button></div></div>`;
+  /* ---------- editor ---------- */
+  function make(){ if(game) game.stop(); game=null;
+    $('main').innerHTML=`<div class="card"><div class="row"><input id="ti" maxlength="40" placeholder="Game title" value="${esc(G.title)}" style="flex:1;min-width:180px">
+      <select id="ki">${Object.entries(KINDS).map(([k,v])=>`<option value="${k}" ${k===G.kind?'selected':''}>${v[0]} ${v[1]}</option>`).join('')}</select>
+      <select id="th">${Object.keys(THEMES).map(k=>`<option ${k===G.theme?'selected':''}>${k}</option>`).join('')}</select>
+      <select id="he">${HEROES.map(h=>`<option ${h===G.hero?'selected':''}>${h}</option>`).join('')}</select></div><p class="note" id="kd">${KINDS[G.kind][2]}</p></div>
+      <div class="ed"><div class="card"><h3>Tiles</h3><div class="pal">${TILES.map(t=>`<button data-tool="${esc(t[0])}" class="${t[0]===tool?'on':''}"><span>${t[1]}</span>${t[2]}</button>`).join('')}</div>
+        <p class="note">Click or drag on the level to place. Right-click erases.</p><div class="row" style="flex-direction:column;align-items:stretch"><button class="btn" id="test">▶ Test play</button><button class="btn g" id="clr">🧹 Start over</button><button class="btn g" id="sub">📨 Submit to publish</button></div><p class="note" id="sm"></p></div>
+        <div>${stage()}</div></div>`;
+    const cv=$('cv'); drawMap(cv,G,false); let painting=0;
+    const paint=e=>{ const r=cv.getBoundingClientRect(), i=Math.floor((e.clientX-r.left)/r.width*W), y=Math.floor((e.clientY-r.top)/r.height*H); if(i<0||y<0||i>=W||y>=H) return;
+      const t=e.buttons===2?'.':tool; if(t==='S'||t==='G'&&G.kind!=='racer'){ G.map=G.map.map(row=>row.replace(t==='S'?/S/g:/G/g,'.')); } G.map[y]=G.map[y].slice(0,i)+t+G.map[y].slice(i+1); save(); drawMap(cv,G,false); };
+    cv.oncontextmenu=e=>e.preventDefault(); cv.onpointerdown=e=>{ painting=1; cv.setPointerCapture(e.pointerId); paint(e); }; cv.onpointermove=e=>{ if(painting) paint(e); }; cv.onpointerup=()=>painting=0;
+    $('ti').oninput=e=>{ G.title=e.target.value; save(); }; $('th').onchange=e=>{ G.theme=e.target.value; save(); drawMap(cv,G,false); }; $('he').onchange=e=>{ G.hero=e.target.value; save(); drawMap(cv,G,false); };
+    $('ki').onchange=e=>{ if(!confirm('Switch game type? This starts a fresh level for that type.')){ e.target.value=G.kind; return; } G.kind=e.target.value; G.map=blank(G.kind); save(); make(); };
+    $('clr').onclick=()=>{ if(confirm('Clear the whole level?')){ G.map=blank(G.kind); save(); drawMap(cv,G,false); } };
+    $('test').onclick=()=>{ if(game){ game.stop(); game=null; $('test').textContent='▶ Test play'; drawMap(cv,G,false); $('over').style.display='none'; return; } $('test').textContent='■ Stop test'; play(G,null,{}); };
+    $('sub').onclick=async()=>{ if(!G.title.trim()) return $('sm').textContent='Give your game a title first.'; if(!G.map.join('').includes('S')) return $('sm').textContent='Place a 🙂 start.';
+      if(G.kind!=='shooter'&&!G.map.join('').includes('G')) return $('sm').textContent='Place a 🏁 goal.'; if(G.kind==='shooter'&&!G.map.join('').includes('E')) return $('sm').textContent='Place at least one 👾 enemy.';
+      if(!confirm('Send "'+G.title+'" to the owner? It shows in Made by players after it is approved.')) return;
+      const r=await post('/st/submit',{game:G}); $('sm').textContent=r.ok?'📨 Sent! You can see its status in My games.':({title:'Please pick a friendlier title.',many:'You can send up to 5 games a day.',big:'That level is too big.'}[r.err]||'Could not send it. Check the title and try again.'); }; }
+  document.addEventListener('click',e=>{ const t=e.target.closest('[data-tool]'); if(t){ tool=t.dataset.tool; document.querySelectorAll('[data-tool]').forEach(b=>b.classList.toggle('on',b===t)); } });
+  /* ---------- my games + gallery ---------- */
+  const thumb=g=>{ const c=document.createElement('canvas'); c.width=W*8; c.height=H*8; drawMap(c,g,false); return c; };
+  async function mine(){ const d=await post('/st/mine'); const L=(d&&d.games)||[]; $('main').innerHTML=`<div class="card"><h3>📁 Games you sent</h3>${L.length?L.map(x=>`<div class="row" style="padding:8px 0;border-top:1px solid var(--line)"><b style="flex:1">${KINDS[x.kind]?KINDS[x.kind][0]:''} ${esc(x.title)}</b><span class="st st-${x.st}">${{wait:'Waiting for approval',ok:'Published',no:'Not approved'}[x.st]}</span>${x.st==='ok'?`<span class="note">▶ ${x.plays} · ❤️ ${x.likes}</span><a class="btn g" href="studio?play=${x.id}">Play</a>`:''}</div>`).join(''):'<p class="note">You haven\'t sent any games yet. Make one in ✏️ Make!</p>'}</div>`; }
+  async function gal(){ const d=await fetch(SRV+'/st/list').then(r=>r.json()).catch(()=>null); const L=(d&&d.games)||[];
+    $('main').innerHTML=L.length?`<div class="gal" id="gal"></div>`:'<div class="card"><p class="note">No published games yet. Make one and send it in, and after the owner approves it, it shows up here!</p></div>';
+    for(const g0 of L){ const el=document.createElement('a'); el.className='gc'; el.href='studio?play='+g0.id; el.innerHTML=`<div><b>${KINDS[g0.kind]?KINDS[g0.kind][0]:''} ${esc(g0.title)}</b><small>by ${esc(g0.name)} · ▶ ${g0.plays} · ❤️ ${g0.likes}</small></div>`; $('gal').appendChild(el);
+      fetch(SRV+'/st/get?id='+g0.id).then(r=>r.json()).then(full=>{ if(full&&full.data) el.prepend(thumb(full.data)); }).catch(()=>{}); } }
+  async function playId(id,review){ const d=await fetch(SRV+'/st/get?id='+encodeURIComponent(id)).then(r=>r.json()).catch(()=>null); if(!d||d.err){ $('main').innerHTML='<div class="card"><p class="note">That game was not found.</p></div>'; return; }
+    if(d.st!=='ok'&&!review){ $('main').innerHTML='<div class="card"><p class="note">This game is waiting for the owner to approve it.</p></div>'; return; }
+    $('main').innerHTML=`<div class="row" style="margin-bottom:10px"><h2 style="margin:0;font:900 22px system-ui;flex:1">${KINDS[d.kind][0]} ${esc(d.title)} <small class="note">by ${esc(d.name)}</small></h2>${review?'<span class="st st-wait">Owner preview</span>':`<button class="btn g" id="lk">❤️ ${d.likes}</button>`}<button class="btn g" id="bk">← Games</button></div><p class="note">${KINDS[d.kind][2]} Arrows or WASD to move${d.kind==='shooter'?', Space to shoot':d.kind==='racer'?'':', Space or ↑ to jump'}.</p>${stage()}`;
+    if(!review) post('/st/play',{id}); play(d.data,()=>gal(),{back:'Back to games'});
+    $('bk').onclick=()=>{ if(game) game.stop(); history.pushState(null,'','studio'); setTab('gal'); };
+    const lk=$('lk'); if(lk) lk.onclick=async()=>{ const r=await post('/st/like',{id}); if(r.ok) lk.textContent=r.liked?'❤️ Liked':'🤍 Like'; }; }
+  function setTab(t){ tab=t; document.querySelectorAll('.tabs button').forEach(b=>b.classList.toggle('on',b.dataset.t===t)); if(game){ game.stop(); game=null; } ({make,mine,gal})[t](); }
+  document.querySelector('.tabs').onclick=e=>{ const b=e.target.closest('[data-t]'); if(b){ history.pushState(null,'','studio'); setTab(b.dataset.t); } };
+  const q=new URLSearchParams(location.search); if(q.get('play')) playId(q.get('play'),q.get('review')==='1'); else setTab(q.get('t')||'make');
+})();
+</script>
+<script src="online.js"></script>
+<script src="site.js"></script>
+<script src="chat.js"></script>
+</body>
+</html>

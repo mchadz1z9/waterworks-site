@@ -120,6 +120,13 @@ body{background:radial-gradient(1200px 600px at 10% -10%,#1e1b4b 0,transparent 6
   </div>
 
   <div class="card full">
+    <h2>🛠️ Rival Studio: games to approve</h2>
+    <p class="mut">Games players made in Rival Studio. Nothing shows in "Made by players" until you approve it. Play it first with ▶.</p>
+    <div class="row"><button id="stGo" style="flex:0 0 auto">Refresh</button></div>
+    <div id="stList" class="list" style="max-height:420px;overflow:auto"><span class="mut">Loading…</span></div>
+  </div>
+
+  <div class="card full">
     <h2>📣 Full-screen update announcement</h2>
     <p class="mut">Everyone sees this cover their screen the next time they open the site. They close it with X; it shows once per update.</p>
     <label>Quick templates</label><div class="row" id="annTpls" style="margin-bottom:4px"></div>
@@ -1009,6 +1016,13 @@ function initVisits(set){ if(initVisits.done) return; initVisits.done=1; $('pxOn
   $('vsQ').oninput=()=>renderVisits();
   $('pxOn').onchange=async()=>{ const on=$('pxOn').checked; const r=await api('/admin/site','settings',{patch:{proxyBlock:on}}).catch(()=>({})); setMsg('pxMsg',r.ok?(on?'Proxy & VPN blocking is on.':'Proxy & VPN blocking is off.'):'Could not save.',r.ok?1:0); };
   $('pxGo').onclick=loadPx; $('pxList').closest('.card').onclick=async e=>{ const b=e.target.closest('[data-pxok],[data-pxno]'); if(!b) return; await api('/admin/site','pxAllow',{pid:b.dataset.pxok||b.dataset.pxno,on:!!b.dataset.pxok}); loadPx(); };
+  /* Rival Studio approvals */
+  { const e3=s=>String(s||'').replace(/[&<>"]/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;'}[c])), K={platformer:'🏃',obby:'🧗',maze:'🌀',shooter:'🎯',racer:'🏎️'};
+    const loadSt=async()=>{ try{ const d=await api('/admin/site','stPending'); const w=d.wait||[], l=d.live||[];
+      $('stList').innerHTML=(w.length?'<div style="font-weight:800;margin:6px 0">Waiting ('+w.length+')</div>'+w.map(g=>`<div class="item">${K[g.kind]||''} <b>${e3(g.title)}</b> by ${e3(g.name)} <a href="studio?play=${g.id}&review=1" target="_blank">▶ Play</a> <button data-st="${g.id}" data-v="ok">✅ Approve</button> <button data-st="${g.id}" data-v="no">❌ Reject</button></div>`).join(''):'<span class="mut">No games waiting. 🎉</span>')+
+        (l.length?'<div style="font-weight:800;margin:10px 0 6px">Published ('+l.length+')</div>'+l.map(g=>`<div class="item">${K[g.kind]||''} <b>${e3(g.title)}</b> by ${e3(g.name)} · ▶ ${g.plays} · ❤️ ${g.likes} <a href="studio?play=${g.id}" target="_blank">Play</a> <button data-st="${g.id}" data-v="no">Remove</button></div>`).join(''):''); }catch(e){ $('stList').innerHTML='<span class="mut">Could not load Studio games.</span>'; } };
+    $('stGo').onclick=loadSt; $('stList').onclick=async e=>{ const b=e.target.closest('[data-st]'); if(!b) return; if(b.dataset.v==='no'&&!confirm('Hide this game?')) return; await api('/admin/site','stSet',{id:b.dataset.st,st:b.dataset.v}).catch(()=>{}); loadSt(); };
+    loadSt(); setInterval(()=>{ if(document.visibilityState==='visible') loadSt(); },90000); }
   /* updates, restarts & glitches */
   { const ago=t=>{ const m=Math.round((Date.now()-t)/60000); return m<1?'just now':m<60?m+' min ago':m<1440?Math.round(m/60)+' h ago':Math.round(m/1440)+' d ago'; }, e2=s=>String(s||'').replace(/[&<>"]/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;'}[c]));
     const loadGl=async()=>{ try{ const d=await api('/admin/site','glitches',{days:3}); const g=d.groups||[], n=d.notes||[];

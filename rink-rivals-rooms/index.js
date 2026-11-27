@@ -291,7 +291,7 @@ export default {
     if(url.pathname==='/ai'){ if(req.method==='OPTIONS') return new Response(null,{headers:CORS}); if(req.method!=='POST') return J({err:'method'},405); return rrAI(req,env,RCF); }
     if(url.pathname==='/acct'){ if(req.method==='OPTIONS') return new Response(null,{headers:CORS}); return env.ACCT.get(env.ACCT.idFromName('ACCT')).fetch(req); }
     if(url.pathname==='/site'){ if(req.method==='OPTIONS') return new Response(null,{headers:CORS}); return env.SITE.get(env.SITE.idFromName('SITE')).fetch(req); }
-    if(url.pathname==='/tourney'||url.pathname==='/play'||url.pathname==='/popular'||url.pathname==='/daily'||url.pathname==='/like'||url.pathname==='/review'||url.pathname==='/vote'||url.pathname==='/namecheck'||url.pathname.startsWith('/feed/')||url.pathname.startsWith('/net/')||url.pathname==='/glitch'||url.pathname==='/sc/pick'||url.pathname==='/sc/my'||url.pathname==='/sc/lb'||url.pathname==='/gd/vote'||url.pathname.startsWith('/mkt/')||url.pathname.startsWith('/lg/')||url.pathname.startsWith('/es/')){ if(req.method==='OPTIONS') return new Response(null,{headers:CORS}); const cf=RCF||req.cf||{}, h=new Headers(req.headers); h.set('x-rr-asn',String(cf.asn||'')); h.set('x-rr-aso',String(cf.asOrganization||'').slice(0,80)); h.set('x-rr-cc',String(cf.country||'')); return env.SITE.get(env.SITE.idFromName('SITE')).fetch(new Request(req,{headers:h})); }
+    if(url.pathname==='/tourney'||url.pathname==='/play'||url.pathname==='/popular'||url.pathname==='/daily'||url.pathname==='/like'||url.pathname==='/review'||url.pathname==='/vote'||url.pathname==='/namecheck'||url.pathname.startsWith('/feed/')||url.pathname.startsWith('/net/')||url.pathname==='/glitch'||url.pathname==='/sc/pick'||url.pathname==='/sc/my'||url.pathname==='/sc/lb'||url.pathname==='/gd/vote'||url.pathname.startsWith('/mkt/')||url.pathname.startsWith('/lg/')||url.pathname.startsWith('/es/')||url.pathname.startsWith('/st/')){ if(req.method==='OPTIONS') return new Response(null,{headers:CORS}); const cf=RCF||req.cf||{}, h=new Headers(req.headers); h.set('x-rr-asn',String(cf.asn||'')); h.set('x-rr-aso',String(cf.asOrganization||'').slice(0,80)); h.set('x-rr-cc',String(cf.country||'')); return env.SITE.get(env.SITE.idFromName('SITE')).fetch(new Request(req,{headers:h})); }
     const lb=url.pathname.match(/^\/lb\/([a-z0-9]{2,16})$/);
     if(lb){ if(req.method==='OPTIONS') return new Response(null,{headers:CORS}); return env.BOARDS.get(env.BOARDS.idFromName(lb[1])).fetch(req); }
     const pm=url.pathname.match(/^\/party\/([A-Z0-9]{4,8})$/);
@@ -768,6 +768,25 @@ export class Site {
         const r=this.sql.exec('SELECT SUM(CASE WHEN v>0 THEN 1 ELSE 0 END) u,SUM(CASE WHEN v<0 THEN 1 ELSE 0 END) d FROM netvote WHERE id=?',id).one(); this.netC=null; return J({ok:true,u:r.u||0,d:r.d||0}); }
       if(url.pathname==='/net/report'){ this.sql.exec('INSERT OR IGNORE INTO netrep(id,pid,ts) VALUES(?,?,?)',id,pid,now); this.netC=null; return J({ok:true}); }
       return J({err:'nf'},404); }
+    /* Rival Studio: player-made games. Nothing is public until the owner approves it in HQ. */
+    if(url.pathname.startsWith('/st/')){ const now=Date.now();
+      if(!this.stOk){ this.sql.exec('CREATE TABLE IF NOT EXISTS stg(id TEXT PRIMARY KEY, pid TEXT, name TEXT, title TEXT, kind TEXT, st TEXT, data TEXT, ts INTEGER, plays INTEGER DEFAULT 0, likes INTEGER DEFAULT 0)'); this.sql.exec('CREATE TABLE IF NOT EXISTS stl(id TEXT, pid TEXT, PRIMARY KEY(id,pid))'); this.stOk=1; }
+      const KINDS=['platformer','obby','maze','shooter','racer'];
+      if(url.pathname==='/st/list') return J({games:this.sql.exec("SELECT id,name,title,kind,plays,likes,ts FROM stg WHERE st='ok' ORDER BY ts DESC LIMIT 200").toArray()});
+      if(url.pathname==='/st/get'){ const r=this.sql.exec('SELECT id,name,title,kind,st,data,plays,likes FROM stg WHERE id=?',String(url.searchParams.get('id')||'').slice(0,16)).toArray()[0]; if(!r||r.st==='no') return J({err:'nf'},404); return J({...r,data:JSON.parse(r.data)}); }
+      let m={}; try{ m=await req.json(); }catch(e){} const pid=cleanPid(m.pid);
+      if(url.pathname==='/st/play'){ this.sql.exec("UPDATE stg SET plays=plays+1 WHERE id=? AND st='ok'",String(m.id||'').slice(0,16)); return J({ok:true}); }
+      if(pid.length<8) return J({err:'bad'},400);
+      if(url.pathname==='/st/mine') return J({games:this.sql.exec('SELECT id,title,kind,st,plays,likes,ts FROM stg WHERE pid=? ORDER BY ts DESC LIMIT 50',pid).toArray()});
+      if(url.pathname==='/st/like'){ const id=String(m.id||'').slice(0,16); const had=this.sql.exec('SELECT 1 FROM stl WHERE id=? AND pid=?',id,pid).toArray().length; if(had) this.sql.exec('DELETE FROM stl WHERE id=? AND pid=?',id,pid); else this.sql.exec('INSERT INTO stl(id,pid) VALUES(?,?)',id,pid);
+        this.sql.exec('UPDATE stg SET likes=(SELECT COUNT(*) FROM stl WHERE id=?) WHERE id=?',id,id); return J({ok:true,liked:!had}); }
+      if(url.pathname==='/st/submit'){ const g=m.game||{}; const raw=JSON.stringify(g); if(raw.length>12000) return J({err:'big'},400);
+        const title=String(g.title||'').replace(/[<>]/g,'').trim().slice(0,40), kind=String(g.kind||''); if(!title||!KINDS.includes(kind)||!Array.isArray(g.map)||g.map.length!==14||!g.map.every(r=>typeof r==='string'&&r.length===24)) return J({err:'bad'},400);
+        if(CHAT_BAD.some(r=>{ r.lastIndex=0; return r.test(title); })) return J({err:'title'},400);
+        const recent=this.sql.exec("SELECT COUNT(*) n FROM stg WHERE pid=? AND ts>?",pid,now-864e5).one().n; if(recent>=5) return J({err:'many'},429);
+        const id=Array.from({length:10},()=>'abcdefghjkmnpqrstuvwxyz23456789'[Math.floor(Math.random()*31)]).join('');
+        this.sql.exec("INSERT INTO stg(id,pid,name,title,kind,st,data,ts) VALUES(?,?,?,?,?,'wait',?,?)",id,pid,cleanName(m.name),title,kind,raw,now); return J({ok:true,id}); }
+      return J({err:'nf'},404); }
     /* Rival Esports */
     if(url.pathname.startsWith('/es/')){ const now=Date.now(), season=new Date(now).toISOString().slice(0,7);
       if(!this.esOk){ this.sql.exec('CREATE TABLE IF NOT EXISTS es(id TEXT PRIMARY KEY, at INTEGER, data TEXT)'); this.sql.exec('CREATE TABLE IF NOT EXISTS esr(pid TEXT PRIMARY KEY, name TEXT, season TEXT, pts INTEGER, w INTEGER, l INTEGER, cups INTEGER)'); this.esOk=1; }
@@ -1099,6 +1118,8 @@ export class Site {
       if(m.op==='feedComDel'){ this.sql.exec('DELETE FROM fcom WHERE cid=?',+m.cid); return J({ok:true}); }
       if(m.op==='feedBan'){ const pid=cleanPid(m.pid); if(m.on){ this.sql.exec('INSERT OR REPLACE INTO fban(pid,ts) VALUES(?,?)',pid,Date.now()); if(m.wipe){ for(const r of this.sql.exec("SELECT id FROM fpost WHERE pid=? AND st<>'gone'",pid).toArray()){ this.sql.exec('DELETE FROM fblob WHERE post=?',r.id); this.sql.exec("UPDATE fpost SET st='gone',size=0 WHERE id=?",r.id); } this.sql.exec('DELETE FROM fcom WHERE pid=?',pid); } } else this.sql.exec('DELETE FROM fban WHERE pid=?',pid); return J({ok:true}); }
       if(m.op==='feedHide'){ const set=(await this.s.get('settings'))||{}, id=String(m.cid||'').slice(0,40); let h=set.feedHide||[]; h=m.on?[...new Set([...h,id])]:h.filter(x=>x!==id); set.feedHide=h.slice(-1000); if(!m.on) this.sql.exec('DELETE FROM frep WHERE id=?',id); await this.s.put('settings',set); return J({ok:true,hide:set.feedHide}); }
+      if(m.op==='stPending'){ try{ this.sql.exec('CREATE TABLE IF NOT EXISTS stg(id TEXT PRIMARY KEY, pid TEXT, name TEXT, title TEXT, kind TEXT, st TEXT, data TEXT, ts INTEGER, plays INTEGER DEFAULT 0, likes INTEGER DEFAULT 0)'); }catch(e){} return J({wait:this.sql.exec("SELECT id,name,title,kind,ts FROM stg WHERE st='wait' ORDER BY ts LIMIT 100").toArray(),live:this.sql.exec("SELECT id,name,title,kind,plays,likes FROM stg WHERE st='ok' ORDER BY ts DESC LIMIT 100").toArray()}); }
+      if(m.op==='stSet'){ const st=m.st==='ok'?'ok':m.st==='no'?'no':''; if(!st) return J({err:'bad'},400); this.sql.exec('UPDATE stg SET st=? WHERE id=?',st,String(m.id||'').slice(0,16)); return J({ok:true}); }
       if(m.op==='glitches'){ try{ this.sql.exec('CREATE TABLE IF NOT EXISTS glitch(id INTEGER PRIMARY KEY AUTOINCREMENT, ts INTEGER, kind TEXT, page TEXT, msg TEXT, src TEXT, ua TEXT, pid TEXT, name TEXT)'); }catch(e){} const since=Date.now()-(+m.days||3)*864e5;
         const groups=this.sql.exec("SELECT page,msg,kind,COUNT(*) n,COUNT(DISTINCT pid) people,MAX(ts) last,MAX(src) src,MAX(ua) ua FROM glitch WHERE ts>? AND kind='error' GROUP BY page,msg ORDER BY n DESC LIMIT 100",since).toArray();
         const notes=this.sql.exec("SELECT ts,page,msg,name,ua FROM glitch WHERE ts>? AND kind='user' ORDER BY id DESC LIMIT 100",since).toArray(); return J({groups,notes,now:Date.now()}); }
