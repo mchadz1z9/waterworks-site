@@ -43,6 +43,13 @@ body.mini #nav{width:76px;padding:4px}body.mini #nav a{flex-direction:column;gap
 .mt h3{margin:0 0 4px;font:600 16px/1.35 system-ui;display:-webkit-box;-webkit-line-clamp:2;-webkit-box-orient:vertical;overflow:hidden}
 .mt p{margin:0;color:var(--mut);font-size:14px;line-height:1.4}
 #sent{height:60px}
+.shelf{grid-column:1/-1;border-top:1px solid #2a2a35;border-bottom:1px solid #2a2a35;padding:16px 0 18px}
+.shelf h2{margin:0 0 12px;font:700 20px system-ui}
+.srow{display:grid;grid-auto-flow:column;grid-auto-columns:minmax(150px,1fr);gap:8px;overflow-x:auto;scrollbar-width:thin}
+.st{display:block;min-width:0}.st .sth{position:relative;aspect-ratio:9/16;border-radius:12px;overflow:hidden;background:#111 center/auto 100% no-repeat}
+.st .sth .rc{position:absolute;left:6px;bottom:6px;background:rgba(0,0,0,.7);border-radius:4px;padding:2px 5px;font:600 10px system-ui}.st .sth .rc b{background:var(--acc);-webkit-background-clip:text;background-clip:text;color:transparent}
+.st h3{margin:8px 2px 0;font:600 14px/1.3 system-ui;display:-webkit-box;-webkit-line-clamp:2;-webkit-box-orient:vertical;overflow:hidden}
+@media(max-width:800px){.srow{grid-auto-columns:42vw}}
 .note{color:var(--mut);padding:30px 0;font-size:14px}
 /* search results: list layout */
 .list .v{display:flex;gap:16px}.list .th{width:min(360px,45%);flex:none}.list .mt{margin-top:0}.list .mt h3{font-size:18px;font-weight:500}
@@ -78,22 +85,25 @@ body.mini #nav{width:76px;padding:4px}body.mini #nav a{flex-direction:column;gap
   const $=s=>document.querySelector(s), esc=s=>String(s).replace(/[&<>"]/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;'}[c]));
   const SERVER=(()=>{ try{ if(localStorage.getItem('rrSrv')==='relay') return location.origin+'/rr'; }catch(e){} return 'https://rink-rivals-rooms.mitchellchad2026.workers.dev'; })();
   const LS={get(k,d){ try{ return JSON.parse(localStorage.getItem(k))||d; }catch(e){ return d; } },set(k,v){ try{ localStorage.setItem(k,JSON.stringify(v)); }catch(e){} }};
-  let V=[], byId=new Map(), CATS=[];
+  let V=[], byId=new Map(), CATS=[], LONG=[], SHORT=[]; const base=k=>String(k||'').replace(/ shorts$/,'');
   /* every clip, YouTube ones only, with a fixed shuffle that changes once a day */
   const day=Math.floor(Date.now()/864e5); const hsh=s=>{ let h=day*2654435761>>>0; for(let i=0;i<s.length;i++) h=Math.imul(h^s.charCodeAt(i),16777619)>>>0; return h; };
   function ingest(){ const A=(window.RR_CLIPS||[]).filter(c=>c.src==='yt'&&c.yt); if(A.length===V.length) return false;
     V=A.slice().sort((a,b)=>hsh(a.yt)-hsh(b.yt)); byId=new Map(V.map(c=>[c.yt,c]));
-    const n={}; for(const c of V) n[c.cat]=(n[c.cat]||0)+1; CATS=Object.entries(n).filter(e=>e[1]>=60).sort((a,b)=>b[1]-a[1]).map(e=>e[0]); return true; }
+    const n={}; for(const c of V) n[c.cat]=(n[c.cat]||0)+1; const b={}; for(const [k,v] of Object.entries(n)) b[base(k)]=(b[base(k)]||0)+v; CATS=Object.entries(b).filter(e=>e[1]>=60).sort((a,b)=>b[1]-a[1]).map(e=>e[0]); LONG=V.filter(c=>!c.short); SHORT=V.filter(c=>c.short); return true; }
   const COL=['#ef4444','#f59e0b','#10b981','#3b82f6','#8b5cf6','#ec4899','#14b8a6','#f97316','#6366f1','#84cc16'];
   const av=by=>`<div class="av" style="background:${COL[hsh(by||'?')%COL.length]}">${esc((by||'?').trim().charAt(0).toUpperCase())}</div>`;
-  const thumb=c=>{ const u=`https://i.ytimg.com/vi/${c.yt}/hqdefault.jpg`; return c.short?`<div class="th"><div class="bl" style="background-image:url('${u}')"></div><div class="fg" style="background-image:url('${u}')"></div><span class="rc"><b>Rival Clips</b></span></div>`:`<div class="th"><img class="full" loading="lazy" src="https://i.ytimg.com/vi/${c.yt}/mqdefault.jpg" alt=""><span class="rc"><b>Rival Clips</b></span></div>`; };
+  const dur=s=>{ s=Math.round(s); const h=Math.floor(s/3600), m=Math.floor(s%3600/60), x=String(s%60).padStart(2,'0'); return h?h+':'+String(m).padStart(2,'0')+':'+x:m+':'+x; };
+  const thumb=c=>{ const u=`https://i.ytimg.com/vi/${c.yt}/hqdefault.jpg`; return c.short?`<div class="th"><div class="bl" style="background-image:url('${u}')"></div><div class="fg" style="background-image:url('${u}')"></div><span class="rc"><b>Rival Clips</b></span></div>`:`<div class="th"><img class="full" loading="lazy" src="https://i.ytimg.com/vi/${c.yt}/mqdefault.jpg" alt=""><span class="rc"><b>Rival Clips</b>${c.d?' · '+dur(c.d):''}</span></div>`; };
   const card=c=>`<a class="v" href="?v=${c.yt}" data-v="${c.yt}">${thumb(c)}<div class="mt">${av(c.by)}<div><h3>${esc(c.title)}</h3><p>${esc(c.by||'')}<br>Rival Clips</p></div></div></a>`;
+  const stile=c=>`<a class="st" href="?v=${c.yt}"><div class="sth" style="background-image:url('https://i.ytimg.com/vi/${c.yt}/hqdefault.jpg')"><span class="rc"><b>Rival Clips</b></span></div><h3>${esc(c.title)}</h3></a>`;
+  const shelf=L=>L.length?`<section class="shelf"><h2>📱 Shorts</h2><div class="srow">${L.map(stile).join('')}</div></section>`:'';
   /* the background image of each Shorts tile only loads when it comes near the screen */
-  let io=null; const lazyBg=root=>{ if(!('IntersectionObserver' in window)) return; if(!io) io=new IntersectionObserver(es=>{ for(const e of es) if(e.isIntersecting){ const t=e.target; t.querySelectorAll('[data-bg]').forEach(d=>{ d.style.backgroundImage=d.dataset.bg; d.removeAttribute('data-bg'); }); io.unobserve(t); } },{rootMargin:'600px'}); root.querySelectorAll('.th').forEach(t=>{ if(t.querySelector('[data-bg]')) io.observe(t); }); };
+  let io=null; const lazyBg=root=>{ if(!('IntersectionObserver' in window)) return; if(!io) io=new IntersectionObserver(es=>{ for(const e of es) if(e.isIntersecting){ const t=e.target; (t.matches('[data-bg]')?[t]:[]).concat([...t.querySelectorAll('[data-bg]')]).forEach(d=>{ d.style.backgroundImage=d.dataset.bg; d.removeAttribute('data-bg'); }); io.unobserve(t); } },{rootMargin:'600px'}); root.querySelectorAll('.th,.sth').forEach(t=>{ if(t.matches('[data-bg]')||t.querySelector('[data-bg]')) io.observe(t); }); };
   const fix=h=>h.replace(/style="background-image:(url\('[^']+'\))"/g,'data-bg="$1"');
   let feedObs=null;
-  function feed(list,cls,top){ const M=$('#main'); M.innerHTML=(top||'')+`<div class="grid ${cls||''}" id="g"></div><div id="sent"></div>`; let i=0; const g=$('#g');
-    const more=()=>{ const tmp=document.createElement('div'); tmp.innerHTML=fix(list.slice(i,i+36).map(card).join('')); lazyBg(tmp); while(tmp.firstChild) g.appendChild(tmp.firstChild); i+=36; if(i>=list.length&&feedObs){ feedObs.disconnect(); feedObs=null; } };
+  function feed(list,cls,top,SH){ let si=0, nextShelf=12; const M=$('#main'); M.innerHTML=(top||'')+`<div class="grid ${cls||''}" id="g"></div><div id="sent"></div>`; let i=0; const g=$('#g');
+    const more=()=>{ const tmp=document.createElement('div'); let h=''; for(const c of list.slice(i,i+36)){ h+=card(c); if(SH&&SH.length&&++si===nextShelf){ h+=shelf(SH.slice((si/12|0)*12%Math.max(1,SH.length-12)).slice(0,12)); nextShelf+=48; } } tmp.innerHTML=fix(h); lazyBg(tmp); while(tmp.firstChild) g.appendChild(tmp.firstChild); i+=36; if(i>=list.length&&feedObs){ feedObs.disconnect(); feedObs=null; } };
     if(feedObs){ feedObs.disconnect(); feedObs=null; } more(); if(!list.length) g.innerHTML='<div class="note">Nothing here yet.</div>';
     if(i<list.length&&'IntersectionObserver' in window){ feedObs=new IntersectionObserver(e=>{ if(e[0].isIntersecting) more(); },{rootMargin:'1200px'}); feedObs.observe($('#sent')); } return { add(L){ list=list.concat(L); if(!feedObs&&i<list.length){ more(); } } }; }
   function nav(cur){ const it=[['home','🏠','Home','rivalclips'],['shorts','📱','Shorts','clips'],['hist','🕘','History','?h=1'],['liked','👍','Liked','?l=1']];
@@ -112,7 +122,7 @@ body.mini #nav{width:76px;padding:4px}body.mini #nav a{flex-direction:column;gap
   function watch(id){ const c=byId.get(id)||{yt:id,title:'',by:'',cat:''};
     const h=LS.get('rcHist',[]).filter(x=>x!==id); h.unshift(id); LS.set('rcHist',h.slice(0,200));
     const liked=LS.get('rcLiked',[]).includes(id);
-    const same=V.filter(x=>x.cat===c.cat&&x.yt!==id), up=same.slice(hsh(id)%Math.max(1,same.length-30)).slice(0,24).concat(V.slice(0,6));
+    const same=(c.short?SHORT:LONG.length?LONG:V).filter(x=>base(x.cat)===base(c.cat)&&x.yt!==id), up=same.slice(hsh(id)%Math.max(1,same.length-30)).slice(0,24).concat(V.slice(0,6));
     $('#main').innerHTML=`<div id="watch"><div id="wl"><div id="pl" class="${c.short?'sh':''}"><iframe src="https://www.youtube-nocookie.com/embed/${encodeURIComponent(id)}?autoplay=1&playsinline=1&rel=0&modestbranding=1" allow="autoplay; encrypted-media; picture-in-picture; fullscreen" allowfullscreen title="${esc(c.title)}"></iframe></div>
       <h1 id="wt">${esc(c.title||'Rival Clips video')}</h1><div id="wr">${av(c.by)}<div class="ch"><b>${esc(c.by||'')}</b><small>on Rival Clips</small></div><span class="sp"></span><button class="pill${liked?' on':''}" id="lk">👍 ${liked?'Liked':'Like'}</button><button class="pill" id="sh">↗ Share</button></div>
       <div id="desc">${esc(c.cat||'')}<br>Watching on <b>Rival Clips</b> by Arcade Rivals.</div></div><div id="up">${fix(up.map(card).join(''))}</div></div>`;
@@ -124,7 +134,7 @@ body.mini #nav{width:76px;padding:4px}body.mini #nav a{flex-direction:column;gap
     if(q){ $('#q').value=q; nav(''); search(q); return; }
     if(p.get('h')){ nav('hist'); feed(LS.get('rcHist',[]).map(i=>byId.get(i)).filter(Boolean),'',`<h2 style="margin:20px 0 0">🕘 History</h2>`); return; }
     if(p.get('l')){ nav('liked'); feed(LS.get('rcLiked',[]).map(i=>byId.get(i)).filter(Boolean),'',`<h2 style="margin:20px 0 0">👍 Liked videos</h2>`); return; }
-    nav(c||'home'); feed(c?V.filter(x=>x.cat===c):V,'',chips(c)); }
+    nav(c||'home'); const inC=x=>!c||base(x.cat)===c, Lg=LONG.filter(inC), Sh=SHORT.filter(inC); feed(Lg.length>=24?Lg:V.filter(inC),'',chips(c),Lg.length>=24?Sh:null); }
   const go=u=>{ history.pushState(null,'',u); route(); };
   document.addEventListener('click',e=>{ if(e.target.id==='lm'&&document.onclick2){ document.onclick2(e); return; }
     const ch=e.target.closest('[data-chip]'); if(ch){ go(ch.dataset.chip?'?c='+encodeURIComponent(ch.dataset.chip):'rivalclips'); scrollTo(0,0); return; }
@@ -135,7 +145,7 @@ body.mini #nav{width:76px;padding:4px}body.mini #nav a{flex-direction:column;gap
   ingest(); route();
   /* the big Shorts list arrives after the page is up; the home feed picks it up without jumping */
   addEventListener('rr-clips-more',()=>{ if(ingest()){ const p=new URLSearchParams(location.search); if(!p.get('v')&&!p.get('q')&&!p.get('h')&&!p.get('l')&&scrollY<200) route(); else nav(p.get('c')||''); } });
-  const s=document.createElement('script'); s.src='clips-data2.js'; s.async=true; document.body.appendChild(s);
+  for(const f of ['clips-long.js','clips-data2.js','clips-data3.js']){ const s=document.createElement('script'); s.src=f; s.async=true; document.body.appendChild(s); }
 })();
 </script>
 <script src="online.js"></script>
