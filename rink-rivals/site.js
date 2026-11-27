@@ -308,7 +308,7 @@ body.rrHasBanner #rrTourBtn{top:48px}
     const sc=document.createElement('script'); sc.src='lobby3d.js'; sc.defer=true; (document.head||de).appendChild(sc); }
 
   /* focus mode: on game pages the floating buttons fade while you're playing (keys or taps on the game), and come back when you move the mouse */
-  if(PAGE&&!['index','clips','rivalclips','tv','sports','gameday','market','avatar','league','esports','studio','marketday','remix','more','free-games','messages','sports-arcade','admin','today','worlds','call','chat'].includes(PAGE)){
+  if(PAGE&&!['index','clips','rivalclips','tv','sports','gameday','market','avatar','league','esports','studio','marketday','remix','runway','more','free-games','messages','sports-arcade','admin','today','worlds','call','chat'].includes(PAGE)){
     const fst=document.createElement('style'); fst.textContent='html.rrPlay #rrTog,html.rrPlay #rrpF,html.rrPlay #rrcF,html.rrPlay #rrCoin,html.rrPlay #rrEmoB,html.rrPlay #rrPhotoB,html.rrPlay #rrAcctB,html.rrPlay #rrGC,html.rrPlay #rrCoinT,html.rrPlay #saFs,html.rrPlay #rrOss,html.rrPlay #back,html.rrPlay #saBack{opacity:.08!important;transition:opacity .5s!important}#rrTog,#rrpF,#rrcF,#rrCoin,#rrEmoB,#rrPhotoB,#rrAcctB,#rrGC,#rrCoinT,#saFs{transition:opacity .3s}';
     (document.head||document.documentElement).appendChild(fst);
     let lastKey=0, mx=-1, my=-1; const de=document.documentElement;
