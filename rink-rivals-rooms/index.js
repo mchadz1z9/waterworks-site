@@ -128,6 +128,17 @@ async function ytSearch(url,env){
   return new Response(body,{headers:H});
 }
 
+/* Games page "New this week": GameMonetize's newest games, read once every 6 hours and run through the same kid filter as the main list */
+const NET_BAD=new RegExp(String.raw`(blood|gore|gory|kiss|dating|\bdate\b|romance|romantic|girlfriend|boyfriend|crush|valentine|pregnan|sexy|\bsex|bikini|lingerie|nude|naked|drunk|beer|alcohol|vodka|casino|gambl|\bslots?\b|\bbet(ting)?\b|horror|scary|creepy|terrif|nightmare|granny|skibidi|toilet|poop|\bfart|prank|murder|\bkill(er|ing)?\b.*(people|human|civilian)|torture|serial|cigar|smok|weed|\bdrug|suicide|hell\b|devil|demon|satan|jail ?break|prison|gang|mafia|thug|hitman|assassin|sniper.*(city|people)|baby hazel|surgery|doctor game|dentist|hospital|wedding|marry|bride|tiktok|instagram|monkey mart|celebrity|princess.*(date|kiss)|squid game|backrooms|huggy|poppy|siren head|five nights|fnaf|freddy|rainbow friends|minecraft|roblox|among us|fortnite|mario|sonic|pokemon|pikachu|spongebob|disney|barbie|lego|subway surf|temple run|angry birds|cut the rope|stumble guys|fall guys|geometry dash|slither|agar|krunker|shell shock|1v1\.lol|bloxd|stickman hook)`,'i');
+const NET_SEC={"Racing":"Racing","Shooting":"Shooters","Sports":"Sports","Soccer":"Sports","Action":"Action","Stickman":"Action","Boys":"Action","Multiplayer":"Multiplayer",".IO":"Multiplayer","2 Player":"Multiplayer","Puzzle":"Puzzle","Adventure":"Adventure","3D":"Adventure","Arcade":"Arcade","Hypercasual":"Casual","Clicker":"Casual","Girls":"Casual","Cooking":"Casual"};
+async function netNew(){ const H={...CORS,'content-type':'application/json','cache-control':'public, max-age=1800'}; const ck=new Request('https://net.cache/new'), cache=caches.default; const hit=await cache.match(ck); if(hit) return new Response(hit.body,{headers:H});
+  const out=[]; const S=['Racing','Shooters','Sports','Action','Adventure','Multiplayer','Puzzle','Arcade','Casual'];
+  for(const pg of [1,2]){ try{ const r=await fetch('https://gamemonetize.com/feed.php?format=0&num=100&page='+pg,{cf:{cacheTtl:21600}}); const L=await r.json();
+    for(const g of L||[]){ const h=(String(g.url||'').match(/^https:\/\/html5\.gamemonetize\.co\/([a-z0-9]+)\/$/)||[])[1]; const t=String(g.title||'').replace(/&amp;/g,'&').replace(/&#39;/g,"'").replace(/&quot;/g,'"').trim();
+      if(!h||!/^[\x20-\x7e]{3,80}$/.test(t)||NET_BAD.test(t+' '+(g.description||'')+' '+(g.tags||''))) continue;
+      out.push([String(g.id).replace(/\D/g,''),h,t,S.indexOf(NET_SEC[g.category]||'Casual'),String(g.tags||'').toLowerCase().replace(/[^a-z0-9 ]+/g,' ').replace(/\s+/g,' ').trim().slice(0,70)]); } }catch(e){} }
+  const body=JSON.stringify({games:out,secs:S}); if(out.length) await cache.put(ck,new Response(body,{headers:{'content-type':'application/json','cache-control':'public, max-age=21600'}})); return new Response(body,{headers:H}); }
+
 export default {
   /* nightly chat wipe at 10 p.m. Toronto time. Cron runs at 02:00 and 03:00 UTC, and only the one that lands on 22:00 local (EST or EDT) clears */
   async scheduled(ev, env, ctx){
@@ -193,6 +204,7 @@ export default {
           if(vid&&/"isLiveNow":true|"isLive":true/.test(lh)){ const tt=(lh.match(/<meta name="title" content="([^"]{0,140})"/)||[])[1]||'NHL live'; yt={id:vid,title:tt.replace(/&amp;/g,'&').replace(/&#39;/g,"'").replace(/&quot;/g,'"')}; } }catch(e){}
         r=new Response(JSON.stringify({date:d.currentDate,games,yt}),{headers:{'content-type':'application/json','cache-control':'max-age=30'}}); await c.put(key,r.clone()); }
       const h=new Headers(r.headers); for(const k in CORS) h.set(k,CORS[k]); return new Response(r.body,{headers:h}); }
+    if(url.pathname==='/netnew'){ if(req.method==='OPTIONS') return new Response(null,{headers:CORS}); return netNew(); }
     if(url.pathname==='/yts'){ if(req.method==='OPTIONS') return new Response(null,{headers:CORS}); return ytSearch(url,env); }
     if(url.pathname==='/ws'){ if(req.method==='OPTIONS') return new Response(null,{headers:CORS}); return webSearch(url); }
     if(url.pathname==='/itch'){ if(req.method==='OPTIONS') return new Response(null,{headers:CORS}); return itchList(url); }
@@ -201,7 +213,7 @@ export default {
     if(url.pathname==='/ai'){ if(req.method==='OPTIONS') return new Response(null,{headers:CORS}); if(req.method!=='POST') return J({err:'method'},405); return rrAI(req,env,RCF); }
     if(url.pathname==='/acct'){ if(req.method==='OPTIONS') return new Response(null,{headers:CORS}); return env.ACCT.get(env.ACCT.idFromName('ACCT')).fetch(req); }
     if(url.pathname==='/site'){ if(req.method==='OPTIONS') return new Response(null,{headers:CORS}); return env.SITE.get(env.SITE.idFromName('SITE')).fetch(req); }
-    if(url.pathname==='/tourney'||url.pathname==='/play'||url.pathname==='/popular'||url.pathname==='/daily'||url.pathname==='/like'||url.pathname==='/review'||url.pathname==='/vote'||url.pathname==='/namecheck'||url.pathname.startsWith('/feed/')){ if(req.method==='OPTIONS') return new Response(null,{headers:CORS}); const cf=RCF||req.cf||{}, h=new Headers(req.headers); h.set('x-rr-asn',String(cf.asn||'')); h.set('x-rr-aso',String(cf.asOrganization||'').slice(0,80)); h.set('x-rr-cc',String(cf.country||'')); return env.SITE.get(env.SITE.idFromName('SITE')).fetch(new Request(req,{headers:h})); }
+    if(url.pathname==='/tourney'||url.pathname==='/play'||url.pathname==='/popular'||url.pathname==='/daily'||url.pathname==='/like'||url.pathname==='/review'||url.pathname==='/vote'||url.pathname==='/namecheck'||url.pathname.startsWith('/feed/')||url.pathname.startsWith('/net/')){ if(req.method==='OPTIONS') return new Response(null,{headers:CORS}); const cf=RCF||req.cf||{}, h=new Headers(req.headers); h.set('x-rr-asn',String(cf.asn||'')); h.set('x-rr-aso',String(cf.asOrganization||'').slice(0,80)); h.set('x-rr-cc',String(cf.country||'')); return env.SITE.get(env.SITE.idFromName('SITE')).fetch(new Request(req,{headers:h})); }
     const lb=url.pathname.match(/^\/lb\/([a-z0-9]{2,16})$/);
     if(lb){ if(req.method==='OPTIONS') return new Response(null,{headers:CORS}); return env.BOARDS.get(env.BOARDS.idFromName(lb[1])).fetch(req); }
     const pm=url.pathname.match(/^\/party\/([A-Z0-9]{4,8})$/);
@@ -651,6 +663,22 @@ export class Site {
         /* two reports and a player's post is hidden until an admin looks at it */ if(id.startsWith('p:')&&n>=2) this.sql.exec("UPDATE fpost SET st='hidden' WHERE id=? AND st='ok'",+id.slice(2)); return J({ok:true}); }
       return J({err:'unknown'},404); }
     /* how popular each game is: visits in the last 14 days that played it (cached 10 minutes) */
+    /* network games (Games page): play counts, thumbs up/down and "not working" reports; 3 reports from different players hide a game for 30 days */
+    if(url.pathname.startsWith('/net/')){ const H={...CORS,'content-type':'application/json'}, now=Date.now(), day=Math.floor(now/864e5);
+      if(!this.netOk){ this.sql.exec('CREATE TABLE IF NOT EXISTS netplay(id TEXT, day INTEGER, n INTEGER, PRIMARY KEY(id,day))'); this.sql.exec('CREATE TABLE IF NOT EXISTS netvote(id TEXT, pid TEXT, v INTEGER, PRIMARY KEY(id,pid))'); this.sql.exec('CREATE TABLE IF NOT EXISTS netrep(id TEXT, pid TEXT, ts INTEGER, PRIMARY KEY(id,pid))'); this.netOk=1; this.netSeen=new Map(); }
+      if(url.pathname==='/net/stats'){ if(!this.netC||now-this.netC.t>300000){ const top=this.sql.exec('SELECT id,SUM(n) s FROM netplay WHERE day>=? GROUP BY id ORDER BY s DESC LIMIT 400',day-14).toArray().map(r=>[r.id,r.s]);
+          const hide=this.sql.exec('SELECT id FROM netrep WHERE ts>? GROUP BY id HAVING COUNT(*)>=3',now-30*864e5).toArray().map(r=>r.id);
+          const rate={}; for(const r of this.sql.exec('SELECT id,SUM(CASE WHEN v>0 THEN 1 ELSE 0 END) u,SUM(CASE WHEN v<0 THEN 1 ELSE 0 END) d FROM netvote GROUP BY id')) rate[r.id]=[r.u,r.d];
+          this.netC={t:now,body:JSON.stringify({top,hide,rate})}; if(Math.random()<.05){ this.sql.exec('DELETE FROM netplay WHERE day<?',day-60); this.sql.exec('DELETE FROM netrep WHERE ts<?',now-30*864e5); } }
+        return new Response(this.netC.body,{headers:{...H,'cache-control':'public, max-age=120'}}); }
+      if(req.method!=='POST') return J({err:'method'},405);
+      let m={}; try{ m=await req.json(); }catch(e){} const id=String(m.id||'').replace(/[^0-9]/g,'').slice(0,8), pid=cleanPid(m.pid);
+      if(!id||pid.length<8) return J({err:'bad'},400);
+      if(url.pathname==='/net/play'){ const k=pid+':'+id+':'+day; if(!this.netSeen.has(k)){ if(this.netSeen.size>50000) this.netSeen.clear(); this.netSeen.set(k,1); this.sql.exec('INSERT INTO netplay(id,day,n) VALUES(?,?,1) ON CONFLICT(id,day) DO UPDATE SET n=n+1',id,day); } return J({ok:true}); }
+      if(url.pathname==='/net/vote'){ const v=Math.sign(+m.v||0); if(v) this.sql.exec('INSERT INTO netvote(id,pid,v) VALUES(?,?,?) ON CONFLICT(id,pid) DO UPDATE SET v=excluded.v',id,pid,v); else this.sql.exec('DELETE FROM netvote WHERE id=? AND pid=?',id,pid);
+        const r=this.sql.exec('SELECT SUM(CASE WHEN v>0 THEN 1 ELSE 0 END) u,SUM(CASE WHEN v<0 THEN 1 ELSE 0 END) d FROM netvote WHERE id=?',id).one(); this.netC=null; return J({ok:true,u:r.u||0,d:r.d||0}); }
+      if(url.pathname==='/net/report'){ this.sql.exec('INSERT OR IGNORE INTO netrep(id,pid,ts) VALUES(?,?,?)',id,pid,now); this.netC=null; return J({ok:true}); }
+      return J({err:'nf'},404); }
     if(url.pathname==='/popular'){ if(req.method==='OPTIONS') return new Response(null,{headers:CORS});
       const now=Date.now(); if(!this.popIx){ try{ this.sql.exec('CREATE INDEX IF NOT EXISTS visit_last ON visit(last)'); }catch(e){} this.popIx=1; } if(!this.popC||now-this.popC.t>600000){ const cnt={}; for(const r of this.sql.exec('SELECT games FROM visit WHERE last>?',now-14*86400000)) for(const g of String(r.games||'').split(',')){ if(g&&g!=='home'&&/^[a-z0-9-]{1,24}$/.test(g)) cnt[g]=(cnt[g]||0)+1; } this.popC={t:now,g:cnt}; }
       return new Response(JSON.stringify({ok:true,days:14,g:this.popC.g}),{headers:{...CORS,'content-type':'application/json','cache-control':'public, max-age=300'}}); }

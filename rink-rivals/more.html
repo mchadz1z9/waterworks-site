@@ -27,6 +27,9 @@ h1{margin:0;font:900 36px/1 system-ui;letter-spacing:.01em}
 .strip .g:first-child{grid-column:span 2;aspect-ratio:auto}
 .grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(160px,1fr));gap:12px}
 #sent{height:40px}
+#top{position:relative}#sg{display:none;position:absolute;right:0;top:52px;width:min(460px,100%);background:#0b1122;border:1px solid #334155;border-radius:14px;padding:6px;z-index:20;box-shadow:0 12px 40px rgba(0,0,0,.5)}
+#sg a{display:flex;align-items:center;gap:10px;padding:6px;border-radius:10px;color:#fff;text-decoration:none;font:600 14px system-ui}#sg a:hover{background:#1e293b}#sg img{width:56px;height:42px;object-fit:cover;border-radius:6px}
+.g .rt{position:absolute;top:6px;right:6px;left:auto;font:800 11px system-ui;font-style:normal;background:rgba(0,0,0,.65);border-radius:6px;padding:2px 6px}
 #back{position:fixed;left:10px;top:10px;z-index:9;background:rgba(15,23,42,.9);color:#fff;border:1px solid rgba(255,255,255,.25);border-radius:999px;padding:7px 13px;font:700 13px system-ui;text-decoration:none}
 .note{color:#64748b;font-size:12px;margin-top:24px}.sub{color:var(--mut)}
 @media(max-width:700px){h1{font-size:28px}#hero{grid-template-columns:1fr 1fr}#hero .g:first-child{grid-column:span 2;grid-row:auto;min-height:190px}#hero .g:nth-child(n+4){display:none}.strip{grid-auto-columns:140px}.grid{grid-template-columns:repeat(auto-fill,minmax(130px,1fr))}}
@@ -49,11 +52,19 @@ h1{margin:0;font:900 36px/1 system-ui;letter-spacing:.01em}
   const SECS=(window.NETSECS||Object.keys(ICON)).filter(s=>G.some(g=>g[3]===s));
   /* our own games, shown first */
   const OURS=[['city','Rival City','🏙️','#1e293b,#f59e0b','open world driving cars police city gta'],['br','Storm Royale','🌪️','#312e81,#db2777','battle royale shooter storm fortnite'],['blockverse','Blockverse','🧱','#3f9f46,#6e4e2c','blocks voxel sandbox build mine craft survival minecraft'],['skystunt','Sky Stunt','🚗','#0ea5e9,#f97316','car stunt racing jumps drift'],['football','Football','🏈','#14532d,#a16207','american football nfl sports'],['hockey','Hockey','🏒','#0c4a6e,#e2e8f0','ice hockey nhl sports'],['packs','Pack Rip','🃏','#f59e0b,#be123c','pack opener cards sports collect'],['elements','Element Lab','⚗️','#7c3aed,#0f172a','alchemy combine elements mix'],['basketball','Basketball','🏀','#9a3412,#1e293b','basketball nba hoops sports'],['f1','F1 Racing','🏎️','#991b1b,#111827','formula racing cars race'],['deepdive','Deep Dive','🤿','#0369a1,#0f172a','ocean trivia dive water'],['sports-arcade','Sports Arcade','🏆','#065f46,#1d4ed8','sports games arcade']];
+  const SRV=(()=>{ try{ if(localStorage.getItem('rrSrv')==='relay') return location.origin+'/rr'; }catch(e){} return 'https://rink-rivals-rooms.mitchellchad2026.workers.dev'; })();
+  const LSJ=(k,d)=>{ try{ return JSON.parse(localStorage.getItem(k))||d; }catch(e){ return d; } };
+  let NEW=[]; const addNew=()=>{ if(!NEW.length) return; const have=new Set(G.map(g=>g[1])); const add=NEW.filter(g=>!have.has(g[1])); if(add.length){ G=add.concat(G); byKey=new Map(G.map(g=>[g[0]+':'+g[1],g])); byId=new Map(G.map(g=>[g[1],g])); IX=null; } };
+  let ST={top:[],hide:[],rate:{}}, HIDE=new Set(); const ok=g=>!HIDE.has(g[1]);
+  const rateOf=id=>{ const r=ST.rate[id]; if(!r||r[0]+r[1]<3) return ''; return `<i class="rt">👍 ${Math.round(100*r[0]/(r[0]+r[1]))}%</i>`; };
+  /* collections: hand-made lists built from titles and tags */
+  const COLS=[['col:2p','👥 2 player',/\b(2 ?players?|two players?|2p|1v1|pvp|versus|vs friend)\b/],['col:mc','🧱 Games like Minecraft',/\b(craft|block|blocks|blocky|voxel|mine|mining|sandbox|cube)\b/],['col:rb','🧗 Games like Roblox',/\b(obby|parkour|blox|tycoon)\b/],['col:car','🚗 Car games',/\b(car|cars|drift|driving|drive|parking|racing|truck|traffic)\b/],['col:io','🌐 .io games',/(\.io\b|\bio\b)/],['col:quick','⏱️ Quick break',/\b(hypercasual|tap|one tap|clicker|idle|endless|runner|stack)\b/],['col:class','📚 Puzzle for class',/\b(math|word|words|spelling|logic|brain|quiz|trivia|sudoku|chess|memory|typing)\b/]];
+  const colList=k=>{ const c=COLS.find(c=>c[0]===k); return c?G.filter(g=>ok(g)&&c[2].test((g[2]+' '+(g[7]||'')).toLowerCase())):[]; };
   const hashOf=g=>(String(g[4]).match(/\/([a-z0-9]{20,})\/?$/)||[])[1]||'';
-  const tile=g=>`<a class="g" href="play?n=${g[0]}&id=${encodeURIComponent(g[1])}&h=${hashOf(g)}&t=${encodeURIComponent(g[2])}" title="${esc(g[6])}"><img loading="lazy" decoding="async" src="${esc(g[5])}" alt=""><b>${esc(g[2])}</b></a>`;
+  const tile=g=>`<a class="g" href="play?n=${g[0]}&id=${encodeURIComponent(g[1])}&h=${hashOf(g)}&t=${encodeURIComponent(g[2])}" title="${esc(g[6])}"><img loading="lazy" decoding="async" src="${esc(g[5])}" alt="">${rateOf(g[1])}<b>${esc(g[2])}</b></a>`;
   const ours=o=>`<a class="g o" href="${o[0]}" style="--c:linear-gradient(135deg,${o[3]})"><i>ORIGINAL</i><span>${o[2]}</span><b>${esc(o[1])}</b></a>`;
   const recent=()=>{ try{ return JSON.parse(localStorage.getItem('rrNetRecent')||'[]'); }catch(e){ return []; } };
-  let byKey=new Map(G.map(g=>[g[0]+':'+g[1],g]));
+  let byKey=new Map(G.map(g=>[g[0]+':'+g[1],g])), byId=new Map(G.map(g=>[g[1],g]));
   /* a fixed daily shuffle, so the featured games change each day but not on every reload */
   const day=Math.floor(Date.now()/864e5); const rnd=(i)=>{ let x=Math.sin((i+1)*9301+day*49297)*233280; return x-Math.floor(x); };
   const daily=L=>L.map((g,i)=>[rnd(i),g]).sort((a,b)=>a[0]-b[0]).map(x=>x[1]);
@@ -76,14 +87,14 @@ h1{margin:0;font:900 36px/1 system-ui;letter-spacing:.01em}
         if(b<8) for(const tg of x.tg){ if(tg===w){ b=Math.max(b,7); break; } if(w.length>2&&tg.startsWith(w)) b=Math.max(b,5); else if(w.length>=5&&tg.length>=5&&lev(w,tg,1)<=1) b=Math.max(b,4); }
         if(b<4&&syn[k].size){ for(const tw of x.tw) if(syn[k].has(tw)){ b=Math.max(b,5); break; } if(b<4) for(const tg of x.tg) if(syn[k].has(tg)){ b=Math.max(b,3); break; } }
         if(b){ hit++; sc+=b; } });
-      if(hit){ sc+=hit===W.length?15:0; R.push([hit,sc,x.i,x.g]); } }
+      if(hit&&!HIDE.has(x.g[1])){ sc+=hit===W.length?15:0; R.push([hit,sc,x.i,x.g]); } }
     R.sort((a,b)=>b[0]-a[0]||b[1]-a[1]||a[2]-b[2]);
     if(R.length) return {L:R.map(r=>r[3]),close:R[0][0]<W.length,fixed:changed?qn:''};
     /* nothing matched at all: the closest-sounding titles, then the most popular games */
     const C=IX.map(x=>[Math.min(...W.map(w=>Math.min(...x.tw.map(tw=>lev(w,tw,3))))),x.i,x.g]).filter(r=>r[0]<=3).sort((a,b)=>a[0]-b[0]||a[1]-b[1]).slice(0,60).map(r=>r[2]);
     return {L:C.length?C:FEAT.slice(0,60),close:true}; }
 
-  function chips(){ $('#chips').innerHTML=[['all','🔥 Home']].concat([['ours','⭐ Originals']],SECS.map(s=>[s,ICON[s]+' '+s])).map(([k,t])=>`<button class="chip${k===cat?' on':''}" data-c="${k}">${t}</button>`).join(''); }
+  function chips(){ $('#chips').innerHTML=[['all','🔥 Home']].concat([['ours','⭐ Originals']],SECS.map(s=>[s,ICON[s]+' '+s]),COLS.map(c=>[c[0],c[1]])).map(([k,t])=>`<button class="chip${k===cat?' on':''}" data-c="${k}">${t}</button>`).join(''); }
   function row(title,sub,list,more){ return `<section class="row"><h2>${title}${sub?` <small>${sub}</small>`:''}${more?`<button data-c="${more}">See all</button>`:''}</h2><div class="strip">${list.join('')}</div></section>`; }
   /* long lists are drawn 96 tiles at a time as you scroll, so the page stays fast */
   function grid(L,html){ const M=$('#main'); M.innerHTML=(html||'')+'<div class="grid" id="grid"></div><div id="sent"></div>'; let i=0; const gr=$('#grid');
@@ -94,21 +105,34 @@ h1{margin:0;font:900 36px/1 system-ui;letter-spacing:.01em}
     if(q){ const r=search(q), qn=r.fixed||norm(q), O=OURS.filter(o=>norm(o[1]+' '+o[4]).split(' ').some(w=>qn.split(' ').some(x=>w===x||(x.length>=4&&w.startsWith(x))))).map(ours); const n=O.length+r.L.length;
       grid(O.concat(r.L.map(tile)),`<div class="sub" style="margin-bottom:10px">${r.fixed?`Showing results for “${esc(r.fixed)}” · `:''}${r.close?`No exact match for “${esc(q)}”. Here are the closest games${n?` (${n.toLocaleString()})`:''}:`:`${n.toLocaleString()} games for “${esc(q)}”`}${window.NETALL?'':' · loading all games…'}</div>`); return; }
     if(cat==='ours'){ grid(OURS.map(ours)); return; }
-    if(cat!=='all'){ grid(G.filter(g=>g[3]===cat).map(tile)); return; }
-    const F=daily(FEAT.slice(0,400)).slice(0,5), R=recent().map(k=>byKey.get(k)).filter(Boolean).slice(0,16);
+    if(cat.startsWith('col:')){ grid(colList(cat).map(tile),window.NETALL?'':'<div class="sub" style="margin-bottom:10px">Loading all games…</div>'); return; }
+    if(cat==='fav'){ grid(LSJ('rrNetFav',[]).map(f=>byKey.get(f[0])||['gm',f[0].split(':')[1],f[1],'','https://html5.gamemonetize.co/'+f[2]+'/','https://img.gamemonetize.com/'+f[2]+'/512x384.jpg','']).map(tile)); return; }
+    if(cat!=='all'){ grid(G.filter(g=>g[3]===cat&&ok(g)).map(tile)); return; }
+    const F=daily(FEAT.filter(ok).slice(0,400)).slice(0,5), R=recent().map(k=>byKey.get(k)).filter(Boolean).slice(0,16);
     let h=`<div id="hero">${F.map(tile).join('')}</div>`;
     h+=row('⭐ Arcade Rivals originals','made by us',OURS.map(ours),'ours');
+    const MY=LSJ('rrNetFav',[]).map(f=>byKey.get(f[0])||['gm',f[0].split(':')[1],f[1],'','https://html5.gamemonetize.co/'+f[2]+'/','https://img.gamemonetize.com/'+f[2]+'/512x384.jpg','']);
+    if(MY.length) h+=row('❤️ My games','your favorites',MY.slice(0,20).map(tile),'fav');
     if(R.length) h+=row('🕘 Played recently','',R.map(tile));
-    h+=row('🆕 New games','just added',G.slice().sort((a,b)=>b[1]-a[1]).slice(0,20).map(tile));
-    for(const s of SECS){ const L=G.filter(g=>g[3]===s); h+=row(ICON[s]+' '+s,L.length.toLocaleString()+' games',daily(FEAT.filter(g=>g[3]===s).slice(0,120)).slice(0,20).map(tile),s); }
+    const TOP=ST.top.map(t=>byId.get(t[0])).filter(g=>g&&ok(g)).slice(0,20);
+    if(TOP.length>=5) h+=row('🔥 Most played here','what kids on Arcade Rivals play most',TOP.map(tile));
+    h+=row('🆕 New this week',NEW.length?'fresh from the game network':'just added',(NEW.length?NEW:G.slice().sort((a,b)=>b[1]-a[1])).filter(ok).slice(0,20).map(tile));
+    for(const c of COLS.slice(0,4)){ const L=colList(c[0]); if(L.length>=8) h+=row(c[1],L.length.toLocaleString()+' games',daily(L.slice(0,200)).slice(0,20).map(tile),c[0]); }
+    for(const s of SECS){ const L=G.filter(g=>g[3]===s); h+=row(ICON[s]+' '+s,L.length.toLocaleString()+' games',daily(FEAT.filter(g=>g[3]===s&&ok(g)).slice(0,120)).slice(0,20).map(tile),s); }
     $('#main').innerHTML=h; }
   document.addEventListener('click',e=>{ const b=e.target.closest('[data-c]'); if(!b) return; cat=b.dataset.c; $('#q').value=''; history.replaceState(null,'',cat==='all'?'more':'more?c='+encodeURIComponent(cat)); draw(); scrollTo(0,0); });
   let t; $('#q').oninput=()=>{ clearTimeout(t); t=setTimeout(()=>{ const q=$('#q').value.trim(); history.replaceState(null,'',q?'more?q='+encodeURIComponent(q):(cat==='all'?'more':'more?c='+encodeURIComponent(cat))); draw(); },180); };
+  const sg=document.createElement('div'); sg.id='sg'; $('#q').insertAdjacentElement('afterend',sg); let sgT;
+  const sugg=()=>{ const q=$('#q').value.trim(); if(q.length<2||document.activeElement!==$('#q')){ sg.style.display='none'; return; } const r=search(q).L.slice(0,6);
+    sg.innerHTML=r.map(g=>`<a href="${tile(g).match(/href="([^"]+)"/)[1].replace(/&amp;/g,'&')}"><img src="${esc(g[5])}" alt=""><span>${esc(g[2])}</span></a>`).join(''); sg.style.display=r.length?'block':'none'; };
+  $('#q').addEventListener('input',()=>{ clearTimeout(sgT); sgT=setTimeout(sugg,120); }); $('#q').addEventListener('blur',()=>setTimeout(()=>sg.style.display='none',200)); $('#q').addEventListener('focus',sugg);
   $('#q').onkeydown=e=>{ if(e.key==='Enter'){ e.preventDefault(); const a=document.querySelector('#grid a'); if(a) location.href=a.href; } };
   draw();
+  fetch(SRV+'/netnew').then(r=>r.json()).then(d=>{ if(!d||!d.games) return; NEW=d.games.map(r=>['gm',r[0],r[2],d.secs[r[3]]||'Casual','https://html5.gamemonetize.co/'+r[1]+'/','https://img.gamemonetize.com/'+r[1]+'/512x384.jpg',r[4],r[4]]); addNew(); if(!$('#q').value.trim()&&cat==='all') draw(); }).catch(()=>{});
+  fetch(SRV+'/net/stats').then(r=>r.json()).then(d=>{ if(!d) return; ST=d; HIDE=new Set(d.hide||[]); if(!$('#q').value.trim()) draw(); }).catch(()=>{});
   /* the full catalog loads after the page is up, then search and categories cover every game */
   const s=document.createElement('script'); s.src='net-all.js'; s.async=true;
-  s.onload=()=>{ const A=window.NETALL||[], M=new Map(A.map(g=>[g[1],g])), f=new Set(FEAT.map(g=>g[1])); G=FEAT.map(g=>{ const x=M.get(g[1]); return x?[g[0],g[1],g[2],g[3],g[4],g[5],g[6],x[7]]:g; }).concat(A.filter(g=>!f.has(g[1]))); byKey=new Map(G.map(g=>[g[0]+':'+g[1],g])); IX=null; count(); if($('#q').value.trim()||cat!=='all') draw(); };
+  s.onload=()=>{ const A=window.NETALL||[], M=new Map(A.map(g=>[g[1],g])), f=new Set(FEAT.map(g=>g[1])); G=FEAT.map(g=>{ const x=M.get(g[1]); return x?[g[0],g[1],g[2],g[3],g[4],g[5],g[6],x[7]]:g; }).concat(A.filter(g=>!f.has(g[1]))); byKey=new Map(G.map(g=>[g[0]+':'+g[1],g])); byId=new Map(G.map(g=>[g[1],g])); IX=null; addNew(); count(); if($('#q').value.trim()||cat!=='all'||ST.top.length) draw(); };
   document.body.appendChild(s);
 })();
 </script>

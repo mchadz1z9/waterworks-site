@@ -15,12 +15,15 @@ iframe{width:100%;height:100%;border:0;background:#000}
 #bar{position:relative;z-index:2147483646}
 /* while a game is open, only the top bar and chat are shown: the site's other buttons and banners stay out of the game's way */
 #rrBanner,#rrTourBtn,#rrGC,#btnKeys,#rrEmoB,#rrPhotoB,#rrpF,#rrAcctB,#rrCoin,#rrAnn,#rrStreak,[id^=rrPop],#arena,#rrSnow{display:none!important}
-@media(max-width:600px){#bar small{display:none}}
+#bar button.on{background:#f59e0b;border-color:#f59e0b;color:#111}
+#bar{overflow-x:auto;scrollbar-width:none}#bar>*{flex:none}#bar b{flex:0 1 auto;min-width:60px}
+#toast{position:fixed;left:50%;top:60px;transform:translateX(-50%);background:#0f172a;border:1px solid #334155;border-radius:12px;padding:10px 14px;font:700 14px system-ui;z-index:2147483647;display:none}
+@media(max-width:600px){#bar small{display:none}#shr{font-size:0!important}#shr::before{content:'🔗';font-size:13px}}
 </style>
 </head>
 <body>
-<div id="bar"><a href="./">← Arcade</a><a href="more">🌐 More games</a><b id="t"></b><button id="rl" title="Reload game">↻</button><button id="rnd" title="Random game">🎲</button><button id="fs">⛶</button><small id="src"></small></div>
-<div id="wrap"></div>
+<div id="bar"><a href="./">← Arcade</a><a href="more">🌐 More games</a><b id="t"></b><button id="rl" title="Reload game">↻</button><button id="rnd" title="Random game">🎲</button><button id="fav" title="Add to My games">🤍</button><button id="up" title="I like it">👍 <span></span></button><button id="dn" title="Not for me">👎</button><button id="shr" title="Copy a link to play with a friend">🔗 Friend</button><button id="rep" title="Game not working?">⚠️</button><button id="fs">⛶</button><small id="src"></small></div>
+<div id="wrap"></div><div id="toast"></div>
 <script src="net-games.js"></script>
 <script>
 (function(){ const q=new URLSearchParams(location.search), w=document.getElementById('wrap'); let g=(window.NETGAMES||[]).find(r=>r[0]===q.get('n')&&String(r[1])===q.get('id'));
@@ -34,6 +37,22 @@ iframe{width:100%;height:100%;border:0;background:#000}
   document.getElementById('rl').onclick=()=>{ f.src=f.src; };
   document.getElementById('rnd').onclick=()=>{ const L=window.NETGAMES, r=L[Math.floor(Math.random()*L.length)]; location.href='play?n='+r[0]+'&id='+encodeURIComponent(r[1])+'&h='+((r[4].match(/\/([a-z0-9]{20,})\/?$/)||[])[1]||'')+'&t='+encodeURIComponent(r[2]); };
   document.getElementById('fs').onclick=()=>{ (w.requestFullscreen||w.webkitRequestFullscreen||function(){}).call(w); };
+  /* favorites, thumbs, reports, sharing and play counts (server keeps the totals for the Games page) */
+  const SRV=(()=>{ try{ if(localStorage.getItem('rrSrv')==='relay') return location.origin+'/rr'; }catch(e){} return 'https://rink-rivals-rooms.mitchellchad2026.workers.dev'; })();
+  const pid=(()=>{ try{ let p=localStorage.getItem('rrPid'); if(!p){ p=Math.random().toString(36).slice(2)+Date.now().toString(36); localStorage.setItem('rrPid',p); } return p; }catch(e){ return ''; } })();
+  const LSJ=(k,d)=>{ try{ return JSON.parse(localStorage.getItem(k))||d; }catch(e){ return d; } }, LSS=(k,v)=>{ try{ localStorage.setItem(k,JSON.stringify(v)); }catch(e){} };
+  const post=(path,body)=>fetch(SRV+path,{method:'POST',headers:{'content-type':'application/json'},body:JSON.stringify(Object.assign({id:g[1],pid},body||{}))}).then(r=>r.json()).catch(()=>null);
+  const key=g[0]+':'+g[1], hsh=(g[4].match(/\/([a-z0-9]{20,})\/?$/)||[])[1]||'', $=id=>document.getElementById(id);
+  const toast=t=>{ const e=$('toast'); e.textContent=t; e.style.display='block'; clearTimeout(e._t); e._t=setTimeout(()=>e.style.display='none',2600); };
+  if(g[0]==='gm') post('/net/play');
+  fetch(SRV+'/net/stats').then(r=>r.json()).then(d=>{ const r=d&&d.rate&&d.rate[g[1]]; if(r) voteUI(r[0]); }).catch(()=>{});
+  const favs=()=>LSJ('rrNetFav',[]); const favUI=()=>{ const on=favs().some(f=>f[0]===key); $('fav').textContent=on?'❤️':'🤍'; $('fav').classList.toggle('on',on); }; favUI();
+  $('fav').onclick=()=>{ let f=favs(); const on=f.some(x=>x[0]===key); f=on?f.filter(x=>x[0]!==key):[[key,g[2],hsh]].concat(f).slice(0,200); LSS('rrNetFav',f); favUI(); toast(on?'Removed from My games':'❤️ Added to My games'); };
+  const votes=LSJ('rrNetVote',{}); const voteUI=(u)=>{ $('up').classList.toggle('on',votes[key]===1); $('dn').classList.toggle('on',votes[key]===-1); if(u!=null) $('up').querySelector('span').textContent=u||''; }; voteUI();
+  const vote=v=>{ v=votes[key]===v?0:v; if(v) votes[key]=v; else delete votes[key]; LSS('rrNetVote',votes); voteUI(); post('/net/vote',{v}).then(d=>{ if(d&&d.ok) voteUI(d.u); }); };
+  $('up').onclick=()=>vote(1); $('dn').onclick=()=>vote(-1);
+  $('shr').onclick=()=>{ const u=location.origin+'/play?n='+g[0]+'&id='+encodeURIComponent(g[1])+(hsh?'&h='+hsh:'')+'&t='+encodeURIComponent(g[2]); (navigator.clipboard?navigator.clipboard.writeText(u):Promise.reject()).then(()=>toast('🔗 Link copied! Send it to a friend so they can play too')).catch(()=>prompt('Copy this link and send it to a friend:',u)); };
+  $('rep').onclick=()=>{ const r=LSJ('rrNetRep',[]); if(r.includes(key)){ toast('Thanks, you already reported this game'); return; } if(!confirm('Is this game not working (black screen, error or won\'t load)?\n\nOK = report it and play a random game instead')) return; r.push(key); LSS('rrNetRep',r.slice(-300)); post('/net/report'); toast('Thanks! Games with several reports get hidden.'); setTimeout(()=>$('rnd').click(),1200); };
   try{ const r=JSON.parse(localStorage.getItem('rrNetRecent')||'[]').filter(x=>x!==g[0]+':'+g[1]); r.unshift(g[0]+':'+g[1]); localStorage.setItem('rrNetRecent',JSON.stringify(r.slice(0,30))); }catch(e){}
 })();
 </script>
