@@ -7,7 +7,7 @@
   const J=(k,d)=>{ try{ return JSON.parse(ls.get(k)||'null')||d; }catch(e){ return d; } };
   const isOwner=()=>{ if(ls.get('rrOwner')==='1'||/\bowner\b/.test(String(ls.get('rrMyTag')||'').toLowerCase())) return true; try{ return sessionStorage.getItem('rrRole')==='full'; }catch(e){ return false; } };
   const PAGE=(location.pathname.split('/').pop()||'').replace(/\.html$/,'')||'index';
-  const NOGAME=['','index','clips','rivalclips','tv','sports','gameday','market','avatar','about','hq-src','sports-arcade','launch','admin','hub']; if(/^hq/.test(PAGE)) NOGAME.push(PAGE);
+  const NOGAME=['','index','clips','rivalclips','tv','sports','gameday','market','avatar','league','about','hq-src','sports-arcade','launch','admin','hub']; if(/^hq/.test(PAGE)) NOGAME.push(PAGE);
   const today=()=>new Date().toDateString();
   let bal=Math.max(0,+ls.get('rrCoins')||0); const inv=J('rrInv',{}), eq=J('rrEquip',{});
   let D=J('rrCoinDay',{}); if(D.d!==today()) D={d:today(),earned:0,play:0,res:0};
