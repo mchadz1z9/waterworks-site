@@ -162,10 +162,80 @@ def stage_shorts():
     json.dump(res, open(os.path.join(OUT, SHFILE), 'w'))
     print('channels with shorts:', len(res), 'shorts:', sum(len(r['v']) for r in res.values()))
 
+SPORTS_TOPICS = {
+ '🏀 NBA shorts': ['nba','nba highlights','nba shorts','nba top plays','nba dunks','nba buzzer beaters','basketball highlights','nba skills','nba funny moments','wnba','nba g league','college basketball','march madness','high school basketball','basketball mixtapes','basketball trick shots','streetball','nba 2k shorts','lakers','warriors','celtics','knicks','bulls','heat','mavericks','nuggets','bucks','suns','thunder','76ers','cavaliers','timberwolves','spurs','rockets','grizzlies','pacers','magic basketball','kings basketball','pelicans','hawks','nets','hornets','pistons','raptors','jazz','blazers','clippers','wizards','lebron james','stephen curry','victor wembanyama','luka doncic','giannis','nikola jokic','anthony edwards','ja morant','kevin durant','jayson tatum','shai gilgeous-alexander','nba draft','nba all star','basketball training','basketball drills'],
+ '⚾ Baseball shorts': ['mlb','mlb highlights','mlb shorts','baseball highlights','baseball shorts','mlb top plays','home runs','diving catches','baseball skills','little league','little league world series','college baseball','softball highlights','baseball trick plays','baseball funny moments','pitching','baseball hitting drills','yankees','dodgers','red sox','cubs','mets','braves','astros','phillies','padres','giants baseball','cardinals baseball','mariners','blue jays','orioles','rangers baseball','twins','guardians','tigers baseball','brewers','royals','rays','reds','pirates','angels baseball','diamondbacks','rockies','marlins','nationals','white sox','athletics baseball','shohei ohtani','aaron judge','mookie betts','juan soto','bobby witt jr','paul skenes','elly de la cruz','world series','home run derby','mlb all star','baseball cards','wiffle ball'],
+}
+FOURTH_TOPICS = {
+ '🔬 Science shorts': ['science youtuber','engineering channel','experiments channel','space channel','nature documentary shorts','physics fun','chemistry fun','robot builds','science magic','amazing facts'],
+ '🐾 Animal shorts': ['animal channel','pet channel','dog channel','cat channel','wildlife channel','zookeeper','aquarium channel','farm channel','bird channel','reptile keeper'],
+ '⚽ Sports shorts': ['sports channel','soccer channel','hockey channel','skate channel','trick shot channel','olympics','extreme sports','sports highlights channel','golf channel','tennis channel','nfl highlights','college football highlights','football skills','flag football'],
+ '🎮 Gaming shorts': ['gaming channel','minecraft channel','roblox channel','nintendo channel','gaming shorts channel','game dev','indie games','retro games channel','speedrunner','gaming tips'],
+ '🧱 LEGO & builds': ['lego channel','builder channel','maker channel','diy channel','rc channel','model channel','woodworking channel','3d print channel','engineering builds','cardboard channel'],
+ '🎨 Art & DIY': ['art channel','drawing channel','painting channel','craft channel','sculpture channel','animation channel','cake artist','clay artist','artist shorts','diy ideas'],
+ '🍳 Food shorts': ['cooking channel','baking channel','chef shorts','recipe channel','food channel','dessert channel','bbq channel','food review kids','snack channel','candy channel'],
+ '😂 Comedy shorts': ['clean comedy channel','funny family channel','funny animals channel','animated comedy','sketch channel','funny sports channel','kids comedy','prank free comedy','wholesome funny','funny moments clean'],
+ '✨ Satisfying': ['satisfying channel','restoration channel','cleaning channel','factory channel','machine channel','asmr satisfying channel','process videos','how its made channel','craftsman','satisfying art'],
+ '🚗 Cars & machines': ['car channel','truck channel','train channel','plane channel','construction channel','tractor channel','rc car channel','motorsport','racing channel','space launch channel'],
+ '🎵 Music shorts': ['music channel','piano channel','guitar channel','drum channel','singer channel','dance channel','band channel','beatbox channel','violin channel','music teacher'],
+ '🌍 World & travel': ['travel channel','geography channel','history channel','nature channel','national geographic kids','world facts channel','city tour','country facts','explorer channel','maps channel'],
+ '🎩 Magic & tricks': ['magic channel','magician','card magic channel','illusion channel','juggling channel','yo-yo channel','skill channel','puzzle channel','riddle channel','life hack channel'],
+}
+LONGCAT = lambda c: c.replace(' shorts', '')
+
+def secs(t):
+    p = [int(x) for x in re.findall(r'\d+', t or '')]
+    s = 0
+    for x in p: s = s * 60 + x
+    return s
+
+def channel_videos(ch):
+    path = ch['url'] if ch['url'].startswith('/@') else '/channel/' + ch['id']
+    d = initial_data(get('https://www.youtube.com' + path + '/videos'))
+    if not d: return []
+    out = []
+    for l in walk(d, 'lockupViewModel', []):
+        try:
+            vid = l.get('contentId'); 
+            title = l['metadata']['lockupMetadataViewModel']['title']['content']
+            badges = walk(l.get('contentImage', {}), 'thumbnailBadgeViewModel', [])
+            dur = secs(badges[0].get('text', '')) if badges else 0
+            if vid and len(vid) == 11: out.append({'yt': vid, 'title': title, 'dur': dur})
+        except Exception: pass
+    return out
+
+def stage_videos():
+    chans = []
+    seen = set()
+    for f in CHFILE.split(','):
+        p = os.path.join(OUT, f)
+        if not os.path.exists(p): continue
+        for c in json.load(open(p)):
+            if c.get('id') and c['id'] not in seen: seen.add(c['id']); chans.append(c)
+    res = {}
+    def one(ch): return ch, channel_videos(ch)
+    with cf.ThreadPoolExecutor(6) as ex:
+        for n, (ch, vids) in enumerate(ex.map(one, chans)):
+            keep = []
+            for v in vids:
+                t = v['title'].strip()
+                if not t or not (75 <= v['dur'] <= 40 * 60) or BLOCK.search(t) or not english(t): continue
+                keep.append({'yt': v['yt'], 'title': t[:100], 'dur': v['dur']})
+                if len(keep) >= PER: break
+            if len(keep) >= 3: res[ch['id']] = {'by': ch['title'], 'cat': LONGCAT(ch['cat']), 'subs': ch['subs'], 'v': keep}
+            if n % 50 == 0: print(n, '/', len(chans), 'channels ·', sum(len(r['v']) for r in res.values()), 'videos', flush=True)
+            if n % 300 == 0: json.dump(res, open(os.path.join(OUT, SHFILE), 'w'))
+    json.dump(res, open(os.path.join(OUT, SHFILE), 'w'))
+    print('channels with videos:', len(res), 'videos:', sum(len(r['v']) for r in res.values()))
+
 PER = int(os.environ.get('PER', '24')); CHFILE = os.environ.get('CHFILE', 'channels.json'); SHFILE = os.environ.get('SHFILE', 'shorts.json')
 if os.environ.get('MORE'):
     TOPICS = MORE_TOPICS
 if os.environ.get('THIRD'):
     TOPICS = THIRD_TOPICS
+if os.environ.get('SPORTS'):
+    TOPICS = SPORTS_TOPICS
+if os.environ.get('FOURTH'):
+    TOPICS = FOURTH_TOPICS
 if __name__ == '__main__':
-    {'channels': stage_channels, 'shorts': stage_shorts}[sys.argv[1]]()
+    {'channels': stage_channels, 'shorts': stage_shorts, 'videos': stage_videos}[sys.argv[1]]()
