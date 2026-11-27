@@ -7,7 +7,7 @@
   const J=(k,d)=>{ try{ return JSON.parse(ls.get(k)||'null')||d; }catch(e){ return d; } };
   const isOwner=()=>{ if(ls.get('rrOwner')==='1'||/\bowner\b/.test(String(ls.get('rrMyTag')||'').toLowerCase())) return true; try{ return sessionStorage.getItem('rrRole')==='full'; }catch(e){ return false; } };
   const PAGE=(location.pathname.split('/').pop()||'').replace(/\.html$/,'')||'index';
-  const NOGAME=['','index','clips','rivalclips','tv','sports','gameday','market','about','hq-src','sports-arcade','launch','admin','hub']; if(/^hq/.test(PAGE)) NOGAME.push(PAGE);
+  const NOGAME=['','index','clips','rivalclips','tv','sports','gameday','market','avatar','about','hq-src','sports-arcade','launch','admin','hub']; if(/^hq/.test(PAGE)) NOGAME.push(PAGE);
   const today=()=>new Date().toDateString();
   let bal=Math.max(0,+ls.get('rrCoins')||0); const inv=J('rrInv',{}), eq=J('rrEquip',{});
   let D=J('rrCoinDay',{}); if(D.d!==today()) D={d:today(),earned:0,play:0,res:0};
@@ -408,7 +408,7 @@
   function mount(){ banners(); setTimeout(gcRender,1500); if(/^hq/.test(PAGE)||window.RR_ADMIN||document.getElementById('rrCoin')) return; css(); pill=document.createElement('button'); pill.id='rrCoin'; pill.title='Arcade Coins — open the shop'; pill.onclick=()=>open(); document.body.appendChild(pill); render(); }
   if(document.readyState==='loading') addEventListener('DOMContentLoaded',mount); else mount();
   addEventListener('storage',e=>{ if(e.key==='rrCoins'){ bal=Math.max(0,+e.newValue||0); render(); } });
-  window.RRCOIN={ pirate:why=>pirateStart(why), pirateLeft:()=>Math.max(0,pirateEnd()-Date.now()), tradeable:()=>ITEMS.filter(i=>!i.many&&!i.buy).map(i=>({k:i.k,ic:i.ic,n:i.n,rar:i.rar||0,own:!!inv[i.k]||isOwner()})), itemName:k=>{ const i=ITEMS.find(x=>x.k===k); return i?`${i.ic} ${i.n}`:k; },
+  window.RRCOIN={ itemOf:k=>ITEMS.find(i=>i.k===k)||null, eqKey:sl=>{ const k=eq[sl]; return k&&has(k)?k:null; }, owns:k=>!!has(k), toggleItem:k=>buy(k),  pirate:why=>pirateStart(why), pirateLeft:()=>Math.max(0,pirateEnd()-Date.now()), tradeable:()=>ITEMS.filter(i=>!i.many&&!i.buy).map(i=>({k:i.k,ic:i.ic,n:i.n,rar:i.rar||0,own:!!inv[i.k]||isOwner()})), itemName:k=>{ const i=ITEMS.find(x=>x.k===k); return i?`${i.ic} ${i.n}`:k; },
     tradeTake:(items,coins)=>{ coins=Math.max(0,Math.floor(coins||0)); if(!isOwner()){ if(bal<coins) return false; for(const k of items) if(!inv[k]) return false; for(const k of items){ delete inv[k]; for(const sl in eq) if(eq[sl]===k) eq[sl]=null; } if(coins){ bal-=coins; logIt(-coins,'Trade'); } } save(); return true; },
     tradeGive:(items,coins)=>{ for(const k of items) if(ITEMS.some(i=>i.k===k)) inv[k]=1; coins=Math.max(0,Math.floor(coins||0)); if(coins&&!isOwner()){ bal+=coins; logIt(coins,'Trade'); } save(); },
     giveCrate:k=>{ const C=CRATES[k]; if(!C) return; inv[C.inv]=(inv[C.inv]||0)+1; save(); }, achievements:()=>ACH.map(a=>({...a,got:ACHD[a.id]||0})), stat, mapWeek:MAPWEEK, season:SEASONNOW, featured:FEAT, event:EVENT, carPaint, carDeco, get bal(){ return isOwner()?Infinity:bal; }, get level(){ return lvl(); }, add, spend, has, equipped, open, items:ITEMS, toast, track };

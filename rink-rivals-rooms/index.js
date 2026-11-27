@@ -569,7 +569,7 @@ export class Chat {
     if(m.t==='hello'){ const who=String(m.pid||'').replace(/[^a-z0-9]/gi,'').slice(0,24)||crypto.randomUUID().slice(0,12); let nm=cleanName(m.name); let swapped=false;
       if(reservedFor(nm,who,JSON.parse(this.cfgGet('reserved')||'[]'))){ nm='Player'+Math.floor(1000+Math.random()*9000); swapped=true; }
       const b=this.isBanned(nm,who); if(b){ this.send(ws,{t:'kicked',perm:b.until===0,mins:b.until===0?0:Math.ceil((b.until-Date.now())/60000)}); try{ ws.close(4003,'banned'); }catch(e){} return; }
-      a={name:nm,game:String(m.game||'home').replace(/[^a-z0-9]/g,'').slice(0,16)||'home',who,ts:[],last:''}; ws.serializeAttachment(a);
+      a={name:nm,game:String(m.game||'home').replace(/[^a-z0-9]/g,'').slice(0,16)||'home',who,ts:[],last:'',av:/^a1\.[0-9.]{1,40}~[a-z0-9_,]{0,120}$/i.test(m.av||'')?m.av:''}; ws.serializeAttachment(a);
       { const me2=pubId(who), rows=this.sql.exec('SELECT ts,fpub,fname,tpub,tname,text,seen FROM dmsg WHERE fpub=? OR tpub=? ORDER BY id DESC LIMIT 150',me2,me2).toArray().reverse(); if(rows.length){ this.send(ws,{t:'dmhist',list:rows.map(r=>({self:r.fpub===me2,from:r.fpub,fromName:r.fname,to:r.tpub,toName:r.tname,text:r.text,ts:r.ts,unseen:r.tpub===me2&&!r.seen}))}); this.sql.exec('UPDATE dmsg SET seen=1 WHERE tpub=?',me2); } }
       if(swapped){ this.send(ws,{t:'you',name:nm}); this.send(ws,{t:'sys',text:'That name is reserved, so you were given a different one. Pick a new name with ✎ Name.'}); }
       const g=await this.grantOfWho(who); this.send(ws,g?{t:'role',lvl:g,url:ADMIN_URL}:{t:'role',lvl:null}); try{ const rs=JSON.parse(this.cfgGet('restart')||'{}'); if(rs.at&&rs.at>Date.now()) this.send(ws,{t:'restart',at:rs.at,text:rs.text,now:Date.now()}); }catch(e){} this.count(); return; }
@@ -600,7 +600,8 @@ export class Chat {
     if(m.t==='report'){ const id=+m.id; if(!id) return; this.sql.exec('INSERT OR IGNORE INTO r(mid,who) VALUES(?,?)',id,a.who); const c=this.sql.exec('SELECT COUNT(*) AS c FROM r WHERE mid=?',id).toArray()[0].c;
       if(c>=3){ const row=this.sql.exec('SELECT who FROM m WHERE id=?',id).toArray()[0]; this.sql.exec('UPDATE m SET hid=1 WHERE id=?',id); this.all({t:'del',id}); if(row){ const n=this.sql.exec('SELECT COUNT(*) AS c FROM m WHERE who=? AND hid=1 AND ts>?',row.who,Date.now()-86400000).toArray()[0].c; if(n>=2) this.sql.exec('INSERT OR REPLACE INTO mute(who,until) VALUES(?,?)',row.who,Date.now()+3600000*(n>=4?24:1)); } }
       this.send(ws,{t:'sys',text:'Thanks, that message was reported.'}); return; }
-    /* Rival TV: each channel has its own chat room (same filters, mutes and bans as the main chat) */
+    if(m.t==='av'){ a.av=/^a1\.[0-9.]{1,40}~[a-z0-9_,]{0,120}$/i.test(m.av||'')?m.av:''; ws.serializeAttachment(a); return; }
+     /* Rival TV: each channel has its own chat room (same filters, mutes and bans as the main chat) */
      if(m.t==='tvjoin'){ const room=/^tv[a-z0-9]{1,12}$/.test(m.room||'')?m.room:''; a.tv=room; ws.serializeAttachment(a); if(room){ const L=this.sql.exec('SELECT id,ts,name,text FROM tvm WHERE room=? ORDER BY id DESC LIMIT 40',room).toArray().reverse(); let n=0; for(const s of this.ctx.getWebSockets()){ const b=s.deserializeAttachment(); if(b&&b.tv===room) n++; } this.send(ws,{t:'tvhist',room,list:L,n}); } return; }
      if(m.t==='say'){ const now=Date.now(), tvroom=/^tv[a-z0-9]{1,12}$/.test(m.room||'')&&a.tv===m.room?m.room:'';
       const mu=this.sql.exec('SELECT until FROM mute WHERE who=?',a.who).toArray()[0]; if(mu&&mu.until>now){ this.send(ws,{t:'sys',text:`You are muted for ${Math.ceil((mu.until-now)/60000)} more minutes.`}); return; }
@@ -616,10 +617,10 @@ export class Chat {
       { const slow=+(this.cfgGet('slow')||0); if(slow>0&&!(await this.grantOfWho(a.who))&&a.lastSay&&now-a.lastSay<slow*1000){ this.send(ws,{t:'sys',text:`Slow mode is on — wait ${Math.ceil((slow*1000-(now-a.lastSay))/1000)}s between messages.`}); return; } a.lastSay=now; }
       a.ts.push(now); a.last=text.toLowerCase(); ws.serializeAttachment(a);
       if(tvroom){ this.sql.exec('INSERT INTO tvm(room,ts,name,text) VALUES(?,?,?,?)',tvroom,now,a.name,text); const tid=this.sql.exec('SELECT last_insert_rowid() AS id').toArray()[0].id; if(tid%50===0) this.sql.exec('DELETE FROM tvm WHERE id<?',tid-3000);
-         for(const s of this.ctx.getWebSockets()){ const b=s.deserializeAttachment(); if(b&&b.tv===tvroom) this.send(s,{t:'tvmsg',room:tvroom,m:{id:tid,ts:now,name:a.name,text,tag:this.tagOf(a.name)}}); } return; }
+         for(const s of this.ctx.getWebSockets()){ const b=s.deserializeAttachment(); if(b&&b.tv===tvroom) this.send(s,{t:'tvmsg',room:tvroom,m:{id:tid,ts:now,name:a.name,text,tag:this.tagOf(a.name),av:a.av||''}}); } return; }
        this.sql.exec('INSERT INTO m(ts,name,text,game,who) VALUES(?,?,?,?,?)',now,a.name,text,a.game,a.who);
       const id=this.sql.exec('SELECT last_insert_rowid() AS id').toArray()[0].id; this.sql.exec('DELETE FROM m WHERE id<?',id-600);
-      this.all({t:'msg',m:{id,ts:now,name:a.name,text,game:a.game,tag:this.tagOf(a.name)}}); return; } }
+      this.all({t:'msg',m:{id,ts:now,name:a.name,text,game:a.game,tag:this.tagOf(a.name),av:a.av||''}}); return; } }
   async webSocketClose(ws){ try{ ws.serializeAttachment(null); ws.close(); }catch(e){} this.count(); }
   async webSocketError(ws){ return this.webSocketClose(ws); }
 }
