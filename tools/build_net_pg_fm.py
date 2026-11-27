@@ -2,7 +2,7 @@ import json,re,glob,html,collections
 src=open('pick4.py').read()
 exec(src.split("# GameDistribution")[0])   # BAD, SECS, sec(), ok_title()
 SEEN.update({'pg':set(),'fm':set()})
-GBAD=re.compile(r'\b(horror|scary|zombie apocalypse|gore|blood|dating|kiss|love|romance|casino|gambl|slot|poker|roulette|bikini|sexy|beer|drunk|cigar|weed|nsfw|adult|18\+|teen titans)\b',re.I)
+GBAD=re.compile(r'\b(horror|scary|zombie apocalypse|gore|blood|dating|kiss|romance|casino|gambl|slot|poker|roulette|bikini|sexy|beer|drunk|cigar|weed|nsfw|adult|18\+|teen titans)\b',re.I)
 def secOf(gs):
     for c in gs:
         s=sec(c)
@@ -35,7 +35,8 @@ js2=('/* '+str(len(fm))+' kid-filtered games from the Famobi public feed. Packed
  'window.NETX=(window.NETX||[]).concat(R.map(r=>["fm",r[0],r[1],S[r[2]],"https://play.famobi.com/"+r[0],r[4]?"https://img.cdn.famobi.com/portal/html5games/images/tmp/"+r[4]:"",r[3],r[3],r[0]]));})();\n')
 open(SITE+'net-pg.js','w').write(js1); open(SITE+'net-fm.js','w').write(js2)
 s=open(SITE+'net-all.js').read(); old=int(re.search(r'window\.NETTOTAL=(\d+);',s).group(1))
-base=65759; tot=base+len(pg)+len(fm)+1
+cnt=lambda f:len(json.loads(re.search(r',R=(\[.*\]);\n',open(SITE+f).read(),re.S).group(1)))
+base=cnt('net-all.js')+cnt('net-gd.js')+cnt('net-gp.js')+cnt('net-hg.js'); tot=base+len(pg)+len(fm)+2
 for f in ['net-games.js','net-all.js']:
     s=open(SITE+f).read(); s=re.sub(r'window\.NETTOTAL=\d+;','window.NETTOTAL='+str(tot)+';',s); open(SITE+f,'w').write(s)
 print('pg',len(pg),'fm',len(fm),'total',tot,'MB',round(len(js1)/1e6,2))
