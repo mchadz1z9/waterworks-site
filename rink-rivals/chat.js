@@ -39,7 +39,7 @@
 #rrcPop .ib{display:flex;gap:10px;margin-top:12px}
 #rrcPop .ib button{font:800 18px system-ui,sans-serif;border-radius:12px;padding:10px 20px;border:0;cursor:pointer}
 #rrcPop .ib .y{background:#22c55e;color:#052e16}
-#rrcPop .ib .n{background:#334155;color:#e2e8f0} #rrcPop span{font-size:15px;color:#94a3b8} #rrcPop div{margin-top:6px;word-wrap:break-word} #rrcPop small{display:block;margin-top:8px;color:#818cf8;font-size:14px} .rrc header .bell{background:none;border:0;cursor:pointer;font-size:15px;padding:0 4px} .rrc .m a{color:#7dd3fc;text-decoration:underline;word-break:break-all} .rrc .m{line-height:1.3;word-wrap:break-word;position:relative;padding:5px 8px;border-radius:10px;background:rgba(255,255,255,.04)}
+#rrcPop .ib .n{background:#334155;color:#e2e8f0} #rrcPop span{font-size:15px;color:#94a3b8} #rrcPop div{margin-top:6px;word-wrap:break-word} #rrcPop small{display:block;margin-top:8px;color:#818cf8;font-size:14px} .rrc header .bell,.rrc header .bug{background:none;border:0;cursor:pointer;font-size:15px;padding:0 4px} .rrc .m a{color:#7dd3fc;text-decoration:underline;word-break:break-all} .rrc .m{line-height:1.3;word-wrap:break-word;position:relative;padding:5px 8px;border-radius:10px;background:rgba(255,255,255,.04)}
 .rrc .m.me{background:rgba(99,102,241,.18)}
 .rrc .m .n{font-weight:800} .rrc .m .g{font-size:11px;color:#94a3b8;margin-left:6px;font-weight:700} .rrc .m .t{float:right;font-size:11px;color:#64748b;margin-left:6px}
 .rrc .m .x{display:none;position:absolute;right:4px;top:18px;background:#1e293b;border:0;color:#fca5a5;border-radius:6px;font-size:11px;cursor:pointer;padding:1px 6px}
@@ -202,7 +202,7 @@ const PHOTOS={alps:{f:'swissalps',pos:'center 40%',by:'Swiss Alps photo: Ximonic
   try{ const raw=(location.pathname.split('/').pop()||'').replace(/\.html$/,''); if(raw&&!/^(index|chat|call|clips|hub)$/.test(raw)&&!/^hq-/.test(raw)){ let r=JSON.parse(ls.get('rrRecent')||'[]'); if(!Array.isArray(r)) r=[]; r=[raw].concat(r.filter(x=>x!==raw)).slice(0,8); ls.set('rrRecent',JSON.stringify(r)); } }catch(e){}
     function build(){
     root=document.createElement('div'); root.className='rrc';
-    root.innerHTML=`<header><span>💬</span><b>Arcade Rivals Chat</b><small class="cnt" title="See who's online and what they're playing">connecting…</small><button class="bell" title="Message notifications on/off">🔔</button><button class="nm" title="Change your name">✎ Name</button><a class="adm" href="#" title="Admin tools" style="display:none">⚙</a>${GAME==='chat'?'':'<a class="pg" href="chat" title="Open the full chat page">⤢</a>'}${dock()?'':'<button class="cl" title="Close">✕</button>'}</header>
+    root.innerHTML=`<header><span>💬</span><b>Arcade Rivals Chat</b><small class="cnt" title="See who's online and what they're playing">connecting…</small><button class="bell" title="Message notifications on/off">🔔</button><button class="nm" title="Change your name">✎ Name</button><button class="bug" title="Something glitchy? Tell the owner">🐞</button><a class="adm" href="#" title="Admin tools" style="display:none">⚙</a>${GAME==='chat'?'':'<a class="pg" href="chat" title="Open the full chat page">⤢</a>'}${dock()?'':'<button class="cl" title="Close">✕</button>'}</header>
       <div class="log"><div class="empty">Say hi to everyone on Arcade Rivals 👋</div></div><div class="who"></div><div class="dmv" style="display:none"></div>
       <div class="rules">Be kind · no swearing · never share personal info · no spam · ⚑ reports a message</div>
       <form autocomplete="off"><input maxlength="200" placeholder="${name?'Message everyone…':'Pick a name to chat…'}" aria-label="Chat message"><button>Send</button></form>`;
@@ -211,7 +211,7 @@ const PHOTOS={alps:{f:'swissalps',pos:'center 40%',by:'Swiss Alps photo: Ximonic
     { const a=root.querySelector('.adm'); let u=''; try{ u=localStorage.getItem('rrAdmUrl')||''; }catch(e){} if(a&&myRole&&u){ a.href=u; a.style.display=''; a.textContent=myRole==='full'?'⚙ Admin':'⚙ Mod'; } }
     /* keys typed into the chat must never reach the game */
     for(const ev of ['keydown','keyup','keypress']) inp.addEventListener(ev,e=>{ e.stopPropagation(); if(ev==='keydown'&&e.key==='Escape'){ inp.blur(); if(!dock()) toggle(false); } });
-    root.querySelector('form').addEventListener('submit',e=>{ e.preventDefault(); send(); });
+    root.querySelector('form').addEventListener('submit',e=>{ e.preventDefault(); send(); }); { const bg=root.querySelector('.bug'); if(bg) bg.onclick=()=>{ const t=prompt('🐞 What went wrong? (which game, what happened)'); if(t&&t.trim()){ if(window.RRGLITCH) RRGLITCH(t.trim()); alert('Thanks! The owner will see your report.'); } }; }
     const bl=root.querySelector('.bell'); const bellUI=()=>{ bl.textContent=notifOn?'🔔':'🔕'; bl.title=notifOn?'Notifications on (click to turn off)':'Notifications off (click to turn on)'; }; bellUI(); bl.addEventListener('click',()=>{ notifOn=!notifOn; ls.set('rrChatNotify',notifOn?'1':'0'); bellUI(); if(notifOn&&window.Notification&&Notification.permission==='default') try{ Notification.requestPermission(); }catch(e){} sys(notifOn?'Notifications on: you will see a pop-up when someone messages.':'Notifications off.'); });
     root.querySelector('.nm').addEventListener('click',()=>askName()); cnt.addEventListener('click',()=>showWho());
     const cl=root.querySelector('.cl'); if(cl) cl.addEventListener('click',()=>toggle(false));
@@ -261,6 +261,8 @@ const PHOTOS={alps:{f:'swissalps',pos:'center 40%',by:'Swiss Alps photo: Ximonic
       else if(m.t==='del'){ const el=msgs.get(m.id); if(el){ el.remove(); msgs.delete(m.id); } }
       else if(m.t==='clear'){ log.innerHTML=''; msgs.clear(); }
       else if(m.t==='you'){ name=m.name; ls.set('rrOnlineName',name); }
+      else if(m.t==='restart'){ try{ dispatchEvent(new CustomEvent('rr-restart',{detail:m})); }catch(e){} }
+      else if(m.t==='notice'){ try{ dispatchEvent(new CustomEvent('rr-notice',{detail:m})); }catch(e){} }
       else if(m.t==='tvmsg'||m.t==='tvhist'){ try{ dispatchEvent(new CustomEvent('rrc-tv',{detail:m})); }catch(e){} }
       else if(m.t==='who'){ roster=m.list||[]; setN(roster.length); renderWho(); try{ dispatchEvent(new CustomEvent('rrc-who',{detail:roster})); }catch(e){} }
       else if(m.t==='invite') inviteCard(m);

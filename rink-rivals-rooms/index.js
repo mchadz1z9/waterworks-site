@@ -213,7 +213,7 @@ export default {
     if(url.pathname==='/ai'){ if(req.method==='OPTIONS') return new Response(null,{headers:CORS}); if(req.method!=='POST') return J({err:'method'},405); return rrAI(req,env,RCF); }
     if(url.pathname==='/acct'){ if(req.method==='OPTIONS') return new Response(null,{headers:CORS}); return env.ACCT.get(env.ACCT.idFromName('ACCT')).fetch(req); }
     if(url.pathname==='/site'){ if(req.method==='OPTIONS') return new Response(null,{headers:CORS}); return env.SITE.get(env.SITE.idFromName('SITE')).fetch(req); }
-    if(url.pathname==='/tourney'||url.pathname==='/play'||url.pathname==='/popular'||url.pathname==='/daily'||url.pathname==='/like'||url.pathname==='/review'||url.pathname==='/vote'||url.pathname==='/namecheck'||url.pathname.startsWith('/feed/')||url.pathname.startsWith('/net/')){ if(req.method==='OPTIONS') return new Response(null,{headers:CORS}); const cf=RCF||req.cf||{}, h=new Headers(req.headers); h.set('x-rr-asn',String(cf.asn||'')); h.set('x-rr-aso',String(cf.asOrganization||'').slice(0,80)); h.set('x-rr-cc',String(cf.country||'')); return env.SITE.get(env.SITE.idFromName('SITE')).fetch(new Request(req,{headers:h})); }
+    if(url.pathname==='/tourney'||url.pathname==='/play'||url.pathname==='/popular'||url.pathname==='/daily'||url.pathname==='/like'||url.pathname==='/review'||url.pathname==='/vote'||url.pathname==='/namecheck'||url.pathname.startsWith('/feed/')||url.pathname.startsWith('/net/')||url.pathname==='/glitch'){ if(req.method==='OPTIONS') return new Response(null,{headers:CORS}); const cf=RCF||req.cf||{}, h=new Headers(req.headers); h.set('x-rr-asn',String(cf.asn||'')); h.set('x-rr-aso',String(cf.asOrganization||'').slice(0,80)); h.set('x-rr-cc',String(cf.country||'')); return env.SITE.get(env.SITE.idFromName('SITE')).fetch(new Request(req,{headers:h})); }
     const lb=url.pathname.match(/^\/lb\/([a-z0-9]{2,16})$/);
     if(lb){ if(req.method==='OPTIONS') return new Response(null,{headers:CORS}); return env.BOARDS.get(env.BOARDS.idFromName(lb[1])).fetch(req); }
     const pm=url.pathname.match(/^\/party\/([A-Z0-9]{4,8})$/);
@@ -455,6 +455,12 @@ export class Chat {
         const pub=pubId(pid); this.sql.exec('INSERT OR REPLACE INTO grnt2(sh,pubid,lvl,name,ts) VALUES(?,?,?,?,?)',await sha('rr-grant:'+pid),pub,lvl,nm,Date.now()); for(const ws of this.socksByPub(pub)) this.send(ws,{t:'role',lvl,url:ADMIN_URL}); return J({ok:true,pubid:pub}); }
       if(m.op==='list') return J({rows:this.sql.exec('SELECT * FROM m ORDER BY id DESC LIMIT 200').toArray()});
       if(m.op==='del'&&m.id){ this.sql.exec('UPDATE m SET hid=1 WHERE id=?',+m.id); this.all({t:'del',id:+m.id}); return J({ok:true}); }
+      /* owner update tools: a countdown banner on every open page, then every page reloads; and instant notices */
+      if(m.op==='restart'||m.op==='notice'||m.op==='restartcancel'){ if(req.headers.get('x-admin-role')!=='full') return J({err:'forbidden'},403);
+        if(m.op==='notice'){ const text=String(m.text||'').replace(/[<>]/g,'').trim().slice(0,200); if(!text) return J({err:'empty'},400); this.all({t:'notice',text}); return J({ok:true,sent:this.ctx.getWebSockets().length}); }
+        if(m.op==='restartcancel'){ this.cfgSet('restart','{}'); this.all({t:'restart',cancel:true}); return J({ok:true}); }
+        const secs=Math.max(10,Math.min(900,+m.secs||60)), at=Date.now()+secs*1000, text=String(m.text||'').replace(/[<>]/g,'').trim().slice(0,160);
+        this.cfgSet('restart',JSON.stringify({at,text})); this.all({t:'restart',at,text,now:Date.now()}); return J({ok:true,at,sent:this.ctx.getWebSockets().length}); }
       if(m.op==='mute'&&m.who){ this.sql.exec('INSERT OR REPLACE INTO mute(who,until) VALUES(?,?)',String(m.who),Date.now()+(+m.mins||1440)*60000); return J({ok:true}); }
       if(m.op==='kick'&&m.name){ const nm=String(m.name).toLowerCase(), mins=+m.mins||30; let n=0;
         for(const ws of this.ctx.getWebSockets()){ const b=ws.deserializeAttachment(); if(b&&String(b.name||'').toLowerCase()===nm){ n++; this.sql.exec('INSERT OR REPLACE INTO mute(who,until) VALUES(?,?)',b.who,Date.now()+mins*60000); try{ ws.send(JSON.stringify({t:'kicked',mins})); }catch(e){} try{ ws.close(4001,'kicked'); }catch(e){} } }
@@ -532,7 +538,7 @@ export class Chat {
       a={name:nm,game:String(m.game||'home').replace(/[^a-z0-9]/g,'').slice(0,16)||'home',who,ts:[],last:''}; ws.serializeAttachment(a);
       { const me2=pubId(who), rows=this.sql.exec('SELECT ts,fpub,fname,tpub,tname,text,seen FROM dmsg WHERE fpub=? OR tpub=? ORDER BY id DESC LIMIT 150',me2,me2).toArray().reverse(); if(rows.length){ this.send(ws,{t:'dmhist',list:rows.map(r=>({self:r.fpub===me2,from:r.fpub,fromName:r.fname,to:r.tpub,toName:r.tname,text:r.text,ts:r.ts,unseen:r.tpub===me2&&!r.seen}))}); this.sql.exec('UPDATE dmsg SET seen=1 WHERE tpub=?',me2); } }
       if(swapped){ this.send(ws,{t:'you',name:nm}); this.send(ws,{t:'sys',text:'That name is reserved, so you were given a different one. Pick a new name with ✎ Name.'}); }
-      const g=await this.grantOfWho(who); this.send(ws,g?{t:'role',lvl:g,url:ADMIN_URL}:{t:'role',lvl:null}); this.count(); return; }
+      const g=await this.grantOfWho(who); this.send(ws,g?{t:'role',lvl:g,url:ADMIN_URL}:{t:'role',lvl:null}); try{ const rs=JSON.parse(this.cfgGet('restart')||'{}'); if(rs.at&&rs.at>Date.now()) this.send(ws,{t:'restart',at:rs.at,text:rs.text,now:Date.now()}); }catch(e){} this.count(); return; }
     if(!a) return;
     if(m.t==='where'){ a.game=String(m.game||'home').replace(/[^a-z0-9]/g,'').slice(0,16)||'home'; ws.serializeAttachment(a); this.who(); return; }
     if(m.t==='dm'){ const now=Date.now(), to=String(m.to||'').slice(0,12); if(!to) return;
@@ -683,6 +689,13 @@ export class Site {
         const r=this.sql.exec('SELECT SUM(CASE WHEN v>0 THEN 1 ELSE 0 END) u,SUM(CASE WHEN v<0 THEN 1 ELSE 0 END) d FROM netvote WHERE id=?',id).one(); this.netC=null; return J({ok:true,u:r.u||0,d:r.d||0}); }
       if(url.pathname==='/net/report'){ this.sql.exec('INSERT OR IGNORE INTO netrep(id,pid,ts) VALUES(?,?,?)',id,pid,now); this.netC=null; return J({ok:true}); }
       return J({err:'nf'},404); }
+    /* glitch reports: errors caught on players' pages plus "report a glitch" notes, for the owner's HQ page */
+    if(url.pathname==='/glitch'){ if(req.method!=='POST') return J({err:'method'},405); let m={}; try{ m=await req.json(); }catch(e){}
+      if(!this.glOk){ this.sql.exec('CREATE TABLE IF NOT EXISTS glitch(id INTEGER PRIMARY KEY AUTOINCREMENT, ts INTEGER, kind TEXT, page TEXT, msg TEXT, src TEXT, ua TEXT, pid TEXT, name TEXT)'); this.glOk=1; this.glRate=new Map(); }
+      const pid=cleanPid(m.pid), now=Date.now(), k=pid||'anon'; const r=(this.glRate.get(k)||[]).filter(t=>now-t<600000); if(r.length>=20) return J({ok:false}); r.push(now); this.glRate.set(k,r); if(this.glRate.size>5000) this.glRate.clear();
+      const cl=(v,n)=>String(v||'').replace(/[\u0000-\u001f<>]/g,' ').trim().slice(0,n);
+      this.sql.exec('INSERT INTO glitch(ts,kind,page,msg,src,ua,pid,name) VALUES(?,?,?,?,?,?,?,?)',now,m.kind==='user'?'user':'error',cl(m.page,40),cl(m.msg,400),cl(m.src,160),cl(m.ua,120),pid,cleanName(m.name));
+      if(Math.random()<.05) this.sql.exec('DELETE FROM glitch WHERE id<(SELECT MAX(id)-5000 FROM glitch)'); return J({ok:true}); }
     if(url.pathname==='/popular'){ if(req.method==='OPTIONS') return new Response(null,{headers:CORS});
       const now=Date.now(); if(!this.popIx){ try{ this.sql.exec('CREATE INDEX IF NOT EXISTS visit_last ON visit(last)'); }catch(e){} this.popIx=1; } if(!this.popC||now-this.popC.t>600000){ const cnt={}; for(const r of this.sql.exec('SELECT games FROM visit WHERE last>?',now-14*86400000)) for(const g of String(r.games||'').split(',')){ if(g&&g!=='home'&&/^[a-z0-9-]{1,24}$/.test(g)) cnt[g]=(cnt[g]||0)+1; } this.popC={t:now,g:cnt}; }
       return new Response(JSON.stringify({ok:true,days:14,g:this.popC.g}),{headers:{...CORS,'content-type':'application/json','cache-control':'public, max-age=300'}}); }
@@ -883,6 +896,10 @@ export class Site {
       if(m.op==='feedComDel'){ this.sql.exec('DELETE FROM fcom WHERE cid=?',+m.cid); return J({ok:true}); }
       if(m.op==='feedBan'){ const pid=cleanPid(m.pid); if(m.on){ this.sql.exec('INSERT OR REPLACE INTO fban(pid,ts) VALUES(?,?)',pid,Date.now()); if(m.wipe){ for(const r of this.sql.exec("SELECT id FROM fpost WHERE pid=? AND st<>'gone'",pid).toArray()){ this.sql.exec('DELETE FROM fblob WHERE post=?',r.id); this.sql.exec("UPDATE fpost SET st='gone',size=0 WHERE id=?",r.id); } this.sql.exec('DELETE FROM fcom WHERE pid=?',pid); } } else this.sql.exec('DELETE FROM fban WHERE pid=?',pid); return J({ok:true}); }
       if(m.op==='feedHide'){ const set=(await this.s.get('settings'))||{}, id=String(m.cid||'').slice(0,40); let h=set.feedHide||[]; h=m.on?[...new Set([...h,id])]:h.filter(x=>x!==id); set.feedHide=h.slice(-1000); if(!m.on) this.sql.exec('DELETE FROM frep WHERE id=?',id); await this.s.put('settings',set); return J({ok:true,hide:set.feedHide}); }
+      if(m.op==='glitches'){ try{ this.sql.exec('CREATE TABLE IF NOT EXISTS glitch(id INTEGER PRIMARY KEY AUTOINCREMENT, ts INTEGER, kind TEXT, page TEXT, msg TEXT, src TEXT, ua TEXT, pid TEXT, name TEXT)'); }catch(e){} const since=Date.now()-(+m.days||3)*864e5;
+        const groups=this.sql.exec("SELECT page,msg,kind,COUNT(*) n,COUNT(DISTINCT pid) people,MAX(ts) last,MAX(src) src,MAX(ua) ua FROM glitch WHERE ts>? AND kind='error' GROUP BY page,msg ORDER BY n DESC LIMIT 100",since).toArray();
+        const notes=this.sql.exec("SELECT ts,page,msg,name,ua FROM glitch WHERE ts>? AND kind='user' ORDER BY id DESC LIMIT 100",since).toArray(); return J({groups,notes,now:Date.now()}); }
+      if(m.op==='glitchclear'){ try{ this.sql.exec('DELETE FROM glitch'); }catch(e){} return J({ok:true}); }
       if(m.op==='visits'){ const since=+m.since||0, rows=this.sql.exec('SELECT id,pid,name,start,last,game,games,dev,aso,proxy FROM visit WHERE id>? ORDER BY id DESC LIMIT ?',since,Math.min(300,+m.limit||150)).toArray(); return J({rows,now:Date.now()}); }
       if(m.op==='pxList') return J({rows:this.sql.exec("SELECT pid,name,last,aso,cc,dev FROM pl WHERE aso LIKE '⚠️%' ORDER BY last DESC LIMIT 200").toArray(),ok:this.sql.exec('SELECT p.pid,(SELECT name FROM pl WHERE pl.pid=p.pid) name FROM pxok p').toArray()});
       if(m.op==='pxAllow'){ const pid=cleanPid(m.pid); if(m.on) this.sql.exec('INSERT OR REPLACE INTO pxok(pid,ts) VALUES(?,?)',pid,Date.now()); else this.sql.exec('DELETE FROM pxok WHERE pid=?',pid); return J({ok:true}); }

@@ -107,6 +107,19 @@ body{background:radial-gradient(1200px 600px at 10% -10%,#1e1b4b 0,transparent 6
   </div>
 
   <div class="card full">
+    <h2>🛠️ Updates, restarts &amp; glitches</h2>
+    <p class="mut">Tell everyone something right now, or restart the site: everyone sees a countdown bar, then every open page reloads (that clears stuck games and loads your newest update). Below are glitches from players' pages and their "🐞 report a glitch" notes.</p>
+    <label>📣 Instant notice to everyone online</label>
+    <div class="row"><input id="ntText" maxlength="200" placeholder="e.g. New update coming in 5 minutes!"><button class="go" id="ntGo" style="flex:0 0 auto">Send</button></div>
+    <label>🔧 Restart the site</label>
+    <div class="row"><select id="rsSecs" style="flex:0 0 140px"><option value="30">in 30 seconds</option><option value="60" selected>in 1 minute</option><option value="120">in 2 minutes</option><option value="300">in 5 minutes</option></select><input id="rsText" maxlength="160" placeholder="optional: why (e.g. installing an update)"><button class="go" id="rsGo" style="flex:0 0 auto">Start countdown</button><button id="rsStop" style="flex:0 0 auto">Cancel</button></div>
+    <div class="mut" id="rsMsg"></div>
+    <label>🐞 Glitches (last 3 days)</label>
+    <div class="row"><button id="glGo" style="flex:0 0 auto">Refresh</button><button id="glClear" style="flex:0 0 auto">Clear all</button></div>
+    <div id="glList" class="list" style="max-height:420px;overflow:auto"><span class="mut">Loading…</span></div>
+  </div>
+
+  <div class="card full">
     <h2>📣 Full-screen update announcement</h2>
     <p class="mut">Everyone sees this cover their screen the next time they open the site. They close it with X; it shows once per update.</p>
     <label>Quick templates</label><div class="row" id="annTpls" style="margin-bottom:4px"></div>
@@ -996,6 +1009,16 @@ function initVisits(set){ if(initVisits.done) return; initVisits.done=1; $('pxOn
   $('vsQ').oninput=()=>renderVisits();
   $('pxOn').onchange=async()=>{ const on=$('pxOn').checked; const r=await api('/admin/site','settings',{patch:{proxyBlock:on}}).catch(()=>({})); setMsg('pxMsg',r.ok?(on?'Proxy & VPN blocking is on.':'Proxy & VPN blocking is off.'):'Could not save.',r.ok?1:0); };
   $('pxGo').onclick=loadPx; $('pxList').closest('.card').onclick=async e=>{ const b=e.target.closest('[data-pxok],[data-pxno]'); if(!b) return; await api('/admin/site','pxAllow',{pid:b.dataset.pxok||b.dataset.pxno,on:!!b.dataset.pxok}); loadPx(); };
+  /* updates, restarts & glitches */
+  { const ago=t=>{ const m=Math.round((Date.now()-t)/60000); return m<1?'just now':m<60?m+' min ago':m<1440?Math.round(m/60)+' h ago':Math.round(m/1440)+' d ago'; }, e2=s=>String(s||'').replace(/[&<>"]/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;'}[c]));
+    const loadGl=async()=>{ try{ const d=await api('/admin/site','glitches',{days:3}); const g=d.groups||[], n=d.notes||[];
+      $('glList').innerHTML=(n.length?'<div style="font-weight:800;margin:6px 0">Player reports</div>'+n.map(x=>`<div class="item"><b>${e2(x.name||'Someone')}</b> on <b>${e2(x.page)}</b> · ${ago(x.ts)}<br>${e2(x.msg)}</div>`).join(''):'')+
+        (g.length?'<div style="font-weight:800;margin:10px 0 6px">Errors caught on pages</div>'+g.map(x=>`<div class="item"><b>${e2(x.page)}</b> · ${x.n}× for ${x.people} player${x.people==1?'':'s'} · last ${ago(x.last)}<br><code style="font-size:12px">${e2(x.msg)}</code>${x.src?`<br><span class="mut" style="font-size:12px">${e2(x.src)}</span>`:''}</div>`).join(''):'')||'<span class="mut">No glitches reported. 🎉</span>'; }catch(e){ $('glList').innerHTML='<span class="mut">Could not load glitches.</span>'; } };
+    $('glGo').onclick=loadGl; $('glClear').onclick=async()=>{ if(!confirm('Clear all glitch reports?')) return; await api('/admin/site','glitchclear').catch(()=>{}); loadGl(); };
+    $('ntGo').onclick=async()=>{ const t=$('ntText').value.trim(); if(!t) return; const r=await api('/admin/chat','notice',{text:t}).catch(()=>({})); setMsg('rsMsg',r.ok?`📣 Sent to ${r.sent} open page${r.sent==1?'':'s'}.`:'Could not send (owner sign-in needed).'); if(r.ok) $('ntText').value=''; };
+    $('rsGo').onclick=async()=>{ const secs=+$('rsSecs').value; if(!confirm(`Every open page will show a countdown and reload in ${secs} seconds. Start?`)) return; const r=await api('/admin/chat','restart',{secs,text:$('rsText').value.trim()}).catch(()=>({})); setMsg('rsMsg',r.ok?`🔧 Countdown started on ${r.sent} open page${r.sent==1?'':'s'}. Pages reload at ${new Date(r.at).toLocaleTimeString()}.`:'Could not start (owner sign-in needed).'); };
+    $('rsStop').onclick=async()=>{ const r=await api('/admin/chat','restartcancel').catch(()=>({})); setMsg('rsMsg',r.ok?'Countdown cancelled.':'Could not cancel.'); };
+    loadGl(); setInterval(()=>{ if(document.visibilityState==='visible') loadGl(); },60000); }
   loadVisits(); loadPx(); setInterval(()=>{ if(document.visibilityState==='visible') loadVisits() },40000); setInterval(()=>{ if(document.visibilityState==='visible'&&(typeof CURG==='undefined'||CURG==='sec'||CURG==='all'||CURG==='dash')) loadPx() },120000); setInterval(()=>renderVisits(),30000); }
 
 /* ---- arcade admin (Connor's role) ---- */

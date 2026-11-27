@@ -319,6 +319,20 @@ body.rrHasBanner #rrTourBtn{top:48px}
   /* parties work on every page */
   if(PAGE!=='admin'&&!window.RRPARTY&&!document.querySelector('script[src$="party.js"]')){ const sc=document.createElement('script'); sc.src='party.js'; sc.defer=true; (document.head||document.documentElement).appendChild(sc); }
 
+  /* owner update tools: "servers restarting" countdown (every open page reloads when it ends) and instant notices */
+  (function(){ let bar=null, t=null, at=0;
+    function show(m){ if(m.cancel){ if(bar) bar.remove(); bar=null; clearInterval(t); return; } at=m.at-(m.now?m.now-Date.now():0); if(!bar){ bar=document.createElement('div'); bar.id='rrRestart'; bar.style.cssText='position:fixed;left:0;right:0;top:0;z-index:2147483647;background:linear-gradient(90deg,#b91c1c,#ea580c);color:#fff;font:800 15px system-ui,sans-serif;text-align:center;padding:10px 12px;box-shadow:0 4px 20px rgba(0,0,0,.4)'; (document.body||document.documentElement).appendChild(bar); }
+      const txt=m.text?' — '+m.text:''; clearInterval(t); const tick=()=>{ const s=Math.max(0,Math.ceil((at-Date.now())/1000)); bar.textContent=s>0?`🔧 Servers restarting in ${Math.floor(s/60)}:${String(s%60).padStart(2,'0')}${txt} · save what you're doing!`:'🔄 Restarting now…'; if(s<=0){ clearInterval(t); setTimeout(()=>location.reload(),500+Math.random()*8000); } }; tick(); t=setInterval(tick,500); }
+    addEventListener('rr-restart',e=>show(e.detail||{}));
+    addEventListener('rr-notice',e=>{ const d=e.detail||{}; if(!d.text) return; const n=document.createElement('div'); n.style.cssText='position:fixed;left:50%;top:14px;transform:translateX(-50%);z-index:2147483646;max-width:min(560px,92vw);background:#0f172a;color:#fff;border:2px solid #f59e0b;border-radius:14px;padding:12px 16px;font:700 15px system-ui,sans-serif;box-shadow:0 10px 40px rgba(0,0,0,.5);text-align:center'; n.textContent='📣 '+d.text; (document.body||document.documentElement).appendChild(n); setTimeout(()=>n.remove(),12000); n.onclick=()=>n.remove(); });
+  })();
+  /* glitch reports: errors on this page go to the owner's HQ page (a few per visit at most) */
+  (function(){ if(OFF||PAGE==='admin'||/^hq/.test(PAGE)) return; let sent=0; const seen=new Set();
+    const send=(kind,msg,src)=>{ if(sent>=5&&kind==='error') return; const k=msg+'|'+src; if(seen.has(k)) return; seen.add(k); sent++; try{ fetch(SERVER+'/glitch',{method:'POST',headers:{'content-type':'application/json'},keepalive:true,body:JSON.stringify({kind,page:PAGE||'home',msg:String(msg).slice(0,400),src:String(src||'').slice(0,160),ua:navigator.userAgent.slice(0,120),pid:pid(),name:ls.get('rrOnlineName')||''})}).catch(()=>{}); }catch(e){} };
+    addEventListener('error',e=>{ if(!e.message||/^Script error\.?$/.test(e.message)||/ResizeObserver/.test(e.message)) return; send('error',e.message,(e.filename||'').replace(location.origin,'')+':'+(e.lineno||0)); });
+    addEventListener('unhandledrejection',e=>{ const r=e.reason; const msg=r&&(r.message||String(r)); if(!msg||/Failed to fetch|NetworkError|Load failed|AbortError/i.test(msg)) return; send('error','(promise) '+msg,''); });
+    window.RRGLITCH=(text)=>send('user',String(text||'').slice(0,400),location.pathname+location.search);
+  })();
   /* count play time: a heartbeat every minute while the page is open and visible */
   /* a fingerprint of this device (browser, screen, time zone…) so a ban survives clearing the browser's data */
   function devFp(){ try{ const n=navigator, s=screen, str=[n.userAgent,n.language,n.hardwareConcurrency,n.deviceMemory,s.width+'x'+s.height,s.colorDepth,(Intl.DateTimeFormat().resolvedOptions()||{}).timeZone,n.platform,n.maxTouchPoints].join('|'); let h1=0xdeadbeef, h2=0x41c6ce57; for(let i=0;i<str.length;i++){ const c=str.charCodeAt(i); h1=Math.imul(h1^c,2654435761); h2=Math.imul(h2^c,1597334677); } h1=Math.imul(h1^(h1>>>16),2246822507)^Math.imul(h2^(h2>>>13),3266489909); h2=Math.imul(h2^(h2>>>16),2246822507)^Math.imul(h1^(h1>>>13),3266489909); return (h2>>>0).toString(36)+(h1>>>0).toString(36); }catch(e){ return ''; } }
