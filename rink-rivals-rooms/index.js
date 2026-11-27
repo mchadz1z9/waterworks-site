@@ -291,7 +291,7 @@ export default {
     if(url.pathname==='/ai'){ if(req.method==='OPTIONS') return new Response(null,{headers:CORS}); if(req.method!=='POST') return J({err:'method'},405); return rrAI(req,env,RCF); }
     if(url.pathname==='/acct'){ if(req.method==='OPTIONS') return new Response(null,{headers:CORS}); return env.ACCT.get(env.ACCT.idFromName('ACCT')).fetch(req); }
     if(url.pathname==='/site'){ if(req.method==='OPTIONS') return new Response(null,{headers:CORS}); return env.SITE.get(env.SITE.idFromName('SITE')).fetch(req); }
-    if(url.pathname==='/tourney'||url.pathname==='/play'||url.pathname==='/popular'||url.pathname==='/daily'||url.pathname==='/like'||url.pathname==='/review'||url.pathname==='/vote'||url.pathname==='/namecheck'||url.pathname.startsWith('/feed/')||url.pathname.startsWith('/net/')||url.pathname==='/glitch'||url.pathname==='/sc/pick'||url.pathname==='/sc/my'||url.pathname==='/sc/lb'||url.pathname==='/gd/vote'||url.pathname.startsWith('/mkt/')||url.pathname.startsWith('/lg/')||url.pathname.startsWith('/es/')||url.pathname.startsWith('/st/')){ if(req.method==='OPTIONS') return new Response(null,{headers:CORS}); const cf=RCF||req.cf||{}, h=new Headers(req.headers); h.set('x-rr-asn',String(cf.asn||'')); h.set('x-rr-aso',String(cf.asOrganization||'').slice(0,80)); h.set('x-rr-cc',String(cf.country||'')); return env.SITE.get(env.SITE.idFromName('SITE')).fetch(new Request(req,{headers:h})); }
+    if(url.pathname==='/tourney'||url.pathname==='/play'||url.pathname==='/popular'||url.pathname==='/daily'||url.pathname==='/like'||url.pathname==='/review'||url.pathname==='/vote'||url.pathname==='/namecheck'||url.pathname.startsWith('/feed/')||url.pathname.startsWith('/net/')||url.pathname==='/glitch'||url.pathname==='/sc/pick'||url.pathname==='/sc/my'||url.pathname==='/sc/lb'||url.pathname==='/gd/vote'||url.pathname.startsWith('/mkt/')||url.pathname.startsWith('/lg/')||url.pathname.startsWith('/es/')||url.pathname.startsWith('/st/')||url.pathname.startsWith('/md/')){ if(req.method==='OPTIONS') return new Response(null,{headers:CORS}); const cf=RCF||req.cf||{}, h=new Headers(req.headers); h.set('x-rr-asn',String(cf.asn||'')); h.set('x-rr-aso',String(cf.asOrganization||'').slice(0,80)); h.set('x-rr-cc',String(cf.country||'')); return env.SITE.get(env.SITE.idFromName('SITE')).fetch(new Request(req,{headers:h})); }
     const lb=url.pathname.match(/^\/lb\/([a-z0-9]{2,16})$/);
     if(lb){ if(req.method==='OPTIONS') return new Response(null,{headers:CORS}); return env.BOARDS.get(env.BOARDS.idFromName(lb[1])).fetch(req); }
     const pm=url.pathname.match(/^\/party\/([A-Z0-9]{4,8})$/);
@@ -767,6 +767,34 @@ export class Site {
       if(url.pathname==='/net/vote'){ const v=Math.sign(+m.v||0); if(v) this.sql.exec('INSERT INTO netvote(id,pid,v) VALUES(?,?,?) ON CONFLICT(id,pid) DO UPDATE SET v=excluded.v',id,pid,v); else this.sql.exec('DELETE FROM netvote WHERE id=? AND pid=?',id,pid);
         const r=this.sql.exec('SELECT SUM(CASE WHEN v>0 THEN 1 ELSE 0 END) u,SUM(CASE WHEN v<0 THEN 1 ELSE 0 END) d FROM netvote WHERE id=?',id).one(); this.netC=null; return J({ok:true,u:r.u||0,d:r.d||0}); }
       if(url.pathname==='/net/report'){ this.sql.exec('INSERT OR IGNORE INTO netrep(id,pid,ts) VALUES(?,?,?)',id,pid,now); this.netC=null; return J({ok:true}); }
+      return J({err:'nf'},404); }
+    /* Rival Market Day: weekend marketplace for shop items and cards. Coins and things move through "claims" the player's device picks up. */
+    if(url.pathname.startsWith('/md/')){ const now=Date.now();
+      if(!this.mdOk){ this.sql.exec('CREATE TABLE IF NOT EXISTS mdl(id INTEGER PRIMARY KEY AUTOINCREMENT, pid TEXT, name TEXT, kind TEXT, k TEXT, label TEXT, price INTEGER, auc INTEGER, bid INTEGER, bpid TEXT, bname TEXT, ends INTEGER, st TEXT, ts INTEGER)'); this.sql.exec('CREATE TABLE IF NOT EXISTS mdc(id INTEGER PRIMARY KEY AUTOINCREMENT, pid TEXT, kind TEXT, k TEXT, n INTEGER, why TEXT, ts INTEGER)'); this.sql.exec('CREATE TABLE IF NOT EXISTS mdp(k TEXT, price INTEGER, ts INTEGER)'); this.mdOk=1; }
+      const et=new Date(new Date(now).toLocaleString('en-US',{timeZone:'America/New_York'})), dow=et.getDay(), open=dow===6||dow===0;
+      const closeAt=(()=>{ const d=new Date(et); d.setHours(24,0,0,0); if(dow===6) d.setDate(d.getDate()+1); return now+(d-et); })(), openAt=(()=>{ const d=new Date(et); d.setHours(0,0,0,0); d.setDate(d.getDate()+((6-dow+7)%7||7)); return now+(d-et); })();
+      const claim=(pid,kind,k,n,why)=>this.sql.exec('INSERT INTO mdc(pid,kind,k,n,why,ts) VALUES(?,?,?,?,?,?)',pid,kind,k,n,why,now);
+      /* settle: when the market is closed, auctions go to the top bidder and unsold things go back */
+      if(!open&&(!this.mdSet||now-this.mdSet>60000)){ this.mdSet=now; for(const l of this.sql.exec("SELECT * FROM mdl WHERE st='open'").toArray()){
+          if(l.auc&&l.bpid){ claim(l.bpid,l.kind,l.k,1,'Won the auction: '+l.label); claim(l.pid,'coins','',l.bid,'Sold at auction: '+l.label); this.sql.exec("UPDATE mdl SET st='sold',price=? WHERE id=?",l.bid,l.id); this.sql.exec('INSERT INTO mdp(k,price,ts) VALUES(?,?,?)',l.k,l.bid,now); }
+          else { claim(l.pid,l.kind,l.k,1,'Not sold, back to you: '+l.label); this.sql.exec("UPDATE mdl SET st='back' WHERE id=?",l.id); } } }
+      if(url.pathname==='/md/list'){ const L=this.sql.exec("SELECT id,name,kind,k,label,price,auc,bid,bname,ts FROM mdl WHERE st='open' ORDER BY id DESC LIMIT 400").toArray();
+        const H={}; for(const r of this.sql.exec('SELECT k,price FROM mdp WHERE ts>? ORDER BY ts DESC LIMIT 3000',now-60*864e5)){ (H[r.k]=H[r.k]||[]).length<10&&H[r.k].push(r.price); }
+        return J({open,openAt,closeAt,list:L,hist:H,now}); }
+      let m={}; try{ m=await req.json(); }catch(e){} const pid=cleanPid(m.pid); if(pid.length<8) return J({err:'bad'},400);
+      if(url.pathname==='/md/claims'){ const C=this.sql.exec('SELECT id,kind,k,n,why FROM mdc WHERE pid=? ORDER BY id LIMIT 50',pid).toArray(); if(C.length) this.sql.exec('DELETE FROM mdc WHERE pid=? AND id<=?',pid,C[C.length-1].id);
+        return J({claims:C,mine:this.sql.exec("SELECT id,kind,label,price,auc,bid,bname,st FROM mdl WHERE pid=? ORDER BY id DESC LIMIT 30",pid).toArray()}); }
+      if(!open) return J({err:'closed',openAt},400);
+      if(url.pathname==='/md/sell'){ const kind=m.kind==='card'?'card':m.kind==='item'?'item':''; const k=String(m.k||'').slice(0,80), label=String(m.label||'').replace(/[<>]/g,'').slice(0,60), price=Math.floor(+m.price||0);
+        if(!kind||!k||price<1||price>100000) return J({err:'bad'},400); if(this.sql.exec("SELECT COUNT(*) n FROM mdl WHERE pid=? AND st='open'",pid).one().n>=10) return J({err:'many'},400);
+        this.sql.exec("INSERT INTO mdl(pid,name,kind,k,label,price,auc,bid,bpid,bname,ends,st,ts) VALUES(?,?,?,?,?,?,?,0,'','',?, 'open',?)",pid,cleanName(m.name),kind,k,label,price,m.auc?1:0,closeAt,now); return J({ok:true}); }
+      const l=this.sql.exec("SELECT * FROM mdl WHERE id=? AND st='open'",+m.id||0).toArray()[0]; if(!l) return J({err:'gone'},400);
+      if(url.pathname==='/md/cancel'){ if(l.pid!==pid) return J({err:'no'},403); if(l.auc&&l.bpid) return J({err:'bids'},400); this.sql.exec("UPDATE mdl SET st='back' WHERE id=?",l.id); return J({ok:true,kind:l.kind,k:l.k}); }
+      if(l.pid===pid) return J({err:'own'},400);
+      if(url.pathname==='/md/buy'){ if(l.auc) return J({err:'auction'},400); if(+m.pay!==l.price) return J({err:'price',price:l.price},400);
+        this.sql.exec("UPDATE mdl SET st='sold',bpid=?,bname=? WHERE id=?",pid,cleanName(m.name),l.id); claim(l.pid,'coins','',l.price,'Sold: '+l.label); this.sql.exec('INSERT INTO mdp(k,price,ts) VALUES(?,?,?)',l.k,l.price,now); return J({ok:true,kind:l.kind,k:l.k}); }
+      if(url.pathname==='/md/bid'){ if(!l.auc) return J({err:'notauc'},400); const b=Math.floor(+m.pay||0), min=Math.max(l.price,l.bid?l.bid+Math.max(1,Math.ceil(l.bid*.05)):l.price); if(b<min) return J({err:'low',min},400);
+        if(l.bpid) claim(l.bpid,'coins','',l.bid,'Outbid on '+l.label+', coins back'); this.sql.exec('UPDATE mdl SET bid=?,bpid=?,bname=? WHERE id=?',b,pid,cleanName(m.name),l.id); return J({ok:true}); }
       return J({err:'nf'},404); }
     /* Rival Studio: player-made games. Nothing is public until the owner approves it in HQ. */
     if(url.pathname.startsWith('/st/')){ const now=Date.now();
