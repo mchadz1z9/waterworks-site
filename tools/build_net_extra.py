@@ -62,10 +62,10 @@ js3=('/* '+str(len(hg))+' games from the HTMLGames.com public feed. Packed: [fol
  '(function(){const S='+json.dumps(SECS)+',R='+json.dumps(hg,separators=(',',':'),ensure_ascii=False)+';\n'
  'window.NETX=(window.NETX||[]).concat(R.map(r=>["hg",r[0],r[1],S[r[2]],"https://cdn.htmlgames.com/"+r[0]+"/index.html","https://cdn.htmlgames.com/"+r[0]+"/img/icon/image-300x200.jpg",r[3],r[3],r[0]]));})();\n')
 SITE='/home/user/waterworks-site/rink-rivals/'
-js1=('/* '+str(len(gd))+' kid-filtered games from the GameDistribution public catalog (not already on the GameMonetize list). Packed: [md5, title, section, tags]. */\n'
+js1=('/* '+str(len(gd))+' kid-filtered games from the GameDistribution public catalog. Packed: [md5, title, section, tags]. */\n'
  '(function(){const S='+json.dumps(SECS)+',R='+json.dumps(gd,separators=(',',':'),ensure_ascii=False)+';\n'
  'window.NETX=(window.NETX||[]).concat(R.map(r=>["gd",r[0],r[1],S[r[2]],"https://html5.gamedistribution.com/"+r[0]+"/","https://img.gamedistribution.com/"+r[0]+"-512x384.jpg",r[3],r[3],r[0]]));})();\n')
-js2=('/* '+str(len(gp))+' kid-filtered games from the GamePix public feed (not already on the other lists). Packed: [id, slug, title, section, category]. */\n'
+js2=('/* '+str(len(gp))+' kid-filtered games from the GamePix public feed. Packed: [id, slug, title, section, category]. */\n'
  '(function(){const S='+json.dumps(SECS)+',R='+json.dumps(gp,separators=(',',':'),ensure_ascii=False)+';\n'
  'window.NETX=(window.NETX||[]).concat(R.map(r=>["gp",String(r[0]),r[2],S[r[3]],"https://play.gamepix.com/"+r[1]+"/embed?sid=1","https://img.gamepix.com/games/"+r[1]+"/cover/"+r[1]+".png?w=320",r[4],r[4],r[1]]));})();\n')
 open(SITE+'net-gd.js','w').write(js1); open(SITE+'net-gp.js','w').write(js2); open(SITE+'net-hg.js','w').write(js3)
