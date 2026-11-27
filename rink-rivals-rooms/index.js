@@ -154,6 +154,21 @@ async function scStand(lg){ const path=SC_LG[lg]; if(!path) return null; const k
   const groups=[]; const walk=(n)=>{ if(n.standings&&n.standings.entries) groups.push({name:n.name,teams:n.standings.entries.map(e=>{ const S={}; for(const x of e.stats||[]) S[x.name]=x.displayValue; return {ab:e.team.abbreviation,name:e.team.shortDisplayName||e.team.displayName,logo:((e.team.logos||[])[0]||{}).href||'',w:S.wins||'0',l:S.losses||'0',t:S.ties||S.otLosses||'',pct:S.winPercent||'',gb:S.gamesBehind||'',pts:S.points||'',seed:+(S.playoffSeed||99),strk:S.streak||''}; }).sort((a,b)=>a.seed-b.seed)}); for(const ch of n.children||[]) walk(ch); }; walk(j);
   const out={lg,groups}; await c.put(key,new Response(JSON.stringify(out),{headers:{'content-type':'application/json','cache-control':'public, max-age=1800'}})); return out; }
 
+/* Rival Game Day: one game's live details (score, recent plays, scoring plays, leaders, win chance), trimmed and cached */
+async function gdSum(lg,id){ const path=SC_LG[lg]; if(!path||!/^\d{5,14}$/.test(id||'')) return null; const key=new Request('https://sc.cache/gd/'+lg+'/'+id), c=caches.default; const hit=await c.match(key); if(hit) return hit.json();
+  let d; try{ const r=await fetch('https://site.api.espn.com/apis/site/v2/sports/'+path+'/summary?event='+id,{headers:{'user-agent':'ArcadeRivals/1.0'}}); if(!r.ok) return null; d=await r.json(); }catch(e){ return null; }
+  const comp=((d.header||{}).competitions||[])[0]||{}, cs=comp.competitors||[], st=((comp.status||{}).type)||{}, byId={};
+  const team=t=>{ byId[t.id]=t.team.abbreviation; return {ab:t.team.abbreviation,name:t.team.shortDisplayName||t.team.displayName||t.team.name,logo:((t.team.logos||[])[0]||{}).href||t.team.logo||'',score:t.score!=null?String(t.score):'',rec:((t.record||[])[0]||{}).displayValue||((t.record||[])[0]||{}).summary||'',color:t.team.color||'',win:!!t.winner}; };
+  const h=cs.find(x=>x.homeAway==='home'), a=cs.find(x=>x.homeAway==='away'); if(!h||!a) return null; const home=team(h), away=team(a);
+  let plays=[]; if(d.drives){ for(const dr of (d.drives.previous||[]).concat(d.drives.current?[d.drives.current]:[])){ const tm=((dr.team||{}).abbreviation)||''; for(const p of dr.plays||[]) plays.push([p,tm]); } } else plays=(d.plays||[]).map(p=>[p,byId[(p.team||{}).id]||'']);
+  const seen=new Set(); plays=plays.filter(([p])=>!seen.has(p.id)&&seen.add(p.id));
+  const P=([p,tm])=>({t:String(p.text||'').trim().slice(0,220),c:((p.clock||{}).displayValue)||'',p:((p.period||{}).number)||'',s:!!p.scoringPlay,tm,hs:p.homeScore,as:p.awayScore});
+  const scoring=(d.scoringPlays||plays.filter(([p])=>p.scoringPlay).map(x=>x[0])).map(p=>P([p,((p.team||{}).abbreviation)||byId[(p.team||{}).id]||''])).slice(-30);
+  const leaders=(d.leaders||[]).map(l=>({ab:((l.team||{}).abbreviation)||'',cats:(l.leaders||[]).slice(0,3).map(x=>{ const y=(x.leaders||[])[0]||{}; return {n:x.displayName||x.name,who:((y.athlete||{}).shortName)||((y.athlete||{}).displayName)||'',v:y.displayValue||''}; })}));
+  const wp=(d.winprobability||[]).slice(-1)[0], hw=wp&&wp.homeWinPercentage!=null?Math.round(wp.homeWinPercentage*100):null;
+  const out={lg,id,st:st.state||'pre',det:st.shortDetail||st.detail||'',date:comp.date||'',home,away,plays:plays.slice(-30).reverse().map(P),scoring:scoring.reverse(),leaders,hw,venue:(((d.gameInfo||{}).venue)||{}).fullName||''};
+  await c.put(key,new Response(JSON.stringify(out),{headers:{'content-type':'application/json','cache-control':'public, max-age='+(out.st==='in'?10:out.st==='post'?3600:120)}})); return out; }
+
 export default {
   /* nightly chat wipe at 10 p.m. Toronto time. Cron runs at 02:00 and 03:00 UTC, and only the one that lands on 22:00 local (EST or EDT) clears */
   async scheduled(ev, env, ctx){
@@ -219,6 +234,7 @@ export default {
           if(vid&&/"isLiveNow":true|"isLive":true/.test(lh)){ const tt=(lh.match(/<meta name="title" content="([^"]{0,140})"/)||[])[1]||'NHL live'; yt={id:vid,title:tt.replace(/&amp;/g,'&').replace(/&#39;/g,"'").replace(/&quot;/g,'"')}; } }catch(e){}
         r=new Response(JSON.stringify({date:d.currentDate,games,yt}),{headers:{'content-type':'application/json','cache-control':'max-age=30'}}); await c.put(key,r.clone()); }
       const h=new Headers(r.headers); for(const k in CORS) h.set(k,CORS[k]); return new Response(r.body,{headers:h}); }
+    if(url.pathname==='/gd/sum'){ if(req.method==='OPTIONS') return new Response(null,{headers:CORS}); const d=await gdSum(url.searchParams.get('l')||'',url.searchParams.get('id')||''); if(!d) return J({err:'espn'},502); return new Response(JSON.stringify(d),{headers:{...CORS,'content-type':'application/json','cache-control':'public, max-age=8'}}); }
     if(url.pathname==='/sc/board'||url.pathname==='/sc/stand'){ if(req.method==='OPTIONS') return new Response(null,{headers:CORS}); const lg=url.searchParams.get('l')||'nba';
       const d=url.pathname==='/sc/board'?await scBoard(lg,url.searchParams.get('d')||''):await scStand(lg); if(!d) return J({err:'espn'},502);
       return new Response(JSON.stringify(d),{headers:{...CORS,'content-type':'application/json','cache-control':'public, max-age=15'}}); }
@@ -231,7 +247,7 @@ export default {
     if(url.pathname==='/ai'){ if(req.method==='OPTIONS') return new Response(null,{headers:CORS}); if(req.method!=='POST') return J({err:'method'},405); return rrAI(req,env,RCF); }
     if(url.pathname==='/acct'){ if(req.method==='OPTIONS') return new Response(null,{headers:CORS}); return env.ACCT.get(env.ACCT.idFromName('ACCT')).fetch(req); }
     if(url.pathname==='/site'){ if(req.method==='OPTIONS') return new Response(null,{headers:CORS}); return env.SITE.get(env.SITE.idFromName('SITE')).fetch(req); }
-    if(url.pathname==='/tourney'||url.pathname==='/play'||url.pathname==='/popular'||url.pathname==='/daily'||url.pathname==='/like'||url.pathname==='/review'||url.pathname==='/vote'||url.pathname==='/namecheck'||url.pathname.startsWith('/feed/')||url.pathname.startsWith('/net/')||url.pathname==='/glitch'||url.pathname==='/sc/pick'||url.pathname==='/sc/my'||url.pathname==='/sc/lb'){ if(req.method==='OPTIONS') return new Response(null,{headers:CORS}); const cf=RCF||req.cf||{}, h=new Headers(req.headers); h.set('x-rr-asn',String(cf.asn||'')); h.set('x-rr-aso',String(cf.asOrganization||'').slice(0,80)); h.set('x-rr-cc',String(cf.country||'')); return env.SITE.get(env.SITE.idFromName('SITE')).fetch(new Request(req,{headers:h})); }
+    if(url.pathname==='/tourney'||url.pathname==='/play'||url.pathname==='/popular'||url.pathname==='/daily'||url.pathname==='/like'||url.pathname==='/review'||url.pathname==='/vote'||url.pathname==='/namecheck'||url.pathname.startsWith('/feed/')||url.pathname.startsWith('/net/')||url.pathname==='/glitch'||url.pathname==='/sc/pick'||url.pathname==='/sc/my'||url.pathname==='/sc/lb'||url.pathname==='/gd/vote'){ if(req.method==='OPTIONS') return new Response(null,{headers:CORS}); const cf=RCF||req.cf||{}, h=new Headers(req.headers); h.set('x-rr-asn',String(cf.asn||'')); h.set('x-rr-aso',String(cf.asOrganization||'').slice(0,80)); h.set('x-rr-cc',String(cf.country||'')); return env.SITE.get(env.SITE.idFromName('SITE')).fetch(new Request(req,{headers:h})); }
     const lb=url.pathname.match(/^\/lb\/([a-z0-9]{2,16})$/);
     if(lb){ if(req.method==='OPTIONS') return new Response(null,{headers:CORS}); return env.BOARDS.get(env.BOARDS.idFromName(lb[1])).fetch(req); }
     const pm=url.pathname.match(/^\/party\/([A-Z0-9]{4,8})$/);
@@ -707,6 +723,12 @@ export class Site {
         const r=this.sql.exec('SELECT SUM(CASE WHEN v>0 THEN 1 ELSE 0 END) u,SUM(CASE WHEN v<0 THEN 1 ELSE 0 END) d FROM netvote WHERE id=?',id).one(); this.netC=null; return J({ok:true,u:r.u||0,d:r.d||0}); }
       if(url.pathname==='/net/report'){ this.sql.exec('INSERT OR IGNORE INTO netrep(id,pid,ts) VALUES(?,?,?)',id,pid,now); this.netC=null; return J({ok:true}); }
       return J({err:'nf'},404); }
+    /* Game Day "who scores next?": votes for the current score; returns how everyone voted */
+    if(url.pathname==='/gd/vote'){ let m={}; try{ m=await req.json(); }catch(e){} if(!this.gdOk){ this.sql.exec('CREATE TABLE IF NOT EXISTS gdvote(gid TEXT, state TEXT, pid TEXT, side TEXT, ts INTEGER, PRIMARY KEY(gid,state,pid))'); this.gdOk=1; }
+      const gid=String(m.gid||'').replace(/\D/g,'').slice(0,14), state=String(m.state||'').replace(/[^0-9-]/g,'').slice(0,9), pid=cleanPid(m.pid), side=m.side==='h'||m.side==='a'?m.side:'';
+      if(!gid||!state) return J({err:'bad'},400); if(side&&pid.length>=8) this.sql.exec('INSERT INTO gdvote(gid,state,pid,side,ts) VALUES(?,?,?,?,?) ON CONFLICT(gid,state,pid) DO UPDATE SET side=excluded.side',gid,state,pid,side,Date.now());
+      if(Math.random()<.01) this.sql.exec('DELETE FROM gdvote WHERE ts<?',Date.now()-3*864e5);
+      const r=this.sql.exec("SELECT SUM(CASE WHEN side='h' THEN 1 ELSE 0 END) h,SUM(CASE WHEN side='a' THEN 1 ELSE 0 END) a FROM gdvote WHERE gid=? AND state=?",gid,state).one(); return J({h:r.h||0,a:r.a||0}); }
     /* Sports Center pick'em: pick a winner before the game starts; settled from the final scores */
     if(url.pathname==='/sc/pick'||url.pathname==='/sc/my'||url.pathname==='/sc/lb'){ const now=Date.now();
       if(!this.scOk){ this.sql.exec('CREATE TABLE IF NOT EXISTS pick(pid TEXT, name TEXT, lg TEXT, gid TEXT, team TEXT, day TEXT, gts INTEGER, ts INTEGER, res INTEGER DEFAULT 0, PRIMARY KEY(pid,gid))'); this.sql.exec('CREATE INDEX IF NOT EXISTS pick_res ON pick(res,gts)'); this.scOk=1; }
