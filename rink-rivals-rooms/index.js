@@ -761,7 +761,7 @@ export class Site {
           this.netC={t:now,body:JSON.stringify({top,hide,rate})}; if(Math.random()<.05){ this.sql.exec('DELETE FROM netplay WHERE day<?',day-60); this.sql.exec('DELETE FROM netrep WHERE ts<?',now-30*864e5); } }
         return new Response(this.netC.body,{headers:{...H,'cache-control':'public, max-age=120'}}); }
       if(req.method!=='POST') return J({err:'method'},405);
-      let m={}; try{ m=await req.json(); }catch(e){} const id0=String(m.id||'').toLowerCase(), id=/^\d{1,8}$/.test(id0)||/^(g[dp]|hg|pg|fm|dx):[a-z0-9_-]{1,90}$/.test(id0)?id0:'', pid=cleanPid(m.pid);
+      let m={}; try{ m=await req.json(); }catch(e){} const id0=String(m.id||'').toLowerCase(), id=/^\d{1,8}$/.test(id0)||/^(g[dp]|hg|pg|fm|dx|os):[a-z0-9_-]{1,90}$/.test(id0)?id0:'', pid=cleanPid(m.pid);
       if(!id||pid.length<8) return J({err:'bad'},400);
       if(url.pathname==='/net/play'){ const k=pid+':'+id+':'+day; if(!this.netSeen.has(k)){ if(this.netSeen.size>50000) this.netSeen.clear(); this.netSeen.set(k,1); this.sql.exec('INSERT INTO netplay(id,day,n) VALUES(?,?,1) ON CONFLICT(id,day) DO UPDATE SET n=n+1',id,day); } return J({ok:true}); }
       if(url.pathname==='/net/vote'){ const v=Math.sign(+m.v||0); if(v) this.sql.exec('INSERT INTO netvote(id,pid,v) VALUES(?,?,?) ON CONFLICT(id,pid) DO UPDATE SET v=excluded.v',id,pid,v); else this.sql.exec('DELETE FROM netvote WHERE id=? AND pid=?',id,pid);
